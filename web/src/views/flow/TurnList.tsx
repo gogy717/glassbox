@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { Turn } from '../../../../src/core/model.js';
+import { Figures } from '../../components/Figures';
 import { StatusMark, type UiStatus } from '../../components/Status';
 import { useApprovalsContext } from '../../data/approvals';
 import { useSessionAgentKind } from '../../data/session-agent';
@@ -22,9 +23,14 @@ import css from './TurnList.module.css';
 
 export interface TurnItem {
   turn: Turn;
-  /** For the turn list: one line, the prompt shortened. */
+  /** What it is called: "Conversation 2", or "Calls outside conversations". */
+  label: string;
+  /** For the turn list: one line, the prompt shortened, without the label. */
   title: string;
-  /** For the open turn's heading: the whole prompt, line breaks kept. */
+  /** For the open turn's heading: the whole prompt, line breaks kept, without the label. */
+  prompt: string;
+  /** The label and the whole prompt in one ("Conversation 2: …"), for a heading that has no
+   *  label of its own (the Steps view, until it uses `TurnHeader`). */
   heading: string;
   calls: number;
   tools: number;
@@ -48,19 +54,16 @@ export function useTurnItems(open: OpenSession, agentId: string): TurnItem[] {
           tools += ts.length;
           return callStatus(r, ts, approvals);
         });
-        const label = (prompt: string) =>
-          isOutsideTurn(turn)
-            ? t('flow.outsideTurns')
-            : turn.origin === 'task-notification'
-              ? t('flow.turnTitle', { n: turn.index, prompt: t('flow.taskNotification') })
-              : prompt
-                ? t('flow.turnTitle', { n: turn.index, prompt })
-                : t('flow.turnFallback', { n: turn.index });
+        const label = turnLabel(turn, t);
+        const prompt = turnPrompt(turn, t);
         const status = turnStatus(turn, statuses);
         return {
           turn,
-          title: label(truncatePrompt(turn.prompt)),
-          heading: label(turn.prompt.trim()),
+          label,
+          title: prompt ? truncatePrompt(prompt) : label,
+          prompt: prompt || label,
+          heading:
+            prompt && !isOutsideTurn(turn) ? t('flow.turnTitle', { n: turn.index, prompt }) : label,
           calls: reqs.length,
           tools,
           status,
@@ -69,6 +72,21 @@ export function useTurnItems(open: OpenSession, agentId: string): TurnItem[] {
       }),
     [open, agentId, t, approvals, agent],
   );
+}
+
+type Translate = ReturnType<typeof useI18n>['t'];
+
+/** What a turn is called: its number, unless it is the bucket of calls outside any turn. */
+function turnLabel(turn: Turn, t: Translate): string {
+  if (isOutsideTurn(turn)) return t('flow.outsideTurns');
+  return t('flow.turnLabel', { n: turn.index });
+}
+
+/** What a turn asked, in a sentence of its own; empty when it asked nothing that can be shown. */
+function turnPrompt(turn: Turn, t: Translate): string {
+  if (isOutsideTurn(turn)) return '';
+  if (turn.origin === 'task-notification') return t('flow.taskNotification');
+  return turn.prompt.trim();
 }
 
 /**
@@ -155,45 +173,67 @@ export const TurnList = memo(function TurnList({ items, selectedId, onSelect }: 
     <nav className={css.pane} aria-label={t('flow.turns')}>
       <div className={css.head}>
         {t('flow.turns')}
-        <span className="num">{items.length}</span>
+        <span className="figure">{items.length}</span>
       </div>
       <ul ref={listRef} className={css.list} aria-label={t('flow.turns')}>
-        {newestFirst.map((it) => (
-          <li key={it.turn.id} data-turn={it.turn.id}>
-            <button
-              type="button"
-              className={css.card}
-              {...roving(it.turn.id)}
-              aria-current={it.turn.id === selectedId ? 'true' : undefined}
-              data-command={it.command || undefined}
-              title={it.turn.prompt}
-              onClick={() => onSelect(it.turn.id)}
-            >
-              <span className={css.line}>
+        {newestFirst.map((it) => {
+          const clock = formatClock(it.turn.startedAt);
+          // Dense list: a complete turn is the check alone; what needs attention keeps its word,
+          // except at the end of a narrow row's first line, where only the mark fits.
+          const mark = <StatusMark status={it.status} compact={it.status === 'complete'} />;
+          const markOnly = <StatusMark status={it.status} compact />;
+          return (
+            <li key={it.turn.id} data-turn={it.turn.id}>
+              <button
+                type="button"
+                className={css.row}
+                {...roving(it.turn.id)}
+                aria-current={it.turn.id === selectedId ? 'true' : undefined}
+                data-command={it.command || undefined}
+                title={it.turn.prompt}
+                onClick={() => onSelect(it.turn.id)}
+              >
+                {/* The number column says "Conversation N" on screen; screen readers hear the words. */}
+                {!it.command && it.title !== it.label && (
+                  <span className="visually-hidden">{`${it.label} `}</span>
+                )}
+                <span className={`${css.num} figure`} aria-hidden="true">
+                  {it.command || isOutsideTurn(it.turn) ? '' : it.turn.index}
+                </span>
                 {/* Not a conversation, so not numbered like one: the command says what it was. */}
                 <span className={css.title} data-title>
                   {it.command ? it.turn.prompt.trim() : it.title}
                 </span>
-                {it.command && <span className={css.command}>{t('flow.localCommand')}</span>}
-                <span className={`${css.time} num`}>{formatClock(it.turn.startedAt)}</span>
-              </span>
-              {/* Part of the card's text, so screen readers read it; shown on hover and focus. */}
-              {it.command && <span className={css.hint}>{t('flow.localCommandHint')}</span>}
-              {/* A local command has no calls or status to show: one line is enough. */}
-              {!it.command && it.turn.origin !== 'human' && it.turn.sender && (
-                <span className={css.sender}>{t('flow.from', { sender: it.turn.sender })}</span>
-              )}
-              {!it.command && (
-                <span className={css.line}>
-                  <span className={css.counts}>
-                    {t('flow.callsTools', { calls: it.calls, tools: it.tools })}
-                  </span>
-                  <StatusMark status={it.status} />
-                </span>
-              )}
-            </button>
-          </li>
-        ))}
+                <span className={`${css.clock} figure`}>{clock}</span>
+                {it.command ? (
+                  <>
+                    <span className={css.command}>{t('flow.localCommand')}</span>
+                    {/* Part of the row's text, so screen readers read it; shown on hover and focus. */}
+                    <span className={css.hint}>{t('flow.localCommandHint')}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className={css.markTop}>{markOnly}</span>
+                    {it.turn.origin !== 'human' && it.turn.sender && (
+                      <span className={css.sender}>
+                        {t('flow.from', { sender: it.turn.sender })}
+                      </span>
+                    )}
+                    <span className={css.sub}>
+                      <span className={`${css.subClock} figure`}>{clock}</span>
+                      <span className={css.counts}>
+                        <Figures
+                          text={t('flow.callsToolsShort', { calls: it.calls, tools: it.tools })}
+                        />
+                      </span>
+                      <span className={css.markSub}>{mark}</span>
+                    </span>
+                  </>
+                )}
+              </button>
+            </li>
+          );
+        })}
       </ul>
     </nav>
   );

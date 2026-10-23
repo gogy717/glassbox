@@ -153,19 +153,26 @@ describe('FlowView', () => {
     const turns = screen.getByRole('list', { name: 'Conversations' });
     // DOM order is display order, so Tab walks the turns as they are seen.
     const items = within(turns).getAllByRole('button');
+    // The number column says which conversation; the title is the prompt alone.
     expect(items.map((b) => b.querySelector('[data-title]')?.textContent)).toEqual([
-      'Conversation 3: Now write the design document from the findings',
+      'Now write the design document from the findings',
       expect.stringMatching(
-        /^Conversation 2: Research how a live viewer could read Claude Code transcripts, use ultracode\. What I need to know: - .+…$/,
+        /^Research how a live viewer could read Claude Code transcripts, use ultracode\. What I need to know: - .+…$/,
       ),
-      'Conversation 1: Busy sessions should be listed first in the sidebar',
+      'Busy sessions should be listed first in the sidebar',
+    ]);
+    expect(items.map((b) => b.textContent?.match(/^Conversation \d/)?.[0])).toEqual([
+      'Conversation 3',
+      'Conversation 2',
+      'Conversation 1',
     ]);
     expect(items[0]).toHaveAttribute('aria-current', 'true');
-    expect(within(items[0] as HTMLElement).getByText('Running')).toBeInTheDocument();
+    expect(within(items[0] as HTMLElement).getAllByText('Running')[0]).toBeInTheDocument();
+    expect(items[2]).toHaveTextContent('3 calls · 3 tools');
+    // A complete turn is a quiet check, named for screen readers.
     expect(
-      within(items[2] as HTMLElement).getByText('3 model calls · 3 tools'),
+      within(items[2] as HTMLElement).getAllByRole('img', { name: 'Complete' })[0],
     ).toBeInTheDocument();
-    expect(within(items[2] as HTMLElement).getByText('Complete')).toBeInTheDocument();
   });
 
   it('keeps an older turn picked from the URL selected while newer ones stay on top', () => {
@@ -218,7 +225,7 @@ describe('FlowView', () => {
     renderFlow({ open: withPrompt('turn_m1', prompt) });
     const card = screen.getByRole('button', { name: /Conversation 1/ });
     const title = card.querySelector('[data-title]')?.textContent ?? '';
-    expect([...title]).toHaveLength('Conversation 1: '.length + 120 + 1);
+    expect([...title]).toHaveLength(120 + 1);
     expect(title.endsWith('…')).toBe(true);
     expect(card).toHaveAttribute('title', prompt);
   });
@@ -289,7 +296,7 @@ describe('FlowView', () => {
     });
     const { navigate } = renderFlow({ open, follow: false });
     const card = screen.getByRole('button', { name: /Calls outside conversations/ });
-    expect(card).toHaveTextContent('1 model call · 0 tools');
+    expect(card).toHaveTextContent('1 call · 0 tools');
     fireEvent.click(card);
     expect(navigate).toHaveBeenLastCalledWith({ turnId: 'outside:main', requestId: null });
   });
@@ -467,13 +474,16 @@ describe('FlowView', () => {
     expect(navigate).toHaveBeenLastCalledWith({ turnId: 'turn_m1', requestId: null });
   });
 
-  it('offers “Back to latest” in the turn header while follow is paused', () => {
+  it('says following is paused, in a bar under the turn header, with the way back', () => {
     const { navigate, setFollow } = renderFlow({ route: { turnId: 'turn_m1' }, follow: false });
-    const back = screen.getByRole('button', { name: 'Back to latest' });
-    // In the header row, beside the turn's meta, not floating over the calls.
-    expect(screen.getByRole('heading', { level: 2 }).parentElement?.parentElement).toContainElement(
-      back,
+    // In the layout between the header and the calls, not floating over them.
+    const bar = screen.getByRole('group', { name: 'Conversation 1' }).nextElementSibling;
+    if (!(bar instanceof HTMLElement)) throw new Error('no bar after the header');
+    // The newest conversation (3) is still running in the demo.
+    expect(within(bar).getByRole('status')).toHaveTextContent(
+      'Following paused · Conversation 3 is running',
     );
+    const back = within(bar).getByRole('button', { name: 'Back to latest' });
     fireEvent.click(back);
     expect(setFollow).toHaveBeenLastCalledWith(true);
     expect(navigate).toHaveBeenLastCalledWith({ turnId: null, requestId: null });

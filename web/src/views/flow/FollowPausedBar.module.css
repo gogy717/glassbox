@@ -1,0 +1,27 @@
+/* A 30 px line in the layout under the turn's head: nothing floats over the calls. */
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  min-height: 30px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--layer-2);
+  color: var(--muted);
+  font-size: var(--fs-small);
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .bar {
+    padding: 0 12px;
+  }
+}
