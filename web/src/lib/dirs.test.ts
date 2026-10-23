@@ -53,6 +53,8 @@ describe('dirPlaceholder', () => {
 
   it('falls back to a neutral path without sessions to go by', () => {
     expect(dirPlaceholder([])).toBe('/path/to/project');
+    // Only temporary folders: no example of where projects live.
+    expect(dirPlaceholder(['/tmp/scratch/run'])).toBe('/path/to/project');
     expect(dirPlaceholder(['/'])).toBe('/path/to/project');
   });
 });

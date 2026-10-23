@@ -5,7 +5,7 @@ import { totalTokens } from '../../../src/core/usage.js';
 import { useI18n } from '../i18n';
 import { AGENT_TONES, agentColors, agentName } from '../lib/agent-names';
 import { formatCompact, formatRelative } from '../lib/format';
-import { groupSessions } from '../lib/sessions';
+import { groupSessions, isListed } from '../lib/sessions';
 import { AgentTag } from './AgentTag';
 import css from './SessionSidebar.module.css';
 import { LiveDot } from './Status';
@@ -19,24 +19,28 @@ interface Props {
 }
 
 export function SessionSidebar({ sessions, selectedId, now, showProbes, onSelect }: Props) {
-  const { t, intl } = useI18n();
+  const { t } = useI18n();
   const [query, setQuery] = useState('');
   const [only, setOnly] = useState<AgentKind | null>(null);
-  // Agents with sessions here, in a fixed order so the chips do not move as sessions update.
+  // Agents with sessions in the list (probes count only when shown), in a fixed order so the
+  // chips do not move as sessions update.
   const agents = useMemo(() => {
-    const present = new Set(sessions.map((s) => s.agent));
+    const present = new Set(sessions.filter((s) => isListed(s, showProbes)).map((s) => s.agent));
     const known = AGENT_TONES.filter((a) => present.has(a));
     const others = [...present].filter((a) => !(AGENT_TONES as readonly string[]).includes(a));
     return [...known, ...others.sort()];
-  }, [sessions]);
+  }, [sessions, showProbes]);
   // A filter on an agent whose sessions are all gone shows everything again.
   const filter = only !== null && agents.includes(only) ? only : null;
   const groups = useMemo(
     () =>
-      groupSessions(filter ? sessions.filter((s) => s.agent === filter) : sessions, query, {
-        showProbes,
-      }),
-    [sessions, filter, query, showProbes],
+      groupSessions(
+        // The open session keeps its row, so the list never loses what the page shows.
+        filter ? sessions.filter((s) => s.agent === filter || s.id === selectedId) : sessions,
+        query,
+        { showProbes },
+      ),
+    [sessions, filter, selectedId, query, showProbes],
   );
 
   return (
@@ -85,52 +89,81 @@ export function SessionSidebar({ sessions, selectedId, now, showProbes, onSelect
             <li className={css.groupTitle} aria-hidden="true">
               {g.project}
             </li>
-            {g.sessions.map((s) => {
-              const title = s.title ?? t('sidebar.untitled');
-              const live = t(`live.${s.live}`);
-              const when = formatRelative(s.updatedAt, now, intl);
-              const tokens = s.usage
-                ? t('common.tokens', { n: formatCompact(totalTokens(s.usage), intl) })
-                : null;
-              // The row cuts long text short; the tooltip has all of it.
-              const tip = [
-                title,
-                [agentName(s.agent), live, when, tokens].filter(Boolean).join(' · '),
-                s.cwd,
-              ]
-                .filter(Boolean)
-                .join('\n');
-              return (
-                <li key={s.id}>
-                  <button
-                    type="button"
-                    className={css.item}
-                    aria-current={s.id === selectedId ? 'true' : undefined}
-                    title={tip}
-                    onClick={() => onSelect(s.id)}
-                  >
-                    <span className={css.title}>{title}</span>
-                    <span className={css.meta}>
-                      <AgentTag kind={s.agent} />
-                      <LiveDot state={s.live} />
-                      <span className={css.state}>{live}</span>
-                      <span className={css.when}>
-                        <span className={css.sep}>·</span> {when}
-                        {tokens && (
-                          <>
-                            {' '}
-                            <span className={css.sep}>·</span> <span className="num">{tokens}</span>
-                          </>
-                        )}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
+            {g.sessions.map((s) => (
+              <li key={s.id}>
+                <SessionRow
+                  session={s}
+                  selected={s.id === selectedId}
+                  now={now}
+                  onSelect={onSelect}
+                />
+              </li>
+            ))}
           </ul>
         ))}
       </div>
     </nav>
+  );
+}
+
+function SessionRow({
+  session: s,
+  selected,
+  now,
+  onSelect,
+}: {
+  session: SessionSummary;
+  selected: boolean;
+  now: number;
+  onSelect(id: string): void;
+}) {
+  const { t, intl } = useI18n();
+  // Whether the row cut its text short when the pointer arrived: only then does the tooltip
+  // repeat the row's text (whole), so a screen reader does not hear it twice.
+  const [clipped, setClipped] = useState(false);
+  const title = s.title ?? t('sidebar.untitled');
+  const live = t(`live.${s.live}`);
+  const when = formatRelative(s.updatedAt, now, intl);
+  const tokens = s.usage
+    ? t('common.tokens', { n: formatCompact(totalTokens(s.usage), intl) })
+    : null;
+  const tip = clipped
+    ? [title, [agentName(s.agent), live, when, tokens].filter(Boolean).join(' · '), s.cwd]
+        .filter(Boolean)
+        .join('\n')
+    : (s.cwd ?? undefined);
+  return (
+    <button
+      type="button"
+      className={css.item}
+      aria-current={selected ? 'true' : undefined}
+      title={tip}
+      onPointerEnter={(e) =>
+        setClipped(
+          [...e.currentTarget.querySelectorAll<HTMLElement>('[data-clip]')].some(
+            (el) => el.scrollWidth > el.clientWidth,
+          ),
+        )
+      }
+      onClick={() => onSelect(s.id)}
+    >
+      <span className={css.title} data-clip>
+        {title}
+      </span>
+      <span className={css.meta}>
+        <AgentTag kind={s.agent} />
+        <LiveDot state={s.live} />
+        <span className={css.state}>{live}</span>
+        <span className={css.when} data-clip>
+          <span className={css.sep}>·</span> {when}
+          {tokens && (
+            <>
+              {' '}
+              <span className={css.sep}>·</span> <span className="num">{tokens}</span>
+            </>
+          )}
+        </span>
+      </span>
+    </button>
   );
 }

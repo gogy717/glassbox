@@ -123,6 +123,53 @@ describe('SessionSidebar', () => {
     ).toEqual(['Claude Code', 'Grok', 'aider']);
   });
 
+  it('offers chips only for agents with listed sessions, probes included only when shown', () => {
+    const probe = { ...(sessions[1] as SessionSummary), agent: 'grok', tags: ['probe'] };
+    const list = [sessions[0] as SessionSummary, probe];
+    const sidebar = (showProbes: boolean) => (
+      <I18nContext.Provider value={makeI18n('en')}>
+        <SessionSidebar
+          sessions={list}
+          selectedId={null}
+          now={DEMO_NOW.getTime()}
+          showProbes={showProbes}
+          onSelect={vi.fn()}
+        />
+      </I18nContext.Provider>
+    );
+    const { rerender } = render(sidebar(false));
+    expect(screen.queryByRole('group', { name: 'Filter by agent' })).toBeNull();
+    rerender(sidebar(true));
+    const group = screen.getByRole('group', { name: 'Filter by agent' });
+    expect(
+      within(group)
+        .getAllByRole('button')
+        .map((c) => c.textContent),
+    ).toEqual(['Claude Code', 'Grok']);
+  });
+
+  it('keeps the open session’s row while another agent is picked', () => {
+    const mixed = sessions.map((s, i) => (i === 1 ? { ...s, agent: 'grok' } : s));
+    const open = mixed[0] as SessionSummary;
+    render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <SessionSidebar
+          sessions={mixed}
+          selectedId={open.id}
+          now={DEMO_NOW.getTime()}
+          onSelect={vi.fn()}
+        />
+      </I18nContext.Provider>,
+    );
+    const group = screen.getByRole('group', { name: 'Filter by agent' });
+    fireEvent.click(within(group).getByRole('button', { name: 'Grok' }));
+    const rows = screen.getAllByRole('button').filter((b) => b.closest('li'));
+    expect(rows).toHaveLength(2);
+    expect(rows.find((b) => b.getAttribute('aria-current') === 'true')).toHaveTextContent(
+      open.title ?? '',
+    );
+  });
+
   it('shows everything again when the filtered agent’s sessions are gone', () => {
     const mixed = sessions.map((s, i) => (i === 1 ? { ...s, agent: 'grok' } : s));
     const sidebar = (list: SessionSummary[]) => (
@@ -159,6 +206,15 @@ describe('SessionSidebar', () => {
     );
     const row = screen.getByRole('button', { name: /A very long title/ });
     expect(row).toHaveClass(css.item as string);
+    // Nothing cut short (jsdom lays nothing out): the tooltip only adds the folder, so a screen
+    // reader does not hear the row's text twice.
+    fireEvent.pointerEnter(row);
+    expect(row).toHaveAttribute('title', long.cwd);
+    // Cut short: the tooltip has all of it.
+    const title = row.querySelector<HTMLElement>(`.${css.title}`) as HTMLElement;
+    Object.defineProperty(title, 'scrollWidth', { configurable: true, value: 400 });
+    Object.defineProperty(title, 'clientWidth', { configurable: true, value: 200 });
+    fireEvent.pointerEnter(row);
     const tip = (row.getAttribute('title') ?? '').split('\n');
     expect(tip[0]).toBe(long.title);
     expect(tip[1]).toMatch(/^Claude Code · Running · .+ · 1\.9M tokens$/);

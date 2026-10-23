@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { demoOpen, DEMO_NOW as NOW } from '../test/demo';
-import { agentPath, agentTree, subtreeIds, summarize } from './agents';
+import { agentPath, agentTree, mayStillRun, subtreeIds, summarize } from './agents';
 
 const EXPLORE = 'a1b2c3d4e5f60718';
 
@@ -76,5 +76,26 @@ describe('summarize', () => {
       output: 2_800,
       thinking: 1_600,
     });
+  });
+});
+
+describe('mayStillRun', () => {
+  it('holds while the session is live or the agent runs', () => {
+    const open = demoOpen(NOW);
+    const at = (live: 'busy' | 'waiting' | 'idle' | 'closed') => ({
+      ...open,
+      session: { ...open.session, live },
+    });
+    expect(mayStillRun(at('busy'), 'nobody')).toBe(true);
+    expect(mayStillRun(at('waiting'), 'nobody')).toBe(true);
+    expect(mayStillRun(at('closed'), 'nobody')).toBe(false);
+    expect(mayStillRun(at('idle'), 'nobody')).toBe(false);
+    const main = open.agents.get('main');
+    if (!main) throw new Error('fixture');
+    const running = {
+      ...at('closed'),
+      agents: new Map(open.agents).set('main', { ...main, status: 'running' as const }),
+    };
+    expect(mayStillRun(running, 'main')).toBe(true);
   });
 });

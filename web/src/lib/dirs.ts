@@ -25,7 +25,8 @@ export function shortPath(dir: string): string {
  * most recent one, else a neutral path.
  */
 export function dirPlaceholder(dirs: string[]): string {
-  const recent = dirs.find((d) => !isTemporary(d)) ?? dirs[0];
+  // A temporary folder (/tmp, …) is no example of where projects live.
+  const recent = dirs.find((d) => !isTemporary(d));
   const sep = recent?.includes('\\') && !recent.includes('/') ? '\\' : '/';
   const cut = recent ? recent.replace(/[\\/]+$/, '').lastIndexOf(sep) : -1;
   if (!recent || cut <= 0) return '/path/to/project';

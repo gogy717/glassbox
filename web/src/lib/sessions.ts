@@ -15,15 +15,18 @@ const busyFirst = (a: SessionSummary, b: SessionSummary) =>
  * Sidebar grouping: by project, running sessions first (in groups and within them), then most
  * recently updated. `query` matches title or cwd, case-insensitively.
  */
+/** Background probe sessions (e.g. ClaudeBar's) are noise unless asked for. */
+export const isListed = (s: SessionSummary, showProbes = false): boolean =>
+  showProbes || !s.tags?.includes('probe');
+
 export function groupSessions(
   sessions: SessionSummary[],
   query: string,
   opts: { showProbes?: boolean } = {},
 ): SessionGroup[] {
   const q = query.trim().toLowerCase();
-  // Background probe sessions (e.g. ClaudeBar's) are noise unless asked for.
   const matches = (s: SessionSummary) =>
-    (opts.showProbes || !s.tags?.includes('probe')) &&
+    isListed(s, opts.showProbes) &&
     (!q || (s.title ?? '').toLowerCase().includes(q) || (s.cwd ?? '').toLowerCase().includes(q));
   const groups = new Map<string, SessionSummary[]>();
   for (const s of sessions) {

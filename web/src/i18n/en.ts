@@ -110,7 +110,7 @@ export const en: Record<MessageKey, string> = {
   'tokens.input': 'Uncached input',
   'tokens.output': 'Output',
   'tokens.thinking': 'of which thinking',
-  'tokens.rowLabel': '{label} · {n} {n|token|tokens}',
+  'tokens.rowLabel': '{label} · {status} · {n} {n|token|tokens}',
   'steps.cat.explore': 'Explore',
   'steps.cat.edit': 'Edit',
   'steps.cat.run': 'Run',

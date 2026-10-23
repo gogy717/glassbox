@@ -59,21 +59,22 @@
   /* Blocked on the person answering a permission prompt; follows the theme's warning colour. */
   --seg-approval: var(--warning);
 
-  /* Coding-agent tags: tint background + text, ≥ 4.5:1 in both themes. The text colours stay
-     apart on every pair under protanopia / deuteranopia (OKLab ΔE ≥ 9) and away from status
-     colours; the tag always carries the agent's name too. */
-  --agent-claude-code-fg: #9f4f25;
-  --agent-claude-code-bg: #fee3d7;
-  --agent-codex-fg: #016f82;
-  --agent-codex-bg: #c5f3ff;
-  --agent-grok-fg: #7541b8;
-  --agent-grok-bg: #ede5ff;
-  --agent-oh-my-pi-fg: #760c50;
-  --agent-oh-my-pi-bg: #fee0ee;
-  --agent-opencode-fg: #433f01;
-  --agent-opencode-bg: #efecbe;
-  --agent-other-fg: #54585f;
-  --agent-other-bg: #e6eaef;
+  /* Coding-agent tags. The fill carries the agent: its lightness and hue keep every pair of
+     agents apart, also under protanopia / deuteranopia, and away from the status, accent and
+     tool-card colours, which sit at other lightnesses. The text is a near-ink shade of the same
+     hue, ≥ 4.5:1 on its fill. tokens.test.ts holds all of this; the tag names its agent too. */
+  --agent-claude-code-fg: #4a2010;
+  --agent-claude-code-bg: #c38873;
+  --agent-codex-fg: #023538;
+  --agent-codex-bg: #7af4fc;
+  --agent-grok-fg: #31254d;
+  --agent-grok-bg: #ad91f2;
+  --agent-oh-my-pi-fg: #461e36;
+  --agent-oh-my-pi-bg: #fea2d7;
+  --agent-opencode-fg: #332f01;
+  --agent-opencode-bg: #f3eeb4;
+  --agent-other-fg: #2a2e33;
+  --agent-other-bg: #c9ced4;
 
   /* JSON inspector (DevTools palette). */
   --json-key: #881391;
@@ -138,18 +139,18 @@
     --json-key: #5db0d7;
     --json-string: #f28b82;
     --json-number: #99c8ff;
-    --agent-claude-code-fg: #da8b64;
-    --agent-claude-code-bg: #492614;
-    --agent-codex-fg: #9aedff;
-    --agent-codex-bg: #003740;
-    --agent-grok-fg: #9e8afa;
-    --agent-grok-bg: #302a4c;
-    --agent-oh-my-pi-fg: #f09fd9;
-    --agent-oh-my-pi-bg: #44243b;
-    --agent-opencode-fg: #ddd486;
-    --agent-opencode-bg: #363106;
-    --agent-other-fg: #bfc5cc;
-    --agent-other-bg: #2e3134;
+    --agent-claude-code-fg: #fff0ec;
+    --agent-claude-code-bg: #7f1900;
+    --agent-codex-fg: #e1f9fd;
+    --agent-codex-bg: #03515c;
+    --agent-grok-fg: #f3f2ff;
+    --agent-grok-bg: #36017f;
+    --agent-oh-my-pi-fg: #feeef7;
+    --agent-oh-my-pi-bg: #4c0038;
+    --agent-opencode-fg: #f7f4e1;
+    --agent-opencode-bg: #6c6433;
+    --agent-other-fg: #eff4fa;
+    --agent-other-bg: #3f4348;
   }
 }
 
@@ -201,16 +202,16 @@
   --json-key: #5db0d7;
   --json-string: #f28b82;
   --json-number: #99c8ff;
-  --agent-claude-code-fg: #da8b64;
-  --agent-claude-code-bg: #492614;
-  --agent-codex-fg: #9aedff;
-  --agent-codex-bg: #003740;
-  --agent-grok-fg: #9e8afa;
-  --agent-grok-bg: #302a4c;
-  --agent-oh-my-pi-fg: #f09fd9;
-  --agent-oh-my-pi-bg: #44243b;
-  --agent-opencode-fg: #ddd486;
-  --agent-opencode-bg: #363106;
-  --agent-other-fg: #bfc5cc;
-  --agent-other-bg: #2e3134;
+  --agent-claude-code-fg: #fff0ec;
+  --agent-claude-code-bg: #7f1900;
+  --agent-codex-fg: #e1f9fd;
+  --agent-codex-bg: #03515c;
+  --agent-grok-fg: #f3f2ff;
+  --agent-grok-bg: #36017f;
+  --agent-oh-my-pi-fg: #feeef7;
+  --agent-oh-my-pi-bg: #4c0038;
+  --agent-opencode-fg: #f7f4e1;
+  --agent-opencode-bg: #6c6433;
+  --agent-other-fg: #eff4fa;
+  --agent-other-bg: #3f4348;
 }

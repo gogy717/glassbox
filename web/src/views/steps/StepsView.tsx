@@ -5,6 +5,7 @@ import { useApprovalsContext } from '../../data/approvals';
 import type { OpenSession } from '../../data/store';
 import { useNow } from '../../data/useNow';
 import { useI18n } from '../../i18n';
+import { mayStillRun } from '../../lib/agents';
 import { formatDuration, formatNumber } from '../../lib/format';
 import { buildSteps, type Phase, type PhaseCategory, type Step } from '../../lib/steps';
 import type { Navigate, Route } from '../../router';
@@ -31,10 +32,7 @@ export function StepsView({ open, agentId, route, navigate }: Props) {
   const items = useTurnItems(open, agentId);
   const current = useSelectedTurn(items, open, agentId, route, follow);
   // An empty view says "yet" only while the agent may still add to it.
-  const running =
-    open.session.live === 'busy' ||
-    open.session.live === 'waiting' ||
-    open.agents.get(agentId)?.status === 'running';
+  const running = mayStillRun(open, agentId);
   // Durations of a running step grow with the clock; finished turns need no ticking.
   const live = current?.status === 'running' || current?.status === 'approval';
   const now = useNow(live ? 1000 : 60_000);

@@ -73,6 +73,10 @@ describe('TokensView', () => {
       'verify:live-write',
     ]);
     expect(within(byAgent).getByText('cc-recon')).toBeInTheDocument();
+    // The row's name says the agent's state, which its dot only shows.
+    expect(
+      within(byAgent).getByRole('button', { name: /^Main · Running · .+ tokens$/ }),
+    ).toBeInTheDocument();
     fireEvent.click(within(byAgent).getByRole('radio', { name: 'By spend' }));
     expect(labels()).toEqual([
       'recon:prior-art',

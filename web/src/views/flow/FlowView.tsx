@@ -7,6 +7,7 @@ import { StatusPill } from '../../components/Status';
 import type { OpenSession } from '../../data/store';
 import { useNow } from '../../data/useNow';
 import { useI18n } from '../../i18n';
+import { mayStillRun } from '../../lib/agents';
 import { formatClock, formatDuration } from '../../lib/format';
 import type { Navigate, Route } from '../../router';
 import { useUi } from '../../ui';
@@ -35,10 +36,7 @@ export function FlowView({ open, agentId, route, navigate, live = null }: Props)
   const items = useTurnItems(open, agentId);
   const current = useSelectedTurn(items, open, agentId, route, follow);
   // An empty view says "yet" only while the agent may still add to it.
-  const running =
-    open.session.live === 'busy' ||
-    open.session.live === 'waiting' ||
-    open.agents.get(agentId)?.status === 'running';
+  const running = mayStillRun(open, agentId);
 
   // Stable across renders so memoised rows are not invalidated by a new navigate function.
   const navRef = useRef(navigate);
