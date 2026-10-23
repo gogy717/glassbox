@@ -45,6 +45,7 @@ describe('Diagnostics', () => {
           'live-state',
           'other-branches',
           'broken-tree',
+          'live-state-unfinished-reply',
         ],
         parseErrors: 0,
         unknownRecordTypes: {},
@@ -53,13 +54,14 @@ describe('Diagnostics', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: '数据诊断' }));
     const items = within(screen.getByRole('dialog')).getAllByRole('listitem');
-    expect(items).toHaveLength(10);
+    expect(items).toHaveLength(11);
     expect(items[3]).toHaveTextContent('最近 30 秒内有写入');
     expect(items[5]).toHaveTextContent('此 agent 的子代理数据未接入');
     expect(items[6]).toHaveTextContent('需要 Node 的 zstd 支持');
     expect(items[7]).toHaveTextContent('总是显示为已关闭');
     expect(items[8]).toHaveTextContent('编辑后重发的提示');
     expect(items[9]).toHaveTextContent('指向缺失的父条目');
+    expect(items[10]).toHaveTextContent('未完成的回复在最近一小时内');
     for (const li of items) expect(li.textContent).toMatch(/[一-鿿]/);
   });
 
@@ -118,5 +120,26 @@ describe('Diagnostics', () => {
     ]);
     // Translated, not shown as raw keys.
     expect(within(screen.getByRole('dialog')).queryByText('broken-tree')).toBeNull();
+  });
+
+  it('explains how an OpenCode session’s live state is guessed, not with Codex’s rule', () => {
+    render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <SessionAgentContext.Provider value="opencode">
+          <Diagnostics
+            diagnostics={{
+              unavailable: ['request-detail', 'live-state-unfinished-reply'],
+              parseErrors: 0,
+              unknownRecordTypes: {},
+            }}
+          />
+        </SessionAgentContext.Provider>
+      </I18nContext.Provider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Data diagnostics' }));
+    const panel = screen.getByRole('dialog');
+    expect(panel).toHaveTextContent('“running” means OpenCode is running and a reply');
+    expect(panel).not.toHaveTextContent('30 seconds');
+    expect(within(panel).queryByText('live-state-unfinished-reply')).toBeNull();
   });
 });

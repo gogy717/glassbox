@@ -188,7 +188,7 @@ describe('OpenCodeSessionParser: a finished session', () => {
     expect(feed(b.doc()).snapshot().diagnostics).toEqual({
       unknownRecordTypes: {},
       parseErrors: 0,
-      unavailable: ['request-detail', 'live-state-heuristic'],
+      unavailable: ['request-detail', 'live-state-unfinished-reply'],
     });
   });
 

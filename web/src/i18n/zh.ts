@@ -264,6 +264,8 @@ export const zh = {
   'diag.u.inFlight': '进行中的请求：此版本不写请求开始记录，回复落盘后才能看到',
   'diag.u.perRequestUsage': '按请求的 token 用量：只有会话级合计',
   'diag.u.liveStateHeuristic': '这个 agent 没有进程登记，“运行中”是按最近 30 秒内有写入推断的',
+  'diag.u.liveStateUnfinishedReply':
+    '运行状态是推断的：{agent} 正在运行，并且这个会话里有一条未完成的回复在最近一小时内（无法列出进程时为 10 分钟内）有写入，才显示为“运行中”；等待和空闲不会被记录，其余都显示为已关闭',
   'diag.u.archivedSessions': '部分已归档的会话无法解压读取（需要 Node 的 zstd 支持）',
   'diag.u.compactionMarkers': '压缩点是根据上下文骤降推测的',
   'diag.u.liveState':

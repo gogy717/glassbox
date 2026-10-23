@@ -11,6 +11,7 @@ const GAPS: Record<string, MessageKey> = {
   'in-flight': 'diag.u.inFlight',
   'per-request-usage': 'diag.u.perRequestUsage',
   'live-state-heuristic': 'diag.u.liveStateHeuristic',
+  'live-state-unfinished-reply': 'diag.u.liveStateUnfinishedReply',
   'compaction-markers': 'diag.u.compactionMarkers',
   subagents: 'diag.u.subagents',
   'archived-sessions': 'diag.u.archivedSessions',

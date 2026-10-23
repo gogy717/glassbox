@@ -10,8 +10,8 @@
  *
  * Every ingest rebuilds the views from the document. Change sets are the difference from what
  * clients were last given, so they carry removals too: OpenCode deletes messages when the user
- * reverts. Live state comes from the adapter's heuristic, so every snapshot lists
- * `live-state-heuristic`; OpenCode stores no request bodies, hence `request-detail`.
+ * reverts. Live state comes from the adapter's guess from unfinished replies, so every snapshot
+ * lists `live-state-unfinished-reply`; OpenCode stores no request bodies, hence `request-detail`.
  */
 import { basename } from 'node:path';
 import type { ChangeSet, SessionParser, SessionSource, SourceFile } from '../../core/adapter.js';
@@ -55,7 +55,7 @@ import {
 } from './records.js';
 
 const PREVIEW_CHARS = 500;
-const UNAVAILABLE = ['request-detail', 'live-state-heuristic'];
+const UNAVAILABLE = ['request-detail', 'live-state-unfinished-reply'];
 const VIEW_KINDS = ['agents', 'turns', 'requests', 'toolCalls'] as const;
 type ViewKind = (typeof VIEW_KINDS)[number];
 

@@ -272,6 +272,8 @@ export const en: Record<MessageKey, string> = {
   'diag.u.perRequestUsage': 'Per-request token usage: only session totals are available',
   'diag.u.liveStateHeuristic':
     'This agent has no process registry: “running” means the session was written to in the last 30 seconds',
+  'diag.u.liveStateUnfinishedReply':
+    'Live state is inferred: “running” means {agent} is running and a reply in this session is unfinished and was written to in the last hour (10 minutes where processes cannot be listed); waiting and idle are not recorded, so the rest shows as closed',
   'diag.u.archivedSessions':
     'Some archived sessions cannot be unpacked (needs zstd support in Node)',
   'diag.u.compactionMarkers': 'Compaction points are inferred from sharp context drops',
