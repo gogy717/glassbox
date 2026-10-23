@@ -14,7 +14,7 @@ import css from './FlowView.module.css';
 import { FollowPausedBar } from './FollowPausedBar';
 import { requestsOf, toolsOf } from './flow-model';
 import { TurnHeader } from './TurnHeader';
-import { TurnList, useSelectedTurn, useTurnItems } from './TurnList';
+import { filterTurns, TurnList, useSelectedTurn, useTurnItems } from './TurnList';
 import { useFollowScroll } from './useFollowScroll';
 
 interface Props {
@@ -31,7 +31,11 @@ export function FlowView({ open, agentId, route, navigate, live = null }: Props)
   const { follow, setFollow } = useUi();
 
   const items = useTurnItems(open, agentId);
-  const current = useSelectedTurn(items, open, agentId, route, follow);
+  // The list's filter: follow shows the newest conversation that passes it; a conversation
+  // already on screen stays there while the list is filtered.
+  const [query, setQuery] = useState('');
+  const latest = filterTurns(items, query).at(-1) ?? items.at(-1);
+  const current = useSelectedTurn(items, open, agentId, route, follow, latest);
   // An empty view says "yet" only while the agent may still add to it.
   const running = mayStillRun(open, agentId);
 
@@ -71,7 +75,13 @@ export function FlowView({ open, agentId, route, navigate, live = null }: Props)
 
   return (
     <div className={css.flow}>
-      <TurnList items={items} selectedId={current?.turn.id ?? null} onSelect={pickTurn} />
+      <TurnList
+        items={items}
+        selectedId={current?.turn.id ?? null}
+        onSelect={pickTurn}
+        query={query}
+        onQuery={setQuery}
+      />
       <section className={css.main}>
         {current ? (
           <>

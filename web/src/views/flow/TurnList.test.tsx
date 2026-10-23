@@ -186,3 +186,66 @@ describe('TurnList', () => {
     expect(onSelect).toHaveBeenCalledWith('turn_6');
   });
 });
+
+describe('TurnList filter', () => {
+  afterEach(cleanup);
+
+  function renderFiltered(initial = '') {
+    const onQuery = vi.fn();
+    const tree = (query: string) => (
+      <I18nContext.Provider value={makeI18n('en')}>
+        <TurnList
+          items={items}
+          selectedId="turn_5"
+          onSelect={vi.fn()}
+          query={query}
+          onQuery={onQuery}
+        />
+      </I18nContext.Provider>
+    );
+    const view = render(tree(initial));
+    return { ...view, onQuery, type: (q: string) => view.rerender(tree(q)) };
+  }
+
+  const titles = () =>
+    within(screen.getByRole('list', { name: 'Conversations' }))
+      .getAllByRole('button')
+      .map((b) => b.querySelector('[data-title]')?.textContent);
+
+  it('keeps the conversations whose heading matches, newest first, and counts them', () => {
+    const { type, onQuery } = renderFiltered();
+    const field = screen.getByRole('searchbox', { name: 'Filter conversations' });
+    fireEvent.change(field, { target: { value: 'prompt 2' } });
+    expect(onQuery).toHaveBeenLastCalledWith('prompt 2');
+    type('PROMPT');
+    expect(titles()).toEqual(['prompt 5', 'prompt 4', 'prompt 3', 'prompt 2', 'prompt 1']);
+    type('prompt 2');
+    expect(titles()).toEqual(['prompt 2']);
+    expect(screen.getByRole('navigation', { name: 'Conversations' })).toHaveTextContent('1 of 5');
+    // The number the row shows matches too: "Conversation 4".
+    type('conversation 4');
+    expect(titles()).toEqual(['prompt 4']);
+  });
+
+  it('says so when nothing matches, and clears with Escape', () => {
+    const { type, onQuery } = renderFiltered('nothing like this');
+    expect(screen.getByText('No conversation matches')).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Conversations' })).toBeNull();
+    fireEvent.keyDown(screen.getByRole('searchbox'), { key: 'Escape' });
+    expect(onQuery).toHaveBeenLastCalledWith('');
+    type('');
+    expect(titles()).toHaveLength(5);
+  });
+
+  it('is the tab stop before the list', () => {
+    renderFiltered();
+    const field = screen.getByRole('searchbox', { name: 'Filter conversations' });
+    const list = screen.getByRole('list', { name: 'Conversations' });
+    expect(field.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('has no field where the view does not ask for one', () => {
+    renderList('turn_5');
+    expect(screen.queryByRole('searchbox')).toBeNull();
+  });
+});

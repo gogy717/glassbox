@@ -533,6 +533,19 @@ describe('FlowView', () => {
     expect(screen.queryByRole('region', { name: /details/ })).toBeNull();
   });
 
+  it('follows the newest conversation that passes the filter, and keeps the stage when none does', () => {
+    renderFlow();
+    const field = screen.getByRole('searchbox', { name: 'Filter conversations' });
+    fireEvent.change(field, { target: { value: 'busy sessions' } });
+    const list = screen.getByRole('list', { name: 'Conversations' });
+    expect(within(list).getAllByRole('button')).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Conversation 1: Busy/);
+    fireEvent.change(field, { target: { value: 'no such words' } });
+    expect(screen.getByText('No conversation matches')).toBeInTheDocument();
+    // Nothing to follow in the list: the newest conversation stays on stage.
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Conversation 3: /);
+  });
+
   it('opens the turn of a linked request and highlights its row', () => {
     renderFlow({ route: { requestId: 'req_m2' }, follow: false });
     expect(screen.getByRole('button', { name: /Conversation 1/ })).toHaveAttribute(
