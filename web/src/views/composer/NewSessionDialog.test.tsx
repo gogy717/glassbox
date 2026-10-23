@@ -40,14 +40,23 @@ describe('NewSessionDialog', () => {
     );
   });
 
-  it('offers recent directories by their last two folders, full path on hover', async () => {
+  it('offers recent directories whole when they fit, picked with a click', async () => {
     renderDialog();
-    const chip = await screen.findByRole('button', { name: 'Dev/blog' });
-    expect(chip).toHaveAttribute('title', '/Users/demo/Dev/blog');
+    const chip = await screen.findByRole('button', { name: '/Users/demo/Dev/blog' });
+    expect(chip).not.toHaveAccessibleDescription();
     fireEvent.click(chip);
     expect(screen.getByRole('textbox', { name: 'Working directory' })).toHaveValue(
       '/Users/demo/Dev/blog',
     );
+  });
+
+  it('cuts a long directory in the middle, keeping its root and its tail, the whole on hover', async () => {
+    const long = '/home/user/orca/workspaces/glassbox/anemone';
+    renderDialog(fakeClient({ directories: vi.fn(async () => [long]) }));
+    const chip = await screen.findByRole('button', { name: '/…/workspaces/glassbox/anemone' });
+    expect(chip).toHaveAccessibleDescription(long);
+    fireEvent.click(chip);
+    expect(screen.getByRole('textbox', { name: 'Working directory' })).toHaveValue(long);
   });
 
   it('keeps temporary folders out of the way until asked for', async () => {
@@ -56,10 +65,12 @@ describe('NewSessionDialog', () => {
         directories: vi.fn(async () => ['/Users/demo/Dev/blog', '/private/tmp/claude-501/scratch']),
       }),
     );
-    await screen.findByRole('button', { name: 'Dev/blog' });
-    expect(screen.queryByRole('button', { name: 'claude-501/scratch' })).toBeNull();
+    await screen.findByRole('button', { name: '/Users/demo/Dev/blog' });
+    expect(screen.queryByRole('button', { name: '/private/tmp/claude-501/scratch' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Temporary folders (1)' }));
-    expect(screen.getByRole('button', { name: 'claude-501/scratch' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: '/private/tmp/claude-501/scratch' }),
+    ).toBeInTheDocument();
   });
 
   it('needs an absolute directory and a first message before starting', async () => {

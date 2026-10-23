@@ -12,8 +12,8 @@
   flex-direction: column;
   width: min(1080px, calc(100vw - 48px));
   height: min(760px, calc(100vh - 48px));
-  border: 1px solid var(--border);
-  border-radius: 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-l);
   background: var(--layer-1);
   box-shadow: var(--shadow);
   overflow: hidden;
@@ -35,7 +35,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 650;
+  font-size: var(--fs-title);
+  font-weight: 600;
 }
 
 .close {
@@ -44,10 +45,11 @@
   width: 30px;
   height: 30px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-l);
   background: transparent;
   color: var(--muted);
   cursor: pointer;
+  transition: background var(--motion);
 }
 
 .close:hover {

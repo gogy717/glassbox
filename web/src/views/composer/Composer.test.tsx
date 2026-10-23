@@ -78,9 +78,9 @@ describe('Composer', () => {
   it('keeps another agent’s session view-only and points to a new Claude Code session', () => {
     const { box, client, onNewSession } = renderComposer({ session: { ...closed, agent: 'grok' } });
     expect(box).toBeDisabled();
-    const modes = screen.getAllByRole('radio');
-    expect(modes).toHaveLength(2);
-    for (const m of modes) expect(m).toBeDisabled();
+    // Nothing to choose for an agent glassbox cannot run: the modes are not there at all.
+    expect(screen.queryByRole('radiogroup', { name: 'How to send' })).toBeNull();
+    expect(screen.queryByRole('radio')).toBeNull();
     expect(box).toHaveAttribute(
       'placeholder',
       'Grok sessions are view-only; start a Claude Code session with “New session”',
@@ -109,12 +109,22 @@ describe('Composer', () => {
     expect(box).toHaveValue('');
   });
 
-  it('will not write into a session a terminal has open, until "continue in a copy" is picked', async () => {
+  it('continues a session a terminal has open in a copy, saying once why', async () => {
     const { client, box } = renderComposer({ session: busy });
-    expect(box).toBeDisabled();
-    expect(box.getAttribute('placeholder')).toMatch(/open in a terminal/);
-    fireEvent.click(screen.getByRole('radio', { name: 'Continue in a copy' }));
     expect(box).toBeEnabled();
+    expect(box).toHaveAttribute(
+      'placeholder',
+      'Message Claude Code (Enter to send, Shift+Enter for a new line)',
+    );
+    expect(screen.getByRole('radio', { name: 'Continue in a copy' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    // Continue stays in view, struck through, with its reason; it is not a choice right now.
+    const resume = screen.getByRole('radio', { name: 'Continue' });
+    expect(resume).toBeDisabled();
+    expect(resume).toHaveAttribute('title', expect.stringMatching(/^Open in a terminal right now/));
+    expect(screen.getAllByText(/Open in a terminal right now/)).toHaveLength(1);
     type(box, 'hi');
     fireEvent.keyDown(box, { key: 'Enter' });
     await waitFor(() =>
@@ -124,9 +134,38 @@ describe('Composer', () => {
     );
   });
 
-  it('treats an idle terminal session as open too', () => {
-    const { box } = renderComposer({ session: idle });
-    expect(box).toBeDisabled();
+  it('treats an idle terminal session as open too, and offers Continue again once it closes', () => {
+    const client = fakeClient();
+    const view = (session: SessionSummary) => (
+      <I18nContext.Provider value={makeI18n('en')}>
+        <Composer
+          session={session}
+          run={null}
+          client={client}
+          onNewSession={vi.fn()}
+          onRunStarted={vi.fn()}
+        />
+      </I18nContext.Provider>
+    );
+    const { rerender } = render(view(idle));
+    expect(screen.getByRole('radio', { name: 'Continue in a copy' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    expect(screen.getByText(/Open in a terminal right now/)).toBeInTheDocument();
+    rerender(view({ ...idle, live: 'closed' }));
+    expect(screen.getByRole('radio', { name: 'Continue' })).toBeEnabled();
+    expect(screen.getByRole('radio', { name: 'Continue' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.queryByText(/Open in a terminal right now/)).toBeNull();
+  });
+
+  it('keeps the person’s own pick for a closed session', () => {
+    renderComposer({ session: closed });
+    fireEvent.click(screen.getByRole('radio', { name: 'Continue in a copy' }));
+    expect(screen.getByRole('radio', { name: 'Continue in a copy' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
   });
 
   it('keeps Shift+Enter and IME composition as typing; Ctrl/⌘+Enter also sends', async () => {

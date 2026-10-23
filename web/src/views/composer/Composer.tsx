@@ -1,7 +1,8 @@
-import { Plus, Send, Square } from 'lucide-react';
+import { Lock, Plus, Send, Square } from 'lucide-react';
 import { type KeyboardEvent, useState } from 'react';
 import type { SessionSummary } from '../../../../src/core/model.js';
 import type { RunPermissionMode, RunState } from '../../../../src/shared/runs.js';
+import { Switch } from '../../components/Switch';
 import type { RunsClient } from '../../data/runs';
 import { useSessionAgent } from '../../data/session-agent';
 import { useI18n } from '../../i18n';
@@ -22,12 +23,17 @@ interface Props {
 type StartMode = 'resume' | 'fork';
 const REPLYING = new Set<RunState['status']>(['starting', 'running', 'waiting-permission']);
 
-/** Bottom bar for talking to Claude: continue a session, fork it, or follow up on a run. */
+/**
+ * Bottom bar for talking to Claude: continue a session, fork it, or follow up on a run. It offers
+ * the action that is true now: a copy while a terminal holds the session (Continue comes back
+ * once it closes), nothing to choose for an agent glassbox cannot run, Stop while a reply runs.
+ */
 export function Composer({ session, run, client, onNewSession, onRunStarted }: Props) {
   const { t } = useI18n();
   const agent = useSessionAgent();
   const [text, setText] = useState('');
-  const [mode, setMode] = useState<StartMode>('resume');
+  // The person's pick, if they made one; otherwise the mode follows the session.
+  const [choice, setChoice] = useState<StartMode | null>(null);
   const [permissionMode, setPermissionMode] = useState<RunPermissionMode>('default');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,17 +41,17 @@ export function Composer({ session, run, client, onNewSession, onRunStarted }: P
   const activeRun = run && run.status !== 'closed' && run.status !== 'error' ? run : null;
   const failedRun = run?.status === 'error' ? run : null;
   const replying = !!activeRun && REPLYING.has(activeRun.status);
-  // Two processes writing one session interleave its transcript: only a closed session resumes.
-  const openElsewhere = !!session && !activeRun && session.live !== 'closed' && mode === 'resume';
-
   // glassbox can only run Claude Code; other agents' sessions are there to look at.
   const viewOnly = !!session && session.agent !== 'claude-code';
+  // Two processes writing one session interleave its transcript: only a closed session resumes,
+  // so while a terminal holds it, a copy is the way on.
+  const terminalOwns = !!session && !viewOnly && !activeRun && session.live !== 'closed';
+  const mode: StartMode = terminalOwns ? 'fork' : (choice ?? 'resume');
 
   let blocked: string | null = null;
   if (!session) blocked = t('composer.noSession');
   else if (viewOnly) blocked = t('composer.viewOnly', { agent: agentName(session.agent) });
   else if (replying) blocked = t('composer.waiting');
-  else if (openElsewhere) blocked = t('composer.busyTerminal');
   const prompt = text.trim();
   const canSend = !blocked && !busy && prompt.length > 0;
 
@@ -90,7 +96,8 @@ export function Composer({ session, run, client, onNewSession, onRunStarted }: P
           <span className={css.error}>{failedRun.error}</span>
           <button
             type="button"
-            className={css.secondary}
+            className={css.button}
+            data-size="small"
             disabled={busy || prompt.length === 0}
             onClick={() => void start('fork')}
           >
@@ -98,7 +105,8 @@ export function Composer({ session, run, client, onNewSession, onRunStarted }: P
           </button>
         </div>
       )}
-      <div className={css.inputRow}>
+      {/* Send (or Stop) sits inside the field, at its right. */}
+      <div className={css.field} data-off={blocked ? '' : undefined}>
         <textarea
           className={css.textarea}
           aria-label={t('composer.message')}
@@ -112,45 +120,59 @@ export function Composer({ session, run, client, onNewSession, onRunStarted }: P
         {replying && activeRun ? (
           <button
             type="button"
-            className={css.secondary}
+            className={css.button}
+            data-kind="stop"
             onClick={() => void act(() => client.interrupt(activeRun.id))}
           >
-            <Square size={13} aria-hidden="true" />
+            <Square size={12} aria-hidden="true" />
             {t('composer.stop')}
           </button>
         ) : (
-          <button type="button" className={css.primary} disabled={!canSend} onClick={send}>
-            <Send size={13} aria-hidden="true" />
+          <button
+            type="button"
+            className={css.button}
+            data-kind="primary"
+            disabled={!canSend}
+            onClick={send}
+          >
+            <Send size={12} aria-hidden="true" />
             {t('composer.send')}
           </button>
         )}
       </div>
       <div className={css.controls}>
-        {session && !activeRun && (
-          <div className={css.modes} role="radiogroup" aria-label={t('composer.modes')}>
-            {(['resume', 'fork'] as const).map((m) => (
-              // biome-ignore lint/a11y/useSemanticElements: a two-option segmented control
-              <button
-                key={m}
-                type="button"
-                role="radio"
-                aria-checked={mode === m}
-                disabled={viewOnly}
-                onClick={() => setMode(m)}
-              >
-                {t(m === 'resume' ? 'composer.continue' : 'composer.fork')}
-              </button>
-            ))}
-          </div>
+        {session && !activeRun && !viewOnly && (
+          <Switch<StartMode>
+            label={t('composer.modes')}
+            size="small"
+            value={mode}
+            options={[
+              {
+                value: 'resume',
+                label: t('composer.continue'),
+                disabled: terminalOwns,
+                title: terminalOwns ? t('composer.busyTerminal') : undefined,
+              },
+              { value: 'fork', label: t('composer.fork') },
+            ]}
+            onChange={setChoice}
+          />
         )}
         {!activeRun && !viewOnly && (
           <PermissionModeSelect value={permissionMode} onChange={setPermissionMode} />
         )}
-        <button type="button" className={css.secondary} onClick={onNewSession}>
-          <Plus size={13} aria-hidden="true" />
+        <button type="button" className={css.button} data-size="small" onClick={onNewSession}>
+          <Plus size={12} aria-hidden="true" />
           {t('composer.newSession')}
         </button>
         {error && <span className={css.error}>{t('composer.error', { msg: error })}</span>}
+        {/* Said once, here; the placeholder stays the ordinary one. */}
+        {terminalOwns && (
+          <span className={css.hint}>
+            <Lock size={12} aria-hidden="true" />
+            {t('composer.busyTerminal')}
+          </span>
+        )}
       </div>
     </div>
   );

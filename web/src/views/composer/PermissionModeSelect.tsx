@@ -3,6 +3,7 @@ import type { RunPermissionMode } from '../../../../src/shared/runs.js';
 import { useI18n } from '../../i18n';
 import css from './Composer.module.css';
 
+/** "Permissions · Default (ask each time) ▾": a ghost button over a native select. */
 export function PermissionModeSelect({
   value,
   onChange,
@@ -13,7 +14,9 @@ export function PermissionModeSelect({
   const { t } = useI18n();
   return (
     <label className={css.select}>
-      <span className="visually-hidden">{t('composer.permMode')}</span>
+      <span className={css.selectLabel} aria-hidden="true">
+        {t('composer.permMode')} ·
+      </span>
       <select
         aria-label={t('composer.permMode')}
         value={value}

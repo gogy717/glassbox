@@ -1,7 +1,9 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { PermissionRequest } from '../../../../src/shared/runs.js';
+import { StoreContext } from '../../data/store';
 import { I18nContext, makeI18n } from '../../i18n';
+import { demoStore } from '../../test/demo';
 import { PermissionDialog } from './PermissionDialog';
 
 const bash: PermissionRequest = {
@@ -137,5 +139,30 @@ describe('PermissionDialog', () => {
     fail(new Error('run is gone'));
     expect(await screen.findByText('Could not send: run is gone')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Allow' })).toBeEnabled();
+  });
+
+  it('names the prompt, where its call sits, and the keys, as a quiet panel', () => {
+    const store = demoStore();
+    const open = store.getState().open;
+    const call = open?.toolCalls.get('tu_m2a');
+    const request = call ? open?.requests.get(call.requestId) : undefined;
+    const turn = request?.turnId ? open?.turns.get(request.turnId) : undefined;
+    expect(turn && request).toBeTruthy();
+    render(
+      <StoreContext.Provider value={store}>
+        <I18nContext.Provider value={makeI18n('en')}>
+          <PermissionDialog request={{ ...bash, id: 'tu_m2a' }} onDecide={vi.fn()} />
+        </I18nContext.Provider>
+      </StoreContext.Provider>,
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Claude Code wants to use Bash' });
+    expect(dialog).toHaveTextContent(`Conversation ${turn?.index} · call #${request?.index}`);
+    expect(dialog).toHaveTextContent('Permission');
+    expect(dialog).toHaveTextContent('Esc hides this; it stays pending');
+  });
+
+  it('leaves the reference out when the call is not in the records yet', () => {
+    renderDialog(bash);
+    expect(screen.getByRole('dialog')).not.toHaveTextContent(/Conversation \d/);
   });
 });

@@ -71,14 +71,16 @@ describe('App', () => {
 
   it('does not claim there are no sessions before the list has arrived', () => {
     render(<App store={createStore()} connect={noConnect} runs={fakeRuns()} />);
-    expect(screen.queryByText(/No sessions yet/)).toBeNull();
+    expect(screen.queryByText(/No sessions on this machine/)).toBeNull();
   });
 
   it('welcomes a first-time user: what glassbox reads and how to start', () => {
     const store = createStore();
     store.applyEvent({ type: 'sessions', sessions: [] });
     render(<App store={store} connect={noConnect} runs={fakeRuns()} />);
-    expect(screen.getByRole('heading', { name: 'No sessions yet' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'No sessions on this machine' }),
+    ).toBeInTheDocument();
     // Every agent glassbox reads, where from, and how to change it.
     for (const s of ['~/.claude/projects', '--claude-dir', '~/.grok', '--grok-dir', '--no-grok'])
       expect(screen.getByRole('main')).toHaveTextContent(s);
@@ -316,11 +318,14 @@ describe('App', () => {
     expect(screen.getByText('Session not found')).toBeInTheDocument();
   });
 
-  it('puts the composer at the bottom, blocked for a session a terminal has open', () => {
+  it('puts the composer at the bottom, continuing a session a terminal has open in a copy', () => {
     window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}`;
     render(<App store={demoStore()} connect={noConnect} runs={fakeRuns()} />);
-    expect(screen.getByRole('textbox', { name: 'Message' })).toBeDisabled();
-    expect(screen.getByRole('radio', { name: 'Continue in a copy' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBeEnabled();
+    expect(screen.getByRole('radio', { name: 'Continue in a copy' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
   });
 
   it('shows a pending permission prompt of this session’s run and answers it', async () => {
