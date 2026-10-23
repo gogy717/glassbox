@@ -229,10 +229,9 @@ export const TurnList = memo(function TurnList({
       >
         {newestFirst.map((it) => {
           const clock = formatClock(it.turn.startedAt);
-          // Dense list: a complete turn is the check alone; what needs attention keeps its word,
-          // except at the end of a narrow row's first line, where only the mark fits.
-          const mark = <StatusMark status={it.status} compact={it.status === 'complete'} />;
-          const markOnly = <StatusMark status={it.status} compact />;
+          // Dense list: complete and failed are their glyph alone; the dot states keep their
+          // word, as a dot would differ by colour only.
+          const mark = <StatusMark status={it.status} compact />;
           return (
             <li key={it.turn.id} data-turn={it.turn.id}>
               <button
@@ -264,7 +263,7 @@ export const TurnList = memo(function TurnList({
                   </>
                 ) : (
                   <>
-                    <span className={css.markTop}>{markOnly}</span>
+                    <span className={css.markTop}>{mark}</span>
                     {it.turn.origin !== 'human' && it.turn.sender && (
                       <span className={css.sender}>
                         {t('flow.from', { sender: it.turn.sender })}

@@ -5,7 +5,6 @@ import {
   ChevronDown,
   Clock3,
   CornerDownLeft,
-  LoaderCircle,
   ShieldQuestion,
   Workflow,
   X,
@@ -178,13 +177,9 @@ export function ResponseCard({ req, selected, onSelect, thinkingSince }: Respons
   return (
     <Card
       kind="response"
-      icon={
-        inFlight ? (
-          <LoaderCircle size={13} className="spin" aria-hidden="true" />
-        ) : (
-          <CornerDownLeft size={13} aria-hidden="true" />
-        )
-      }
+      // No spinner: D1's only loops are the status dot's pulse and the live caret; the
+      // "Thinking · m:ss" preview already says the call is under way.
+      icon={<CornerDownLeft size={13} aria-hidden="true" />}
       title={t('flow.response')}
       selected={selected}
       onSelect={onSelect}
@@ -224,7 +219,7 @@ function ResultStrip({ tool }: { tool: ToolCall }) {
     icon = <ShieldQuestion size={12} aria-hidden="true" />;
     label = t('status.approval');
   } else if (status === 'running') {
-    icon = <LoaderCircle size={12} className="spin" aria-hidden="true" />;
+    icon = <LiveDot kind="status" state="running" />;
     label = tool.startedAt ? (
       <Ticking since={tool.startedAt} labelKey="flow.runningFor" />
     ) : (
