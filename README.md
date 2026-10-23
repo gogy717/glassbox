@@ -48,6 +48,7 @@ Common options:
 | `--codex-dir <path>` / `--no-codex` | Codex data dir, default `$CODEX_HOME` or `~/.codex` (Codex sessions show whenever it exists) / don't show them          |
 | `--claude-bin <path>`               | The `claude` used to send messages, default the one on `PATH`                                                           |
 | `--use-api-key`                     | Let the `claude` started for messages use `ANTHROPIC_API_KEY` (default: the account you signed in with in the terminal) |
+| `--fetch-quota`                     | Keep the plan quota fresh by asking Anthropic for it every 5 minutes with Claude Code's sign-in (see Data and privacy)  |
 | `--demo`                            | Run on built-in demo data: no local sessions are read and `claude` is never started                                     |
 | `--help`                            | List every option                                                                                                       |
 
@@ -76,7 +77,7 @@ glassbox starts the `claude` installed on your machine, with your own sign-in, s
 
 ## Accounts and terms
 
-glassbox has no sign-in of its own and never reads or stores credentials. To send a message it starts the official `claude` installed on your machine (in its headless stream-json mode), with the account you are signed in to: the same one you use in a terminal. Make sure this use fits the Anthropic terms that apply to your account; if you are unsure, start glassbox with `--use-api-key` to use an API key instead.
+glassbox has no sign-in of its own and never reads or stores credentials (unless you add `--fetch-quota`, below). To send a message it starts the official `claude` installed on your machine (in its headless stream-json mode), with the account you are signed in to: the same one you use in a terminal. Make sure this use fits the Anthropic terms that apply to your account; if you are unsure, start glassbox with `--use-api-key` to use an API key instead.
 
 glassbox is an independent project, not affiliated with or endorsed by Anthropic.
 
@@ -85,7 +86,7 @@ glassbox is an independent project, not affiliated with or endorsed by Anthropic
 - Reads only `~/.claude` (session transcripts), the `cachedUsageUtilization` entry of `~/.claude.json`, `~/.grok`, and the session records in `~/.codex` (`sessions/`, `archived_sessions/`, `session_index.jsonl`; never credential files such as `auth.json`); never changes a Claude Code, Grok or Codex file (when you message from glassbox, `claude` writes its own records, just as in a terminal).
 - Accepts connections from this machine only: it checks where a connection really comes from, and validates `Host` / `Origin` too. Every write needs a token generated at each start, so other web pages cannot read your sessions or send messages through it.
 - Does not pass `ANTHROPIC_API_KEY` to the `claude` it starts (so you are not billed by the API by accident) unless you add `--use-api-key`.
-- glassbox itself makes no outbound network requests and has no telemetry.
+- glassbox itself makes no outbound network requests and has no telemetry, unless you add `--fetch-quota`: then every 5 minutes it reads the access token from Claude Code's sign-in (`~/.claude/.credentials.json`, or the macOS Keychain) and sends it to `api.anthropic.com/api/oauth/usage`, and nowhere else. The token is never logged, stored or refreshed; when it has expired glassbox waits for Claude Code to renew it. The endpoint is the one Claude Code's `/usage` uses and is not a public API, so it may change.
 
 ## Known limitations
 
@@ -95,7 +96,7 @@ glassbox is an independent project, not affiliated with or endorsed by Anthropic
 - The transcript format is Claude Code's internal format and may change with upgrades; glassbox skips and counts anything it does not recognise instead of crashing.
 - When you message from glassbox you see the reply text and the thinking-token count grow live, but Claude Code's streaming output does not include the thinking text itself.
 - Grok and Codex sessions are view only. Grok records tokens per turn, so a turn's usage is attributed to its last call; Codex encrypts its thinking, so glassbox shows only Codex's own reasoning summaries and thinking tokens.
-- Quota comes from Claude Code's cache, refreshed by ClaudeBar or `/usage`; when neither runs, the data goes stale (the UI says so).
+- Quota comes from Claude Code's cache, refreshed by ClaudeBar or `/usage`; when neither runs, the data goes stale (the UI says so). Signing in again or switching accounts clears that cache, so the quota disappears until the next `/usage`. `--fetch-quota` keeps it fresh on its own.
 
 ## Local development
 

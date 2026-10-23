@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serve } from '@hono/node-server';
 import { createClaudeCodeAdapter } from '../adapters/claude-code/index.js';
+import { createQuotaFetcher } from '../adapters/claude-code/quota-fetch.js';
 import { createCodexAdapter } from '../adapters/codex/index.js';
 import { createGrokAdapter } from '../adapters/grok/index.js';
 import type { AgentAdapter } from '../core/adapter.js';
@@ -89,7 +90,14 @@ async function main(): Promise<void> {
     }
   }
 
-  const adapters: AgentAdapter[] = [createClaudeCodeAdapter({ claudeDir: opts.claudeDir })];
+  const quotaFetcher =
+    opts.fetchQuota && !opts.demo
+      ? createQuotaFetcher({ claudeDir: opts.claudeDir, log })
+      : undefined;
+  if (quotaFetcher) log('asking Anthropic for the plan quota with your Claude Code sign-in');
+  const adapters: AgentAdapter[] = [
+    createClaudeCodeAdapter({ claudeDir: opts.claudeDir, quotaFetcher }),
+  ];
   if (grokDir) {
     adapters.push(createGrokAdapter({ grokDir }));
     log(`showing Grok sessions from ${grokDir} (--no-grok to hide them)`);

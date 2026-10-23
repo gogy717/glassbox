@@ -88,11 +88,25 @@ export function quotaFromConfig(config: unknown, now: number = Date.now()): Quot
   const root = obj(config);
   const cached = obj(root?.cachedUsageUtilization);
   const account = obj(root?.oauthAccount)?.accountUuid;
-  const u = obj(cached?.utilization);
-  const fetchedAtMs = num(cached?.fetchedAtMs);
-  const fetchedAt = msToIso(fetchedAtMs);
-  if (!cached || !u || fetchedAtMs === null || fetchedAt === null) return null;
+  if (!cached) return null;
   if (typeof cached.accountUuid !== 'string' || cached.accountUuid !== account) return null;
+  return quotaFromUtilization(cached.utilization, cached.fetchedAtMs, now, 'claude-code-cache');
+}
+
+/**
+ * Quota from a usage endpoint body (cached by Claude Code, or fetched with `--fetch-quota`), or
+ * null when it is malformed.
+ */
+export function quotaFromUtilization(
+  utilization: unknown,
+  fetchedAtMsValue: unknown,
+  now: number,
+  source: string,
+): QuotaSnapshot | null {
+  const u = obj(utilization);
+  const fetchedAtMs = num(fetchedAtMsValue);
+  const fetchedAt = msToIso(fetchedAtMs);
+  if (!u || fetchedAtMs === null || fetchedAt === null) return null;
 
   const windows: QuotaWindow[] = [];
   const add = (w: QuotaWindow | null) => {
@@ -110,7 +124,7 @@ export function quotaFromConfig(config: unknown, now: number = Date.now()): Quot
     stale: now - fetchedAtMs > STALE_MS,
     windows,
     extraUsage: extraUsage(u),
-    source: 'claude-code-cache',
+    source,
   };
 }
 

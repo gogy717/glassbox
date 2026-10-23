@@ -24,6 +24,8 @@ export interface CliOptions {
   /** `--codex-dir`, else $CODEX_HOME, else ~/.codex. */
   codexDir: string;
   codexDirFromFlag: boolean;
+  /** Ask Anthropic's usage endpoint for the plan quota with Claude Code's sign-in. */
+  fetchQuota: boolean;
 }
 
 export const USAGE = `Usage: glassbox [options]
@@ -44,6 +46,9 @@ Options:
   --codex-dir <dir>   Codex home (default $CODEX_HOME, else ~/.codex); Codex sessions are
                       shown whenever that dir exists
   --no-codex          don't show Codex sessions
+  --fetch-quota       keep the plan quota fresh by asking Anthropic for it every 5 minutes,
+                      using Claude Code's sign-in (off by default: glassbox otherwise reads no
+                      credentials and makes no network requests)
   --help              show this help
 
 glassbox only answers connections from this machine: transcripts are private and the API
@@ -71,6 +76,7 @@ export function parseCliArgs(
       'no-grok': { type: 'boolean' },
       'codex-dir': { type: 'string' },
       'no-codex': { type: 'boolean' },
+      'fetch-quota': { type: 'boolean' },
     },
   });
   const portText = values.port ?? String(DEFAULT_PORT);
@@ -92,6 +98,7 @@ export function parseCliArgs(
     codex: !values['no-codex'],
     codexDir: resolve(values['codex-dir'] ?? ctx.env.CODEX_HOME ?? join(ctx.homedir, '.codex')),
     codexDirFromFlag: values['codex-dir'] !== undefined,
+    fetchQuota: values['fetch-quota'] ?? false,
   };
 }
 

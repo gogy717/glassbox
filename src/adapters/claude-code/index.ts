@@ -13,17 +13,21 @@ import {
 } from './discovery.js';
 import { ClaudeSessionParser } from './parser.js';
 import { readQuotaFile } from './quota.js';
+import type { QuotaFetcher } from './quota-fetch.js';
 
 export interface ClaudeCodeAdapterOptions {
   /** The Claude config dir: `$CLAUDE_CONFIG_DIR` or `~/.claude`. */
   claudeDir: string;
   /** Claude Code's global config file; default `~/.claude.json`, or inside a custom config dir. */
   globalConfigPath?: string;
+  /** Set with `--fetch-quota`: also ask the usage endpoint, and show whichever quota is newer. */
+  quotaFetcher?: QuotaFetcher;
 }
 
 export function createClaudeCodeAdapter({
   claudeDir,
   globalConfigPath,
+  quotaFetcher,
 }: ClaudeCodeAdapterOptions): AgentAdapter {
   const configPath =
     globalConfigPath ??
@@ -46,7 +50,9 @@ export function createClaudeCodeAdapter({
     quota: async () => {
       const read = await readQuotaFile(configPath);
       if (read.kind === 'ok') lastQuota = read.quota;
-      return lastQuota;
+      const fetched = (await quotaFetcher?.latest()) ?? null;
+      if (!fetched || !lastQuota) return fetched ?? lastQuota;
+      return Date.parse(fetched.fetchedAt) >= Date.parse(lastQuota.fetchedAt) ? fetched : lastQuota;
     },
     quotaFiles: () => [configPath],
   };

@@ -48,6 +48,7 @@ npx --yes github:gogy717/glassbox#v0.1.1
 | `--codex-dir <path>` / `--no-codex` | Codex 数据目录，默认 `$CODEX_HOME` 或 `~/.codex`（目录存在就显示 Codex 会话）/ 不显示 |
 | `--claude-bin <path>`               | 发消息时使用的 `claude`，默认取 `PATH` 里的                                           |
 | `--use-api-key`                     | 让发消息启动的 `claude` 使用 `ANTHROPIC_API_KEY`（默认用你在终端里登录的账号）        |
+| `--fetch-quota`                     | 每 5 分钟用 Claude Code 的登录向 Anthropic 查询额度，保持额度最新（见「数据与隐私」） |
 | `--demo`                            | 用内置演示数据运行，不读取本机会话，也不会启动 `claude`                               |
 | `--help`                            | 查看全部参数                                                                          |
 
@@ -76,7 +77,7 @@ glassbox 启动的是你本机安装的 `claude`，用你自己的登录，`CLAU
 
 ## 账号与条款
 
-glassbox 自己没有登录功能，也不读取或保存任何凭据。发消息时，它启动的是你本机安装的官方 `claude`（以无界面的 stream-json 模式运行），用的是你在终端里登录的同一个账号。请自行确认这种用法符合你的账号所适用的 Anthropic 条款；不确定的话，可以加 `--use-api-key` 改用 API key。
+glassbox 自己没有登录功能，也不读取或保存任何凭据（除非加了 `--fetch-quota`，见下文）。发消息时，它启动的是你本机安装的官方 `claude`（以无界面的 stream-json 模式运行），用的是你在终端里登录的同一个账号。请自行确认这种用法符合你的账号所适用的 Anthropic 条款；不确定的话，可以加 `--use-api-key` 改用 API key。
 
 glassbox 是独立项目，与 Anthropic 没有关联，也未获其认可。
 
@@ -85,7 +86,7 @@ glassbox 是独立项目，与 Anthropic 没有关联，也未获其认可。
 - 只读 `~/.claude`（会话转录）、`~/.claude.json` 里的 `cachedUsageUtilization` 一项、`~/.grok`，以及 `~/.codex` 里的会话记录（`sessions/`、`archived_sessions/`、`session_index.jsonl`，不碰 `auth.json` 之类的凭据文件）；不修改任何 Claude Code / Grok / Codex 文件（用 glassbox 发消息时，记录由 `claude` 自己写入，和在终端里一样）。
 - 只接受本机连接：看的是连接的真实来源地址，`Host` / `Origin` 也会校验；所有写操作需要每次启动随机生成的令牌，其他网页无法借道读取会话或发消息。
 - 默认不把 `ANTHROPIC_API_KEY` 传给启动的 `claude`（避免意外按 API 计费），除非加 `--use-api-key`。
-- glassbox 自己不发起任何外部网络请求，没有遥测。
+- glassbox 自己不发起任何外部网络请求，没有遥测；除非加了 `--fetch-quota`：这时它每 5 分钟从 Claude Code 的登录信息（`~/.claude/.credentials.json`，macOS 上是钥匙串）读取 access token，只发给 `api.anthropic.com/api/oauth/usage`。token 不记日志、不保存、不刷新；过期了就等 Claude Code 自己续期。这个接口就是 Claude Code 的 `/usage` 用的那个，不是公开 API，以后可能会变。
 
 ## 已知限制
 
@@ -95,7 +96,7 @@ glassbox 是独立项目，与 Anthropic 没有关联，也未获其认可。
 - 转录格式是 Claude Code 的内部格式，升级后可能变化；glassbox 遇到不认识的内容会跳过并计数，不会崩溃。
 - 用 glassbox 发消息时能实时看到回复文字和思考 token 的增长，但 Claude Code 的流式输出里没有思考的文字本身。
 - Grok 和 Codex 会话只能查看。Grok 只按轮次记录 token，所以一轮的用量记在这一轮的最后一次调用上；Codex 的思考内容是加密的，只能显示它自带的推理摘要和思考 token。
-- 额度数据来自 Claude Code 的缓存，由 ClaudeBar 或 `/usage` 刷新；两者都没有运行时，数据会变旧（界面会标出）。
+- 额度数据来自 Claude Code 的缓存，由 ClaudeBar 或 `/usage` 刷新；两者都没有运行时，数据会变旧（界面会标出）。重新登录或切换账号会清空这份缓存，额度会消失，直到下一次 `/usage`。加 `--fetch-quota` 可以让它自己保持最新。
 
 ## 本地开发
 

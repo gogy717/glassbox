@@ -22,6 +22,7 @@ describe('parseCliArgs', () => {
       codex: true,
       codexDir: '/home/u/.codex',
       codexDirFromFlag: false,
+      fetchQuota: false,
     });
   });
 
@@ -46,6 +47,7 @@ describe('parseCliArgs', () => {
           '--codex-dir',
           '/data/x',
           '--no-codex',
+          '--fetch-quota',
         ],
         ctx,
       ),
@@ -64,6 +66,7 @@ describe('parseCliArgs', () => {
       codex: false,
       codexDir: '/data/x',
       codexDirFromFlag: true,
+      fetchQuota: true,
     });
   });
 

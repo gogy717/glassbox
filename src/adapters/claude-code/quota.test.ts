@@ -187,4 +187,32 @@ describe('adapter quota()', () => {
     await writeFile(path, '{"cachedUsageUtilization": {"fetch');
     expect(await adapter.quota?.()).toEqual(good);
   });
+
+  it('shows whichever of the cache and the fetched quota is newer', async () => {
+    const path = join(dir, '.claude.json');
+    await writeFile(path, JSON.stringify(config()));
+    const fetched = (fetchedAt: string) => ({
+      latest: async () => ({
+        agent: 'claude-code' as const,
+        fetchedAt,
+        stale: false,
+        windows: [],
+        extraUsage: null,
+        source: 'anthropic-usage-api',
+      }),
+    });
+    // The fixture's cache was fetched 4 minutes before NOW.
+    const newer = createClaudeCodeAdapter({
+      claudeDir: dir,
+      quotaFetcher: fetched(new Date(NOW).toISOString()),
+    });
+    expect((await newer.quota?.())?.source).toBe('anthropic-usage-api');
+    const older = createClaudeCodeAdapter({
+      claudeDir: dir,
+      quotaFetcher: fetched(new Date(NOW - 60 * 60_000).toISOString()),
+    });
+    expect((await older.quota?.())?.source).toBe('claude-code-cache');
+    await rm(path);
+    expect((await older.quota?.())?.source).toBe('anthropic-usage-api');
+  });
 });
