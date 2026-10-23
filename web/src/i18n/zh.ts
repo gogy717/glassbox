@@ -52,6 +52,8 @@ export const zh = {
   'flow.turnTitle': '第{n}轮：{prompt}',
   'status.unknownEnd': '未知结束',
   'flow.turns': '用户轮次',
+  'flow.localCommand': '本地命令',
+  'flow.localCommandHint': '由 Claude Code 自己执行，没有调用模型',
   'flow.turnFallback': '第{n}轮',
   'flow.promptMore': '展开全文',
   'flow.promptLess': '收起',

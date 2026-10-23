@@ -9,6 +9,7 @@ import { formatClock } from '../../lib/format';
 import type { Route } from '../../router';
 import {
   callStatus,
+  isLocalCommand,
   isOutsideTurn,
   requestsOf,
   toolsOf,
@@ -27,6 +28,8 @@ export interface TurnItem {
   calls: number;
   tools: number;
   status: UiStatus;
+  /** A local slash command (no model call): listed compactly. */
+  command: boolean;
 }
 
 /** The agent's turns with display titles, counts and statuses (shared by the flow and steps tabs). */
@@ -51,13 +54,15 @@ export function useTurnItems(open: OpenSession, agentId: string): TurnItem[] {
               : prompt
                 ? t('flow.turnTitle', { n: turn.index, prompt })
                 : t('flow.turnFallback', { n: turn.index });
+        const status = turnStatus(turn, statuses);
         return {
           turn,
           title: label(truncatePrompt(turn.prompt)),
           heading: label(turn.prompt.trim()),
           calls: reqs.length,
           tools,
-          status: turnStatus(turn, statuses),
+          status,
+          command: isLocalCommand(turn, reqs.length, status),
         };
       }),
     [open, agentId, t, approvals],
@@ -158,24 +163,34 @@ export const TurnList = memo(function TurnList({ items, selectedId, onSelect }: 
               className={css.card}
               {...roving(it.turn.id)}
               aria-current={it.turn.id === selectedId ? 'true' : undefined}
+              data-command={it.command || undefined}
               title={it.turn.prompt}
               onClick={() => onSelect(it.turn.id)}
             >
               <span className={css.line}>
+                {/* Not a conversation, so not numbered like one: the command says what it was. */}
                 <span className={css.title} data-title>
-                  {it.title}
+                  {it.command ? it.turn.prompt.trim() : it.title}
                 </span>
+                {it.command && (
+                  <span className={css.command} title={t('flow.localCommandHint')}>
+                    {t('flow.localCommand')}
+                  </span>
+                )}
                 <span className={`${css.time} num`}>{formatClock(it.turn.startedAt)}</span>
               </span>
-              {it.turn.origin !== 'human' && it.turn.sender && (
+              {/* A local command has no calls or status to show: one line is enough. */}
+              {!it.command && it.turn.origin !== 'human' && it.turn.sender && (
                 <span className={css.sender}>{t('flow.from', { sender: it.turn.sender })}</span>
               )}
-              <span className={css.line}>
-                <span className={css.counts}>
-                  {t('flow.callsTools', { calls: it.calls, tools: it.tools })}
+              {!it.command && (
+                <span className={css.line}>
+                  <span className={css.counts}>
+                    {t('flow.callsTools', { calls: it.calls, tools: it.tools })}
+                  </span>
+                  <StatusPill status={it.status} />
                 </span>
-                <StatusPill status={it.status} />
-              </span>
+              )}
             </button>
           </li>
         ))}

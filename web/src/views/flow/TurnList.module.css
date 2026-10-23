@@ -94,6 +94,29 @@
   white-space: nowrap;
 }
 
+/* A local slash command (/effort): one slim line, not a full conversation card. */
+.card[data-command] {
+  gap: 0;
+  padding: 6px 12px;
+  border-style: dashed;
+  background: transparent;
+}
+
+.card[data-command] .title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.command {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--layer-3);
+  color: var(--muted);
+  font-size: 10px;
+}
+
 @media (max-width: 900px) {
   .pane {
     border-right: 0;

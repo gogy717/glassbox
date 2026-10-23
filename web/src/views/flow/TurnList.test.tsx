@@ -23,6 +23,7 @@ function item(n: number): TurnItem {
     calls: 1,
     tools: 0,
     status: 'complete',
+    command: false,
   };
 }
 
@@ -143,5 +144,35 @@ describe('TurnList', () => {
     );
     expect(cards[0]).toHaveAttribute('tabindex', '0');
     expect(cards.filter((c) => c.tabIndex === 0)).toHaveLength(1);
+  });
+
+  it('lists a local slash command as one slim line, still selectable', () => {
+    const onSelect = vi.fn();
+    const command: TurnItem = {
+      ...item(6),
+      turn: { ...item(6).turn, prompt: '/effort' },
+      title: 'Conversation 6: /effort',
+      calls: 0,
+      command: true,
+    };
+    render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <TurnList items={[...items, command]} selectedId="turn_5" onSelect={onSelect} />
+      </I18nContext.Provider>,
+    );
+    const card = screen.getByRole('button', { name: /^\/effort/ });
+    expect(card.querySelector('[data-title]')).toHaveTextContent(/^\/effort$/);
+    expect(card).toHaveAttribute('data-command');
+    expect(within(card).getByText('local command')).toHaveAttribute(
+      'title',
+      'Run by Claude Code itself; the model was not called',
+    );
+    expect(within(card).queryByText(/model call/)).toBeNull();
+    expect(within(card).queryByText('Complete')).toBeNull();
+    // Ordinary turns keep their counts and status.
+    const other = screen.getByRole('button', { name: /Conversation 5/ });
+    expect(within(other).getByText('1 model call · 0 tools')).toBeInTheDocument();
+    fireEvent.click(card);
+    expect(onSelect).toHaveBeenCalledWith('turn_6');
   });
 });

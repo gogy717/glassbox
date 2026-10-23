@@ -124,6 +124,35 @@ describe('FlowView', () => {
     expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Conversation 1: /);
   });
 
+  it('lists a local slash command compactly, and a prompt like it with calls in full', () => {
+    const open = demoOpen();
+    const first = open.turns.get('turn_m1');
+    if (!first) throw new Error('fixture');
+    // The person ran /effort before the first prompt: no model call followed.
+    open.turns = new Map([
+      [
+        'turn_cmd',
+        {
+          ...first,
+          id: 'turn_cmd',
+          index: 1,
+          prompt: '/effort',
+          startedAt: '2026-10-23T00:00:00.000Z',
+          endedAt: '2026-10-23T00:00:00.000Z',
+          requestIds: [],
+        },
+      ],
+      ...open.turns,
+    ]);
+    renderFlow({ open });
+    const card = screen.getByRole('button', { name: /\/effort/ });
+    expect(card).toHaveAttribute('data-command');
+    expect(within(card).getByText('local command')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Busy sessions should be listed/ }),
+    ).not.toHaveAttribute('data-command');
+  });
+
   it('keeps a pasted 5 KB prompt to 120 characters in the list, all of it on hover', () => {
     const prompt = `Paste: ${'log line '.repeat(600)}`;
     renderFlow({ open: withPrompt('turn_m1', prompt) });

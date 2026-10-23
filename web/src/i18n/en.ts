@@ -53,6 +53,8 @@ export const en: Record<MessageKey, string> = {
   'flow.turnTitle': 'Conversation {n}: {prompt}',
   'status.unknownEnd': 'Ended (unknown)',
   'flow.turns': 'Conversations',
+  'flow.localCommand': 'local command',
+  'flow.localCommandHint': 'Run by Claude Code itself; the model was not called',
   'flow.turnFallback': 'Conversation {n}',
   'flow.promptMore': 'Show full prompt',
   'flow.promptLess': 'Show less',

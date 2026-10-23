@@ -25,6 +25,23 @@ const OUTSIDE = 'outside:';
 /** True for the pseudo-turn that holds an agent's requests that belong to no turn. */
 export const isOutsideTurn = (t: Turn) => t.id.startsWith(OUTSIDE);
 
+/** A command name, then arguments or nothing: "/effort", "/model opus"; a path "/home/…" is not. */
+const COMMAND = /^\/[A-Za-z][\w:.-]*(\s|$)/;
+
+/**
+ * A person's slash command that never reached the model (Claude Code runs /effort, /clear and
+ * /login itself). The model has no flag for it, so: a command-shaped prompt, finished, no calls.
+ */
+export function isLocalCommand(turn: Turn, calls: number, status: UiStatus): boolean {
+  return (
+    turn.origin === 'human' &&
+    calls === 0 &&
+    status !== 'running' &&
+    status !== 'approval' &&
+    COMMAND.test(turn.prompt.trim())
+  );
+}
+
 /**
  * Requests the adapter could not place in a turn (e.g. before the agent's first prompt) are
  * gathered in one pseudo-turn, so every view shows every request the summary bar counts.
