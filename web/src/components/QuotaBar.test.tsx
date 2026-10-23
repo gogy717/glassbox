@@ -142,9 +142,6 @@ describe('QuotaBar', () => {
     expect(claude).not.toHaveAttribute('data-stale');
     expect(grok).toHaveAttribute('data-stale');
     expect(grok).toHaveAttribute('title', expect.stringContaining('Data from 3 hours ago'));
-    // A hatched track and the age beside the figure, not a greyed-out meter.
-    expect(grok).toHaveTextContent(/25%\s*3h0m old$/);
-    expect(claude).not.toHaveTextContent(/old/);
     const details = openDetails();
     const section = within(details).getByRole('region', { name: 'xAI · SuperGrok' });
     expect(section).toHaveAttribute('data-stale');
@@ -261,6 +258,24 @@ describe('QuotaBar', () => {
     expect(
       within(details).getByText('来源：DeepSeek 余额接口（--fetch-quota）'),
     ).toBeInTheDocument();
+  });
+
+  it('marks a stale meter by its track, and says its age in words only where it stands alone', () => {
+    const old = {
+      ...demo('xai'),
+      stale: true,
+      fetchedAt: new Date(NOW - 3 * 3_600_000).toISOString(),
+    };
+    const { container, unmount } = renderBar([createDemoQuota(DEMO_NOW), old]);
+    const [claude, grok] = screen.getAllByRole('meter');
+    // Under its track, as formatRelative words it ("3 hours ago", or "3 h ago").
+    expect(grok).toHaveTextContent(/25%3\s?h(ours)? ago$/);
+    expect(claude).not.toHaveTextContent(/ago/);
+    // Beside another meter the age is in the tooltip; alone, it is shown too.
+    expect(container.querySelector('[data-single]')).toBeNull();
+    unmount();
+    const alone = renderBar([old]);
+    expect(alone.container.querySelector('[data-single]')).not.toBeNull();
   });
 
   it('renders nothing without quota data', () => {

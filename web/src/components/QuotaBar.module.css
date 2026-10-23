@@ -7,7 +7,7 @@
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  height: 30px;
+  min-height: 30px;
   padding: 0 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-l);
@@ -44,15 +44,18 @@
   color: var(--muted);
 }
 
-/* The age speaks where a meter stands alone (one provider, or the narrow lead-only button);
-   beside others, the hatched track says "old" and the tooltip and details say how old. */
+/* A stale meter's age, a muted line under its track, where the meter stands alone (one
+   provider, or the narrow lead-only button). Beside others, the hatched track says "old" and the
+   tooltip and details say how old. */
 .age {
   display: none;
   font-size: var(--fs-label);
+  font-weight: 400;
+  line-height: 1;
 }
 
 .wrap[data-single] .age {
-  display: inline;
+  display: block;
 }
 
 .meter[data-level="warn"],
@@ -181,9 +184,12 @@
     display: none;
   }
 
-  .more,
-  .meter[data-top] .age {
+  .more {
     display: inline;
+  }
+
+  .meter[data-top] .age {
+    display: block;
   }
 }
 
@@ -221,9 +227,12 @@
     display: none;
   }
 
-  .wrap[data-many] .more,
-  .wrap[data-many] .meter[data-top] .age {
+  .wrap[data-many] .more {
     display: inline;
+  }
+
+  .wrap[data-many] .meter[data-top] .age {
+    display: block;
   }
 }
 

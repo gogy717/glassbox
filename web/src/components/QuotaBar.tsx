@@ -2,7 +2,7 @@ import { Gauge } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { QuotaSnapshot, QuotaWindow } from '../../../src/core/model.js';
 import { type MessageKey, useI18n } from '../i18n';
-import { DASH, formatCountdown, formatRelative, formatResetTime } from '../lib/format';
+import { formatCountdown, formatRelative, formatResetTime } from '../lib/format';
 import { providerName, providerShortName } from '../lib/provider-names';
 import css from './QuotaBar.module.css';
 
@@ -113,15 +113,14 @@ export function QuotaBar({ quotas, now }: Props) {
     q.plan ? `${providerName(q.provider)} · ${q.plan}` : providerName(q.provider);
   const age = (q: QuotaSnapshot) =>
     t(q.stale ? 'quota.stale' : 'quota.updated', { age: formatRelative(q.fetchedAt, now, intl) });
-  // How old a stale meter's figure is, short enough to sit in the button: "3h12m old".
-  const oldBy = (q: QuotaSnapshot) =>
-    t('quota.old', { age: formatCountdown(now - Date.parse(q.fetchedAt)) ?? DASH });
-  const reading = (name: string, value: string, q: QuotaSnapshot) => (
+  const reading = (name: string, value: string) => (
     <span className={`${css.reading} figure`}>
       <span className={css.name}>{name}</span> <span className={css.value}>{value}</span>
-      {q.stale && <span className={css.age}> {oldBy(q)}</span>}
     </span>
   );
+  // How old a stale meter's figure is, a muted line under its track ("6 h ago").
+  const ageLine = (q: QuotaSnapshot) =>
+    q.stale && <span className={css.age}>{formatRelative(q.fetchedAt, now, intl)}</span>;
 
   return (
     <div
@@ -170,16 +169,18 @@ export function QuotaBar({ quotas, now }: Props) {
               data-level={top ? levelOf(top.usedPercent) : 'ok'}
               data-reset={!top || undefined}
             >
-              {reading(name, value, q)}
+              {reading(name, value)}
               <span className={css.track} aria-hidden="true">
                 <span style={{ width: `${top ? pct(top) : 0}%` }} />
               </span>
+              {ageLine(q)}
             </span>
           ) : (
             <span key={m.key} {...shared} data-balance>
-              {reading(name, value, q)}
+              {reading(name, value)}
               {/* Keeps the text level with the meters beside it. */}
               <span className={css.track} data-empty aria-hidden="true" />
+              {ageLine(q)}
             </span>
           );
         })}

@@ -60,7 +60,6 @@ export function Diagnostics({ diagnostics: d }: { diagnostics: Diag }) {
         aria-label={`${t('diag.title')} · ${count}`}
         title={t('diag.title')}
         aria-expanded={open}
-        data-alert={alert || undefined}
         onClick={() => setOpen(!open)}
       >
         <Activity size={14} aria-hidden="true" />
