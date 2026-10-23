@@ -1,4 +1,6 @@
 .panel {
+  /* The cells lay out by the panel's own width: beside the session list it is narrow. */
+  container-type: inline-size;
   margin: 0 14px 14px;
   border-radius: var(--radius-m);
   background: var(--layer-2);
@@ -43,6 +45,16 @@
   background: var(--border);
 }
 
+/* A tool call: the arguments get the most room, the timing the least. */
+.toolGrid {
+  grid-template-columns: minmax(0, 4fr) minmax(0, 3fr) minmax(0, 2fr);
+}
+
+/* A response: the reply gets the most room. */
+.responseGrid {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) minmax(0, 2fr);
+}
+
 .cell {
   display: flex;
   flex-direction: column;
@@ -57,6 +69,22 @@
   font-size: 10px;
   font-weight: 600;
   color: var(--muted);
+}
+
+/* A reply's rendered markdown, on the same surface as plain text. */
+.content {
+  max-height: 420px;
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--layer-1);
+}
+
+.cellHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .status {
@@ -93,6 +121,11 @@
   color: var(--muted);
 }
 
+.statusTools {
+  flex: none;
+  margin-left: auto;
+}
+
 .message,
 .meta {
   margin: 0;
@@ -125,7 +158,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-@media (max-width: 900px) {
+@container (max-width: 760px) {
   .grid {
     grid-template-columns: minmax(0, 1fr);
   }

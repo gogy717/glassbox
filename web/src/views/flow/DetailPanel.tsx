@@ -2,6 +2,7 @@ import { ChevronUp } from 'lucide-react';
 import { type ReactNode, useId, useMemo, useState } from 'react';
 import type { ModelRequest, ToolCall } from '../../../../src/core/model.js';
 import { JsonInspector } from '../../components/JsonInspector';
+import { Markdown } from '../../components/Markdown';
 import { StatusPill } from '../../components/Status';
 import { TextBlock } from '../../components/TextBlock';
 import { fetchRequestDetail, fetchToolResult } from '../../data/api';
@@ -13,6 +14,10 @@ import { agentName, encryptsThinking } from '../../lib/agent-names';
 import { formatClock, formatDuration, formatNumber } from '../../lib/format';
 import type { CardKey } from './cards';
 import css from './DetailPanel.module.css';
+import { ArgsView } from './detail/ArgsView';
+import { useDetailPrefs } from './detail/prefs';
+import { KeyValues, RequestReadable } from './detail/RequestReadable';
+import { MarkdownToggle, ViewToggle } from './detail/ViewToggle';
 import { toolStatus } from './flow-model';
 
 interface Props {
@@ -56,10 +61,25 @@ export function DetailPanel({ sessionId, req, tools, card, onClose }: Props) {
   );
 }
 
-function Cell({ title, children }: { title: string; children: ReactNode }) {
+function Cell({
+  title,
+  tools,
+  children,
+}: {
+  title: string;
+  tools?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <div className={css.cell}>
-      <h4>{title}</h4>
+      {tools ? (
+        <div className={css.cellHead}>
+          <h4>{title}</h4>
+          {tools}
+        </div>
+      ) : (
+        <h4>{title}</h4>
+      )}
       {children}
     </div>
   );
@@ -91,6 +111,7 @@ function Loading<T>({
 function RequestBody({ sessionId, req }: { sessionId: string; req: ModelRequest }) {
   const { t } = useI18n();
   const agent = useSessionAgent();
+  const [prefs] = useDetailPrefs();
   // Keyed on the status too: what was sent is only final once the request has completed.
   const key = req.hasDetail ? `${sessionId}\n${req.id}\n${req.status}` : null;
   const [state, retry] = useFetch(key, (signal) => fetchRequestDetail(sessionId, req.id, signal));
@@ -126,30 +147,47 @@ function RequestBody({ sessionId, req }: { sessionId: string; req: ModelRequest 
                 ))}
               </ul>
             )}
+            <span className={css.statusTools}>
+              <ViewToggle />
+            </span>
           </div>
-          <div className={css.grid}>
-            <Cell title={t('detail.system')}>
-              <JsonInspector label="system" data={trees?.system} />
-            </Cell>
-            <Cell title={t('detail.messages')}>
-              <JsonInspector label="messages" data={trees?.messages} />
-            </Cell>
-            <Cell title={t('detail.tools')}>
-              <JsonInspector label="tools" data={trees?.tools} />
-            </Cell>
-            <Cell title={t('detail.params')}>
-              <JsonInspector label="params" data={trees?.params} />
-            </Cell>
-          </div>
+          {prefs.view === 'readable' ? (
+            <RequestReadable detail={d} />
+          ) : (
+            <div className={css.grid}>
+              <Cell title={t('detail.system')}>
+                <JsonInspector label="system" data={trees?.system} />
+              </Cell>
+              <Cell title={t('detail.messages')}>
+                <JsonInspector label="messages" data={trees?.messages} />
+              </Cell>
+              <Cell title={t('detail.tools')}>
+                <JsonInspector label="tools" data={trees?.tools} />
+              </Cell>
+              <Cell title={t('detail.params')}>
+                <JsonInspector label="params" data={trees?.params} />
+              </Cell>
+            </div>
+          )}
         </>
       )}
     </Loading>
   );
 }
 
+/** A response's usage and timing as one flat list: nested usage fields under "usage.". */
+function usageEntries(usage: Record<string, unknown>): [string, unknown][] {
+  return Object.entries(usage).flatMap(([k, v]): [string, unknown][] =>
+    v !== null && typeof v === 'object' && !Array.isArray(v)
+      ? Object.entries(v).map(([k2, v2]): [string, unknown] => [`${k}.${k2}`, v2])
+      : [[k, v]],
+  );
+}
+
 function ResponseBody({ req }: { req: ModelRequest }) {
   const { t, intl } = useI18n();
   const kind = useSessionAgentKind();
+  const [prefs] = useDetailPrefs();
   const thinking = req.blocks.filter((b) => b.kind === 'thinking');
   const thinkingText = thinking
     .map((b) => (b.kind === 'thinking' ? b.text : null))
@@ -176,8 +214,9 @@ function ResponseBody({ req }: { req: ModelRequest }) {
     }),
     [req],
   );
+  const usageList = useMemo(() => usageEntries(usage), [usage]);
   return (
-    <div className={css.grid}>
+    <div className={`${css.grid} ${css.responseGrid}`}>
       <Cell title={t('detail.thinking')}>
         {thinkingText ? (
           <TextBlock label={t('detail.thinking')} text={thinkingText} />
@@ -197,11 +236,21 @@ function ResponseBody({ req }: { req: ModelRequest }) {
           </p>
         )}
       </Cell>
-      <Cell title={t('detail.content')}>
-        <TextBlock label={t('detail.content')} text={text} />
+      <Cell title={t('detail.content')} tools={text ? <MarkdownToggle /> : undefined}>
+        {text && prefs.markdown === 'rendered' ? (
+          <div className={css.content} data-scroll-region>
+            <Markdown text={text} label={t('detail.content')} />
+          </div>
+        ) : (
+          <TextBlock label={t('detail.content')} text={text} />
+        )}
       </Cell>
-      <Cell title={t('detail.usage')}>
-        <JsonInspector label="usage" data={usage} />
+      <Cell title={t('detail.usage')} tools={<ViewToggle />}>
+        {prefs.view === 'readable' ? (
+          <KeyValues entries={usageList} />
+        ) : (
+          <JsonInspector label="usage" data={usage} />
+        )}
       </Cell>
     </div>
   );
@@ -210,6 +259,7 @@ function ResponseBody({ req }: { req: ModelRequest }) {
 function ToolBody({ sessionId, tool }: { sessionId: string; tool: ToolCall }) {
   const { t } = useI18n();
   const approvals = useApprovalsContext();
+  const [prefs] = useDetailPrefs();
   const [wantFull, setWantFull] = useState(false);
   const [state, retry] = useFetch(wantFull ? `${sessionId}\n${tool.id}` : null, (signal) =>
     fetchToolResult(sessionId, tool.id, signal),
@@ -221,9 +271,13 @@ function ToolBody({ sessionId, tool }: { sessionId: string; tool: ToolCall }) {
     [tool.input],
   );
   return (
-    <div className={css.grid}>
-      <Cell title={t('detail.args')}>
-        <JsonInspector label={tool.name} data={args} />
+    <div className={`${css.grid} ${css.toolGrid}`}>
+      <Cell title={t('detail.args')} tools={<ViewToggle />}>
+        {prefs.view === 'readable' ? (
+          <ArgsView input={tool.input} label={tool.name} />
+        ) : (
+          <JsonInspector label={tool.name} data={args} />
+        )}
       </Cell>
       <Cell title={t('detail.result')}>
         {state.status === 'idle' ? (

@@ -1,0 +1,155 @@
+/* A model reply's markdown, compact enough for a detail panel. */
+.markdown {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.markdown > * {
+  margin: 0;
+}
+
+.h1,
+.h2,
+.h3,
+.h4,
+.h5,
+.h6 {
+  margin: 4px 0 0;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.h1 {
+  font-size: 15px;
+}
+
+.h2 {
+  font-size: 14px;
+}
+
+.h3 {
+  font-size: 13px;
+}
+
+.h4,
+.h5,
+.h6 {
+  font-size: 12px;
+}
+
+.markdown p {
+  margin: 0;
+}
+
+.markdown ul,
+.markdown ol {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.markdown li + li {
+  margin-top: 2px;
+}
+
+.markdown li > ul,
+.markdown li > ol {
+  margin-top: 2px;
+}
+
+/* Task lists: the checkbox replaces the bullet. */
+.markdown li:has(> input[type="checkbox"]) {
+  list-style: none;
+  margin-left: -18px;
+}
+
+.markdown li > input[type="checkbox"] {
+  margin: 0 6px 0 0;
+  vertical-align: -1px;
+}
+
+.markdown blockquote {
+  margin: 0;
+  padding: 2px 10px;
+  border-left: 3px solid var(--border-strong);
+  color: var(--muted);
+}
+
+.markdown hr {
+  width: 100%;
+  height: 0;
+  margin: 2px 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+.markdown a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown del {
+  color: var(--muted);
+}
+
+.inline {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--layer-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+/* A table scrolls inside its own box; it never widens the panel. */
+.tableWrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.tableWrap table {
+  border-collapse: collapse;
+  font-size: 11px;
+  line-height: 16px;
+  overflow-wrap: normal;
+}
+
+.tableWrap th,
+.tableWrap td {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.tableWrap th {
+  background: var(--layer-2);
+  font-weight: 650;
+}
+
+.image,
+.unlinked {
+  overflow-wrap: anywhere;
+}
+
+/* An image glassbox will not load: its alt text and address, as text. */
+.image {
+  padding: 1px 5px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* The text as written, while the renderer loads. */
+.pending {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
