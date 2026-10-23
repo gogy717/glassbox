@@ -24,6 +24,13 @@ export interface CliOptions {
   /** `--codex-dir`, else $CODEX_HOME, else ~/.codex. */
   codexDir: string;
   codexDirFromFlag: boolean;
+  /** Show oh-my-pi sessions when omp has a sessions dir (`--no-omp` turns it off). */
+  omp: boolean;
+  /** omp's root: `--omp-dir`, else ~/$PI_CONFIG_DIR, else ~/.omp. */
+  ompDir: string;
+  /** Its agent dir (sessions, agent.db): `<ompDir>/agent`, or $PI_CODING_AGENT_DIR. */
+  ompAgentDir: string;
+  ompDirFromFlag: boolean;
   /** Ask Anthropic's usage endpoint for the plan quota with Claude Code's sign-in. */
   fetchQuota: boolean;
 }
@@ -46,6 +53,10 @@ Options:
   --codex-dir <dir>   Codex home (default $CODEX_HOME, else ~/.codex); Codex sessions are
                       shown whenever that dir exists
   --no-codex          don't show Codex sessions
+  --omp-dir <dir>     oh-my-pi dir (default ~/.omp, or ~/$PI_CONFIG_DIR); oh-my-pi sessions
+                      are shown whenever <dir>/agent/sessions exists ($PI_CODING_AGENT_DIR
+                      stands in for <dir>/agent when this flag is not given)
+  --no-omp            don't show oh-my-pi sessions
   --fetch-quota       keep the plan quota fresh by asking Anthropic for it every 5 minutes,
                       using Claude Code's sign-in (off by default: glassbox otherwise reads no
                       credentials and makes no network requests)
@@ -76,6 +87,8 @@ export function parseCliArgs(
       'no-grok': { type: 'boolean' },
       'codex-dir': { type: 'string' },
       'no-codex': { type: 'boolean' },
+      'omp-dir': { type: 'string' },
+      'no-omp': { type: 'boolean' },
       'fetch-quota': { type: 'boolean' },
     },
   });
@@ -83,6 +96,9 @@ export function parseCliArgs(
   const port = Number(portText);
   if (!/^\d+$/.test(portText) || port > 65_535) throw new Error(`invalid --port: ${portText}`);
   const claudeDir = values['claude-dir'] ?? ctx.env.CLAUDE_CONFIG_DIR;
+  // omp joins PI_CONFIG_DIR onto the home dir, even when it is absolute.
+  const ompDir = resolve(values['omp-dir'] ?? join(ctx.homedir, ctx.env.PI_CONFIG_DIR || '.omp'));
+  const ompAgentEnv = values['omp-dir'] === undefined ? ctx.env.PI_CODING_AGENT_DIR : undefined;
   return {
     port,
     host: values.host ?? DEFAULT_HOST,
@@ -98,6 +114,10 @@ export function parseCliArgs(
     codex: !values['no-codex'],
     codexDir: resolve(values['codex-dir'] ?? ctx.env.CODEX_HOME ?? join(ctx.homedir, '.codex')),
     codexDirFromFlag: values['codex-dir'] !== undefined,
+    omp: !values['no-omp'],
+    ompDir,
+    ompAgentDir: ompAgentEnv ? resolve(ompAgentEnv) : join(ompDir, 'agent'),
+    ompDirFromFlag: values['omp-dir'] !== undefined,
     fetchQuota: values['fetch-quota'] ?? false,
   };
 }
@@ -130,6 +150,20 @@ export const codexDirToUse = (opts: CliOptions, isDirectory: (p: string) => Prom
     { enabled: opts.codex, dir: opts.codexDir, fromFlag: opts.codexDirFromFlag },
     isDirectory,
   );
+
+/**
+ * omp's agent dir, or null when omp is off or has no sessions there. A `--omp-dir` that does not
+ * exist is an error, like the other agents' dirs.
+ */
+export async function ompAgentDirToUse(
+  opts: CliOptions,
+  isDirectory: (p: string) => Promise<boolean>,
+): Promise<string | null> {
+  if (!opts.omp) return null;
+  if (opts.ompDirFromFlag && !(await isDirectory(opts.ompDir)))
+    throw new Error(`--omp-dir ${opts.ompDir}: not a directory`);
+  return (await isDirectory(join(opts.ompAgentDir, 'sessions'))) ? opts.ompAgentDir : null;
+}
 
 /** A startup warning for binding `host`, or null when it is a loopback address. */
 export function bindWarning(host: string): string | null {

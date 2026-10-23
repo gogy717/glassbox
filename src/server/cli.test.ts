@@ -1,6 +1,13 @@
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { bindWarning, browserUrl, codexDirToUse, grokDirToUse, parseCliArgs } from './args.js';
+import {
+  bindWarning,
+  browserUrl,
+  codexDirToUse,
+  grokDirToUse,
+  ompAgentDirToUse,
+  parseCliArgs,
+} from './args.js';
 import { browserCommand } from './open-browser.js';
 
 const ctx = { env: {}, homedir: '/home/u' };
@@ -22,6 +29,10 @@ describe('parseCliArgs', () => {
       codex: true,
       codexDir: '/home/u/.codex',
       codexDirFromFlag: false,
+      omp: true,
+      ompDir: '/home/u/.omp',
+      ompAgentDir: '/home/u/.omp/agent',
+      ompDirFromFlag: false,
       fetchQuota: false,
     });
   });
@@ -47,6 +58,9 @@ describe('parseCliArgs', () => {
           '--codex-dir',
           '/data/x',
           '--no-codex',
+          '--omp-dir',
+          '/data/o',
+          '--no-omp',
           '--fetch-quota',
         ],
         ctx,
@@ -66,6 +80,10 @@ describe('parseCliArgs', () => {
       codex: false,
       codexDir: '/data/x',
       codexDirFromFlag: true,
+      omp: false,
+      ompDir: '/data/o',
+      ompAgentDir: '/data/o/agent',
+      ompDirFromFlag: true,
       fetchQuota: true,
     });
   });
@@ -182,5 +200,44 @@ describe('codexDirToUse', () => {
     await expect(codexDirToUse(opts(['--codex-dir', '/nope']), exists([]))).rejects.toThrow(
       /--codex-dir.*\/nope/,
     );
+  });
+});
+
+describe('ompAgentDirToUse', () => {
+  const opts = (argv: string[], env: Record<string, string> = {}) =>
+    parseCliArgs(argv, { env, homedir: '/home/u' });
+  const exists = (dirs: string[]) => async (p: string) => dirs.includes(p);
+
+  it('uses ~/.omp/agent when it has sessions', async () => {
+    expect(await ompAgentDirToUse(opts([]), exists(['/home/u/.omp/agent/sessions']))).toBe(
+      '/home/u/.omp/agent',
+    );
+    // An install that never saved a session shows nothing.
+    expect(await ompAgentDirToUse(opts([]), exists(['/home/u/.omp']))).toBeNull();
+  });
+
+  it('follows omp: PI_CONFIG_DIR is joined onto home, PI_CODING_AGENT_DIR moves the agent dir', async () => {
+    const custom = opts([], { PI_CONFIG_DIR: '.omp-work' });
+    expect(custom.ompDir).toBe('/home/u/.omp-work');
+    expect(await ompAgentDirToUse(custom, exists(['/home/u/.omp-work/agent/sessions']))).toBe(
+      '/home/u/.omp-work/agent',
+    );
+    const moved = opts([], { PI_CODING_AGENT_DIR: '/data/agent' });
+    expect(moved).toMatchObject({ ompDir: '/home/u/.omp', ompAgentDir: '/data/agent' });
+    expect(await ompAgentDirToUse(moved, exists(['/data/agent/sessions']))).toBe('/data/agent');
+    // The flag names the whole omp dir; the environment no longer applies.
+    expect(opts(['--omp-dir', '/o'], { PI_CODING_AGENT_DIR: '/data/agent' }).ompAgentDir).toBe(
+      '/o/agent',
+    );
+  });
+
+  it('stays off with --no-omp, and refuses an --omp-dir that does not exist', async () => {
+    expect(
+      await ompAgentDirToUse(opts(['--no-omp']), exists(['/home/u/.omp/agent/sessions'])),
+    ).toBeNull();
+    await expect(ompAgentDirToUse(opts(['--omp-dir', '/nope']), exists([]))).rejects.toThrow(
+      /--omp-dir.*\/nope/,
+    );
+    expect(await ompAgentDirToUse(opts(['--omp-dir', '/o']), exists(['/o']))).toBeNull();
   });
 });
