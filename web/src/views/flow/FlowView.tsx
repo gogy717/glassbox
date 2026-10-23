@@ -212,8 +212,9 @@ function CallList({
 
   const focusIndex = focusId ? calls.findIndex((c) => c.req.id === focusId) : -1;
   const linkFocus = focusId !== clickedRef.current ? focusId : null;
+  // A linked call lands at the top: its line and cards first, then the panel a card link opens.
   useEffect(() => {
-    if (focusIndex >= 0 && linkFocus) virtualizer.scrollToIndex(focusIndex, { align: 'center' });
+    if (focusIndex >= 0 && linkFocus) virtualizer.scrollToIndex(focusIndex, { align: 'start' });
   }, [focusIndex, linkFocus, virtualizer]);
 
   useFollowScroll(parentRef, follow, onUserScrollAway);

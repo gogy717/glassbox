@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Turn } from '../../../../src/core/model.js';
@@ -247,5 +249,14 @@ describe('TurnList filter', () => {
   it('has no field where the view does not ask for one', () => {
     renderList('turn_5');
     expect(screen.queryByRole('searchbox')).toBeNull();
+  });
+});
+
+describe('TurnList styles', () => {
+  // jsdom has no layout: this pins the one rule that keeps the narrow list from widening the page.
+  it('contains each row’s visually hidden text, so the scrolling list cannot widen the page', () => {
+    const sheet = readFileSync(join(import.meta.dirname, 'TurnList.module.css'), 'utf8');
+    const row = /\n\.row \{([^}]*)\}/.exec(sheet)?.[1] ?? '';
+    expect(row).toMatch(/position: relative;/);
   });
 });

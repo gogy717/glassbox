@@ -85,6 +85,9 @@
 
 /* Number · title · clock, then the counts and the status mark under the title. */
 .row {
+  /* Holds its visually hidden text: in the narrow, horizontally scrolling list, text placed
+     against an outer box would stretch the page sideways. */
+  position: relative;
   display: grid;
   grid-template-columns: 14px minmax(0, 1fr) auto;
   align-items: baseline;

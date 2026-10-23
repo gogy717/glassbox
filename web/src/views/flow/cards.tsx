@@ -334,7 +334,7 @@ function SpawnedAgents({
           <LiveDot state={a.status} />
           <span className={css.agentLabel}>{a.label}</span>
           <span className={css.agentMeta}>{t(`status.${a.status}`)}</span>
-          <span className={`${css.agentMeta} num`}>
+          <span className={`${css.agentMeta} figure`}>
             {formatCompact(cumulativeTokens(open, a.id), intl)}
           </span>
         </button>
