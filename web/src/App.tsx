@@ -76,12 +76,15 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
   const { t } = useI18n();
   const state = useSyncExternalStore(store.subscribe, store.getState);
   const [route, navigate] = useRoute();
-  const [follow, setFollow] = useState(true);
-  // Pausing follow is about the session being read: opening another one starts it afresh.
+  // Pausing follow is about the session being read: opening another one starts it afresh,
+  // following its latest turn, unless the link names a turn or a request (a pasted link, Back or
+  // Forward), which then stays on screen.
+  const followsLatest = !route.turnId && !route.requestId;
+  const [follow, setFollow] = useState(followsLatest);
   const [followSession, setFollowSession] = useState(route.sessionId);
   if (followSession !== route.sessionId) {
     setFollowSession(route.sessionId);
-    setFollow(true);
+    setFollow(followsLatest);
   }
   const narrow = useMediaQuery(NARROW);
   const mainRef = useRef<HTMLElement>(null);
