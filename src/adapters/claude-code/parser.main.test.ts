@@ -719,6 +719,35 @@ describe('session summary', () => {
     expect(p.snapshot().session.title).toBe('T4 assignment');
   });
 
+  it('gives a person’s prompt the request Claude Code wrote just before it', () => {
+    const p = parseMain(
+      userPrompt({ text: 'first', ts: at(1) }),
+      apiRequest({ id: 'api-1', ts: at(2) }),
+      assistantBlocks({ requestRef: 'api-1', blocks: ['text'], ts: at(3) }),
+      apiRequest({ id: 'api-2', ts: at(21) }),
+      userPrompt({ text: 'second', ts: at(20) }),
+      assistantBlocks({ requestRef: 'api-2', blocks: ['text'], ts: at(23) }),
+    );
+    const snap = p.snapshot();
+    expect(snap.turns.map((t) => [t.prompt, t.requestIds])).toEqual([
+      ['first', ['api-1']],
+      ['second', ['api-2']],
+    ]);
+    // Numbered within its own turn: "Conversation 2 · call #1".
+    expect(snap.requests.find((r) => r.id === 'api-2')).toMatchObject({ index: 1 });
+  });
+
+  it('keeps an answered request with its turn when the next prompt follows it on disk', () => {
+    const p = parseMain(
+      userPrompt({ text: 'first', ts: at(1) }),
+      apiRequest({ id: 'api-1', ts: at(30) }),
+      assistantBlocks({ requestRef: 'api-1', blocks: ['text'], ts: at(31) }),
+      userPrompt({ text: 'second', ts: at(20) }),
+    );
+    // Its reply is already in: it was the first prompt's, whatever the clocks say.
+    expect(p.snapshot().turns.map((t) => t.requestIds)).toEqual([['api-1'], []]);
+  });
+
   it('leaves a request sent before a queued prompt with the turn it was sent for', () => {
     const p = parseMain(
       userPrompt({ text: 'first', ts: at(1) }),

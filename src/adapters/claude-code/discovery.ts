@@ -52,11 +52,12 @@ async function scanHead(fh: FileHandle, size: number): Promise<Scan> {
     const lines = await readLines(fh, 0, Math.min(len, size));
     // The last line of a partial window is cut: drop it.
     const s = scan(whole ? lines : lines.slice(0, -1));
-    // A first prompt that is a slash command may have been local: read on to the next one.
+    // A slash command may yet turn out local: what came before it is settled, the rest may not be.
+    const t = titleInputs(s.inputs.slice(0, s.openAt ?? s.inputs.length));
     const enough =
       s.firstTs !== null &&
       s.cwd !== null &&
-      (s.firstPrompt !== null || (s.firstAny !== null && s.pendingCommand === null));
+      (t.firstHuman !== null || (t.firstAny !== null && s.openAt === null));
     if (
       enough ||
       whole ||
@@ -78,25 +79,111 @@ async function scanTail(fh: FileHandle, size: number): Promise<Scan> {
   }
 }
 
+/** A prompt seen while looking for the title. */
+interface TitleInput {
+  title: string;
+  human: boolean;
+  /** Whether the model saw it: always for prompts; open (null) while a slash command waits. */
+  reached: boolean | null;
+}
+
+interface CommandCall {
+  id: string;
+  ts: string | null;
+  /** An API error or an interrupt ended it: the parser keeps such a request where it is. */
+  failed: boolean;
+}
+
 interface Scan {
   cwd: string | null;
   version: string | null;
   firstTs: string | null;
   lastTs: string | null;
-  firstPrompt: string | null;
-  /**
-   * A person's slash command, until it is known whether the model saw it: a reply makes it the
-   * first prompt, the next prompt of any origin shows it was local (e.g. /effort).
-   */
-  pendingCommand: string | null;
-  /** First input of any origin (peer, task notification, …). */
-  firstAny: string | null;
-  /** First slash command, local or not: the title of a session with nothing else. */
-  firstCommand: string | null;
+  /** Prompts in order. Titles come from them once every slash command among them is decided. */
+  inputs: TitleInput[];
+  /** The latest turn's slash command, and the model call made in its turn so far. */
+  pending: { input: TitleInput; call: CommandCall | null } | null;
+  /** An earlier command whose call had no reply when the next prompt came. */
+  undecided: { input: TitleInput; call: CommandCall } | null;
+  /** Index of the first input still open when the lines ended; null when none was. */
+  openAt: number | null;
   customTitle: string | null;
   agentName: string | null;
   aiTitle: string | null;
   model: string | null;
+}
+
+/**
+ * Whether a person's slash command reached the model, decided record by record as the parser
+ * attributes requests to turns, so discovery and an opened session agree on the title. A reply
+ * keeps the call with the command's turn. A call sent at or after the next prompt was written
+ * early for that prompt (see the parser's `claimEarlyRequest`). An unanswered call is dropped as
+ * abandoned when the next request starts, unless an error or an interrupt ended it.
+ */
+const commands = {
+  onCall(s: Scan, id: string, ts: string | null): void {
+    if (s.undecided) {
+      s.undecided.input.reached = s.undecided.call.failed;
+      s.undecided = null;
+    }
+    if (s.pending && !s.pending.call) s.pending.call = { id, ts, failed: false };
+  },
+  onReply(s: Scan, requestRef: string | null): void {
+    if (s.undecided) {
+      // Its own late reply keeps it; a reply to anything else is a new request, which drops it.
+      const own = requestRef !== null && requestRef === s.undecided.call.id;
+      s.undecided.input.reached = own || s.undecided.call.failed;
+      s.undecided = null;
+      if (own) return;
+    }
+    if (s.pending) {
+      s.pending.input.reached = true;
+      s.pending = null;
+    }
+  },
+  onFailure(s: Scan): void {
+    const call = s.pending?.call ?? s.undecided?.call;
+    if (call) call.failed = true;
+  },
+  /** A new turn starts; returns a call written early for it. */
+  onPrompt(s: Scan, ts: string | null): CommandCall | null {
+    const p = s.pending;
+    s.pending = null;
+    if (!p) return null;
+    if (!p.call) {
+      p.input.reached = false;
+      return null;
+    }
+    if (p.call.ts && ts && p.call.ts >= ts) {
+      p.input.reached = false;
+      return p.call;
+    }
+    if (p.call.failed) p.input.reached = true;
+    else s.undecided = { input: p.input, call: p.call };
+    return null;
+  },
+  /**
+   * The lines end: a call still waiting stays with its command, as no later request drops it.
+   * Where they end mid-file, more lines may decide otherwise: `openAt` says from where.
+   */
+  finish(s: Scan): void {
+    const open = [s.pending?.input, s.undecided?.input].map((i) => (i ? s.inputs.indexOf(i) : -1));
+    const first = Math.min(...open.filter((i) => i >= 0));
+    s.openAt = Number.isFinite(first) ? first : null;
+    if (s.pending) s.pending.input.reached = s.pending.call !== null;
+    if (s.undecided) s.undecided.input.reached = true;
+    s.pending = null;
+    s.undecided = null;
+  },
+};
+
+/** The parser's title inputs, read from the prompts so far. */
+function titleInputs(inputs: TitleInput[]) {
+  return {
+    firstHuman: inputs.find((i) => i.human && i.reached === true)?.title ?? null,
+    firstAny: inputs.find((i) => i.reached === true)?.title ?? null,
+    command: inputs[0]?.title ?? null,
+  };
 }
 
 function scan(lines: string[]): Scan {
@@ -105,10 +192,10 @@ function scan(lines: string[]): Scan {
     version: null,
     firstTs: null,
     lastTs: null,
-    firstPrompt: null,
-    pendingCommand: null,
-    firstAny: null,
-    firstCommand: null,
+    inputs: [],
+    pending: null,
+    undecided: null,
+    openAt: null,
     customTitle: null,
     agentName: null,
     aiTitle: null,
@@ -129,24 +216,22 @@ function scan(lines: string[]): Scan {
     if (r.kind === 'agent-name' && r.title) s.agentName = r.title;
     if (r.kind === 'assistant' && r.model && r.model !== '<synthetic>' && !r.isSidechain)
       s.model = r.model;
-    if (r.kind === 'assistant' && !r.isSidechain && s.pendingCommand !== null) {
-      s.firstPrompt ??= s.pendingCommand;
-      s.firstAny ??= s.pendingCommand;
-      s.pendingCommand = null;
-    }
-    if (r.kind === 'user' && !r.isSidechain && (s.firstPrompt === null || s.firstAny === null)) {
-      const origin = promptOrigin(r, true);
-      const title = origin === null ? null : cleanPrompt(turnInput(r, origin).prompt);
-      if (title && origin === 'human' && isSlashCommand(r.text)) {
-        s.pendingCommand ??= title;
-        s.firstCommand ??= title;
-      } else if (title) {
-        s.pendingCommand = null;
-        s.firstAny ??= title;
-        if (origin === 'human') s.firstPrompt ??= title;
-      }
-    }
+    if (r.kind === 'api-request' && r.agentId === null) commands.onCall(s, r.id, r.ts);
+    if (r.kind === 'assistant' && !r.isSidechain) commands.onReply(s, r.requestRef);
+    if (r.kind === 'system' && !r.isSidechain && r.subtype === 'api_error') commands.onFailure(s);
+    if (r.kind !== 'user' || r.isSidechain) continue;
+    if (r.interrupt) commands.onFailure(s);
+    const origin = promptOrigin(r, true);
+    if (origin === null) continue;
+    const early = commands.onPrompt(s, r.ts);
+    const title = cleanPrompt(turnInput(r, origin).prompt);
+    if (!title) continue;
+    const command = origin === 'human' && isSlashCommand(r.text);
+    const input: TitleInput = { title, human: origin === 'human', reached: command ? null : true };
+    s.inputs.push(input);
+    if (command) s.pending = { input, call: early };
   }
+  commands.finish(s);
   return s;
 }
 
@@ -208,9 +293,7 @@ async function scanFile(
         customTitle: t.customTitle ?? h.customTitle,
         agentName: t.agentName ?? h.agentName,
         aiTitle: t.aiTitle ?? h.aiTitle,
-        firstHuman: h.firstPrompt,
-        firstAny: h.firstAny,
-        command: h.firstCommand,
+        ...titleInputs(h.inputs),
       }),
       cwd,
       project: cwd ? basename(cwd) : basename(dirname(path)),

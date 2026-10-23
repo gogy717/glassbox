@@ -80,6 +80,31 @@ describe('patches keep a live client in step with the snapshot', () => {
     expect(problems).toEqual([]);
   });
 
+  it('a request written before its prompt moves to that prompt’s turn (2.1.309 order)', () => {
+    const { parser, problems } = replayChecked([
+      { live: 'busy' },
+      main(
+        userPrompt({ text: 'first', ts: at(0) }),
+        apiRequest({ id: 'api-1', ts: at(1) }),
+        assistantBlocks({ requestRef: 'api-1', blocks: ['text'], blockTs: [at(2)] }),
+        // The next prompt's api-request is on disk before the prompt itself.
+        apiRequest({ id: 'api-2', ts: at(11) }),
+        userPrompt({ text: 'second', ts: at(10) }),
+        assistantBlocks({ requestRef: 'api-2', blocks: ['text'], blockTs: [at(12)] }),
+        apiRequest({ id: 'api-3', ts: at(21) }),
+        userPrompt({ text: 'third', ts: at(20) }),
+      ),
+      { live: 'closed' },
+    ]);
+    expect(problems).toEqual([]);
+    const turns = parser.snapshot().turns.filter((t) => t.agentId === 'main');
+    expect(turns.map((t) => [t.prompt, t.requestIds])).toEqual([
+      ['first', ['api-1']],
+      ['second', ['api-2']],
+      ['third', ['api-3']],
+    ]);
+  });
+
   it('a later request updates the unanswered tools of the one before', () => {
     const { problems } = replayChecked([
       { live: 'busy' },
