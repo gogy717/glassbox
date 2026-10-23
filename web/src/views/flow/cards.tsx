@@ -331,7 +331,7 @@ function SpawnedAgents({
     <span className={css.spawned}>
       {agents.slice(0, MAX_LISTED).map((a) => (
         <button key={a.id} type="button" className={css.agent} onClick={() => onEnter(a.id)}>
-          <LiveDot state={a.status} />
+          <LiveDot kind="status" state={a.status} />
           <span className={css.agentLabel}>{a.label}</span>
           <span className={css.agentMeta}>{t(`status.${a.status}`)}</span>
           <span className={`${css.agentMeta} figure`}>
@@ -364,7 +364,7 @@ function WorkflowBlock({
       <span className={css.workflowName}>
         <Workflow size={12} aria-hidden="true" />
         {run.name ?? run.id}
-        <LiveDot state={run.status} label={t(`status.${run.status}`)} />
+        <LiveDot kind="status" state={run.status} label={t(`status.${run.status}`)} />
       </span>
       <span className={css.chips}>
         {run.phases.map((p) => {

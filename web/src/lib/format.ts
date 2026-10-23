@@ -142,35 +142,53 @@ export function formatCountdown(ms: number): string | null {
 
 const ELLIPSIS = '…';
 
+/** Length in code points: an emoji or a rare CJK character counts once, and is never split. */
+const chars = (s: string) => Array.from(s).length;
+
 /**
- * A path cut in the middle to at most `n` characters, keeping what identifies it: the first
- * segment (its root) and as many trailing segments as fit, e.g. "src/…/server/store.ts". A last
- * segment too long on its own keeps its head and its tail (and so its extension):
- * "very-lo…name.ts". Separators are kept as written, `/` or `\`.
+ * A path cut in the middle to at most `n` characters (code points), keeping what identifies it:
+ * the root and as many trailing segments as fit, e.g. "src/…/server/store.ts". The root is the
+ * first segment ("src/", "C:\"), the "/" of an absolute path, or the host of a UNC path
+ * ("\\server\"). A last segment too long on its own keeps its head and its tail (and so its
+ * extension): "very-lo…name.ts". Separators are kept as written, `/` or `\`, and so is a trailing
+ * one ("src/…/omp/"). With no usable limit (NaN, ±Infinity) the path is returned as it is; the
+ * result is never longer than the path.
  */
 export function middleEllipsis(path: string, n: number): string {
+  if (!Number.isFinite(n)) return path;
   const max = Math.max(1, Math.floor(n));
-  if (path.length <= max) return path;
+  if (chars(path) <= max) return path;
+  const trail = /[/\\]+$/.exec(path)?.[0] ?? '';
+  const body = path.slice(0, path.length - trail.length);
+  if (trail && body)
+    return max > trail.length ? cutPath(body, max - trail.length) + trail : ELLIPSIS;
+  return cutPath(path, max);
+}
+
+/** `middleEllipsis` for a path longer than `max` with no trailing separator. */
+function cutPath(path: string, max: number): string {
   const parts = path.split(/([/\\])/); // segments at even indexes, separators at odd
-  const segments = parts.filter((_, i) => i % 2 === 0);
-  if (segments.length >= 3) {
-    // Head: the first segment with its separator ("src/", or "/" for an absolute path).
-    const head = `${parts[0]}${parts[1]}`;
-    let tail = segments.length - 1; // index into segments of the first one kept at the end
-    const tailText = (from: number) => parts.slice(from * 2 - 1).join('');
-    if (head.length + ELLIPSIS.length + tailText(tail).length <= max) {
-      while (tail > 2 && head.length + ELLIPSIS.length + tailText(tail - 1).length <= max) tail--;
-      return `${head}${ELLIPSIS}${tailText(tail)}`;
-    }
+  // The root is parts[0, root): the first segment and its separator, or "/" alone for an
+  // absolute path; a UNC path ("\\server\share\…") keeps its host too.
+  let root = 2;
+  if (/^[/\\]{2}/.test(path)) {
+    const host = parts.findIndex((p, i) => i % 2 === 0 && p !== '');
+    root = host === -1 ? parts.length : host + 2;
   }
-  const last = segments.at(-1) ?? path;
-  if (last.length + 2 <= max && segments.length > 1) {
-    const sep = parts.at(-2) ?? '/';
-    return `${ELLIPSIS}${sep}${last}`;
+  const head = parts.slice(0, root).join('');
+  const fits = (from: number) => chars(head) + 1 + chars(parts.slice(from).join('')) <= max;
+  // The kept tail starts at a separator and leaves out at least the segment after the root.
+  let from = parts.length - 2;
+  if (from > root && fits(from)) {
+    while (from - 2 > root && fits(from - 2)) from -= 2;
+    return `${head}${ELLIPSIS}${parts.slice(from).join('')}`;
   }
-  // Even the file name is too long: keep its start and its end.
+  const last = parts.at(-1) || path;
+  if (parts.length > 1 && chars(last) + 2 <= max) return `${ELLIPSIS}${parts.at(-2)}${last}`;
+  // Even the file name is too long: keep its start and its end, whole characters only.
   const keep = max - ELLIPSIS.length;
   if (keep <= 0) return ELLIPSIS;
+  const name = Array.from(last);
   const tailLen = Math.ceil(keep / 2);
-  return `${last.slice(0, keep - tailLen)}${ELLIPSIS}${last.slice(last.length - tailLen)}`;
+  return `${name.slice(0, keep - tailLen).join('')}${ELLIPSIS}${name.slice(-tailLen).join('')}`;
 }

@@ -21,7 +21,6 @@
   font-size: inherit;
   white-space: nowrap;
   cursor: pointer;
-  transition: color var(--motion);
 }
 
 .word:hover {
@@ -38,9 +37,17 @@
   text-underline-offset: 4px;
 }
 
-/* Unavailable: struck through, faint; the title says why. */
-.word:disabled {
+/* Unavailable: struck through, faint; the title says why. aria-disabled, not disabled, so it
+   stays focusable and the reason reachable from the keyboard. */
+.word[aria-disabled="true"] {
   color: var(--faint);
-  text-decoration: line-through;
+  text-decoration-line: line-through;
+  text-decoration-color: currentColor;
   cursor: default;
+}
+
+/* Chosen, then made unavailable: the ink underline (and the weight) stay under the strike. */
+.word[aria-disabled="true"][aria-checked="true"] {
+  text-decoration-line: underline line-through;
+  text-decoration-color: var(--ink);
 }

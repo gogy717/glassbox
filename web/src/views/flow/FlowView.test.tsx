@@ -320,11 +320,15 @@ describe('FlowView', () => {
     renderFlow();
     const call = row(1);
     // The why line and the Response card, which say nothing yet, both count the thinking.
-    expect(within(call).getAllByText('Thinking · 1:23')).toHaveLength(2);
+    const why = call.querySelector('p') as HTMLElement;
+    const response = within(call).getByRole('group', { name: 'Response' });
+    expect(why).toHaveTextContent('Thinking · 1:23');
+    expect(response).toHaveTextContent('Thinking · 1:23');
     expect(within(call).getAllByText('claude-opus-5-5').length).toBeGreaterThan(0);
     expect(within(call).getAllByText('max').length).toBeGreaterThan(0);
     act(() => vi.advanceTimersByTime(1000));
-    expect(within(call).getAllByText('Thinking · 1:24')).toHaveLength(2);
+    expect(why).toHaveTextContent('Thinking · 1:24');
+    expect(response).toHaveTextContent('Thinking · 1:24');
   });
 
   it('shows token headers, the failed Edit and the final reply in turn 1', () => {
