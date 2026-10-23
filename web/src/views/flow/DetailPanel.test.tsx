@@ -141,6 +141,16 @@ describe('DetailPanel', () => {
     expect(within(panel).getByRole('heading', { name: 'Usage & timing' })).toBeInTheDocument();
   });
 
+  it('shows the usage and timing as a list, the JSON one click away', () => {
+    renderPanel(req('req_m1'), 'response');
+    const panel = screen.getByRole('region', { name: 'Response details' });
+    expect(within(panel).getByText('usage.thinking')).toBeInTheDocument();
+    expect(within(panel).getByText('610')).toBeInTheDocument();
+    expect(within(panel).getByText('claude-opus-5-5')).toBeInTheDocument();
+    fireEvent.click(within(panel).getByRole('radio', { name: 'JSON' }));
+    expect(within(panel).getByText('{} JSON')).toBeInTheDocument();
+  });
+
   it('swaps in the final reply when an open in-flight request completes', () => {
     const live = req('req_m6');
     const done = { ...req('req_m1'), id: live.id, turnId: live.turnId };

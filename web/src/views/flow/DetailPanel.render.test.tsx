@@ -112,6 +112,8 @@ describe('DetailPanel re-rendering', () => {
   });
 
   it('does not rebuild the usage tree of a response for unrelated re-renders', () => {
+    localStorage.setItem('glassbox.detail', JSON.stringify({ view: 'json' }));
+    resetDetailPrefs();
     const before = renders.n;
     const { rerender } = render(
       tree(

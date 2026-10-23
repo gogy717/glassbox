@@ -15,7 +15,7 @@ import type { CardKey } from './cards';
 import css from './DetailPanel.module.css';
 import { ArgsView } from './detail/ArgsView';
 import { useDetailPrefs } from './detail/prefs';
-import { RequestReadable } from './detail/RequestReadable';
+import { KeyValues, RequestReadable } from './detail/RequestReadable';
 import { ViewToggle } from './detail/ViewToggle';
 import { toolStatus } from './flow-model';
 
@@ -174,9 +174,19 @@ function RequestBody({ sessionId, req }: { sessionId: string; req: ModelRequest 
   );
 }
 
+/** A response's usage and timing as one flat list: nested usage fields under "usage.". */
+function usageEntries(usage: Record<string, unknown>): [string, unknown][] {
+  return Object.entries(usage).flatMap(([k, v]): [string, unknown][] =>
+    v !== null && typeof v === 'object' && !Array.isArray(v)
+      ? Object.entries(v).map(([k2, v2]): [string, unknown] => [`${k}.${k2}`, v2])
+      : [[k, v]],
+  );
+}
+
 function ResponseBody({ req }: { req: ModelRequest }) {
   const { t, intl } = useI18n();
   const kind = useSessionAgentKind();
+  const [prefs] = useDetailPrefs();
   const thinking = req.blocks.filter((b) => b.kind === 'thinking');
   const thinkingText = thinking
     .map((b) => (b.kind === 'thinking' ? b.text : null))
@@ -203,6 +213,7 @@ function ResponseBody({ req }: { req: ModelRequest }) {
     }),
     [req],
   );
+  const usageList = useMemo(() => usageEntries(usage), [usage]);
   return (
     <div className={css.grid}>
       <Cell title={t('detail.thinking')}>
@@ -227,8 +238,12 @@ function ResponseBody({ req }: { req: ModelRequest }) {
       <Cell title={t('detail.content')}>
         <TextBlock label={t('detail.content')} text={text} />
       </Cell>
-      <Cell title={t('detail.usage')}>
-        <JsonInspector label="usage" data={usage} />
+      <Cell title={t('detail.usage')} tools={<ViewToggle />}>
+        {prefs.view === 'readable' ? (
+          <KeyValues entries={usageList} />
+        ) : (
+          <JsonInspector label="usage" data={usage} />
+        )}
       </Cell>
     </div>
   );

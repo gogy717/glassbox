@@ -295,6 +295,22 @@ function ParamValue({ value }: { value: unknown }) {
   return <code>{JSON.stringify(value)}</code>;
 }
 
+/** Fields as a compact name/value list: request params, a response's usage and timing. */
+export function KeyValues({ entries }: { entries: [string, unknown][] }) {
+  return (
+    <dl className={css.params}>
+      {entries.map(([k, v]) => (
+        <div key={k}>
+          <dt>{k}</dt>
+          <dd>
+            <ParamValue value={v} />
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 /**
  * What a request sent, readable: the conversation in the wide column, params, system prompt and
  * tools beside it.
@@ -340,16 +356,7 @@ export const RequestReadable = memo(function RequestReadable({
       ) : params.length === 0 ? (
         none
       ) : (
-        <dl className={css.params}>
-          {params.map(([k, v]) => (
-            <div key={k}>
-              <dt>{k}</dt>
-              <dd>
-                <ParamValue value={v} />
-              </dd>
-            </div>
-          ))}
-        </dl>
+        <KeyValues entries={params} />
       )}
     </Section>
   );
