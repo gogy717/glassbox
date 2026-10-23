@@ -43,7 +43,7 @@ describe('StepsView', () => {
 
   it('lists the turns newest first, like the flow tab, with the followed turn on top', () => {
     renderSteps();
-    const items = within(screen.getByRole('list', { name: 'User turns' })).getAllByRole('button');
+    const items = within(screen.getByRole('list', { name: 'Conversations' })).getAllByRole('button');
     expect(items.map((b) => b.textContent?.match(/^Conversation \d+/)?.[0])).toEqual([
       'Conversation 3',
       'Conversation 2',

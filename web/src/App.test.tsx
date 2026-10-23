@@ -146,7 +146,7 @@ describe('App', () => {
     const summary = screen.getByRole('region', { name: 'Summary' });
     const value = (label: string) =>
       within(summary).getByText(label).parentElement?.querySelector('[data-value]')?.textContent;
-    expect(value('Turns')).toBe('3');
+    expect(value('Conversations')).toBe('3');
     expect(value('Model calls')).toBe('28');
     expect(value('Tool calls')).toBe('24');
     expect(value('Duration')).toBe('3m4s');
@@ -163,7 +163,7 @@ describe('App', () => {
       'Timeline',
     ]);
     expect(screen.getByRole('tabpanel')).toContainElement(
-      screen.getByRole('list', { name: 'User turns' }),
+      screen.getByRole('list', { name: 'Conversations' }),
     );
   });
 

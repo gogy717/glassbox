@@ -69,7 +69,7 @@ describe('TimeView', () => {
       'Tools · Explore550ms',
       'Tools · Edit50ms',
       'Tools · Delegate250ms',
-      'Idle (between turns)36m54s',
+      'Idle (between conversations)36m54s',
     ]);
   });
 
@@ -79,7 +79,7 @@ describe('TimeView', () => {
     const items = within(card).getAllByRole('button');
     expect(items).toHaveLength(10);
     expect(items[0]).toHaveTextContent('verify:live-write');
-    expect(items[0]).toHaveTextContent('Turn 1 · call #3');
+    expect(items[0]).toHaveTextContent('Conversation 1 · call #3');
     expect(items[0]).toHaveTextContent('26m28s');
     expect(items[1]).toHaveTextContent('recon:prior-art');
     expect(items[1]).toHaveTextContent('Bash · python3 -I survey.py');

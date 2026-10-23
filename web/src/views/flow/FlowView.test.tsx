@@ -96,7 +96,7 @@ describe('FlowView', () => {
 
   it('lists the agent’s turns newest first and follows the newest, on top', () => {
     renderFlow();
-    const turns = screen.getByRole('list', { name: 'User turns' });
+    const turns = screen.getByRole('list', { name: 'Conversations' });
     // DOM order is display order, so Tab walks the turns as they are seen.
     const items = within(turns).getAllByRole('button');
     expect(items.map((b) => b.querySelector('[data-title]')?.textContent)).toEqual([
@@ -116,7 +116,7 @@ describe('FlowView', () => {
 
   it('keeps an older turn picked from the URL selected while newer ones stay on top', () => {
     renderFlow({ route: { turnId: 'turn_m1' }, follow: false });
-    const items = within(screen.getByRole('list', { name: 'User turns' })).getAllByRole('button');
+    const items = within(screen.getByRole('list', { name: 'Conversations' })).getAllByRole('button');
     expect(items[2]).toHaveAttribute('aria-current', 'true');
     expect(items[2]).toHaveTextContent('Conversation 1');
     expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Conversation 1: /);
@@ -185,7 +185,7 @@ describe('FlowView', () => {
     expect(screen.getByRole('button', { name: /Conversation 1/ })).not.toHaveTextContent('from');
   });
 
-  it('lists calls that belong to no turn under “Calls outside turns”', () => {
+  it('lists calls that belong to no turn under “Calls outside conversations”', () => {
     const open = demoOpen();
     const m1 = open.requests.get('req_m1');
     if (!m1) throw new Error('fixture');
@@ -197,7 +197,7 @@ describe('FlowView', () => {
       toolCallIds: [],
     });
     const { navigate } = renderFlow({ open, follow: false });
-    const card = screen.getByRole('button', { name: /Calls outside turns/ });
+    const card = screen.getByRole('button', { name: /Calls outside conversations/ });
     expect(card).toHaveTextContent('1 model call · 0 tools');
     fireEvent.click(card);
     expect(navigate).toHaveBeenLastCalledWith({ turnId: 'outside:main', requestId: null });

@@ -68,7 +68,9 @@ describe('TurnList', () => {
 
   it('shows the newest turn first and keeps chronological numbers', () => {
     renderList('turn_5');
-    const cards = within(screen.getByRole('list', { name: 'User turns' })).getAllByRole('button');
+    const cards = within(screen.getByRole('list', { name: 'Conversations' })).getAllByRole(
+      'button',
+    );
     expect(cards.map((c) => c.querySelector('[data-title]')?.textContent)).toEqual([
       'Conversation 5: prompt 5',
       'Conversation 4: prompt 4',
@@ -77,7 +79,7 @@ describe('TurnList', () => {
       'Conversation 1: prompt 1',
     ]);
     expect(cards[0]).toHaveAttribute('aria-current', 'true');
-    expect(screen.getByRole('navigation', { name: 'User turns' })).toHaveTextContent('5');
+    expect(screen.getByRole('navigation', { name: 'Conversations' })).toHaveTextContent('5');
   });
 
   it('selects the turn that was clicked, not its position', () => {
@@ -88,7 +90,7 @@ describe('TurnList', () => {
 
   it('scrolls the list, and only the list, to a selected turn out of view', () => {
     const { select } = renderList('turn_5');
-    const list = screen.getByRole('list', { name: 'User turns' });
+    const list = screen.getByRole('list', { name: 'Conversations' });
     const scrolled = layOut(list);
 
     // Turn 1 is the fifth card, at 400–490 px in a 300 px list: scroll it into view.
@@ -103,7 +105,7 @@ describe('TurnList', () => {
 
   it('leaves the scroll alone when the selected turn is already in view', () => {
     const { select } = renderList('turn_5');
-    const scrolled = layOut(screen.getByRole('list', { name: 'User turns' }));
+    const scrolled = layOut(screen.getByRole('list', { name: 'Conversations' }));
     select('turn_4');
     expect(scrolled).toEqual({ top: 0, left: 0 });
   });
