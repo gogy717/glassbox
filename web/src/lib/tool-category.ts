@@ -350,11 +350,14 @@ const PATH_KEYS = [
 /** What a call says it is for: an agent's task label, or oh-my-pi's intent (`i`). */
 const LABEL_KEYS = ['description', 'task_name', 'i'];
 
-/** The item in progress of a todo list or plan (TodoWrite, update_plan, todowrite…). */
+/** The item a todo list or plan is on (TodoWrite, update_plan, todowrite…): in progress, else next, else last. */
 function currentItem(input: Obj): string | null {
   const list = input.todos ?? input.plan;
   if (!Array.isArray(list)) return null;
-  const item = list.find((x) => isObj(x) && x.status === 'in_progress');
+  const item =
+    list.find((x) => isObj(x) && x.status === 'in_progress') ??
+    list.find((x) => isObj(x) && x.status === 'pending') ??
+    list.at(-1);
   return field(item, 'content') ?? field(item, 'step');
 }
 
@@ -401,6 +404,11 @@ export function summarizeInput(tool: ToolCall): string {
   if (question) return clip(question);
   const label = LABEL_KEYS.map(f).find(Boolean);
   if (label) return clip(label);
-  const first = Object.values(input).find((v): v is string => typeof v === 'string');
-  return first ? clip(first) : '';
+  // Never JSON: the first plain value, else the field names.
+  const entries = Object.entries(input);
+  const text = entries.find(([, v]) => typeof v === 'string');
+  if (text) return clip(text[1] as string);
+  const scalar = entries.find(([, v]) => typeof v === 'number' || typeof v === 'boolean');
+  if (scalar) return `${scalar[0]}: ${scalar[1]}`;
+  return clip(entries.map(([k]) => k).join(', '));
 }

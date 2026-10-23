@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { ToolCall } from '../../../../src/core/model.js';
 import { I18nContext, type Locale, makeI18n } from '../../i18n';
 import { demoOpen } from '../../test/demo';
-import { ToolCard } from './cards';
+import { ResponseCard, ToolCard } from './cards';
 
 const tool = (name: string, input: unknown): ToolCall => ({
   id: 'tool_1',
@@ -81,10 +81,19 @@ describe('ToolCard', () => {
     expect(within(card).getByText('a.dev')).toBeInTheDocument();
   });
 
-  it('shows the input as JSON when there is nothing to summarize', () => {
-    const card = renderCard(tool('SomethingNew', { n: 3 }));
+  it('never shows the input as JSON', () => {
+    const card = renderCard(tool('SomethingNew', { n: 3, deep: { a: 1 } }));
     expect(within(card).getByRole('img', { name: 'Other' })).toBeInTheDocument();
-    expect(within(card).getByText('{"n":3}')).toBeInTheDocument();
+    expect(within(card).getByText('n: 3')).toBeInTheDocument();
+    expect(card).not.toHaveTextContent('{');
+  });
+
+  it('shows a JSON result as its message', () => {
+    const card = renderCard({
+      ...tool('SendMessage', { to: 'medaka-f5', message: 'Hi' }),
+      resultPreview: '{"success":true,"message":"Message sent to medaka-f5"}',
+    });
+    expect(within(card).getByText('Message sent to medaka-f5')).toBeInTheDocument();
   });
 
   it('says "Run tool" for a call without input', () => {
@@ -95,5 +104,25 @@ describe('ToolCard', () => {
   it('names the category in Chinese', () => {
     const card = renderCard(tool('Edit', { file_path: '/r/a.ts' }), 'zh');
     expect(within(card).getByRole('img', { name: '修改' })).toHaveAttribute('title', '修改');
+  });
+});
+
+describe('ResponseCard', () => {
+  it('previews a markdown reply as plain text', () => {
+    const req = demoOpen().requests.get('req_m3');
+    if (!req) throw new Error('fixture');
+    const text = '### Spec Compliance\n- **Spec compliant:** yes, see `cards.tsx`';
+    render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <ResponseCard
+          req={{ ...req, blocks: [{ kind: 'text', text, at: '2026-10-23T10:00:00.000Z' }] }}
+          selected={false}
+          onSelect={() => {}}
+        />
+      </I18nContext.Provider>,
+    );
+    expect(
+      screen.getByText('Spec Compliance Spec compliant: yes, see cards.tsx'),
+    ).toBeInTheDocument();
   });
 });

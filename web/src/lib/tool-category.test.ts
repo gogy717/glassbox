@@ -328,7 +328,17 @@ describe('summarizeInput', () => {
       },
       'Write the tests',
     ],
-    ['TodoWrite', { todos: [{ content: 'Done', status: 'completed' }] }, ''],
+    [
+      'TodoWrite',
+      {
+        todos: [
+          { content: 'Read', status: 'completed' },
+          { content: 'Test', status: 'pending' },
+        ],
+      },
+      'Test',
+    ],
+    ['TodoWrite', { todos: [{ content: 'Done', status: 'completed' }] }, 'Done'],
     [
       'AskUserQuestion',
       { questions: [{ question: 'Which branch?', header: 'Branch', options: [] }] },
@@ -340,6 +350,10 @@ describe('summarizeInput', () => {
       'superpowers:test-driven-development',
     ],
     ['mcp__x__y', { 0: 1, title: 'First string' }, 'First string'],
+    // Never JSON: the first plain value, else the field names.
+    ['wait_agent', { timeout_ms: 30000 }, 'timeout_ms: 30000'],
+    ['Odd', { flags: { a: 1 }, ids: [1, 2] }, 'flags, ids'],
+    ['Odd', {}, ''],
     ['Odd', null, ''],
     ['Odd', 'raw text input', 'raw text input'],
   ])('%s %j → %j', (name, input, want) => {

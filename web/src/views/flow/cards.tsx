@@ -20,6 +20,7 @@ import type { OpenSession } from '../../data/store';
 import { useI18n } from '../../i18n';
 import { subtreeIds } from '../../lib/agents';
 import { formatCompact, formatDuration } from '../../lib/format';
+import { plainText, resultLine } from '../../lib/preview';
 import { mcpTool, summarizeInput, toolCategory } from '../../lib/tool-category';
 import css from './cards.module.css';
 import { toolStatus } from './flow-model';
@@ -60,8 +61,6 @@ function Card({ kind, icon, title, selected, onSelect, children, footer, label }
     </div>
   );
 }
-
-const oneLine = (s: string) => s.replace(/\s+/g, ' ').trim();
 
 export function Arrow() {
   return <ArrowRight size={18} className={css.arrow} aria-hidden="true" />;
@@ -120,8 +119,8 @@ export function ResponseCard({ req, selected, onSelect }: CardProps) {
   if (inFlight && req.startedAt)
     preview = <Ticking since={req.startedAt} labelKey="flow.thinkingNow" />;
   else if (req.error) preview = <span className={css.errorText}>{req.error.message}</span>;
-  else if (text) preview = oneLine(text);
-  else if (thinking?.kind === 'thinking' && thinking.text) preview = oneLine(thinking.text);
+  else if (text) preview = plainText(text);
+  else if (thinking?.kind === 'thinking' && thinking.text) preview = plainText(thinking.text);
   else preview = req.toolCallIds.length ? t('flow.toolsOnly') : t('flow.noResponse');
 
   return (
@@ -163,16 +162,6 @@ export function ResponseCard({ req, selected, onSelect }: CardProps) {
   );
 }
 
-function inputPreview(input: unknown): string | null {
-  if (input === null || input === undefined) return null;
-  try {
-    const json = JSON.stringify(input);
-    return json.length > 240 ? `${json.slice(0, 240)}…` : json;
-  } catch {
-    return null;
-  }
-}
-
 function ResultStrip({ tool }: { tool: ToolCall }) {
   const { t } = useI18n();
   const status = toolStatus(tool, useApprovalsContext());
@@ -194,9 +183,7 @@ function ResultStrip({ tool }: { tool: ToolCall }) {
     label = t('status.error');
   } else if (status === 'complete') {
     icon = <CheckCircle2 size={12} aria-hidden="true" />;
-    label =
-      (tool.resultPreview && oneLine(tool.resultPreview.split('\n')[0] ?? '')) ||
-      t('status.complete');
+    label = (tool.resultPreview && resultLine(tool.resultPreview)) || t('status.complete');
   } else {
     icon = <Clock3 size={12} aria-hidden="true" />;
     label = t('status.unknownEnd');
@@ -248,7 +235,7 @@ export function ToolCard({ tool, open, selected, onSelect, onEnterAgent }: ToolC
       label={tool.name}
     >
       <span className={`${css.preview} ${css.mono}`}>
-        {summarizeInput(tool) || inputPreview(tool.input) || t('flow.runTool')}
+        {summarizeInput(tool) || t('flow.runTool')}
       </span>
       <ResultStrip tool={tool} />
     </Card>
