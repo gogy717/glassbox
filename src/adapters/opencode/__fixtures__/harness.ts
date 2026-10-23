@@ -234,6 +234,14 @@ export class WriterProcess {
     for (const statement of rowInserts(doc)) await this.send(statement);
   }
 
+  /** Ends the writer the way a crash does: no checkpoint, its journal files stay behind. */
+  kill(): Promise<void> {
+    return new Promise((resolve) => {
+      this.child.once('exit', () => resolve());
+      this.child.kill('SIGKILL');
+    });
+  }
+
   close(): Promise<void> {
     return new Promise((resolve) => {
       this.child.once('exit', () => resolve());

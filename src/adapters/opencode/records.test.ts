@@ -245,9 +245,17 @@ describe('parsePartRow', () => {
   it('shows the raw argument text of a pending call, and the error of a failed one', () => {
     expect(
       parsePartRow(
-        partRow({ type: 'tool', tool: 'read', state: { status: 'pending', raw: '{"fi' } }),
+        // OpenCode's pending state: an empty input next to the raw argument text so far.
+        partRow({
+          type: 'tool',
+          tool: 'read',
+          state: { status: 'pending', input: {}, raw: '{"fi' },
+        }),
       ),
     ).toMatchObject({ status: 'pending', input: '{"fi' });
+    expect(
+      parsePartRow(partRow({ type: 'tool', tool: 'ls', state: { status: 'running', input: {} } })),
+    ).toMatchObject({ input: {} });
     expect(
       parsePartRow(
         partRow(tool({ callId: 'c', name: 'read', status: 'error', error: 'File not found' })),

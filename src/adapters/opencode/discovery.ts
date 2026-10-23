@@ -17,6 +17,11 @@ import { parseMessageRow, parseSessionRow, type SessionInfo, toIso } from './rec
 const ALIVE_WINDOW_MS = 60 * 60_000;
 /** Where processes cannot be listed, an unfinished call must have been written this recently. */
 const QUIET_WINDOW_MS = 10 * 60_000;
+/**
+ * Sessions whose own row changed this recently are looked at. OpenCode updates the row when
+ * a call starts, but not while its parts stream, so this is wider than the windows above.
+ */
+const CANDIDATE_WINDOW_MS = 24 * 60 * 60_000;
 /** How long a process listing is reused. */
 const PROCESS_TTL_MS = 5000;
 
@@ -147,10 +152,11 @@ export interface LiveIo {
 /**
  * OpenCode records no running-session registry. A session tree is busy while one of its
  * sessions' newest message is an assistant message without `time.completed` or an error (a
- * model call, or the tools of one, still going), and either an OpenCode process runs and the
- * session was written within the last hour, or processes cannot be listed and it was written
- * within ten minutes. A killed OpenCode leaves such a message behind, which is why recency
- * counts. Idle and waiting (a permission prompt) are not recorded, so the rest is closed.
+ * model call, or the tools of one, still going), and that message (its row or one of its
+ * parts) was written within the last hour while an OpenCode process runs, or within ten
+ * minutes where processes cannot be listed. A killed OpenCode leaves such a message behind,
+ * which is why recency counts. Idle and waiting (a permission prompt) are not recorded, so
+ * the rest is closed.
  */
 export async function readLiveStatus(
   db: OpenCodeDb,
@@ -166,10 +172,12 @@ export async function readLiveStatus(
     cache.last = out;
     return out;
   }
-  const activity = await db.activity(now - (running ? ALIVE_WINDOW_MS : QUIET_WINDOW_MS));
+  const activity = await db.activity(now - CANDIDATE_WINDOW_MS);
   if (!activity) return cache.last;
+  const since = now - (running ? ALIVE_WINDOW_MS : QUIET_WINDOW_MS);
   const parents = new Map(activity.sessions.map((s) => [s.id, s.parent_id]));
-  for (const [sessionId, row] of activity.latest) {
+  for (const [sessionId, { row, writtenMs }] of activity.latest) {
+    if (writtenMs < since) continue;
     const message = parseMessageRow(row);
     if (message.kind !== 'assistant' || message.completedMs !== null || message.error) continue;
     out.set(rootOf(sessionId, parents), 'busy');

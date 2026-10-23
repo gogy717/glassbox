@@ -12,9 +12,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ROOT_ID, SessionBuilder, text, tokens } from './__fixtures__/builders.js';
+import { ms, ROOT_ID, SessionBuilder, text, tokens } from './__fixtures__/builders.js';
 import { createDb, insertRows, WriterProcess } from './__fixtures__/harness.js';
-import { isSqliteWarning, journalUsable, OpenCodeDb, withoutSqliteWarning } from './db.js';
+import {
+  isSqliteWarning,
+  journalProblem,
+  journalUsable,
+  OpenCodeDb,
+  withoutSqliteWarning,
+} from './db.js';
 
 let dir: string;
 let path: string;
@@ -122,7 +128,43 @@ describe('OpenCodeDb reads', () => {
     const activity = await openDb().activity(b.sessions[1]?.time_updated ?? 0);
     expect(activity?.sessions).toHaveLength(3);
     expect([...(activity?.latest.keys() ?? [])]).toEqual([child]);
-    expect(activity?.latest.get(child)?.data).toContain('"role":"assistant"');
+    expect(activity?.latest.get(child)?.row.data).toContain('"role":"assistant"');
+  });
+
+  it('dates the newest message by its latest write, parts included', async () => {
+    const b = new SessionBuilder({ updatedSec: 2 });
+    const u = b.user(ROOT_ID, 1, text('go'));
+    const a = b.assistant(ROOT_ID, u, 2, { completedSec: null });
+    // A tool part written an hour later; neither the session nor the message row moved.
+    b.part(a, 3600, text('still going', 3600));
+    createDb(path, b.doc()).close();
+    const latest = (await openDb().activity(0))?.latest.get(ROOT_ID);
+    expect(latest?.row.id).toBe(a);
+    expect(latest?.writtenMs).toBe(ms(3600));
+  });
+
+  it('reads a tree with more sessions than it caches, whole, again and again', async () => {
+    const b = new SessionBuilder();
+    const u = b.user(ROOT_ID, 1, text('fan out'));
+    b.assistant(ROOT_ID, u, 2, { finish: 'stop' });
+    for (let i = 0; i < 70; i++) {
+      const child = b.session({ parent_id: ROOT_ID, title: `Worker ${i}`, createdSec: 3 + i });
+      b.user(child, 3 + i, text(`job ${i}`));
+    }
+    b.session({ id: 'ses_small', title: 'Small', createdSec: 200 });
+    b.user('ses_small', 200, text('hi'));
+    createDb(path, b.doc()).close();
+    const db = openDb();
+    const sizes = (tree: Awaited<ReturnType<OpenCodeDb['tree']>>) => [
+      tree?.value.sessions.length,
+      tree?.value.messages.length,
+      tree?.value.parts.length,
+    ];
+
+    expect(sizes(await db.tree(ROOT_ID))).toEqual([71, 72, 71]);
+    expect(sizes(await db.tree(ROOT_ID))).toEqual([71, 72, 71]);
+    expect(sizes(await db.tree('ses_small'))).toEqual([1, 1, 1]);
+    expect(sizes(await db.tree(ROOT_ID))).toEqual([71, 72, 71]);
   });
 
   it('answers null for a missing database and logs it once until it can be read again', async () => {
@@ -181,6 +223,37 @@ describe('OpenCodeDb never changes OpenCode files', () => {
     await writer.close();
   });
 
+  it('reads the journal an OpenCode killed mid-write left behind, touching no file', async () => {
+    const { b, a } = twoSessions();
+    const writer = await WriterProcess.create(path, b.doc());
+    await writer.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+    const p = b.part(a, 40, text('only in the journal', 40, 41));
+    await writer.insert({ parts: b.parts.filter((x) => x.id === p) });
+    await writer.kill();
+    // No connection is left: the next reader would normally rebuild -shm.
+    expect(statSync(`${path}-wal`).size).toBeGreaterThan(0);
+    expect(existsSync(`${path}-shm`)).toBe(true);
+
+    const before = files();
+    const tree = await openDb().tree(ROOT_ID);
+    expect(tree?.value.parts.map((x) => x.id)).toContain(p);
+    expect(files()).toEqual(before);
+  });
+
+  it('says why it skips a journal that holds pages', async () => {
+    const { b, a } = twoSessions();
+    const writer = await WriterProcess.create(path, b.doc());
+    await writer.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+    const p = b.part(a, 40, text('fresh', 40, 41));
+    await writer.insert({ parts: b.parts.filter((x) => x.id === p) });
+    await writer.kill();
+    rmSync(`${path}-shm`);
+    expect(journalProblem(path)).toBe('its -shm is missing');
+    await openDb().sessions();
+    expect(logs).toEqual([`reading only the checkpointed part of ${path}: its -shm is missing`]);
+    expect(existsSync(`${path}-shm`)).toBe(false);
+  });
+
   it('reads only checkpointed rows when the journal has another mode than the database', async () => {
     const { b, a } = twoSessions();
     const writer = await WriterProcess.create(path, b.doc());
@@ -196,7 +269,9 @@ describe('OpenCodeDb never changes OpenCode files', () => {
     expect(tree?.value.parts.map((x) => x.id)).not.toContain(p);
     await db.sessions();
     expect(files()).toEqual(before);
-    expect(logs.filter((m) => m.includes('checkpointed'))).toHaveLength(1);
+    expect(logs.filter((m) => m.includes('checkpointed'))).toEqual([
+      `reading only the checkpointed part of ${path}: its -wal has mode 644, the database 600`,
+    ]);
     await writer.close();
   });
 

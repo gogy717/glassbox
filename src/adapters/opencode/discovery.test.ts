@@ -140,6 +140,19 @@ describe('readLiveStatus', () => {
     expect((await readLiveStatus(db, newLiveCache(), io(100 + 20 * 60))).size).toBe(0);
   });
 
+  it('counts a part written during a long step as recent, though the session row did not move', async () => {
+    const b = new SessionBuilder({ updatedSec: 2 });
+    const u = b.user(ROOT_ID, 1, text('build'));
+    const a = b.assistant(ROOT_ID, u, 2, { completedSec: null });
+    b.part(a, 2 + 3 * 3600, text('still building', 2 + 3 * 3600));
+    createDb(path, b.doc()).close();
+    const live = await readLiveStatus(new OpenCodeDb(path), newLiveCache(), {
+      now: () => ms(2 + 3 * 3600 + 60),
+      running: async () => true,
+    });
+    expect([...live]).toEqual([[ROOT_ID, 'busy']]);
+  });
+
   it('forgets an unfinished call that is older than an hour even while OpenCode runs', async () => {
     const live = await readLiveStatus(midCall(100), newLiveCache(), {
       now: () => ms(100 + 2 * 3600),
@@ -214,6 +227,46 @@ describe('OpenCode adapter in the store', () => {
     expect(client).toEqual(await store.getSnapshot(id));
     expect(client.session.usage).toMatchObject({ input: 12, output: 5 });
     expect(patches.length).toBeGreaterThan(0);
+    await writer.close();
+  });
+
+  it('patches only the session OpenCode wrote to when two of its sessions are open', async () => {
+    const b = new SessionBuilder();
+    const u = b.user(ROOT_ID, 1, text('one'));
+    b.assistant(ROOT_ID, u, 2, { finish: 'stop', tokens: tokens(1, 1) });
+    const other = b.session({ id: 'ses_other', title: 'Other', createdSec: 5 });
+    const ou = b.user(other, 5, text('two'));
+    b.assistant(other, ou, 6, { finish: 'stop', tokens: tokens(2, 2) });
+    const writer = await WriterProcess.create(path, b.doc());
+    store = new SessionStore({
+      adapters: [createOpenCodeAdapter({ opencodeDir: dir }, { running: async () => false })],
+      discoverMs: 50,
+      liveMs: 50,
+      pollMs: 50,
+      sessionsMs: 20,
+    });
+    await store.start();
+    const seen: Record<string, SessionPatch[]> = { [ROOT_ID]: [], [other]: [] };
+    for (const nativeId of [ROOT_ID, other]) {
+      await store.getSnapshot(`opencode:${nativeId}`);
+      store.onPatch(`opencode:${nativeId}`, (patch) => seen[nativeId]?.push(patch));
+    }
+
+    const u2 = b.user(ROOT_ID, 10, text('again'));
+    await writer.insert({
+      messages: b.messages.filter((m) => m.id === u2),
+      parts: b.parts.filter((p) => p.message_id === u2),
+    });
+
+    await vi.waitFor(
+      () => expect(seen[ROOT_ID]?.flatMap((p) => p.turns.map((t) => t.id))).toContain(u2),
+      {
+        timeout: 3000,
+      },
+    );
+    // Both sessions re-read the database; only the one that changed has news.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(seen[other]).toEqual([]);
     await writer.close();
   });
 });

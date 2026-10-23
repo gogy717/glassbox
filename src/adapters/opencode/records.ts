@@ -328,6 +328,14 @@ export type OpenCodePart = PartBase &
     | { kind: 'invalid' }
   );
 
+/** A pending call's input is still `{}`: its arguments so far are only the raw text. */
+function toolInput(state: Obj): unknown {
+  const input = state.input;
+  const empty = input === undefined || (isObj(input) && Object.keys(input).length === 0);
+  if (empty && typeof state.raw === 'string' && state.raw !== '') return state.raw;
+  return input ?? {};
+}
+
 /** Parts glassbox has no view for: attachments, snapshots, patches, retries, @agent mentions. */
 const KNOWN_PARTS = new Set(['file', 'agent', 'snapshot', 'patch', 'retry']);
 
@@ -371,8 +379,7 @@ export function parsePartRow(row: PartRow): OpenCodePart {
       callId: str(data.callID),
       tool: str(data.tool) ?? 'tool',
       status,
-      // A pending call has only the raw argument text so far.
-      input: state.input ?? (typeof state.raw === 'string' ? state.raw : {}),
+      input: toolInput(state),
       output: typeof state.output === 'string' ? state.output : null,
       error: typeof state.error === 'string' ? state.error : null,
       startMs: num(stateTime.start),

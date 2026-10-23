@@ -48,6 +48,7 @@ const SQL = {
   },
   latestMessage:
     'SELECT id, session_id, time_created, time_updated, data FROM message WHERE session_id = ? ORDER BY time_created DESC, id DESC LIMIT 1',
+  messageWritten: 'SELECT max(time_updated) AS t FROM part WHERE message_id = ?',
 };
 
 /** Runs `load` with Node's experimental-SQLite warning dropped; any other warning goes through. */
@@ -90,6 +91,7 @@ export interface OpenCodeDbIo {
 }
 
 const modeOf = (path: string) => statSync(path).mode & 0o777;
+const octal = (mode: number) => mode.toString(8);
 
 function walHoldsPages(path: string): boolean {
   try {
@@ -110,15 +112,24 @@ function walHoldsPages(path: string): boolean {
  * open would be created again, empty, as OpenCode itself does on its next start.
  */
 export function journalUsable(path: string): boolean {
+  return journalProblem(path) === null;
+}
+
+/** Why the `-wal` cannot be read along with the database (see `journalUsable`); null when it can. */
+export function journalProblem(path: string): string | null {
   try {
     const mode = modeOf(path);
-    return (
-      statSync(`${path}-wal`).size > 0 &&
-      modeOf(`${path}-wal`) === mode &&
-      modeOf(`${path}-shm`) === mode
-    );
-  } catch {
-    return false;
+    const wal = statSync(`${path}-wal`, { throwIfNoEntry: false });
+    if (!wal || wal.size === 0) return 'its -wal holds no pages';
+    if ((wal.mode & 0o777) !== mode)
+      return `its -wal has mode ${octal(wal.mode & 0o777)}, the database ${octal(mode)}`;
+    const shm = statSync(`${path}-shm`, { throwIfNoEntry: false });
+    if (!shm) return 'its -shm is missing';
+    if ((shm.mode & 0o777) !== mode)
+      return `its -shm has mode ${octal(shm.mode & 0o777)}, the database ${octal(mode)}`;
+    return null;
+  } catch (err) {
+    return `its files cannot be inspected: ${err instanceof Error ? err.message : String(err)}`;
   }
 }
 
@@ -189,8 +200,12 @@ const byId = (a: { id: string }, b: { id: string }) => (a.id < b.id ? -1 : a.id 
 
 export interface SessionActivity {
   sessions: Pick<SessionRow, 'id' | 'parent_id' | 'time_updated'>[];
-  /** Newest message of each session updated since the cutoff. */
-  latest: Map<string, MessageRow>;
+  /**
+   * Newest message of each session whose row was updated since the cutoff, with when that
+   * message was last written: its row or any of its parts, which stream without touching the
+   * session row.
+   */
+  latest: Map<string, { row: MessageRow; writtenMs: number }>;
 }
 
 export class OpenCodeDb {
@@ -224,8 +239,11 @@ export class OpenCodeDb {
         sessions.sort((a, b) =>
           a.id === rootId ? -1 : b.id === rootId ? 1 : a.time_created - b.time_created,
         );
-        const tokens = sessions.map((s) => {
-          const entry = this.cached(s.id);
+        const entries = sessions.map((s) => this.cached(s.id));
+        // The tree being read stays cached whatever its size; older sessions make room.
+        this.trimCache(new Set(sessions.map((s) => s.id)));
+        const tokens = sessions.map((s, i) => {
+          const entry = entries[i] as SessionCache;
           const messages = sync(db, SQL.message, s.id, entry.messages);
           const parts = sync(db, SQL.part, s.id, entry.parts);
           return `${s.id}:${s.time_updated}:${messages}:${parts}`;
@@ -233,7 +251,6 @@ export class OpenCodeDb {
         const version = tokens.join('|');
         const known = this.documents.get(rootId);
         if (known?.version === version) return known;
-        const entries = sessions.map((s) => this.cached(s.id));
         const value: SessionDocument = {
           sessions,
           messages: entries.flatMap((e) => [...e.messages.rows.values()]).sort(byCreated),
@@ -261,12 +278,15 @@ export class OpenCodeDb {
         const sessions = db
           .prepare('SELECT id, parent_id, time_updated FROM session')
           .all() as unknown as SessionActivity['sessions'];
-        const latest = new Map<string, MessageRow>();
-        const query = db.prepare(SQL.latestMessage);
+        const latest: SessionActivity['latest'] = new Map();
+        const newest = db.prepare(SQL.latestMessage);
+        const written = db.prepare(SQL.messageWritten);
         for (const s of sessions) {
           if (s.time_updated < sinceMs) continue;
-          const row = query.get(s.id) as unknown as MessageRow | undefined;
-          if (row) latest.set(s.id, row);
+          const row = newest.get(s.id) as unknown as MessageRow | undefined;
+          if (!row) continue;
+          const parts = (written.get(row.id) as unknown as { t: number | null }).t;
+          latest.set(s.id, { row, writtenMs: Math.max(row.time_updated, parts ?? 0) });
         }
         return { sessions, latest };
       } finally {
@@ -275,31 +295,33 @@ export class OpenCodeDb {
     });
   }
 
-  /** The cache entry of a session, most recently used last; the oldest beyond the cap go. */
+  /** The cache entry of a session, moved to the most recently used end. */
   private cached(sessionId: string): SessionCache {
     const empty = () => ({ count: -1, maxUpdated: null, rows: new Map() });
     const entry = this.cache.get(sessionId) ?? { messages: empty(), parts: empty() };
     this.cache.delete(sessionId);
     this.cache.set(sessionId, entry);
+    return entry;
+  }
+
+  /** Drops the least recently used sessions beyond the cap, never one in `keep`. */
+  private trimCache(keep: Set<string>): void {
     for (const key of this.cache.keys()) {
       if (this.cache.size <= CACHED_SESSIONS) break;
-      this.cache.delete(key);
+      if (!keep.has(key)) this.cache.delete(key);
     }
-    return entry;
   }
 
   /** `read` on a fresh read-only connection; null (logged once per failing streak) on failure. */
   private async use<T>(read: (db: DatabaseSync) => T): Promise<T | null> {
     try {
       const { DatabaseSync } = await loadSqlite();
-      const journal = journalUsable(this.path);
-      if (!journal && !this.skippedJournal && walHoldsPages(this.path)) {
+      const problem = journalProblem(this.path);
+      if (problem && !this.skippedJournal && walHoldsPages(this.path)) {
         this.skippedJournal = true;
-        this.log(
-          `reading only the checkpointed part of ${this.path}: its -wal or -shm has another file mode than the database`,
-        );
+        this.log(`reading only the checkpointed part of ${this.path}: ${problem}`);
       }
-      const db = openReadOnly(DatabaseSync, this.path, journal, this.io);
+      const db = openReadOnly(DatabaseSync, this.path, problem === null, this.io);
       try {
         const out = read(db);
         this.failing = false;
