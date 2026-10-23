@@ -49,7 +49,7 @@ export type FetchQuotaProvider = (typeof FETCH_QUOTA_PROVIDERS)[number];
 
 export const USAGE = `Usage: glassbox [options]
 
-Live viewer for Claude Code sessions on this machine.
+Live viewer for Claude Code, Codex, Grok, oh-my-pi and OpenCode sessions on this machine.
 
 Options:
   --port <n>          port to listen on (default ${DEFAULT_PORT})

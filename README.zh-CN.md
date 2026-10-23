@@ -4,7 +4,7 @@
 
 **把 Claude Code 变成玻璃盒子。** 在它干活的时候，实时看清它正在做什么、调用了哪些工具、token 和时间花在哪里——包括 max effort 和 ultracode（Workflow 多代理）运行；也可以直接在 glassbox 里给它发消息。
 
-> A local, live viewer for Claude Code sessions: the execution chain, a step-by-step breakdown of how the agent worked, where the tokens and the time went, plan quota, and multi-agent workflow runs.
+> A local, live viewer for Claude Code, Codex, Grok, oh-my-pi and OpenCode sessions: the execution chain, a step-by-step breakdown of how the agent worked, where the tokens and the time went, plan quota, and multi-agent workflow runs.
 
 ![执行链路：每次模型调用的请求、回复和工具，Agent / Workflow 卡片直接显示子代理的状态与 token](docs/images/zh-CN/flow.png)
 
