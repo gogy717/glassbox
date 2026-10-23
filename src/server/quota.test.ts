@@ -267,6 +267,33 @@ describe('QuotaWatcher with several sources', () => {
     ]);
   });
 
+  it('reads the sources concurrently, merging them in list order', async () => {
+    // The first source answers only once the second has been asked: read one after the other,
+    // they would never finish. Both report anthropic at the same time, so the first one wins.
+    let releaseFirst: () => void = () => {};
+    const first: QuotaSource = {
+      id: 'slow',
+      read: () =>
+        new Promise((resolve) => {
+          releaseFirst = () =>
+            resolve([snap('anthropic', T1, 'claude-code-cache'), snap('xai', T1)]);
+        }),
+    };
+    const second: QuotaSource = {
+      id: 'fast',
+      read: async () => {
+        releaseFirst();
+        return [snap('anthropic', T1, 'anthropic-usage-api'), snap('openai', T1)];
+      },
+    };
+    const w = await startSources([first, second]);
+    expect(w.current()).toEqual([
+      snap('anthropic', T1, 'claude-code-cache'),
+      snap('openai', T1),
+      snap('xai', T1),
+    ]);
+  });
+
   it('keeps the other sources when one fails, and logs the failure once per streak', async () => {
     const logs: string[] = [];
     let fail = true;

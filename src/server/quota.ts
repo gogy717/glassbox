@@ -82,8 +82,8 @@ export class QuotaWatcher {
   private stopped = false;
   /** Each source's last snapshots, to tell a vanished quota from a file caught mid-rewrite. */
   private readonly previous = new Map<QuotaSource, QuotaSnapshot[]>();
-  private confirmTimer: NodeJS.Timeout | null = null;
-  private confirmDone: (() => void) | null = null;
+  /** Ends each pending confirmation delay early, for `stop()`. */
+  private readonly pauses = new Set<() => void>();
 
   constructor(opts: QuotaWatcherOptions) {
     this.sources = opts.sources;
@@ -108,8 +108,7 @@ export class QuotaWatcher {
 
   stop(): void {
     this.stopped = true;
-    if (this.confirmTimer) clearTimeout(this.confirmTimer);
-    this.confirmDone?.();
+    for (const done of [...this.pauses]) done();
     this.watcher?.close();
     this.watcher = null;
     if (this.pollTimer) clearInterval(this.pollTimer);
@@ -154,28 +153,33 @@ export class QuotaWatcher {
     return this.reading;
   }
 
+  /**
+   * Reads the sources concurrently, so a slow one (a network fetch) holds the others up by no more
+   * than its own read; the results merge in list order all the same.
+   */
   private async readAll(): Promise<void> {
-    const read: QuotaSnapshot[] = [];
-    for (const source of this.sources) {
-      let quotas = await this.readOne(source);
-      // A config file read while it is being rewritten parses as nothing. Only believe a
-      // provider's quota disappeared when a second read a moment later agrees.
-      const before = this.previous.get(source) ?? [];
-      if (before.some((p) => !quotas.some((q) => q.provider === p.provider))) {
-        await this.pause(this.debounceMs);
-        if (this.stopped) return;
-        quotas = await this.readOne(source);
-      }
-      read.push(...quotas);
-      this.previous.set(source, quotas);
-    }
+    const read = await Promise.all(this.sources.map((source) => this.readConfirmed(source)));
     if (this.stopped) return;
-    const quotas = mergeQuotas(read);
+    const quotas = mergeQuotas(read.flat());
     const json = JSON.stringify(quotas);
     if (json === this.json) return;
     this.json = json;
     this.quotas = quotas;
     for (const cb of this.listeners) cb(quotas);
+  }
+
+  private async readConfirmed(source: QuotaSource): Promise<QuotaSnapshot[]> {
+    let quotas = await this.readOne(source);
+    // A config file read while it is being rewritten parses as nothing. Only believe a
+    // provider's quota disappeared when a second read a moment later agrees.
+    const before = this.previous.get(source) ?? [];
+    if (before.some((p) => !quotas.some((q) => q.provider === p.provider))) {
+      await this.pause(this.debounceMs);
+      if (this.stopped) return [];
+      quotas = await this.readOne(source);
+    }
+    this.previous.set(source, quotas);
+    return quotas;
   }
 
   private async readOne(source: QuotaSource): Promise<QuotaSnapshot[]> {
@@ -193,12 +197,13 @@ export class QuotaWatcher {
   /** A delay that `stop()` cuts short. */
   private pause(ms: number): Promise<void> {
     return new Promise((resolve) => {
-      this.confirmDone = () => {
-        this.confirmDone = null;
-        this.confirmTimer = null;
+      const done = () => {
+        clearTimeout(timer);
+        this.pauses.delete(done);
         resolve();
       };
-      this.confirmTimer = setTimeout(() => this.confirmDone?.(), ms);
+      const timer = setTimeout(done, ms);
+      this.pauses.add(done);
     });
   }
 }
