@@ -7,6 +7,30 @@ import css from './TokensView.module.css';
 
 const H = 200;
 const PAD = { l: 48, r: 14, t: 12, b: 26 };
+/** Room for one x-axis label ("#156") and the space after it. */
+export const LABEL_GAP = 48;
+
+/** Where point `i` of `count` sits across a chart `width` wide. */
+export function labelX(i: number, count: number, width: number): number {
+  const innerW = Math.max(1, width - PAD.l - PAD.r);
+  return PAD.l + (count > 1 ? (i * innerW) / (count - 1) : innerW / 2);
+}
+
+/**
+ * Which points get an x-axis label: every few, and always the last, so the reader sees how far
+ * the session got. A regular label too close to the last one is dropped instead of overlapping it.
+ */
+export function axisLabels(count: number, width: number): number[] {
+  if (count <= 0) return [];
+  const last = count - 1;
+  const end = labelX(last, count, width);
+  const step = last > 0 ? (end - labelX(0, count, width)) / last : 0;
+  const every = step > 0 ? Math.max(1, Math.ceil(LABEL_GAP / step)) : 1;
+  const out: number[] = [];
+  for (let i = 0; i < last; i += every) if (end - labelX(i, count, width) >= LABEL_GAP) out.push(i);
+  out.push(last);
+  return out;
+}
 
 /** Round up to 1, 2 or 5 × 10^k so gridlines land on readable values. */
 function niceMax(v: number): number {
@@ -32,7 +56,7 @@ export function ContextChart({ title, points, onPick }: Props) {
     const max = niceMax(Math.max(0, ...points.map((p) => p.context)));
     const innerW = Math.max(1, width - PAD.l - PAD.r);
     const step = points.length > 1 ? innerW / (points.length - 1) : 0;
-    const x = (i: number) => PAD.l + (points.length > 1 ? i * step : innerW / 2);
+    const x = (i: number) => labelX(i, points.length, width);
     const y = (v: number) => PAD.t + (1 - v / max) * (H - PAD.t - PAD.b);
     const line = points.map((p, i) => `${i ? 'L' : 'M'}${x(i)},${y(p.context)}`).join('');
     const area = points.length ? `${line}L${x(points.length - 1)},${y(0)}L${x(0)},${y(0)}Z` : '';
@@ -41,7 +65,7 @@ export function ContextChart({ title, points, onPick }: Props) {
     return { x, y, line, area, ticks, slot: points.length > 1 ? step : innerW };
   }, [points, width]);
 
-  const labelEvery = Math.max(1, Math.ceil(points.length / Math.max(1, Math.floor(width / 48))));
+  const labels = useMemo(() => axisLabels(points.length, width), [points.length, width]);
   // Same numbering as the execution chain, so a point can be found there.
   const ref = (p: ContextPoint) =>
     p.turn === null
@@ -77,19 +101,11 @@ export function ContextChart({ title, points, onPick }: Props) {
               </text>
             </g>
           ))}
-          {points.map((p, i) =>
-            i % labelEvery === 0 || i === points.length - 1 ? (
-              <text
-                key={p.requestId}
-                className={css.axis}
-                x={geo.x(i)}
-                y={H - 8}
-                textAnchor="middle"
-              >
-                #{i + 1}
-              </text>
-            ) : null,
-          )}
+          {labels.map((i) => (
+            <text key={i} className={css.axis} x={geo.x(i)} y={H - 8} textAnchor="middle">
+              #{i + 1}
+            </text>
+          ))}
           {points.map((p, i) =>
             p.compacted ? (
               <g key={`c-${p.requestId}`}>
