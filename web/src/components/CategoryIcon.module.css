@@ -1,0 +1,13 @@
+/*
+ * The category colour, a quarter of the way to the text colour: darker on light, lighter on
+ * dark, so even the pale ones (ask, run, other) keep 3:1 on cards and rows.
+ */
+.icon {
+  flex: none;
+  color: color-mix(in srgb, var(--cat) 75%, var(--text));
+}
+
+.labelled {
+  display: inline-flex;
+  flex: none;
+}

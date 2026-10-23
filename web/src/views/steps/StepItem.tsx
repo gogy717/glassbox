@@ -7,13 +7,13 @@ import {
   ShieldQuestion,
 } from 'lucide-react';
 import { memo, type ReactNode } from 'react';
+import { CategoryIcon } from '../../components/CategoryIcon';
 import { Ticking } from '../../components/Status';
 import { useSessionAgent, useSessionAgentKind } from '../../data/session-agent';
 import { useI18n } from '../../i18n';
 import { encryptsThinking } from '../../lib/agent-names';
 import { formatClock, formatDuration, formatNumber } from '../../lib/format';
 import type { Step } from '../../lib/steps';
-import { CategoryIcon } from './CategoryIcon';
 import css from './StepsView.module.css';
 
 interface Props {

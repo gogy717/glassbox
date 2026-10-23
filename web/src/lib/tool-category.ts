@@ -5,18 +5,23 @@ export type ToolCategory =
   | 'explore'
   | 'edit'
   | 'run'
+  | 'git'
   | 'delegate'
   | 'ask'
   | 'plan'
   | 'web'
+  | 'mcp'
   | 'other';
 
+/** Built-in tools of every agent, by the name its sessions record; a shared name is listed once. */
 const BY_NAME: Record<string, ToolCategory> = {
+  // Claude Code
   Read: 'explore',
   Grep: 'explore',
   Glob: 'explore',
   LS: 'explore',
   NotebookRead: 'explore',
+  LSP: 'explore',
   Edit: 'edit',
   MultiEdit: 'edit',
   Write: 'edit',
@@ -24,20 +29,135 @@ const BY_NAME: Record<string, ToolCategory> = {
   Bash: 'run',
   BashOutput: 'run',
   KillShell: 'run',
+  TaskOutput: 'run',
+  TaskStop: 'run',
+  Monitor: 'run',
+  EnterWorktree: 'git',
+  ExitWorktree: 'git',
   Agent: 'delegate',
   Task: 'delegate',
   Workflow: 'delegate',
   SendMessage: 'delegate',
+  ListAgents: 'delegate',
   AskUserQuestion: 'ask',
   TodoWrite: 'plan',
   TaskCreate: 'plan',
   TaskUpdate: 'plan',
+  TaskList: 'plan',
+  TaskGet: 'plan',
   EnterPlanMode: 'plan',
   ExitPlanMode: 'plan',
   Skill: 'plan',
   WebFetch: 'web',
   WebSearch: 'web',
+  ListMcpResourcesTool: 'mcp',
+  ReadMcpResourceTool: 'mcp',
+  // Codex
+  read_file: 'explore', // and Grok
+  list_dir: 'explore', // and Grok
+  grep_files: 'explore',
+  view_image: 'explore',
+  apply_patch: 'edit', // and OpenCode
+  shell: 'run',
+  local_shell: 'run',
+  exec: 'run',
+  exec_command: 'run',
+  write_stdin: 'run',
+  spawn_agent: 'delegate',
+  send_input: 'delegate',
+  send_message: 'delegate',
+  followup_task: 'delegate',
+  wait: 'delegate', // and oh-my-pi; a wait on an exec cell is run (toolCategory)
+  wait_agent: 'delegate',
+  close_agent: 'delegate',
+  resume_agent: 'delegate',
+  interrupt_agent: 'delegate',
+  list_agents: 'delegate',
+  request_user_input: 'ask',
+  request_user_input_async: 'ask',
+  update_plan: 'plan',
+  web_search: 'web', // and Grok, oh-my-pi
+  list_mcp_resources: 'mcp',
+  list_mcp_resource_templates: 'mcp',
+  read_mcp_resource: 'mcp',
+  // Grok, and the tools of its Cursor preset
+  grep: 'explore', // and oh-my-pi, OpenCode
+  search_replace: 'edit',
+  hashline_edit: 'edit',
+  write_file: 'edit',
+  StrReplace: 'edit',
+  EditNotebook: 'edit',
+  Delete: 'edit',
+  run_terminal_command: 'run',
+  Shell: 'run',
+  AwaitShell: 'run',
+  get_command_or_subagent_output: 'run',
+  kill_command_or_subagent: 'run',
+  wait_commands_or_subagents: 'run',
+  get_task_output: 'run',
+  kill_task: 'run',
+  wait_tasks: 'run',
+  spawn_subagent: 'delegate',
+  send_subagent_message: 'delegate',
+  ask_user_question: 'ask',
+  AskQuestion: 'ask',
+  todo_write: 'plan',
+  enter_plan_mode: 'plan',
+  exit_plan_mode: 'plan',
+  update_goal: 'plan',
+  web_fetch: 'web',
+  search_tool: 'mcp',
+  use_tool: 'mcp',
+  // oh-my-pi
+  read: 'explore', // and OpenCode
+  search: 'explore',
+  glob: 'explore', // and OpenCode
+  find: 'explore',
+  ast_grep: 'explore',
+  lsp: 'explore', // and OpenCode
+  recall: 'explore',
+  edit: 'edit', // and OpenCode
+  write: 'edit', // and OpenCode
+  ast_edit: 'edit',
+  bash: 'run', // and OpenCode
+  eval: 'run',
+  debug: 'run',
+  ssh: 'run',
+  github: 'git',
+  task: 'delegate', // and OpenCode
+  vibe_spawn: 'delegate',
+  vibe_send: 'delegate',
+  vibe_wait: 'delegate',
+  vibe_list: 'delegate',
+  vibe_kill: 'delegate',
+  ask: 'ask',
+  todo: 'plan',
+  goal: 'plan',
+  manage_skill: 'plan',
+  browser: 'web',
+  // OpenCode
+  list: 'explore',
+  multiedit: 'edit',
+  patch: 'edit',
+  question: 'ask',
+  todowrite: 'plan',
+  todoread: 'plan',
+  skill: 'plan',
+  webfetch: 'web',
+  websearch: 'web',
+  codesearch: 'web',
 };
+
+/** Tools whose input is a shell command (`command`, Codex's argv, or `cmd`). */
+const SHELLS = new Set([
+  'Bash',
+  'Shell',
+  'shell',
+  'local_shell',
+  'exec_command',
+  'run_terminal_command',
+  'bash',
+]);
 
 const READ_ONLY = new Set([
   'rg',
@@ -76,6 +196,8 @@ const READ_ONLY_GIT = new Set([
   'ls-files',
   'rev-parse',
 ]);
+/** `gh <noun> <verb>` verbs that only look. */
+const READ_ONLY_GH = new Set(['view', 'list', 'status', 'diff', 'checks']);
 
 /** A shell command that only looks around (rg, ls, git log…) is exploring, not running. */
 const FIND_ACTIONS = new Set([
@@ -89,43 +211,105 @@ const FIND_ACTIONS = new Set([
   '-fls',
 ]);
 
+/** Each command of a pipeline or list, as words, without its leading `VAR=value`s. */
+function segments(command: string): string[][] {
+  return command
+    .split(/&&|\|\||[;|\n]/)
+    .map((s) => s.trim().replace(/^(\w+=\S*\s+)+/, ''))
+    .filter(Boolean)
+    .map((s) => s.split(/\s+/));
+}
+
+/** git's subcommand, past its global options (`-C dir`, `-c key=value`, `--no-pager`). */
+function gitSubcommand(args: string[]): string | undefined {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i] ?? '';
+    if (arg === '-C' || arg === '-c') i++;
+    else if (!arg.startsWith('-')) return arg;
+  }
+  return undefined;
+}
+
+function isReadOnlySegment([cmd, ...args]: string[]): boolean {
+  if (!cmd) return true;
+  if (cmd === 'git') return READ_ONLY_GIT.has(gitSubcommand(args) ?? '');
+  if (cmd === 'gh') return READ_ONLY_GH.has(args[1] ?? '');
+  if (cmd === 'find') return !args.some((a) => FIND_ACTIONS.has(a));
+  if (cmd === 'sed') return !args.some((a) => a.startsWith('-i'));
+  return READ_ONLY.has(cmd);
+}
+
 function isReadOnlyCommand(command: string): boolean {
   // Command substitution can run anything.
   if (/\$\(|`/.test(command)) return false;
   // Redirection writes a file, except duplicating a stream (2>&1) or discarding it (/dev/null).
   const withoutHarmless = command.replace(/\d*>&\d+/g, '').replace(/\d*&?>>?\s*\/dev\/null/g, '');
   if (withoutHarmless.includes('>')) return false;
-  return command
-    .split(/&&|\|\||[;|\n]/)
-    .map((s) => s.trim().replace(/^(\w+=\S*\s+)+/, ''))
-    .filter(Boolean)
-    .every((segment) => {
-      const [cmd, sub, ...rest] = segment.split(/\s+/);
-      if (!cmd) return true;
-      if (cmd === 'git') return READ_ONLY_GIT.has(sub ?? '');
-      if (cmd === 'find')
-        return ![sub, ...rest].some((a) => a !== undefined && FIND_ACTIONS.has(a));
-      if (cmd === 'sed') return ![sub, ...rest].some((a) => a?.startsWith('-i'));
-      return READ_ONLY.has(cmd);
-    });
+  return segments(command).every(isReadOnlySegment);
+}
+
+/**
+ * Exploring when it only looks; git when it starts (after any `cd dir &&`) with a git or gh
+ * command that changes something, so a commit whose message is a heredoc still counts.
+ */
+function shellCategory(command: string): ToolCategory {
+  if (isReadOnlyCommand(command)) return 'explore';
+  const first = segments(command).find(([cmd]) => cmd !== 'cd');
+  const isGit = first?.[0] === 'git' || first?.[0] === 'gh';
+  return first && isGit && !isReadOnlySegment(first) ? 'git' : 'run';
+}
+
+type Obj = Record<string, unknown>;
+const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+function field(input: unknown, key: string): string | null {
+  const v = isObj(input) ? input[key] : undefined;
+  return typeof v === 'string' ? v : null;
+}
+
+const SHELL_BIN = /(^|[\\/])((ba|z|da|k)?sh|pwsh|powershell)(\.exe)?$/i;
+
+/** The command line of a shell call: `command` (a string, or Codex's argv) or `cmd`. */
+function shellCommand(input: unknown): string | null {
+  const v = isObj(input) ? (input.command ?? input.cmd) : undefined;
+  if (typeof v === 'string') return v;
+  if (!Array.isArray(v) || !v.every((a): a is string => typeof a === 'string')) return null;
+  // ["bash", "-lc", "rg x"] runs its last word.
+  const [bin = '', ...rest] = v;
+  if (rest.length >= 2 && SHELL_BIN.test(bin) && /^(-\w*c|-command)$/i.test(rest.at(-2) ?? ''))
+    return rest.at(-1) ?? '';
+  return v.join(' ');
+}
+
+const isUrl = (s: string) => /^https?:\/\//i.test(s);
+
+/**
+ * An MCP tool's server and name: `mcp__server__tool`, or `server__tool` as Grok (and older
+ * Codex) name them. Built-in tool names never hold `__`.
+ */
+export function mcpTool(name: string): { server: string; tool: string } | null {
+  const m = name.startsWith('mcp__')
+    ? /^mcp__(.+?)__(.+)$/.exec(name)
+    : /^([A-Za-z0-9][\w.-]*?)__(.+)$/.exec(name);
+  return m?.[1] && m[2] ? { server: m[1], tool: m[2] } : null;
 }
 
 /** MCP servers that drive a browser are web work, like WebFetch. */
-const BROWSER_MCP = /^mcp__[^_]*(chrome|browser|playwright|puppeteer)/i;
+const BROWSER_MCP = /chrome|browser|playwright|puppeteer/i;
 
 export function toolCategory(name: string, input?: unknown): ToolCategory {
-  const byName = BY_NAME[name] ?? (BROWSER_MCP.test(name) ? 'web' : 'other');
-  if (name === 'Bash') {
-    const command = field(input, 'command');
-    if (command && isReadOnlyCommand(command)) return 'explore';
+  if (SHELLS.has(name)) {
+    const command = shellCommand(input);
+    return command === null ? 'run' : shellCategory(command);
   }
-  return byName;
-}
-
-function field(input: unknown, key: string): string | null {
-  if (!input || typeof input !== 'object') return null;
-  const v = (input as Record<string, unknown>)[key];
-  return typeof v === 'string' ? v : null;
+  // Codex's wait is on a code cell it runs; oh-my-pi's on agents.
+  if (name === 'wait' && isObj(input) && 'cell_id' in input) return 'run';
+  // oh-my-pi reads web pages with the same tool as files.
+  if (name === 'read' && isUrl(field(input, 'path') ?? '')) return 'web';
+  if (Object.hasOwn(BY_NAME, name)) return BY_NAME[name] as ToolCategory;
+  const mcp = mcpTool(name);
+  if (mcp) return BROWSER_MCP.test(mcp.server) ? 'web' : 'mcp';
+  return 'other';
 }
 
 const basename = (path: string) => path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
@@ -144,56 +328,79 @@ function hostOf(url: string): string {
   }
 }
 
+/** The files a patch touches (`*** Update File: src/a.ts`), by name. */
+function patchFiles(patch: string): string | null {
+  const files = [...patch.matchAll(/^\*\*\* (?:Add|Update|Delete) File: (.+)$/gm)].map((m) =>
+    basename((m[1] ?? '').trim()),
+  );
+  return files.length ? clip(files.join(', ')) : null;
+}
+
+/** Where a file lives, whatever the agent calls the key. */
+const PATH_KEYS = [
+  'file_path',
+  'filePath',
+  'path',
+  'target_file',
+  'notebook_path',
+  'target_notebook',
+  'dir_path',
+  'target_directory',
+];
+/** What a call says it is for: an agent's task label, or oh-my-pi's intent (`i`). */
+const LABEL_KEYS = ['description', 'task_name', 'i'];
+
+/** The item in progress of a todo list or plan (TodoWrite, update_plan, todowrite…). */
+function currentItem(input: Obj): string | null {
+  const list = input.todos ?? input.plan;
+  if (!Array.isArray(list)) return null;
+  const item = list.find((x) => isObj(x) && x.status === 'in_progress');
+  return field(item, 'content') ?? field(item, 'step');
+}
+
 /** One line saying what the call did: the command, the file, the pattern, the host… */
 export function summarizeInput(tool: ToolCall): string {
   const input = tool.input;
-  if (typeof input === 'string') return clip(input);
+  if (tool.name === 'Workflow') {
+    const name = /\bname:\s*['"]([^'"]+)['"]/.exec(field(input, 'script') ?? '')?.[1];
+    if (name) return name;
+    const path = field(input, 'scriptPath');
+    if (path) return basename(path).replace(/\.[cm]?[jt]s$/, '');
+  }
+  if (tool.name === 'apply_patch' || tool.name === 'patch') {
+    const patch =
+      typeof input === 'string' ? input : (field(input, 'input') ?? field(input, 'patchText'));
+    const files = patch && patchFiles(patch);
+    if (files) return files;
+  }
+  // Codex's exec runs JavaScript, after an optional `// @exec: {…}` line of settings.
+  if (typeof input === 'string')
+    return clip(tool.name === 'exec' ? input.replace(/^\s*\/\/ @exec:.*\n/, '') : input);
+  if (!isObj(input)) return '';
+
   const f = (k: string) => field(input, k);
-  switch (tool.name) {
-    case 'Bash':
-      return clip(f('command') ?? '');
-    case 'Read': {
-      const path = f('file_path');
-      if (!path) break;
-      const o = (input as Record<string, unknown>).offset;
-      const l = (input as Record<string, unknown>).limit;
-      if (typeof o === 'number')
-        return `${basename(path)}:${o}${typeof l === 'number' ? `-${o + l - 1}` : ''}`;
-      return basename(path);
-    }
-    case 'Edit':
-    case 'MultiEdit':
-    case 'Write':
-    case 'NotebookEdit': {
-      const path = f('file_path') ?? f('notebook_path');
-      if (path) return basename(path);
-      break;
-    }
-    case 'Grep':
-    case 'Glob':
-      if (f('pattern')) return clip(f('pattern') as string);
-      break;
-    case 'WebFetch':
-      if (f('url')) return hostOf(f('url') as string);
-      break;
-    case 'WebSearch':
-      if (f('query')) return clip(f('query') as string);
-      break;
-    case 'Agent':
-    case 'Task':
-      if (f('description')) return clip(f('description') as string);
-      break;
-    case 'Workflow': {
-      const name = /\bname:\s*['"]([^'"]+)['"]/.exec(f('script') ?? '')?.[1];
-      if (name) return name;
-      const path = f('scriptPath');
-      if (path) return basename(path).replace(/\.[cm]?[jt]s$/, '');
-      break;
-    }
+  const command = shellCommand(input);
+  if (command) return clip(command);
+  const pattern = f('pattern') ?? f('query');
+  if (pattern) return clip(pattern);
+  const url = f('url');
+  if (url) return hostOf(url);
+  const path = PATH_KEYS.map(f).find(Boolean);
+  if (path) {
+    // oh-my-pi's glob takes its pattern as the path.
+    if (tool.name === 'glob') return clip(path);
+    if (isUrl(path)) return hostOf(path);
+    const { offset: o, limit: l } = input;
+    if (typeof o === 'number')
+      return `${basename(path)}:${o}${typeof l === 'number' ? `-${o + l - 1}` : ''}`;
+    return basename(path);
   }
-  if (input && typeof input === 'object') {
-    const first = Object.values(input).find((v): v is string => typeof v === 'string');
-    if (first) return clip(first);
-  }
-  return '';
+  const item = currentItem(input);
+  if (item) return clip(item);
+  const question = Array.isArray(input.questions) ? field(input.questions[0], 'question') : null;
+  if (question) return clip(question);
+  const label = LABEL_KEYS.map(f).find(Boolean);
+  if (label) return clip(label);
+  const first = Object.values(input).find((v): v is string => typeof v === 'string');
+  return first ? clip(first) : '';
 }

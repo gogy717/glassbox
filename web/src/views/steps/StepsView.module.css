@@ -90,6 +90,12 @@
 .swatch[data-cat="plan"] {
   background: var(--cat-plan);
 }
+.swatch[data-cat="git"] {
+  background: var(--cat-git);
+}
+.swatch[data-cat="mcp"] {
+  background: var(--cat-mcp);
+}
 .swatch[data-cat="answer"] {
   background: var(--cat-answer);
 }

@@ -9,17 +9,18 @@ import {
   Send,
   ShieldQuestion,
   Workflow,
-  Wrench,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { AgentNode, ModelRequest, ToolCall, WorkflowRun } from '../../../../src/core/model.js';
 import { contextSize, totalTokens } from '../../../../src/core/usage.js';
+import { CategoryIcon } from '../../components/CategoryIcon';
 import { LiveDot, Ticking } from '../../components/Status';
 import { useApprovalsContext } from '../../data/approvals';
 import type { OpenSession } from '../../data/store';
 import { useI18n } from '../../i18n';
 import { subtreeIds } from '../../lib/agents';
 import { formatCompact, formatDuration } from '../../lib/format';
+import { mcpTool, summarizeInput, toolCategory } from '../../lib/tool-category';
 import css from './cards.module.css';
 import { toolStatus } from './flow-model';
 
@@ -234,18 +235,20 @@ export function ToolCard({ tool, open, selected, onSelect, onEnterAgent }: ToolC
     const run = open.workflows.get(spawned.runId);
     if (run) footer = <WorkflowBlock run={run} open={open} onEnter={onEnterAgent} />;
   }
+  const category = toolCategory(tool.name, tool.input);
+  const mcp = mcpTool(tool.name);
   return (
     <Card
       kind="tool"
-      icon={<Wrench size={13} aria-hidden="true" />}
-      title={tool.name}
+      icon={<CategoryIcon category={category} size={13} label={t(`steps.cat.${category}`)} />}
+      title={mcp ? `${mcp.server} · ${mcp.tool}` : tool.name}
       selected={selected}
       onSelect={onSelect}
       footer={footer}
       label={tool.name}
     >
       <span className={`${css.preview} ${css.mono}`}>
-        {inputPreview(tool.input) ?? t('flow.runTool')}
+        {summarizeInput(tool) || inputPreview(tool.input) || t('flow.runTool')}
       </span>
       <ResultStrip tool={tool} />
     </Card>

@@ -51,7 +51,17 @@ export interface Phase {
 }
 
 /** When a step mixes kinds equally, the more consequential kind names it. */
-const PRIORITY: PhaseCategory[] = ['delegate', 'edit', 'run', 'ask', 'plan', 'explore', 'other'];
+const PRIORITY: PhaseCategory[] = [
+  'delegate',
+  'edit',
+  'git',
+  'run',
+  'ask',
+  'plan',
+  'mcp',
+  'explore',
+  'other',
+];
 
 const phaseOf = (c: ToolCategory): PhaseCategory => (c === 'web' ? 'explore' : c);
 

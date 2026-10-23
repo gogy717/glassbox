@@ -34,7 +34,9 @@ const TOOL_ORDER: ToolCategory[] = [
   'delegate',
   'ask',
   'plan',
+  'git',
   'web',
+  'mcp',
   'other',
 ];
 const SLOWEST_N = 10;
