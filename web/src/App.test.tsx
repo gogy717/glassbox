@@ -132,6 +132,29 @@ describe('App', () => {
     expect(connect).toHaveBeenLastCalledWith(store, DEMO_SESSION_ID);
   });
 
+  it('starts follow afresh when another session opens', async () => {
+    window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}`;
+    const store = createStore();
+    store.applyEvent({ type: 'sessions', sessions: createDemoSessions(DEMO_NOW) });
+    render(<App store={store} connect={noConnect} />);
+    const follow = () => within(screen.getByRole('banner')).getByRole('button', { name: /Follow/ });
+    fireEvent.click(follow());
+    expect(follow()).toHaveAttribute('aria-pressed', 'false');
+
+    fireEvent.click(within(sidebar()).getByRole('button', { name: /Fix flaky login test/ }));
+    await waitFor(() => expect(follow()).toHaveAttribute('aria-pressed', 'true'));
+  });
+
+  it('keeps follow paused while the same session stays open', async () => {
+    window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}`;
+    render(<App store={demoStore()} connect={noConnect} />);
+    const follow = () => within(screen.getByRole('banner')).getByRole('button', { name: /Follow/ });
+    fireEvent.click(follow());
+    fireEvent.click(screen.getByRole('tab', { name: 'Timeline' }));
+    await waitFor(() => expect(window.location.hash).toContain('tab=time'));
+    expect(follow()).toHaveAttribute('aria-pressed', 'false');
+  });
+
   it('shows title, live state, summary, breadcrumb and tabs for the open session', () => {
     window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}`;
     const store = demoStore();

@@ -77,6 +77,12 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
   const state = useSyncExternalStore(store.subscribe, store.getState);
   const [route, navigate] = useRoute();
   const [follow, setFollow] = useState(true);
+  // Pausing follow is about the session being read: opening another one starts it afresh.
+  const [followSession, setFollowSession] = useState(route.sessionId);
+  if (followSession !== route.sessionId) {
+    setFollowSession(route.sessionId);
+    setFollow(true);
+  }
   const narrow = useMediaQuery(NARROW);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
