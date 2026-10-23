@@ -23,8 +23,9 @@ const EXPIRY_MARGIN_MS = 60_000;
 /** Products as oh-my-pi labels them, so windows read the same whichever source is newer. */
 const PRODUCT_NAMES: Record<string, string> = { GrokBuild: 'Grok Build', Api: 'API' };
 
+/** A usage percentage, capped at 100 (a plan used up shows as full); negative ones are unusable. */
 const percent = (v: unknown) =>
-  typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 100 ? v : null;
+  typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.min(v, 100) : null;
 const isoMs = (v: unknown) => {
   const ms = typeof v === 'string' ? Date.parse(v) : Number.NaN;
   return Number.isNaN(ms) ? null : ms;

@@ -99,15 +99,22 @@ describe('billingWindows', () => {
     ]);
   });
 
-  it('counts an unused product as 0 and skips numbers out of range', () => {
+  it('counts an unused product as 0, shows usage past the plan as full, and skips bad numbers', () => {
     const windows = billingWindows({
       config: {
         ...billingBody.config,
         creditUsagePercent: 140,
-        productUsage: [{ product: 'Api' }, { product: 'GrokBot', usagePercent: 'x' }, {}],
+        productUsage: [
+          { product: 'Api' },
+          { product: 'GrokBot', usagePercent: 'x' },
+          { product: 'GrokBuild', usagePercent: -3 },
+          { product: 'Imagine', usagePercent: Number.POSITIVE_INFINITY },
+          {},
+        ],
       },
     });
     expect(windows.map((w) => [w.id, w.label, w.usedPercent])).toEqual([
+      ['credits:1w', 'SuperGrok Weekly Credits', 100],
       ['product:api:1w', 'API (Weekly)', 0],
     ]);
   });
