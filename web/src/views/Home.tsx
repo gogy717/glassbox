@@ -1,6 +1,7 @@
 import { ArrowRight, Plus } from 'lucide-react';
 import { useMemo } from 'react';
 import type { SessionSummary } from '../../../src/core/model.js';
+import { AgentTag } from '../components/AgentTag';
 import { LiveDot } from '../components/Status';
 import { useI18n } from '../i18n';
 import { formatRelative } from '../lib/format';
@@ -51,6 +52,7 @@ export function Home({ sessions, loaded, now, showProbes, onOpen, onNewSession }
       <button type="button" className={css.card} onClick={() => onOpen(s.id)}>
         <span className={css.title}>{s.title ?? t('sidebar.untitled')}</span>
         <span className={css.meta}>
+          <AgentTag kind={s.agent} />
           <LiveDot state={s.live} />
           {t(`live.${s.live}`)} · {s.project} · {formatRelative(s.updatedAt, now, intl)}
         </span>

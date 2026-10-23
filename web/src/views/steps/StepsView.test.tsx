@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SessionAgentContext } from '../../data/session-agent';
 import type { OpenSession } from '../../data/store';
@@ -40,6 +40,35 @@ const step = (n: number) => screen.getByRole('article', { name: `Step ${n}` });
 describe('StepsView', () => {
   useFakeLayout();
   afterEach(() => vi.useRealTimers());
+
+  it('says “yet” of an empty agent or turn only while more may still arrive', () => {
+    const base = demoOpen();
+    renderSteps({
+      open: { ...base, session: { ...base.session, live: 'closed' } },
+      route: { agentId: 'nobody' },
+    });
+    expect(screen.getByText('No turns for this agent')).toBeInTheDocument();
+    cleanup();
+    renderSteps({
+      open: { ...base, session: { ...base.session, live: 'busy' } },
+      route: { agentId: 'nobody' },
+    });
+    expect(screen.getByText('No turns for this agent yet')).toBeInTheDocument();
+    cleanup();
+
+    const first = base.turns.get('turn_m1');
+    if (!first) throw new Error('fixture');
+    const emptyTurn = (status: 'running' | 'complete'): OpenSession => ({
+      ...base,
+      turns: new Map(base.turns).set(first.id, { ...first, requestIds: [], status }),
+      requests: new Map([...base.requests].filter(([, r]) => r.turnId !== first.id)),
+    });
+    renderSteps({ open: emptyTurn('complete'), route: { turnId: first.id }, follow: false });
+    expect(screen.getByText('No steps in this turn')).toBeInTheDocument();
+    cleanup();
+    renderSteps({ open: emptyTurn('running'), route: { turnId: first.id }, follow: false });
+    expect(screen.getByText('No steps in this turn yet')).toBeInTheDocument();
+  });
 
   it('groups turn 1 into explore → edit → answer phases with time and tokens', () => {
     renderSteps({ route: { turnId: 'turn_m1' }, follow: false });

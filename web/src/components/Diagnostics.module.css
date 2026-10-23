@@ -8,10 +8,13 @@
 
 .button {
   position: relative;
-  display: inline-grid;
-  place-items: center;
-  width: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 28px;
   height: 28px;
+  padding: 0 6px;
   border: 0;
   border-radius: 7px;
   background: transparent;
@@ -24,16 +27,15 @@
   color: var(--text);
 }
 
-/* A small amber dot: something this session cannot show, or something unread. */
-.button[data-alert]::after {
-  content: "";
-  position: absolute;
-  top: 5px;
-  right: 5px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--warning);
+/* What this session cannot show, counted, so the panel is found without hunting for it. */
+.button[data-alert] {
+  color: var(--warning);
+}
+
+.count {
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .panel {

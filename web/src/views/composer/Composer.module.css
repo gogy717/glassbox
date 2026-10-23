@@ -132,7 +132,7 @@
 .primary {
   border: 1px solid var(--accent);
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .secondary {
@@ -144,7 +144,7 @@
 .danger {
   border: 1px solid var(--error);
   background: var(--error);
-  color: #fff;
+  color: var(--on-error);
 }
 
 .primary:disabled,

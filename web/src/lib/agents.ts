@@ -152,3 +152,12 @@ export function summarize(open: OpenSession, agentId: string, now: number): Summ
   s.cacheHitRate = s.input > 0 ? cacheRead / s.input : null;
   return s;
 }
+
+/** The session is live or the agent is running, so turns and calls may still arrive. */
+export function mayStillRun(open: OpenSession, agentId: string): boolean {
+  return (
+    open.session.live === 'busy' ||
+    open.session.live === 'waiting' ||
+    open.agents.get(agentId)?.status === 'running'
+  );
+}

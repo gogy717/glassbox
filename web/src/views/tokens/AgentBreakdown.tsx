@@ -73,11 +73,12 @@ export function AgentBreakdown({ rows, selectedId, onSelect }: Props) {
               type="button"
               className={css.agentRow}
               aria-current={r.id === selectedId ? 'true' : undefined}
-              aria-label={t('tokens.rowLabel', { label, n })}
+              // The row's name replaces its contents, so it names the agent's state too.
+              aria-label={t('tokens.rowLabel', { label, status: t(`status.${r.agent.status}`), n })}
               onClick={() => onSelect(r.id)}
             >
               <span className={css.rowLabel} style={indent}>
-                <LiveDot state={r.agent.status} />
+                <LiveDot state={r.agent.status} label={t(`status.${r.agent.status}`)} />
                 <span data-label>{label}</span>
               </span>
               <TokenBar usage={usage} scale={scale} />

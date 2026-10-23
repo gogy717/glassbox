@@ -207,7 +207,7 @@ function Questions({ request, busy, onDecide }: PartProps) {
           disabled={busy}
           onClick={() => onDecide({ decision: 'deny' })}
         >
-          {t('perm.deny')}
+          {t('perm.skip')}
         </button>
         <button type="button" className={css.primary} disabled={busy || !complete} onClick={submit}>
           {t('perm.send')}

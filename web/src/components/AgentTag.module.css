@@ -1,0 +1,19 @@
+.tag {
+  flex: none;
+  padding: 0 5px;
+  border: 1px solid color-mix(in srgb, var(--tag-fg) 24%, transparent);
+  border-radius: 4px;
+  background: var(--tag-bg);
+  color: var(--tag-fg);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 14px;
+  white-space: nowrap;
+}
+
+.tag[data-size="medium"] {
+  padding: 0 7px;
+  border-radius: var(--radius-s);
+  font-size: 11px;
+  line-height: 18px;
+}

@@ -19,8 +19,10 @@ describe('Diagnostics', () => {
       parseErrors: 2,
       unknownRecordTypes: { 'superseded-request': 3, 'foo-bar': 1 },
     });
-    const button = screen.getByRole('button', { name: 'Data diagnostics' });
+    // Three gaps, unparsable lines, one unknown record type; re-sends are not a gap.
+    const button = screen.getByRole('button', { name: 'Data diagnostics · 5 gaps' });
     expect(button).toHaveAttribute('data-alert');
+    expect(button).toHaveTextContent('5 gaps');
     fireEvent.click(button);
     const panel = screen.getByRole('dialog', { name: 'Data diagnostics' });
     expect(panel).toHaveTextContent('Request contents (system, tools, messages)');
@@ -52,7 +54,7 @@ describe('Diagnostics', () => {
       },
       'zh',
     );
-    fireEvent.click(screen.getByRole('button', { name: '数据诊断' }));
+    fireEvent.click(screen.getByRole('button', { name: '数据诊断 · 11 项缺失' }));
     const items = within(screen.getByRole('dialog')).getAllByRole('listitem');
     expect(items).toHaveLength(11);
     expect(items[3]).toHaveTextContent('最近 30 秒内有写入');
@@ -73,6 +75,7 @@ describe('Diagnostics', () => {
     });
     const button = screen.getByRole('button', { name: 'Data diagnostics' });
     expect(button).not.toHaveAttribute('data-alert');
+    expect(button).toHaveTextContent('');
     fireEvent.click(button);
     const panel = screen.getByRole('dialog', { name: 'Data diagnostics' });
     expect(panel).toHaveTextContent('No problems found');
@@ -93,7 +96,7 @@ describe('Diagnostics', () => {
         </SessionAgentContext.Provider>
       </I18nContext.Provider>,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Data diagnostics' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Data diagnostics/ }));
     expect(screen.getByRole('dialog')).toHaveTextContent('not recorded by this Grok version');
   });
 
@@ -111,7 +114,7 @@ describe('Diagnostics', () => {
         </SessionAgentContext.Provider>
       </I18nContext.Provider>,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Data diagnostics' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Data diagnostics/ }));
     const items = within(screen.getByRole('dialog')).getAllByRole('listitem');
     expect(items.map((li) => li.textContent)).toEqual([
       expect.stringContaining('cannot see whether oh-my-pi has the session open'),
@@ -136,7 +139,7 @@ describe('Diagnostics', () => {
         </SessionAgentContext.Provider>
       </I18nContext.Provider>,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Data diagnostics' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Data diagnostics/ }));
     const panel = screen.getByRole('dialog');
     expect(panel).toHaveTextContent('“running” means OpenCode is running and a reply');
     expect(panel).not.toHaveTextContent('30 seconds');

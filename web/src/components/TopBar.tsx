@@ -1,16 +1,19 @@
 import { Eye, Menu, Settings } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import type { LiveState, QuotaSnapshot } from '../../../src/core/model.js';
+import type { AgentKind, LiveState, QuotaSnapshot } from '../../../src/core/model.js';
 import type { ConnectionState } from '../data/store';
 import { useNow } from '../data/useNow';
 import { useI18n } from '../i18n';
 import type { Prefs } from '../prefs';
+import { AgentTag } from './AgentTag';
 import { QuotaBar } from './QuotaBar';
 import { LiveDot } from './Status';
 import css from './TopBar.module.css';
 
 interface Props {
   title: string | null;
+  /** The coding agent of the open session. */
+  agent: AgentKind | null;
   live: LiveState | null;
   connection: ConnectionState;
   quotas: QuotaSnapshot[];
@@ -36,6 +39,7 @@ export function TopBar(p: Props) {
       <span className={css.logo}>glassbox</span>
       {p.title !== null && (
         <span className={css.session}>
+          {p.agent && <AgentTag kind={p.agent} size="medium" />}
           <span className={css.title} title={p.title}>
             {p.title}
           </span>

@@ -65,6 +65,8 @@ describe('App', () => {
     render(<App store={store} connect={noConnect} />);
     expect(screen.getByRole('heading', { name: 'Pick a session' })).toBeInTheDocument();
     expect(within(sidebar()).getAllByRole('list')).toHaveLength(3);
+    // No session open: the header names no agent.
+    expect(within(screen.getByRole('banner')).queryByText('Claude Code')).toBeNull();
   });
 
   it('does not claim there are no sessions before the list has arrived', () => {
@@ -90,9 +92,8 @@ describe('App', () => {
     store.applyEvent({ type: 'sessions', sessions: createDemoSessions(DEMO_NOW) });
     render(<App store={store} connect={noConnect} runs={fakeRuns()} />);
     const running = screen.getByRole('region', { name: 'Running now' });
-    expect(
-      within(running).getByRole('button', { name: /Live viewer research/ }),
-    ).toBeInTheDocument();
+    const card = within(running).getByRole('button', { name: /Live viewer research/ });
+    expect(within(card).getByText('Claude Code')).toHaveAttribute('data-agent', 'claude-code');
     expect(within(running).queryByRole('button', { name: /Fix flaky login/ })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Open the most recently active session' }));
     await waitFor(() =>
@@ -142,6 +143,8 @@ describe('App', () => {
     expect(within(banner).getByText('Live viewer research (demo)')).toBeInTheDocument();
     expect(within(banner).getByText('Running')).toBeInTheDocument();
     expect(within(banner).getByText('Connected')).toBeInTheDocument();
+    // The open session's agent, in its colours.
+    expect(within(banner).getByText('Claude Code')).toHaveAttribute('data-tone', 'claude-code');
 
     const summary = screen.getByRole('region', { name: 'Summary' });
     const value = (label: string) =>
@@ -155,7 +158,7 @@ describe('App', () => {
     expect(value('Output (thinking)')).toBe('42,040 (27,050)');
 
     expect(screen.getByRole('navigation', { name: 'Agent' })).toHaveTextContent('Main');
-    expect(within(summary).getByRole('button', { name: 'Data diagnostics' })).toBeInTheDocument();
+    expect(within(summary).getByRole('button', { name: /^Data diagnostics/ })).toBeInTheDocument();
     expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
       'Execution chain',
       'How it worked',

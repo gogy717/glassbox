@@ -94,6 +94,36 @@ describe('FlowView', () => {
   useFakeLayout();
   afterEach(() => vi.useRealTimers());
 
+  it('says “yet” of an empty turn or agent only while more may still arrive', () => {
+    const base = demoOpen();
+    const first = [...base.turns.values()][0];
+    if (!first) throw new Error('fixture');
+    const emptyTurn = (status: 'running' | 'complete'): OpenSession => ({
+      ...base,
+      turns: new Map(base.turns).set(first.id, { ...first, requestIds: [], status }),
+      requests: new Map([...base.requests].filter(([, r]) => r.turnId !== first.id)),
+    });
+    renderFlow({ open: emptyTurn('complete'), route: { turnId: first.id }, follow: false });
+    expect(screen.getByText('No model calls in this turn')).toBeInTheDocument();
+    cleanup();
+    renderFlow({ open: emptyTurn('running'), route: { turnId: first.id }, follow: false });
+    expect(screen.getByText('No model calls in this turn yet')).toBeInTheDocument();
+    cleanup();
+
+    // An agent with no turns: "yet" only while the session runs.
+    renderFlow({
+      open: { ...base, session: { ...base.session, live: 'closed' } },
+      route: { agentId: 'nobody' },
+    });
+    expect(screen.getByText('No turns for this agent')).toBeInTheDocument();
+    cleanup();
+    renderFlow({
+      open: { ...base, session: { ...base.session, live: 'busy' } },
+      route: { agentId: 'nobody' },
+    });
+    expect(screen.getByText('No turns for this agent yet')).toBeInTheDocument();
+  });
+
   it('lists the agent’s turns and follows the newest one', () => {
     renderFlow();
     const turns = screen.getByRole('list', { name: 'User turns' });

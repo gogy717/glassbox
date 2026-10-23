@@ -3,7 +3,7 @@ import type { RunPermissionMode, RunState } from '../../../../src/shared/runs.js
 import { Modal } from '../../components/Modal';
 import type { RunsClient } from '../../data/runs';
 import { useI18n } from '../../i18n';
-import { recentDirChoices, shortPath } from '../../lib/dirs';
+import { dirPlaceholder, recentDirChoices, shortPath } from '../../lib/dirs';
 import css from './Composer.module.css';
 import { PermissionModeSelect } from './PermissionModeSelect';
 
@@ -95,7 +95,7 @@ export function NewSessionDialog({ client, onStarted, onClose }: Props) {
             type="text"
             value={cwd}
             spellCheck={false}
-            placeholder="/Users/…"
+            placeholder={dirPlaceholder(recent)}
             aria-describedby={path && !isAbsolute(path) ? hintId : undefined}
             onChange={(e) => setCwd(e.target.value)}
           />

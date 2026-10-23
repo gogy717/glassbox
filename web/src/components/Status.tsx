@@ -18,7 +18,21 @@ import css from './Status.module.css';
  */
 export type UiStatus = 'waiting' | 'running' | 'complete' | 'error' | 'interrupted' | 'approval';
 
-export function LiveDot({ state }: { state: LiveState | UiStatus | 'unknown' }) {
+/**
+ * A state's colour as a dot. Next to the state's name it is decoration; on its own it needs
+ * `label`, which it then carries as its tooltip and accessible name.
+ */
+export function LiveDot({
+  state,
+  label,
+}: {
+  state: LiveState | UiStatus | 'unknown';
+  label?: string;
+}) {
+  if (label)
+    return (
+      <span className={css.dot} data-state={state} role="img" aria-label={label} title={label} />
+    );
   return <span className={css.dot} data-state={state} aria-hidden="true" />;
 }
 

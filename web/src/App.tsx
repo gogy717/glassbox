@@ -123,6 +123,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
         <div className={css.app}>
           <TopBar
             title={route.sessionId ? (summary?.title ?? t('sidebar.untitled')) : null}
+            agent={route.sessionId ? (summary?.agent ?? null) : null}
             live={summary?.live ?? null}
             connection={state.connection}
             quotas={state.quotas}

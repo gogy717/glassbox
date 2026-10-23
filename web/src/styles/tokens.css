@@ -8,15 +8,19 @@
   --border: #e2e5e9;
   --border-strong: #cdd2d8;
   --text: #1c2026;
-  --muted: #677079;
-  --faint: #99a0a8;
-  --accent: #2f6fd6;
+  /* Text tokens clear 4.5:1 (WCAG AA) on every surface and tint they sit on, faint included. */
+  --muted: #525a63;
+  --faint: #666c74;
+  --accent: #1c5cc2;
   --accent-tint: #eaf1fc;
-  --success: #2a9a57;
+  --success: #016c36;
   --success-tint: rgba(42, 154, 87, 0.1);
-  --error: #d1403f;
+  --error: #b21e25;
   --error-tint: rgba(209, 64, 63, 0.09);
-  --warning: #b9781f;
+  --warning: #865301;
+  /* Text on an accent or error fill (primary and danger buttons). */
+  --on-accent: #ffffff;
+  --on-error: #ffffff;
   --shadow: 0 8px 28px rgba(16, 24, 40, 0.14);
   --overlay: rgba(16, 20, 26, 0.36);
 
@@ -55,6 +59,23 @@
   /* Blocked on the person answering a permission prompt; follows the theme's warning colour. */
   --seg-approval: var(--warning);
 
+  /* Coding-agent tags. The fill carries the agent: its lightness and hue keep every pair of
+     agents apart, also under protanopia / deuteranopia, and away from the status, accent and
+     tool-card colours, which sit at other lightnesses. The text is a near-ink shade of the same
+     hue, ≥ 4.5:1 on its fill. tokens.test.ts holds all of this; the tag names its agent too. */
+  --agent-claude-code-fg: #4a2010;
+  --agent-claude-code-bg: #c38873;
+  --agent-codex-fg: #023538;
+  --agent-codex-bg: #7af4fc;
+  --agent-grok-fg: #31254d;
+  --agent-grok-bg: #ad91f2;
+  --agent-oh-my-pi-fg: #461e36;
+  --agent-oh-my-pi-bg: #fea2d7;
+  --agent-opencode-fg: #332f01;
+  --agent-opencode-bg: #f3eeb4;
+  --agent-other-fg: #2a2e33;
+  --agent-other-bg: #c9ced4;
+
   /* JSON inspector (DevTools palette). */
   --json-key: #881391;
   --json-string: #c41a16;
@@ -79,15 +100,17 @@
     --border: #2e333a;
     --border-strong: #3d434b;
     --text: #e3e6ea;
-    --muted: #9aa2ab;
-    --faint: #6e767f;
+    --muted: #a6aeb7;
+    --faint: #8f97a1;
     --accent: #6ea4ff;
     --accent-tint: #1d2a3d;
     --success: #4cc27b;
     --success-tint: rgba(76, 194, 123, 0.13);
-    --error: #f0706e;
+    --error: #fe8c88;
     --error-tint: rgba(240, 112, 110, 0.12);
     --warning: #e0a458;
+    --on-accent: #0b1526;
+    --on-error: #1c0707;
     --shadow: 0 10px 32px rgba(0, 0, 0, 0.5);
     --overlay: rgba(0, 0, 0, 0.55);
     --tok-cache-read: #5b8bd0;
@@ -116,6 +139,18 @@
     --json-key: #5db0d7;
     --json-string: #f28b82;
     --json-number: #99c8ff;
+    --agent-claude-code-fg: #fff0ec;
+    --agent-claude-code-bg: #7f1900;
+    --agent-codex-fg: #e1f9fd;
+    --agent-codex-bg: #03515c;
+    --agent-grok-fg: #f3f2ff;
+    --agent-grok-bg: #36017f;
+    --agent-oh-my-pi-fg: #feeef7;
+    --agent-oh-my-pi-bg: #4c0038;
+    --agent-opencode-fg: #f7f4e1;
+    --agent-opencode-bg: #6c6433;
+    --agent-other-fg: #eff4fa;
+    --agent-other-bg: #3f4348;
   }
 }
 
@@ -128,15 +163,17 @@
   --border: #2e333a;
   --border-strong: #3d434b;
   --text: #e3e6ea;
-  --muted: #9aa2ab;
-  --faint: #6e767f;
+  --muted: #a6aeb7;
+  --faint: #8f97a1;
   --accent: #6ea4ff;
   --accent-tint: #1d2a3d;
   --success: #4cc27b;
   --success-tint: rgba(76, 194, 123, 0.13);
-  --error: #f0706e;
+  --error: #fe8c88;
   --error-tint: rgba(240, 112, 110, 0.12);
   --warning: #e0a458;
+  --on-accent: #0b1526;
+  --on-error: #1c0707;
   --shadow: 0 10px 32px rgba(0, 0, 0, 0.5);
   --overlay: rgba(0, 0, 0, 0.55);
   --tok-cache-read: #5b8bd0;
@@ -165,4 +202,16 @@
   --json-key: #5db0d7;
   --json-string: #f28b82;
   --json-number: #99c8ff;
+  --agent-claude-code-fg: #fff0ec;
+  --agent-claude-code-bg: #7f1900;
+  --agent-codex-fg: #e1f9fd;
+  --agent-codex-bg: #03515c;
+  --agent-grok-fg: #f3f2ff;
+  --agent-grok-bg: #36017f;
+  --agent-oh-my-pi-fg: #feeef7;
+  --agent-oh-my-pi-bg: #4c0038;
+  --agent-opencode-fg: #f7f4e1;
+  --agent-opencode-bg: #6c6433;
+  --agent-other-fg: #eff4fa;
+  --agent-other-bg: #3f4348;
 }

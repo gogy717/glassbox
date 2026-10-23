@@ -5,6 +5,7 @@ import { useApprovalsContext } from '../../data/approvals';
 import type { OpenSession } from '../../data/store';
 import { useNow } from '../../data/useNow';
 import { useI18n } from '../../i18n';
+import { mayStillRun } from '../../lib/agents';
 import { formatDuration, formatNumber } from '../../lib/format';
 import { buildSteps, type Phase, type PhaseCategory, type Step } from '../../lib/steps';
 import type { Navigate, Route } from '../../router';
@@ -30,6 +31,8 @@ export function StepsView({ open, agentId, route, navigate }: Props) {
   const { follow, setFollow } = useUi();
   const items = useTurnItems(open, agentId);
   const current = useSelectedTurn(items, open, agentId, route, follow);
+  // An empty view says "yet" only while the agent may still add to it.
+  const running = mayStillRun(open, agentId);
   // Durations of a running step grow with the clock; finished turns need no ticking.
   const live = current?.status === 'running' || current?.status === 'approval';
   const now = useNow(live ? 1000 : 60_000);
@@ -67,13 +70,14 @@ export function StepsView({ open, agentId, route, navigate }: Props) {
             <StepList
               key={current.turn.id}
               phases={phases}
+              running={live}
               follow={follow}
               onUserScrollAway={() => setFollow(false)}
               onOpen={openStep}
             />
           </>
         ) : (
-          <p className={css.empty}>{t('flow.noTurns')}</p>
+          <p className={css.empty}>{t(running ? 'flow.noTurns' : 'flow.noTurnsDone')}</p>
         )}
         {!follow && (
           <button
@@ -138,9 +142,11 @@ interface ListProps {
   follow: boolean;
   onUserScrollAway(): void;
   onOpen(requestId: string): void;
+  /** The turn is still running: an empty list may yet fill. */
+  running: boolean;
 }
 
-function StepList({ phases, follow, onUserScrollAway, onOpen }: ListProps) {
+function StepList({ phases, running, follow, onUserScrollAway, onOpen }: ListProps) {
   const { t, intl } = useI18n();
   const parentRef = useRef<HTMLDivElement>(null);
   useFollowScroll(parentRef, follow, onUserScrollAway);
@@ -168,7 +174,9 @@ function StepList({ phases, follow, onUserScrollAway, onOpen }: ListProps) {
 
   return (
     <div ref={parentRef} className={css.list} data-steps-scroll>
-      {rows.length === 0 && <p className={css.empty}>{t('steps.empty')}</p>}
+      {rows.length === 0 && (
+        <p className={css.empty}>{t(running ? 'steps.empty' : 'steps.emptyDone')}</p>
+      )}
       <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
         {virtualizer.getVirtualItems().map((item) => {
           const row = rows[item.index];

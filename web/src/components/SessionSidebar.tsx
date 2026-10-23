@@ -1,11 +1,12 @@
-import { Search } from 'lucide-react';
-import { useMemo, useState } from 'react';
-import type { SessionSummary } from '../../../src/core/model.js';
+import { Check, Search } from 'lucide-react';
+import { type CSSProperties, useMemo, useState } from 'react';
+import type { AgentKind, SessionSummary } from '../../../src/core/model.js';
 import { totalTokens } from '../../../src/core/usage.js';
 import { useI18n } from '../i18n';
-import { agentName } from '../lib/agent-names';
+import { AGENT_TONES, agentColors, agentName } from '../lib/agent-names';
 import { formatCompact, formatRelative } from '../lib/format';
-import { groupSessions } from '../lib/sessions';
+import { groupSessions, isListed } from '../lib/sessions';
+import { AgentTag } from './AgentTag';
 import css from './SessionSidebar.module.css';
 import { LiveDot } from './Status';
 
@@ -18,14 +19,29 @@ interface Props {
 }
 
 export function SessionSidebar({ sessions, selectedId, now, showProbes, onSelect }: Props) {
-  const { t, intl } = useI18n();
+  const { t } = useI18n();
   const [query, setQuery] = useState('');
+  const [only, setOnly] = useState<AgentKind | null>(null);
+  // Agents with sessions in the list (probes count only when shown), in a fixed order so the
+  // chips do not move as sessions update.
+  const agents = useMemo(() => {
+    const present = new Set(sessions.filter((s) => isListed(s, showProbes)).map((s) => s.agent));
+    const known = AGENT_TONES.filter((a) => present.has(a));
+    const others = [...present].filter((a) => !(AGENT_TONES as readonly string[]).includes(a));
+    return [...known, ...others.sort()];
+  }, [sessions, showProbes]);
+  // A filter on an agent whose sessions are all gone shows everything again.
+  const filter = only !== null && agents.includes(only) ? only : null;
   const groups = useMemo(
-    () => groupSessions(sessions, query, { showProbes }),
-    [sessions, query, showProbes],
+    () =>
+      groupSessions(
+        // The open session keeps its row, so the list never loses what the page shows.
+        filter ? sessions.filter((s) => s.agent === filter || s.id === selectedId) : sessions,
+        query,
+        { showProbes },
+      ),
+    [sessions, filter, selectedId, query, showProbes],
   );
-  // Which agent a session belongs to only matters once there is more than one on this machine.
-  const multiAgent = useMemo(() => new Set(sessions.map((s) => s.agent)).size > 1, [sessions]);
 
   return (
     <nav className={css.sidebar} aria-label={t('sidebar.title')}>
@@ -39,6 +55,31 @@ export function SessionSidebar({ sessions, selectedId, now, showProbes, onSelect
           onChange={(e) => setQuery(e.target.value)}
         />
       </label>
+      {agents.length > 1 && (
+        // biome-ignore lint/a11y/useSemanticElements: a row of filter toggles; it is not a form fieldset
+        <div className={css.agents} role="group" aria-label={t('sidebar.filterAgents')}>
+          {agents.map((a) => {
+            const { fg, bg } = agentColors(a);
+            return (
+              <button
+                key={a}
+                type="button"
+                className={css.chip}
+                data-agent={a}
+                aria-pressed={filter === a}
+                title={t(filter === a ? 'sidebar.allAgents' : 'sidebar.onlyAgent', {
+                  agent: agentName(a),
+                })}
+                style={{ '--tag-fg': fg, '--tag-bg': bg } as CSSProperties}
+                onClick={() => setOnly(filter === a ? null : a)}
+              >
+                {filter === a && <Check size={11} aria-hidden="true" />}
+                {agentName(a)}
+              </button>
+            );
+          })}
+        </div>
+      )}
       <div className={css.list}>
         {groups.length === 0 && (
           <p className={css.empty}>{t(sessions.length ? 'sidebar.noMatch' : 'sidebar.empty')}</p>
@@ -50,39 +91,79 @@ export function SessionSidebar({ sessions, selectedId, now, showProbes, onSelect
             </li>
             {g.sessions.map((s) => (
               <li key={s.id}>
-                <button
-                  type="button"
-                  className={css.item}
-                  aria-current={s.id === selectedId ? 'true' : undefined}
-                  title={s.cwd ?? undefined}
-                  onClick={() => onSelect(s.id)}
-                >
-                  <span className={css.title}>{s.title ?? t('sidebar.untitled')}</span>
-                  <span className={css.meta}>
-                    {multiAgent && (
-                      <span className={css.agent} data-agent={s.agent}>
-                        {agentName(s.agent)}
-                      </span>
-                    )}
-                    <LiveDot state={s.live} />
-                    <span>{t(`live.${s.live}`)}</span>
-                    <span className={css.sep}>·</span>
-                    <span>{formatRelative(s.updatedAt, now, intl)}</span>
-                    {s.usage && (
-                      <>
-                        <span className={css.sep}>·</span>
-                        <span className="num">
-                          {t('common.tokens', { n: formatCompact(totalTokens(s.usage), intl) })}
-                        </span>
-                      </>
-                    )}
-                  </span>
-                </button>
+                <SessionRow
+                  session={s}
+                  selected={s.id === selectedId}
+                  now={now}
+                  onSelect={onSelect}
+                />
               </li>
             ))}
           </ul>
         ))}
       </div>
     </nav>
+  );
+}
+
+function SessionRow({
+  session: s,
+  selected,
+  now,
+  onSelect,
+}: {
+  session: SessionSummary;
+  selected: boolean;
+  now: number;
+  onSelect(id: string): void;
+}) {
+  const { t, intl } = useI18n();
+  // Whether the row cut its text short when the pointer arrived: only then does the tooltip
+  // repeat the row's text (whole), so a screen reader does not hear it twice.
+  const [clipped, setClipped] = useState(false);
+  const title = s.title ?? t('sidebar.untitled');
+  const live = t(`live.${s.live}`);
+  const when = formatRelative(s.updatedAt, now, intl);
+  const tokens = s.usage
+    ? t('common.tokens', { n: formatCompact(totalTokens(s.usage), intl) })
+    : null;
+  const tip = clipped
+    ? [title, [agentName(s.agent), live, when, tokens].filter(Boolean).join(' · '), s.cwd]
+        .filter(Boolean)
+        .join('\n')
+    : (s.cwd ?? undefined);
+  return (
+    <button
+      type="button"
+      className={css.item}
+      aria-current={selected ? 'true' : undefined}
+      title={tip}
+      onPointerEnter={(e) =>
+        setClipped(
+          [...e.currentTarget.querySelectorAll<HTMLElement>('[data-clip]')].some(
+            (el) => el.scrollWidth > el.clientWidth,
+          ),
+        )
+      }
+      onClick={() => onSelect(s.id)}
+    >
+      <span className={css.title} data-clip>
+        {title}
+      </span>
+      <span className={css.meta}>
+        <AgentTag kind={s.agent} />
+        <LiveDot state={s.live} />
+        <span className={css.state}>{live}</span>
+        <span className={css.when} data-clip>
+          <span className={css.sep}>·</span> {when}
+          {tokens && (
+            <>
+              {' '}
+              <span className={css.sep}>·</span> <span className="num">{tokens}</span>
+            </>
+          )}
+        </span>
+      </span>
+    </button>
   );
 }

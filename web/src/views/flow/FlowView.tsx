@@ -7,6 +7,7 @@ import { StatusPill } from '../../components/Status';
 import type { OpenSession } from '../../data/store';
 import { useNow } from '../../data/useNow';
 import { useI18n } from '../../i18n';
+import { mayStillRun } from '../../lib/agents';
 import { formatClock, formatDuration } from '../../lib/format';
 import type { Navigate, Route } from '../../router';
 import { useUi } from '../../ui';
@@ -34,6 +35,8 @@ export function FlowView({ open, agentId, route, navigate, live = null }: Props)
 
   const items = useTurnItems(open, agentId);
   const current = useSelectedTurn(items, open, agentId, route, follow);
+  // An empty view says "yet" only while the agent may still add to it.
+  const running = mayStillRun(open, agentId);
 
   // Stable across renders so memoised rows are not invalidated by a new navigate function.
   const navRef = useRef(navigate);
@@ -70,7 +73,7 @@ export function FlowView({ open, agentId, route, navigate, live = null }: Props)
             />
           </>
         ) : (
-          <p className={css.empty}>{t('flow.noTurns')}</p>
+          <p className={css.empty}>{t(running ? 'flow.noTurns' : 'flow.noTurnsDone')}</p>
         )}
         {!follow && (
           <button
@@ -183,7 +186,11 @@ function CallList({
 
   return (
     <div ref={parentRef} className={css.calls}>
-      {calls.length === 0 && <p className={css.empty}>{t('flow.noCalls')}</p>}
+      {calls.length === 0 && (
+        <p className={css.empty}>
+          {t(turn.status === 'running' ? 'flow.noCalls' : 'flow.noCallsDone')}
+        </p>
+      )}
       <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
         {virtualizer.getVirtualItems().map((item) => {
           const call = calls[item.index];
