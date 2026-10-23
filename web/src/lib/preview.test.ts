@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { plainText, resultLine } from './preview';
+import { type JsonShape, plainText, resultLine } from './preview';
 
 describe('plainText', () => {
   it.each([
@@ -16,6 +16,10 @@ describe('plainText', () => {
     ['```ts\nconst a = 1;\n```\nAfter', 'const a = 1; After'],
     ['Above\n\n---\n\nBelow', 'Above Below'],
     ['| a | b |\n|---|:-:|\n| 1 | 2 |', 'a b 1 2'],
+    ['a | b\n--|--\n1 | 2\n\nAfter | the table', 'a b 1 2 After | the table'],
+    // Pipes outside tables are shell pipes, and mean something.
+    ['ls | grep x', 'ls | grep x'],
+    ['Run `ls | grep x` first', 'Run ls | grep x first'],
     ['~~old~~ new', 'old new'],
     // Not markdown: kept as written.
     ['snake_case and a__b and 2 * 3 * 4', 'snake_case and a__b and 2 * 3 * 4'],
@@ -32,19 +36,27 @@ describe('plainText', () => {
   });
 });
 
+const shapeLabel = (s: JsonShape) =>
+  s.size === null ? 'JSON' : `JSON · ${s.size} ${s.kind === 'object' ? 'keys' : 'items'}`;
+
 describe('resultLine', () => {
   it.each([
     ['1\timport { Hono } from "hono";\n2\t…', '1 import { Hono } from "hono";'],
     ['{"success":true,"message":"Message sent to medaka-f5"}', 'Message sent to medaka-f5'],
-    ['{\n  "ok": true,\n  "path": "/repo/a.ts"\n}', '/repo/a.ts'],
+    ['{"error":"File not found"}', 'File not found'],
+    ['{"exitCode":0,"output":"3 passed"}', '3 passed'],
+    ['[{"type":"text","text":"Found 3 files"}]', 'Found 3 files'],
     // A preview cut short is no longer valid JSON.
     ['{"success":true,"message":"Sent to \\"medaka\\" and', 'Sent to "medaka" and'],
-    ['[{"type":"text","text":"Found 3 files"}]', 'Found 3 files'],
-    ['{"ok":true}', 'ok: true'],
-    ['[1, 2, 3]', '[1, 2, 3]'],
+    // Data, not a message: say what it is instead of quoting a value out of it (`cat package.json`).
+    ['{\n  "name": "glassbox",\n  "version": "0.2.0"\n}', 'JSON · 2 keys'],
+    ['{"ok":true}', 'JSON · 1 keys'],
+    ['{"result":{"rows":3}}', 'JSON · 1 keys'],
+    ['[1, 2, 3]', 'JSON · 3 items'],
+    ['{"name":"glassbox","dependencies":{"hono', 'JSON'],
     ['', ''],
     ['\n\nsecond line', 'second line'],
   ])('%j → %j', (preview, want) => {
-    expect(resultLine(preview)).toBe(want);
+    expect(resultLine(preview, shapeLabel)).toBe(want);
   });
 });

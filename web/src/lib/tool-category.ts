@@ -1,5 +1,6 @@
 /** What kind of work a tool call is, and a one-line description of it. */
 import type { ToolCall } from '../../../src/core/model.js';
+import { quotedValue } from './preview';
 
 export type ToolCategory =
   | 'explore'
@@ -137,6 +138,7 @@ const BY_NAME: Record<string, ToolCategory> = {
   browser: 'web',
   // OpenCode
   list: 'explore',
+  ls: 'explore', // older id, still in the adapter's fixtures
   multiedit: 'edit',
   patch: 'edit',
   question: 'ask',
@@ -198,6 +200,16 @@ const READ_ONLY_GIT = new Set([
 ]);
 /** `gh <noun> <verb>` verbs that only look. */
 const READ_ONLY_GH = new Set(['view', 'list', 'status', 'diff', 'checks']);
+/** git's global options whose value is the next word. */
+const GIT_VALUE_OPTIONS = new Set([
+  '-C',
+  '-c',
+  '--git-dir',
+  '--work-tree',
+  '--namespace',
+  '--super-prefix',
+  '--config-env',
+]);
 
 /** A shell command that only looks around (rg, ls, git log…) is exploring, not running. */
 const FIND_ACTIONS = new Set([
@@ -220,20 +232,40 @@ function segments(command: string): string[][] {
     .map((s) => s.split(/\s+/));
 }
 
-/** git's subcommand, past its global options (`-C dir`, `-c key=value`, `--no-pager`). */
+/** git's subcommand, past its global options (`-C dir`, `--git-dir .git`, `--no-pager`). */
 function gitSubcommand(args: string[]): string | undefined {
   for (let i = 0; i < args.length; i++) {
     const arg = args[i] ?? '';
-    if (arg === '-C' || arg === '-c') i++;
+    if (GIT_VALUE_OPTIONS.has(arg)) i++;
     else if (!arg.startsWith('-')) return arg;
   }
   return undefined;
 }
 
+/**
+ * gh that only looks: `gh status`, `gh <noun> view|list|…`, and `gh api` reading, which it does
+ * unless a method other than GET is given or fields are sent without one.
+ */
+function isReadOnlyGh(args: string[]): boolean {
+  const [noun, verb] = args;
+  if (noun === 'status') return true;
+  if (noun !== 'api') return READ_ONLY_GH.has(verb ?? '');
+  let method: string | null = null;
+  let fields = false;
+  for (let i = 1; i < args.length; i++) {
+    const arg = args[i] ?? '';
+    if (arg === '-X' || arg === '--method') method = args[++i] ?? '';
+    else if (arg.startsWith('--method=')) method = arg.slice('--method='.length);
+    else if (/^-X./.test(arg)) method = arg.slice(2);
+    else if (/^(-[fF]|--field|--raw-field|--input)(=|$)|^-[fF]./.test(arg)) fields = true;
+  }
+  return method === null ? !fields : method.toUpperCase() === 'GET';
+}
+
 function isReadOnlySegment([cmd, ...args]: string[]): boolean {
   if (!cmd) return true;
   if (cmd === 'git') return READ_ONLY_GIT.has(gitSubcommand(args) ?? '');
-  if (cmd === 'gh') return READ_ONLY_GH.has(args[1] ?? '');
+  if (cmd === 'gh') return isReadOnlyGh(args);
   if (cmd === 'find') return !args.some((a) => FIND_ACTIONS.has(a));
   if (cmd === 'sed') return !args.some((a) => a.startsWith('-i'));
   return READ_ONLY.has(cmd);
@@ -316,8 +348,10 @@ const basename = (path: string) => path.split(/[\\/]/).filter(Boolean).at(-1) ??
 
 const MAX = 80;
 const clip = (s: string) => {
-  const line = s.replace(/\s+/g, ' ').trim();
-  return line.length > MAX ? `${line.slice(0, MAX)}…` : line;
+  // Only the start shows: collapse the whitespace of that, not of a megabyte of input.
+  const head = s.slice(0, MAX * 4);
+  const line = head.replace(/\s+/g, ' ').trim();
+  return line.length > MAX || head.length < s.trimEnd().length ? `${line.slice(0, MAX)}…` : line;
 };
 
 function hostOf(url: string): string {
@@ -361,6 +395,27 @@ function currentItem(input: Obj): string | null {
   return field(item, 'content') ?? field(item, 'step');
 }
 
+/** Past this, a string input is not worth parsing for a one-line summary. */
+const PARSE_MAX = 100_000;
+
+/**
+ * Input that arrived as a string. Arguments that did not parse come this way (OpenCode's pending
+ * raw input, Codex's broken function arguments): summarized as the object they hold, or by their
+ * first value, never shown as JSON.
+ */
+function stringInput(tool: ToolCall, input: string): string {
+  if (!/^\s*[[{]/.test(input)) return clip(input);
+  if (input.length <= PARSE_MAX) {
+    try {
+      const parsed: unknown = JSON.parse(input);
+      return isObj(parsed) ? summarizeInput({ ...tool, input: parsed }) : '';
+    } catch {
+      // Cut short: fall through to its first value.
+    }
+  }
+  return clip(quotedValue(input) ?? '');
+}
+
 /** One line saying what the call did: the command, the file, the pattern, the host… */
 export function summarizeInput(tool: ToolCall): string {
   const input = tool.input;
@@ -377,8 +432,9 @@ export function summarizeInput(tool: ToolCall): string {
     if (files) return files;
   }
   // Codex's exec runs JavaScript, after an optional `// @exec: {…}` line of settings.
-  if (typeof input === 'string')
-    return clip(tool.name === 'exec' ? input.replace(/^\s*\/\/ @exec:.*\n/, '') : input);
+  if (typeof input === 'string' && tool.name === 'exec')
+    return clip(input.replace(/^\s*\/\/ @exec:.*\n/, ''));
+  if (typeof input === 'string') return stringInput(tool, input);
   if (!isObj(input)) return '';
 
   const f = (k: string) => field(input, k);
@@ -406,7 +462,7 @@ export function summarizeInput(tool: ToolCall): string {
   if (label) return clip(label);
   // Never JSON: the first plain value, else the field names.
   const entries = Object.entries(input);
-  const text = entries.find(([, v]) => typeof v === 'string');
+  const text = entries.find(([, v]) => typeof v === 'string' && v.trim() !== '');
   if (text) return clip(text[1] as string);
   const scalar = entries.find(([, v]) => typeof v === 'number' || typeof v === 'boolean');
   if (scalar) return `${scalar[0]}: ${scalar[1]}`;

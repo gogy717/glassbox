@@ -215,7 +215,14 @@ function ResultStrip({ tool }: { tool: ToolCall }) {
     label = t('status.error');
   } else if (status === 'complete') {
     icon = <CheckCircle2 size={12} aria-hidden="true" />;
-    label = (tool.resultPreview && resultLine(tool.resultPreview)) || t('status.complete');
+    label =
+      (tool.resultPreview &&
+        resultLine(tool.resultPreview, (s) =>
+          s.size === null
+            ? t('flow.json')
+            : t(s.kind === 'object' ? 'flow.jsonKeys' : 'flow.jsonItems', { n: s.size }),
+        )) ||
+      t('status.complete');
   } else {
     icon = <Clock3 size={12} aria-hidden="true" />;
     label = t('status.unknownEnd');

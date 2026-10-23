@@ -158,6 +158,8 @@ describe('toolCategory', () => {
         ['grep', 'explore'],
         ['glob', 'explore'],
         ['list', 'explore'],
+        // The name in the adapter's fixtures (an older id).
+        ['ls', 'explore'],
         ['lsp', 'explore'],
         ['edit', 'edit'],
         ['write', 'edit'],
@@ -253,6 +255,15 @@ describe('toolCategory', () => {
     ],
     ['git switch -c ux-tool-icons 8302505', 'git'],
     ['gh pr create --fill', 'git'],
+    ['gh status', 'explore'],
+    ['gh api repos/o/r/pulls --paginate', 'explore'],
+    ['gh api -X GET search/issues -f q=bug', 'explore'],
+    ['gh api repos/o/r/issues -f title=Bug', 'git'],
+    ['gh api -X POST repos/o/r/issues', 'git'],
+    ['gh api --method=DELETE repos/o/r/labels/x', 'git'],
+    ['git --git-dir .git log --oneline', 'explore'],
+    ['git --work-tree . --git-dir .git status', 'explore'],
+    ['git --git-dir .git commit -m x', 'git'],
     ['npm test && git commit -m "x"', 'run'],
     ['gitk', 'run'],
     ["sed -i '' s/a/b/ f", 'run'],
@@ -376,7 +387,8 @@ describe('summarizeInput', () => {
     ['shell', { command: ['bash', '-lc', 'rg -n "x" src'], workdir: '/repo' }, 'rg -n "x" src'],
     ['shell', { command: ['ls', '-la'] }, 'ls -la'],
     ['exec_command', { cmd: 'npm test', workdir: '/repo', yield_time_ms: 1000 }, 'npm test'],
-    ['write_stdin', { session_id: 3, chars: '' }, ''],
+    ['write_stdin', { session_id: 3, chars: '' }, 'session_id: 3'],
+    ['write_stdin', { session_id: 3, chars: 'y\n' }, 'y'],
     ['apply_patch', PATCH, 'store.ts, notes.md, old.txt'],
     ['apply_patch', { input: PATCH }, 'store.ts, notes.md, old.txt'],
     [
@@ -479,5 +491,28 @@ describe('mcpTool', () => {
     ['mcp__nameless', null],
   ])('%s → %j', (name, want) => {
     expect(mcpTool(name)).toEqual(want);
+  });
+});
+
+describe('summarizeInput of a string that is JSON', () => {
+  // Arguments that did not parse reach the card as a string: OpenCode's pending raw input,
+  // Codex's broken function arguments.
+  it.each([
+    ['read', '{"filePath":"/repo/a.ts","off', '/repo/a.ts'],
+    ['exec_command', '{"cmd": "npm test", "workdir', 'npm test'],
+    ['read', '{"fi', ''],
+    ['Odd', '[1, 2', ''],
+    // Valid JSON is summarized like the object it holds.
+    ['Bash', '{"command":"git log --oneline","description":"Log"}', 'git log --oneline'],
+    ['Read', '{"file_path":"/repo/src/app.ts"}', 'app.ts'],
+  ])('%s %j → %j', (name, input, want) => {
+    expect(summarizeInput(tool(name, input))).toBe(want);
+  });
+});
+
+describe('summarizeInput of huge input', () => {
+  it('only reads as far as the line it shows', () => {
+    const summary = summarizeInput(tool('Odd', 'a  b\n'.repeat(2_000_000)));
+    expect(summary).toBe(`${'a b '.repeat(20)}`.slice(0, 80) + '…');
   });
 });

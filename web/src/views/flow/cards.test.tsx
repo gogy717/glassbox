@@ -96,6 +96,25 @@ describe('ToolCard', () => {
     expect(within(card).getByText('Message sent to medaka-f5')).toBeInTheDocument();
   });
 
+  it('says what a JSON result is, instead of quoting a value out of data', () => {
+    const json = '{"name":"glassbox","version":"0.2.0","private":true}';
+    const card = renderCard({
+      ...tool('Bash', { command: 'cat package.json' }),
+      resultPreview: json,
+    });
+    expect(within(card).getByText('JSON · 3 keys')).toBeInTheDocument();
+    expect(card).not.toHaveTextContent('glassbox');
+  });
+
+  it('says it in Chinese too', () => {
+    const preview = '[1, 2]';
+    const card = renderCard(
+      { ...tool('Bash', { command: 'jq .ids f' }), resultPreview: preview },
+      'zh',
+    );
+    expect(within(card).getByText('JSON · 2 项')).toBeInTheDocument();
+  });
+
   it('says "Run tool" for a call without input', () => {
     const card = renderCard(tool('SomethingNew', null));
     expect(within(card).getByText('Run tool')).toBeInTheDocument();
