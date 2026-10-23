@@ -17,12 +17,13 @@
   border-bottom: 1px solid var(--border);
 }
 
-/* #1 · clock · duration │ in 52,400 · uncached 6 · … · out 3,900 (3,100 thinking) · status */
+/* #1 · clock · duration │ in 52,400 · uncached 6 · … · out 3,900 (3,100 thinking) · status.
+   The readings wrap inside their own column; the status mark stays at the top right. */
 .line {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto auto auto minmax(0, 1fr) auto;
   align-items: baseline;
-  flex-wrap: wrap;
-  gap: 2px 14px;
+  column-gap: 14px;
   min-height: 36px;
   padding-top: 10px;
   color: var(--muted);
@@ -61,7 +62,8 @@
 
 .status {
   display: inline-flex;
-  margin-left: auto;
+  grid-column: 5;
+  justify-self: end;
 }
 
 /* The call's reason, aligned with "#1": two lines at most, the rest is in the steps view. */

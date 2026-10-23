@@ -391,7 +391,7 @@ describe('FlowView', () => {
 
   it('does not make screen readers announce a running timer every second', () => {
     renderFlow({ route: { agentId: 'af00000000000002' } });
-    const bash = within(row(9)).getByRole('button', { name: /^Run\s*Bash/ });
+    const bash = within(row(9)).getByRole('button', { name: /^Bash/ });
     for (const live of bash.querySelectorAll('[aria-live]'))
       expect(live.textContent).not.toMatch(/\d:\d\d/);
   });
@@ -400,7 +400,7 @@ describe('FlowView', () => {
     vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
     vi.setSystemTime(DEMO_NOW);
     renderFlow({ route: { agentId: 'af00000000000002' } });
-    const bash = within(row(9)).getByRole('button', { name: /^Run\s*Bash/ });
+    const bash = within(row(9)).getByRole('button', { name: /^Bash/ });
     expect(bash).toHaveTextContent('Running · 26:22');
   });
 
