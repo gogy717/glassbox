@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { existsSync } from 'node:fs';
+import { stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,6 +9,7 @@ import { createClaudeCodeAdapter } from '../adapters/claude-code/index.js';
 import { createQuotaFetcher } from '../adapters/claude-code/quota-fetch.js';
 import { createCodexAdapter } from '../adapters/codex/index.js';
 import { createGrokAdapter } from '../adapters/grok/index.js';
+import { createOpenCodeAdapter } from '../adapters/opencode/index.js';
 import type { AgentAdapter } from '../core/adapter.js';
 import type { SessionSummary } from '../core/model.js';
 import { createApp } from './app.js';
@@ -17,6 +19,7 @@ import {
   type CliOptions,
   codexDirToUse,
   grokDirToUse,
+  opencodeDirToUse,
   parseCliArgs,
   USAGE,
 } from './args.js';
@@ -51,6 +54,14 @@ function createRuns(
   });
 }
 
+async function isFile(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isFile();
+  } catch {
+    return false;
+  }
+}
+
 function findStaticDir(): string | undefined {
   const dir = fileURLToPath(new URL('../web/', import.meta.url));
   return existsSync(join(dir, 'index.html')) ? dir : undefined;
@@ -75,6 +86,7 @@ async function main(): Promise<void> {
   let claudeBin: string | null = null;
   let grokDir: string | null = null;
   let codexDir: string | null = null;
+  let opencodeDir: string | null = null;
   if (!opts.demo) {
     try {
       claudeBin = await findClaudeBin({
@@ -84,6 +96,7 @@ async function main(): Promise<void> {
       });
       grokDir = await grokDirToUse(opts, isDirectory);
       codexDir = await codexDirToUse(opts, isDirectory);
+      opencodeDir = await opencodeDirToUse(opts, isFile);
     } catch (err) {
       console.error(err instanceof Error ? err.message : err);
       process.exit(2);
@@ -105,6 +118,10 @@ async function main(): Promise<void> {
   if (codexDir) {
     adapters.push(createCodexAdapter({ codexDir }));
     log(`showing Codex sessions from ${codexDir} (--no-codex to hide them)`);
+  }
+  if (opencodeDir) {
+    adapters.push(createOpenCodeAdapter({ opencodeDir, log }));
+    log(`showing OpenCode sessions from ${opencodeDir} (--no-opencode to hide them)`);
   }
   const store = opts.demo ? new DemoStore() : new SessionStore({ adapters, log });
   await store.start();

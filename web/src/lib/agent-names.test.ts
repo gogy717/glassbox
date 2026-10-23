@@ -6,6 +6,7 @@ describe('agentName', () => {
     ['claude-code', 'Claude Code'],
     ['grok', 'Grok'],
     ['codex', 'Codex'],
+    ['opencode', 'OpenCode'],
     ['aider', 'aider'],
   ])('%s → %s', (kind, name) => {
     expect(agentName(kind)).toBe(name);

@@ -1,6 +1,13 @@
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { bindWarning, browserUrl, codexDirToUse, grokDirToUse, parseCliArgs } from './args.js';
+import {
+  bindWarning,
+  browserUrl,
+  codexDirToUse,
+  grokDirToUse,
+  opencodeDirToUse,
+  parseCliArgs,
+} from './args.js';
 import { browserCommand } from './open-browser.js';
 
 const ctx = { env: {}, homedir: '/home/u' };
@@ -22,6 +29,9 @@ describe('parseCliArgs', () => {
       codex: true,
       codexDir: '/home/u/.codex',
       codexDirFromFlag: false,
+      opencode: true,
+      opencodeDir: '/home/u/.local/share/opencode',
+      opencodeDirFromFlag: false,
       fetchQuota: false,
     });
   });
@@ -47,6 +57,9 @@ describe('parseCliArgs', () => {
           '--codex-dir',
           '/data/x',
           '--no-codex',
+          '--opencode-dir',
+          '/data/o',
+          '--no-opencode',
           '--fetch-quota',
         ],
         ctx,
@@ -66,6 +79,9 @@ describe('parseCliArgs', () => {
       codex: false,
       codexDir: '/data/x',
       codexDirFromFlag: true,
+      opencode: false,
+      opencodeDir: '/data/o',
+      opencodeDirFromFlag: true,
       fetchQuota: true,
     });
   });
@@ -181,6 +197,44 @@ describe('codexDirToUse', () => {
   it('refuses a --codex-dir that does not exist', async () => {
     await expect(codexDirToUse(opts(['--codex-dir', '/nope']), exists([]))).rejects.toThrow(
       /--codex-dir.*\/nope/,
+    );
+  });
+});
+
+describe('opencodeDirToUse', () => {
+  const opts = (argv: string[], env: Record<string, string> = {}) =>
+    parseCliArgs(argv, { env, homedir: '/home/u' });
+  const files = (paths: string[]) => async (p: string) => paths.includes(p);
+
+  it('uses ~/.local/share/opencode when it holds opencode.db, $XDG_DATA_HOME before it', async () => {
+    const home = '/home/u/.local/share/opencode';
+    expect(await opencodeDirToUse(opts([]), files([`${home}/opencode.db`]))).toBe(home);
+    expect(
+      await opencodeDirToUse(
+        opts([], { XDG_DATA_HOME: '/xdg' }),
+        files(['/xdg/opencode/opencode.db']),
+      ),
+    ).toBe('/xdg/opencode');
+    // An empty XDG_DATA_HOME counts as unset, as OpenCode reads it.
+    expect(opts([], { XDG_DATA_HOME: '' }).opencodeDir).toBe(home);
+  });
+
+  it('stays off without a database, or with --no-opencode', async () => {
+    expect(await opencodeDirToUse(opts([]), files([]))).toBeNull();
+    expect(
+      await opencodeDirToUse(
+        opts(['--no-opencode']),
+        files(['/home/u/.local/share/opencode/opencode.db']),
+      ),
+    ).toBeNull();
+  });
+
+  it('refuses an --opencode-dir without a database in it', async () => {
+    await expect(opencodeDirToUse(opts(['--opencode-dir', '/nope']), files([]))).rejects.toThrow(
+      /--opencode-dir.*\/nope.*opencode\.db/,
+    );
+    expect(await opencodeDirToUse(opts(['--opencode-dir', '/o']), files(['/o/opencode.db']))).toBe(
+      '/o',
     );
   });
 });

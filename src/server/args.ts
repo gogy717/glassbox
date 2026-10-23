@@ -24,6 +24,11 @@ export interface CliOptions {
   /** `--codex-dir`, else $CODEX_HOME, else ~/.codex. */
   codexDir: string;
   codexDirFromFlag: boolean;
+  /** Show OpenCode sessions when its data dir holds a database (`--no-opencode` turns it off). */
+  opencode: boolean;
+  /** `--opencode-dir`, else $XDG_DATA_HOME/opencode, else ~/.local/share/opencode. */
+  opencodeDir: string;
+  opencodeDirFromFlag: boolean;
   /** Ask Anthropic's usage endpoint for the plan quota with Claude Code's sign-in. */
   fetchQuota: boolean;
 }
@@ -46,6 +51,11 @@ Options:
   --codex-dir <dir>   Codex home (default $CODEX_HOME, else ~/.codex); Codex sessions are
                       shown whenever that dir exists
   --no-codex          don't show Codex sessions
+  --opencode-dir <dir>
+                      OpenCode data dir (default $XDG_DATA_HOME/opencode, else
+                      ~/.local/share/opencode); OpenCode sessions are shown whenever it
+                      holds opencode.db
+  --no-opencode       don't show OpenCode sessions
   --fetch-quota       keep the plan quota fresh by asking Anthropic for it every 5 minutes,
                       using Claude Code's sign-in (off by default: glassbox otherwise reads no
                       credentials and makes no network requests)
@@ -76,6 +86,8 @@ export function parseCliArgs(
       'no-grok': { type: 'boolean' },
       'codex-dir': { type: 'string' },
       'no-codex': { type: 'boolean' },
+      'opencode-dir': { type: 'string' },
+      'no-opencode': { type: 'boolean' },
       'fetch-quota': { type: 'boolean' },
     },
   });
@@ -98,6 +110,12 @@ export function parseCliArgs(
     codex: !values['no-codex'],
     codexDir: resolve(values['codex-dir'] ?? ctx.env.CODEX_HOME ?? join(ctx.homedir, '.codex')),
     codexDirFromFlag: values['codex-dir'] !== undefined,
+    opencode: !values['no-opencode'],
+    opencodeDir: resolve(
+      values['opencode-dir'] ??
+        join(ctx.env.XDG_DATA_HOME || join(ctx.homedir, '.local', 'share'), 'opencode'),
+    ),
+    opencodeDirFromFlag: values['opencode-dir'] !== undefined,
     fetchQuota: values['fetch-quota'] ?? false,
   };
 }
@@ -130,6 +148,21 @@ export const codexDirToUse = (opts: CliOptions, isDirectory: (p: string) => Prom
     { enabled: opts.codex, dir: opts.codexDir, fromFlag: opts.codexDirFromFlag },
     isDirectory,
   );
+
+/**
+ * OpenCode's data dir when it holds `opencode.db`, else null. Like `optionalAgentDir`, but the
+ * database must be there: OpenCode keeps its sessions in it, not in files of their own.
+ */
+export async function opencodeDirToUse(
+  opts: CliOptions,
+  isFile: (path: string) => Promise<boolean>,
+): Promise<string | null> {
+  if (!opts.opencode) return null;
+  if (await isFile(join(opts.opencodeDir, 'opencode.db'))) return opts.opencodeDir;
+  if (opts.opencodeDirFromFlag)
+    throw new Error(`--opencode-dir ${opts.opencodeDir}: no opencode.db there`);
+  return null;
+}
 
 /** A startup warning for binding `host`, or null when it is a loopback address. */
 export function bindWarning(host: string): string | null {
