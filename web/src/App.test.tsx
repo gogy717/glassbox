@@ -238,7 +238,7 @@ describe('App', () => {
     const store = createStore();
     store.applyEvent({ type: 'quota', quotas: [createDemoQuota(DEMO_NOW)] });
     render(<App store={store} connect={noConnect} />);
-    expect(within(screen.getByRole('banner')).getByText('5h 62%')).toBeInTheDocument();
+    expect(within(screen.getByRole('banner')).getByText('Claude 62%')).toBeInTheDocument();
   });
 
   it('says a session does not exist once the list has loaded without it', () => {

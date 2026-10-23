@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createDemoQuota, DEMO_SESSION_ID } from '../core/fixtures/demo.js';
+import { createDemoQuotas, DEMO_SESSION_ID } from '../core/fixtures/demo.js';
 import { checkSnapshot } from '../core/invariants.js';
 import type { SessionPatch, SessionSnapshot, SessionSummary } from '../core/model.js';
 import { applyPatch } from './__tests__/apply-patch.js';
@@ -132,9 +132,16 @@ describe('DemoStore quota', () => {
     vi.useFakeTimers({ now: new Date('2026-10-23T02:00:00.000Z') });
   });
 
-  it('serves the demo quota', async () => {
+  it('serves the demo quota of several providers', async () => {
     const demo = new DemoStore();
-    expect(demo.listQuotas()).toEqual([createDemoQuota(new Date('2026-10-23T02:00:00.000Z'))]);
+    expect(demo.listQuotas()).toEqual(createDemoQuotas(new Date('2026-10-23T02:00:00.000Z')));
+    expect(demo.listQuotas().map((q) => q.provider)).toEqual([
+      'anthropic',
+      'openai',
+      'xai',
+      'github-copilot',
+      'deepseek',
+    ]);
     const off = demo.onQuota(() => {});
     off();
   });

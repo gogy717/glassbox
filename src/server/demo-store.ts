@@ -1,5 +1,5 @@
 import {
-  createDemoQuota,
+  createDemoQuotas,
   createDemoSessions,
   createDemoSnapshot,
   DEMO_SESSION_ID,
@@ -69,7 +69,7 @@ export class DemoStore implements AppStore {
     const now = new Date();
     this.snap = createDemoSnapshot(now);
     this.others = createDemoSessions(now).filter((s) => s.id !== DEMO_SESSION_ID);
-    this.quotas = [createDemoQuota(now)];
+    this.quotas = createDemoQuotas(now);
     const inFlight = this.snap.requests.find(
       (r) => r.agentId === MAIN_AGENT_ID && r.status === 'in-flight',
     );

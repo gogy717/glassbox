@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { QuotaSnapshot, QuotaWindow } from '../../../src/core/model.js';
 import { type MessageKey, useI18n } from '../i18n';
 import { formatCountdown, formatRelative, formatResetTime } from '../lib/format';
+import { providerName, providerShortName } from '../lib/provider-names';
 import css from './QuotaBar.module.css';
 
 interface Props {
@@ -13,19 +14,42 @@ interface Props {
 type Level = 'ok' | 'warn' | 'danger';
 const levelOf = (pct: number): Level => (pct >= 90 ? 'danger' : pct >= 70 ? 'warn' : 'ok');
 
-function shortLabel(w: QuotaWindow): string {
-  if (w.kind === 'session') return '5h';
-  if (w.kind === 'weekly') return '7d';
-  if (w.kind === 'weekly-model') return w.model ?? w.id;
-  return w.id;
-}
-
 const pct = (w: QuotaWindow) => Math.round(Math.min(100, Math.max(0, w.usedPercent)));
 
-/** Where quota numbers can come from, in words; an id not listed here shows as itself. */
-const SOURCES: Record<string, MessageKey> = { 'claude-code-cache': 'quota.sourceClaudeCodeCache' };
+/** From this many providers on, the top bar shows only the top one below a wider breakpoint. */
+const MANY = 4;
 
-/** Plan quota at a glance (ClaudeBar-style); click for every window and where the data came from. */
+/** Where quota numbers can come from, in words; an id not listed here shows as itself. */
+const SOURCES: Record<string, MessageKey> = {
+  'claude-code-cache': 'quota.sourceClaudeCodeCache',
+  'anthropic-usage-api': 'quota.sourceAnthropicApi',
+  'oh-my-pi-cache': 'quota.sourceOmpCache',
+  'codex-session': 'quota.sourceCodexSession',
+  'deepseek-api': 'quota.sourceDeepseekApi',
+  'xai-api': 'quota.sourceXaiApi',
+};
+
+/** "¥12.30": the currency's own symbol; a code Intl does not know follows the amount instead. */
+export function formatBalance(balance: { amount: number; currency: string }, intl: string): string {
+  try {
+    return new Intl.NumberFormat(intl, {
+      style: 'currency',
+      currency: balance.currency,
+      currencyDisplay: 'narrowSymbol',
+    }).format(balance.amount);
+  } catch {
+    const amount = balance.amount.toLocaleString(intl, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    return `${amount} ${balance.currency}`;
+  }
+}
+
+/**
+ * Plan quota at a glance (ClaudeBar-style): one meter per provider, at its window closest to the
+ * limit, or its balance when it has no windows. Click for every window and where the data came from.
+ */
 export function QuotaBar({ quotas, now }: Props) {
   const { t, intl } = useI18n();
   const [open, setOpen] = useState(false);
@@ -44,16 +68,20 @@ export function QuotaBar({ quotas, now }: Props) {
     };
   }, [open]);
 
-  const shown = quotas.filter((q) => q.windows.length > 0);
+  const shown = quotas.filter((q) => q.windows.length > 0 || q.balance);
   if (shown.length === 0) return null;
-  const all = shown.flatMap((q) => q.windows);
   // Past its reset time the cached percentage is history: never show it as current usage.
   const isReset = (w: QuotaWindow) => !!w.resetsAt && Date.parse(w.resetsAt) <= now;
-  const current = all.filter((w) => !isReset(w));
-  const top = current.length
-    ? current.reduce((a, b) => (b.usedPercent > a.usedPercent ? b : a))
-    : null;
-  const stale = shown.some((q) => q.stale);
+  const meters = shown.map((q) => ({
+    q,
+    top: q.windows
+      .filter((w) => !isReset(w))
+      .reduce<QuotaWindow | null>((a, b) => (!a || b.usedPercent > a.usedPercent ? b : a), null),
+  }));
+  // The one meter narrow screens keep: the provider closest to a limit, else the first.
+  const lead = meters.reduce((a, b) =>
+    b.top && (!a.top || b.top.usedPercent > a.top.usedPercent) ? b : a,
+  );
   const resetText = (w: QuotaWindow) => {
     if (!w.resetsAt) return null;
     const left = formatCountdown(Date.parse(w.resetsAt) - now);
@@ -67,61 +95,97 @@ export function QuotaBar({ quotas, now }: Props) {
     const key = SOURCES[id];
     return key ? t(key) : id;
   };
-  const longLabel = (w: QuotaWindow) =>
-    w.kind === 'session'
+  const windowName = (w: QuotaWindow) =>
+    w.label ??
+    (w.kind === 'session'
       ? t('quota.windowSession')
       : w.kind === 'weekly'
         ? t('quota.windowWeekly')
         : w.kind === 'weekly-model'
           ? t('quota.windowModel', { model: w.model ?? w.id })
-          : w.id;
+          : w.kind === 'monthly'
+            ? t('quota.windowMonthly')
+            : w.id);
+  const heading = (q: QuotaSnapshot) =>
+    q.plan ? `${providerName(q.provider)} · ${q.plan}` : providerName(q.provider);
+  const age = (q: QuotaSnapshot) =>
+    t(q.stale ? 'quota.stale' : 'quota.updated', { age: formatRelative(q.fetchedAt, now, intl) });
 
   return (
-    <div className={css.wrap} ref={ref} data-stale={stale || undefined}>
+    <div className={css.wrap} ref={ref} data-many={shown.length >= MANY || undefined}>
       <button type="button" className={css.bar} aria-expanded={open} onClick={() => setOpen(!open)}>
         <Gauge size={14} aria-hidden="true" className={css.icon} />
         <span className="visually-hidden">{t('quota.title')}</span>
-        {all.map((w, i) => (
-          // biome-ignore lint/a11y/useSemanticElements: a native <meter> cannot carry the visible "5h 62%" label
-          <span
-            // biome-ignore lint/suspicious/noArrayIndexKey: the same window id can come from two agents
-            key={`${w.id}:${i}`}
-            role="meter"
-            aria-label={shortLabel(w)}
-            aria-valuetext={`${shortLabel(w)} ${isReset(w) ? t('quota.reset') : `${pct(w)}%`}`}
-            aria-valuenow={isReset(w) ? 0 : pct(w)}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            className={css.meter}
-            data-level={isReset(w) ? 'ok' : levelOf(w.usedPercent)}
-            data-reset={isReset(w) || undefined}
-            data-top={w === top || undefined}
-            title={[longLabel(w), t('quota.used', { pct: `${pct(w)}%` }), resetText(w)]
-              .filter(Boolean)
-              .join(' · ')}
-          >
-            <span className="num">
-              {shortLabel(w)} {isReset(w) ? t('quota.reset') : `${pct(w)}%`}
+        {meters.map((m) => {
+          const { q, top } = m;
+          const name = providerShortName(q.provider);
+          const value = top
+            ? `${pct(top)}%`
+            : q.windows.length > 0 || !q.balance
+              ? t('quota.reset')
+              : formatBalance(q.balance, intl);
+          const title = [
+            heading(q),
+            top && `${windowName(top)} ${t('quota.used', { pct: `${pct(top)}%` })}`,
+            top && resetText(top),
+            q.balance && t('quota.balance', { amount: formatBalance(q.balance, intl) }),
+            q.stale && age(q),
+          ]
+            .filter(Boolean)
+            .join(' · ');
+          const shared = {
+            className: css.meter,
+            'data-top': m === lead || undefined,
+            'data-stale': q.stale || undefined,
+            title,
+          };
+          return q.windows.length > 0 ? (
+            // biome-ignore lint/a11y/useSemanticElements: a native <meter> cannot carry the visible "Claude 62%" label
+            <span
+              key={q.provider}
+              {...shared}
+              role="meter"
+              aria-label={name}
+              aria-valuetext={`${name} ${value}`}
+              aria-valuenow={top ? pct(top) : 0}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              data-level={top ? levelOf(top.usedPercent) : 'ok'}
+              data-reset={!top || undefined}
+            >
+              <span className="num">
+                {name} {value}
+              </span>
+              <span className={css.track} aria-hidden="true">
+                <span style={{ width: `${top ? pct(top) : 0}%` }} />
+              </span>
             </span>
-            <span className={css.track} aria-hidden="true">
-              <span style={{ width: `${isReset(w) ? 0 : pct(w)}%` }} />
+          ) : (
+            <span key={q.provider} {...shared} data-balance>
+              <span className="num">
+                {name} {value}
+              </span>
+              {/* Keeps the text level with the meters beside it. */}
+              <span className={css.track} data-empty aria-hidden="true" />
             </span>
-          </span>
-        ))}
-        {stale && (
-          <span className={css.staleNote}>
-            {t('quota.stale', { age: formatRelative(shown[0]?.fetchedAt, now, intl) })}
-          </span>
-        )}
+          );
+        })}
+        {meters.length > 1 && <span className={css.more}>+{meters.length - 1}</span>}
       </button>
       {open && (
         <div className={css.popover} role="dialog" aria-label={t('quota.title')}>
           {shown.map((q) => (
-            <div key={q.provider} className={css.snapshot}>
+            <section
+              key={q.provider}
+              className={css.snapshot}
+              aria-label={heading(q)}
+              data-stale={q.stale || undefined}
+            >
+              <h3 className={css.provider}>{heading(q)}</h3>
               {q.windows.map((w) => (
                 <div key={w.id} className={css.row} data-level={levelOf(w.usedPercent)}>
                   <div className={css.rowHead}>
-                    <span className={css.rowLabel}>{longLabel(w)}</span>
+                    <span className={css.rowLabel}>{windowName(w)}</span>
                     <span className="num">{t('quota.used', { pct: `${pct(w)}%` })}</span>
                   </div>
                   <span className={css.track} aria-hidden="true">
@@ -134,6 +198,11 @@ export function QuotaBar({ quotas, now }: Props) {
                   )}
                 </div>
               ))}
+              {q.balance && (
+                <p className={css.balance}>
+                  {t('quota.balance', { amount: formatBalance(q.balance, intl) })}
+                </p>
+              )}
               {q.extraUsage && (
                 <p className={css.meta}>
                   {t('quota.extra', {
@@ -142,13 +211,9 @@ export function QuotaBar({ quotas, now }: Props) {
                   })}
                 </p>
               )}
-              <p className={css.meta}>
-                {t(q.stale ? 'quota.stale' : 'quota.updated', {
-                  age: formatRelative(q.fetchedAt, now, intl),
-                })}
-              </p>
+              <p className={css.meta}>{age(q)}</p>
               <p className={css.meta}>{t('quota.source', { source: sourceName(q.source) })}</p>
-            </div>
+            </section>
           ))}
           <p className={css.note}>{t('quota.note')}</p>
         </div>

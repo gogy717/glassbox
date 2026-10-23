@@ -1,16 +1,16 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { createDemoQuota } from '../../../src/core/fixtures/demo.js';
+import { createDemoQuota, createDemoQuotas } from '../../../src/core/fixtures/demo.js';
 import type { QuotaSnapshot } from '../../../src/core/model.js';
-import { I18nContext, makeI18n } from '../i18n';
+import { I18nContext, type Locale, makeI18n } from '../i18n';
 import { DEMO_NOW } from '../test/demo';
-import { QuotaBar } from './QuotaBar';
+import { formatBalance, QuotaBar } from './QuotaBar';
 
 const NOW = DEMO_NOW.getTime();
 
-function renderBar(quotas: QuotaSnapshot[]) {
+function renderBar(quotas: QuotaSnapshot[], locale: Locale = 'en') {
   return render(
-    <I18nContext.Provider value={makeI18n('en')}>
+    <I18nContext.Provider value={makeI18n(locale)}>
       <QuotaBar quotas={quotas} now={NOW} />
     </I18nContext.Provider>,
   );
@@ -22,78 +22,170 @@ const withWindow = (i: number, over: Partial<QuotaSnapshot['windows'][number]>):
   return q;
 };
 
+const demo = (provider: string) =>
+  createDemoQuotas(DEMO_NOW).find((q) => q.provider === provider) as QuotaSnapshot;
+
+const openDetails = () => {
+  fireEvent.click(screen.getByRole('button', { name: /Plan quota/ }));
+  return screen.getByRole('dialog', { name: 'Plan quota' });
+};
+
+const meterTexts = (container: HTMLElement) =>
+  [...container.querySelectorAll('button > span[title]')].map((m) => m.textContent);
+
 describe('QuotaBar', () => {
-  it('shows one compact meter per window', () => {
-    renderBar([createDemoQuota(DEMO_NOW)]);
+  it('shows one meter per provider, at its window closest to the limit', () => {
+    const { container } = renderBar(createDemoQuotas(DEMO_NOW));
+    expect(meterTexts(container)).toEqual([
+      'Claude 62%',
+      'ChatGPT 41%',
+      'Grok 25%',
+      'Copilot 74%',
+      'DeepSeek ¥12.30',
+    ]);
     const meters = screen.getAllByRole('meter');
-    expect(meters.map((m) => m.textContent)).toEqual(['5h 62%', '7d 38%', 'Opus 51%']);
-    expect(meters.map((m) => m.getAttribute('aria-valuenow'))).toEqual(['62', '38', '51']);
+    expect(meters.map((m) => m.getAttribute('aria-valuenow'))).toEqual(['62', '41', '25', '74']);
   });
 
   it('colours by usage: under 70% neutral, 70–90% amber, 90% and over red', () => {
-    renderBar([withWindow(0, { usedPercent: 75 }), withWindow(0, { usedPercent: 93 })]);
+    renderBar([
+      withWindow(0, { usedPercent: 75 }),
+      { ...withWindow(1, { usedPercent: 93 }), provider: 'openai' },
+      { ...createDemoQuota(DEMO_NOW), provider: 'xai' },
+    ]);
     const levels = screen.getAllByRole('meter').map((m) => m.getAttribute('data-level'));
-    expect(levels.slice(0, 3)).toEqual(['warn', 'ok', 'ok']);
-    expect(levels[3]).toBe('danger');
+    expect(levels).toEqual(['warn', 'danger', 'ok']);
   });
 
-  it('puts the reset countdown in the tooltip, and says "reset" once it has passed', () => {
-    renderBar([withWindow(1, { resetsAt: new Date(NOW - 60_000).toISOString() })]);
-    const [five, seven] = screen.getAllByRole('meter');
-    expect(five).toHaveAttribute('title', expect.stringContaining('resets in 1h37m'));
-    expect(seven).toHaveAttribute('title', expect.stringContaining('Reset'));
+  it('puts the plan, the window and its reset countdown in the tooltip', () => {
+    renderBar([createDemoQuota(DEMO_NOW)]);
+    expect(screen.getByRole('meter')).toHaveAttribute(
+      'title',
+      'Anthropic · Max 5x · 5-hour window 62% used · resets in 1h37m',
+    );
   });
 
-  it('shows a window whose reset time has passed as reset, not at its old level', () => {
+  it('skips a window whose reset time has passed, and says "reset" once all have', () => {
     renderBar([
       withWindow(0, { usedPercent: 96, resetsAt: new Date(NOW - 20 * 60_000).toISOString() }),
+      {
+        ...withWindow(0, { resetsAt: new Date(NOW - 60_000).toISOString() }),
+        provider: 'openai',
+        windows: [
+          {
+            ...createDemoQuota(DEMO_NOW).windows[0],
+            resetsAt: new Date(NOW - 60_000).toISOString(),
+          },
+        ] as QuotaSnapshot['windows'],
+      },
     ]);
-    const [five] = screen.getAllByRole('meter');
-    expect(five).toHaveTextContent('5h Reset');
-    expect(five).toHaveAttribute('data-level', 'ok');
-    expect(five).not.toHaveAttribute('data-top');
-    const top = screen.getAllByRole('meter').filter((m) => m.hasAttribute('data-top'));
-    expect(top.map((m) => m.textContent)).toEqual(['Opus 51%']);
+    const [claude, openai] = screen.getAllByRole('meter');
+    expect(claude).toHaveTextContent('Claude 51%');
+    expect(openai).toHaveTextContent('ChatGPT Reset');
+    expect(openai).toHaveAttribute('data-level', 'ok');
+    expect(openai).toHaveAttribute('data-reset');
+  });
+
+  it('shows a balance-only provider by its balance, in its currency', () => {
+    const { container } = renderBar([demo('deepseek')]);
+    expect(meterTexts(container)).toEqual(['DeepSeek ¥12.30']);
+    expect(screen.queryByRole('meter')).toBeNull();
+    const details = openDetails();
+    expect(within(details).getByText('Balance ¥12.30')).toBeInTheDocument();
+    expect(
+      within(details).getByText("Source: DeepSeek's balance API (--fetch-quota)"),
+    ).toBeVisible();
+  });
+
+  it('formats balances with the currency symbol, or the code when Intl does not know it', () => {
+    expect(formatBalance({ amount: 12.3, currency: 'CNY' }, 'en')).toBe('¥12.30');
+    expect(formatBalance({ amount: 1234.5, currency: 'USD' }, 'en')).toBe('$1,234.50');
+    expect(formatBalance({ amount: 12.3, currency: 'credits' }, 'en')).toBe('12.30 credits');
+  });
+
+  it('drops a snapshot with neither windows nor a balance', () => {
+    const { container } = renderBar([{ ...demo('deepseek'), balance: null }]);
+    expect(container).toBeEmptyDOMElement();
   });
 
   it('lets assistive technology hear the meters, not just "Plan quota"', () => {
-    renderBar([createDemoQuota(DEMO_NOW)]);
-    expect(screen.getByRole('button', { name: /Plan quota.*5h 62%.*7d 38%/ })).toBeInTheDocument();
+    renderBar(createDemoQuotas(DEMO_NOW).slice(0, 2));
+    expect(
+      screen.getByRole('button', { name: /Plan quota.*Claude 62%.*ChatGPT 41%/ }),
+    ).toBeInTheDocument();
   });
 
-  it('marks the window closest to its limit for narrow screens', () => {
-    renderBar([createDemoQuota(DEMO_NOW)]);
-    const top = screen.getAllByRole('meter').filter((m) => m.hasAttribute('data-top'));
-    expect(top.map((m) => m.textContent)).toEqual(['5h 62%']);
+  it('marks the provider closest to a limit, and counts the others, for narrow screens', () => {
+    const { container } = renderBar(createDemoQuotas(DEMO_NOW));
+    const top = container.querySelectorAll('[data-top]');
+    expect([...top].map((m) => m.textContent)).toEqual(['Copilot 74%']);
+    expect(screen.getByText('+4')).toBeInTheDocument();
+    expect(container.querySelector('[data-many]')).not.toBeNull();
   });
 
-  it('greys out data older than an hour and says how old it is', () => {
-    const q = {
-      ...createDemoQuota(DEMO_NOW),
+  it('keeps the first provider for narrow screens when none has a current window', () => {
+    const { container } = renderBar([demo('deepseek')]);
+    expect(container.querySelector('[data-top]')).toHaveTextContent('DeepSeek ¥12.30');
+    expect(screen.queryByText(/^\+/)).toBeNull();
+    expect(container.querySelector('[data-many]')).toBeNull();
+  });
+
+  it('greys out each provider whose data is older than an hour, and says how old', () => {
+    const old = {
+      ...demo('xai'),
       stale: true,
       fetchedAt: new Date(NOW - 3 * 3_600_000).toISOString(),
     };
-    const { container } = renderBar([q]);
-    expect(container.querySelector('[data-stale]')).not.toBeNull();
-    expect(screen.getByText('Data from 3 hours ago')).toBeInTheDocument();
+    renderBar([createDemoQuota(DEMO_NOW), old]);
+    const [claude, grok] = screen.getAllByRole('meter');
+    expect(claude).not.toHaveAttribute('data-stale');
+    expect(grok).toHaveAttribute('data-stale');
+    expect(grok).toHaveAttribute('title', expect.stringContaining('Data from 3 hours ago'));
+    const details = openDetails();
+    const section = within(details).getByRole('region', { name: 'xAI · SuperGrok' });
+    expect(section).toHaveAttribute('data-stale');
+    expect(within(section).getByText('Data from 3 hours ago')).toBeInTheDocument();
   });
 
-  it('opens details: every window, reset times, data age, source, extra usage and the note', () => {
-    const q: QuotaSnapshot = {
+  it('groups the details by provider: plan, windows, resets, extra usage, age and source', () => {
+    const claude: QuotaSnapshot = {
       ...createDemoQuota(DEMO_NOW),
       extraUsage: { used: 12.5, limit: 50, currency: 'USD' },
     };
-    renderBar([q]);
-    fireEvent.click(screen.getByRole('button', { name: /Plan quota/ }));
-    const dialog = screen.getByRole('dialog', { name: 'Plan quota' });
-    expect(within(dialog).getByText('5-hour window')).toBeInTheDocument();
-    expect(within(dialog).getByText('Weekly')).toBeInTheDocument();
-    expect(within(dialog).getByText('Weekly · Opus')).toBeInTheDocument();
-    expect(within(dialog).getByText('62% used')).toBeInTheDocument();
-    expect(within(dialog).getByText('Updated 4 minutes ago')).toBeInTheDocument();
-    expect(within(dialog).getByText("Source: Claude Code's cache")).toBeInTheDocument();
+    renderBar([claude, ...createDemoQuotas(DEMO_NOW).slice(1)]);
+    const details = openDetails();
+    const sections = within(details).getAllByRole('region');
+    expect(sections.map((s) => s.getAttribute('aria-label'))).toEqual([
+      'Anthropic · Max 5x',
+      'OpenAI · Plus',
+      'xAI · SuperGrok',
+      'GitHub Copilot · Individual',
+      'DeepSeek',
+    ]);
+
+    const [anthropic, openai, xai, copilot] = sections as [
+      HTMLElement,
+      HTMLElement,
+      HTMLElement,
+      HTMLElement,
+    ];
+    expect(within(anthropic).getByText('5-hour window')).toBeInTheDocument();
+    expect(within(anthropic).getByText('Weekly')).toBeInTheDocument();
+    expect(within(anthropic).getByText('Weekly · Opus')).toBeInTheDocument();
+    expect(within(anthropic).getByText('62% used')).toBeInTheDocument();
+    expect(within(anthropic).getByText('Updated 4 minutes ago')).toBeInTheDocument();
+    expect(within(anthropic).getByText("Source: Claude Code's cache")).toBeInTheDocument();
+    expect(within(anthropic).getByText(/Extra usage/)).toHaveTextContent(
+      'Extra usage 12.5 / 50 USD',
+    );
+    expect(within(openai).getByText("Source: Codex's session log")).toBeInTheDocument();
+    // The provider's own window names, and the monthly kind.
+    expect(within(xai).getByText('SuperGrok Weekly Credits')).toBeInTheDocument();
+    expect(within(xai).getByText("Source: oh-my-pi's cache")).toBeInTheDocument();
+    expect(within(copilot).getByText('Premium Requests')).toBeInTheDocument();
+
     // Reset times: a day for the weekly windows three days out, and never seconds.
-    const resets = [...dialog.querySelectorAll('div > span')]
+    const resets = [...anthropic.querySelectorAll('div > span')]
       .map((e) => e.textContent ?? '')
       .filter((text) => text.startsWith('resets in'));
     expect(resets).toHaveLength(3);
@@ -101,14 +193,45 @@ describe('QuotaBar', () => {
       /^resets in 3d · resets [A-Z][a-z]{2}, [A-Z][a-z]{2} \d+, \d\d:\d\d$/,
     );
     for (const text of resets) expect(text).not.toMatch(/\d\d:\d\d:\d\d/);
-    expect(within(dialog).getByText(/Extra usage/)).toHaveTextContent('Extra usage 12.5 / 50 USD');
-    expect(dialog).toHaveTextContent('shared by all your devices');
+    expect(details).toHaveTextContent('shared by all your devices');
   });
 
-  it('names a source it does not know by its id', () => {
-    renderBar([{ ...createDemoQuota(DEMO_NOW), source: 'some-new-feed' }]);
-    fireEvent.click(screen.getByRole('button', { name: /Plan quota/ }));
-    expect(screen.getByText('Source: some-new-feed')).toBeInTheDocument();
+  it('names a window without a label by its kind, monthly included', () => {
+    const q: QuotaSnapshot = {
+      ...demo('github-copilot'),
+      windows: [{ ...demo('github-copilot').windows[0], label: null }] as QuotaSnapshot['windows'],
+    };
+    renderBar([q]);
+    expect(within(openDetails()).getByText('Monthly')).toBeInTheDocument();
+  });
+
+  it('names a provider and a source it does not know by their ids', () => {
+    renderBar([
+      { ...createDemoQuota(DEMO_NOW), provider: 'moonshot', plan: null, source: 'some-new-feed' },
+    ]);
+    expect(screen.getByRole('meter')).toHaveTextContent('moonshot 62%');
+    const details = openDetails();
+    expect(within(details).getByRole('region', { name: 'moonshot' })).toBeInTheDocument();
+    expect(within(details).getByText('Source: some-new-feed')).toBeInTheDocument();
+  });
+
+  it('speaks Chinese', () => {
+    const copilot = demo('github-copilot');
+    renderBar(
+      [
+        { ...copilot, windows: copilot.windows.map((w) => ({ ...w, label: null })) },
+        demo('deepseek'),
+      ],
+      'zh',
+    );
+    fireEvent.click(screen.getByRole('button', { name: /额度/ }));
+    const details = screen.getByRole('dialog', { name: '额度' });
+    expect(within(details).getAllByText('每月')).toHaveLength(3);
+    expect(within(details).getByText('余额 ¥12.30')).toBeInTheDocument();
+    expect(within(details).getByText('来源：oh-my-pi 的缓存')).toBeInTheDocument();
+    expect(
+      within(details).getByText('来源：DeepSeek 余额接口（--fetch-quota）'),
+    ).toBeInTheDocument();
   });
 
   it('renders nothing without quota data', () => {

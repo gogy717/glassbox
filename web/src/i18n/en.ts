@@ -165,8 +165,15 @@ export const en: Record<MessageKey, string> = {
   'quota.resetsOn': 'resets {date}, {clock}',
   'quota.sourceClaudeCodeCache': "Claude Code's cache",
   'quota.extra': 'Extra usage {used} / {limit}',
+  'quota.windowMonthly': 'Monthly',
+  'quota.balance': 'Balance {amount}',
+  'quota.sourceAnthropicApi': "Anthropic's usage API (--fetch-quota)",
+  'quota.sourceOmpCache': "oh-my-pi's cache",
+  'quota.sourceCodexSession': "Codex's session log",
+  'quota.sourceDeepseekApi': "DeepSeek's balance API (--fetch-quota)",
+  'quota.sourceXaiApi': "xAI's usage API (--fetch-quota)",
   'quota.note':
-    'Quota comes from Claude Code’s cache (refreshed by ClaudeBar or /usage) and is shared by all your devices.',
+    'Quotas come from what your agents cache locally (or from each provider with --fetch-quota) and are shared by all your devices on that account.',
   'settings.showProbes': 'Show probe sessions',
   'time.merged':
     '{requests} {requests|request|requests} · {tools} {tools|tool|tools} · total {total}',

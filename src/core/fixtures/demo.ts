@@ -10,6 +10,7 @@ import type {
   IsoTime,
   ModelRequest,
   QuotaSnapshot,
+  QuotaWindow,
   ResponseBlock,
   SessionSnapshot,
   SessionSummary,
@@ -573,4 +574,72 @@ export function createDemoQuota(now: Date = new Date()): QuotaSnapshot {
     balance: null,
     source: 'claude-code-cache',
   };
+}
+
+/**
+ * Plan quotas of every provider glassbox knows, as their sources report them: Claude Code's
+ * cache, a Codex session log, oh-my-pi's usage cache (Grok and Copilot) and DeepSeek's balance.
+ */
+export function createDemoQuotas(now: Date = new Date()): QuotaSnapshot[] {
+  const inMin = (min: number) => new Date(now.getTime() + min * 60_000).toISOString();
+  const ago = (min: number) => new Date(now.getTime() - min * 60_000).toISOString();
+  const window = (
+    id: string,
+    kind: QuotaWindow['kind'],
+    label: string | null,
+    usedPercent: number,
+    resetsInMin: number,
+  ): QuotaWindow => ({ id, kind, label, model: null, usedPercent, resetsAt: inMin(resetsInMin) });
+  const empty = { stale: false, extraUsage: null, balance: null };
+  return [
+    createDemoQuota(now),
+    {
+      ...empty,
+      provider: 'openai',
+      agent: 'codex',
+      plan: 'Plus',
+      fetchedAt: ago(12),
+      windows: [
+        window('primary', 'session', null, 23, 168),
+        window('secondary', 'weekly', null, 41, 4 * 24 * 60),
+      ],
+      source: 'codex-session',
+    },
+    {
+      ...empty,
+      provider: 'xai',
+      agent: 'oh-my-pi',
+      plan: 'SuperGrok',
+      fetchedAt: ago(9),
+      windows: [
+        window('xai-oauth:credits:1w', 'weekly', 'SuperGrok Weekly Credits', 25, 2 * 24 * 60),
+        window('xai-oauth:product:grokbot:1w', 'weekly', 'GrokBot (Weekly)', 16, 2 * 24 * 60),
+        window('xai-oauth:product:grokbuild:1w', 'weekly', 'Grok Build (Weekly)', 9, 2 * 24 * 60),
+      ],
+      source: 'oh-my-pi-cache',
+    },
+    {
+      ...empty,
+      provider: 'github-copilot',
+      agent: 'oh-my-pi',
+      plan: 'Individual',
+      fetchedAt: ago(9),
+      windows: [
+        window('copilot:premium', 'monthly', 'Premium Requests', 74, 9 * 24 * 60),
+        window('copilot:chat', 'monthly', 'Chat Requests', 12, 9 * 24 * 60),
+        window('copilot:completions', 'monthly', 'Completions', 3, 9 * 24 * 60),
+      ],
+      source: 'oh-my-pi-cache',
+    },
+    {
+      ...empty,
+      provider: 'deepseek',
+      agent: null,
+      plan: null,
+      fetchedAt: ago(2),
+      windows: [],
+      balance: { amount: 12.3, currency: 'CNY' },
+      source: 'deepseek-api',
+    },
+  ];
 }
