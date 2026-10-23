@@ -1,5 +1,6 @@
-/* A live state as a 6px dot. Green is left only for Idle, where it is the one quiet word for
-   "ready"; a finished thing (complete) is muted, not green. */
+/* A live state or a status as a 6px dot (data-kind "live" or "status"). Green is left only for
+   Idle, where it is the one quiet word for "ready"; a finished thing (complete) is muted, not
+   green. */
 .dot {
   display: inline-block;
   flex: none;
@@ -15,10 +16,12 @@
   animation: pulse var(--pulse-period) ease-in-out infinite;
 }
 
-.dot[data-state="waiting"],
+/* Needs you: a session waiting for you, or a tool waiting for approval. A status's own
+   'waiting' is not this; it is the hollow dot below. */
+.dot[data-kind="live"][data-state="waiting"],
 .dot[data-state="approval"] {
   background: var(--warning);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 25%, transparent);
+  box-shadow: 0 0 0 3px var(--warning-tint);
   animation: pulse var(--pulse-period) ease-in-out infinite;
 }
 
@@ -36,6 +39,13 @@
 
 .dot[data-state="interrupted"] {
   background: var(--warning);
+}
+
+/* A status that started and was never seen to end: no colour, a hollow dot, as in StatusMark. */
+.dot[data-kind="status"][data-state="waiting"],
+.dot[data-kind="status"][data-state="unknown"] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--faint);
 }
 
 /* StatusMark: dot or glyph + word, 11px, no fill, no padding. */
@@ -76,7 +86,7 @@
 }
 
 .mark[data-state="approval"] .markDot {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 25%, transparent);
+  box-shadow: 0 0 0 3px var(--warning-tint);
   animation: pulse var(--pulse-period) ease-in-out infinite;
 }
 
@@ -85,12 +95,21 @@
   font-weight: 600;
 }
 
-.mark[data-state="interrupted"] {
-  color: var(--warning);
+/* Interrupted: an amber dot, the word stays muted (it does not need you). */
+.mark[data-state="interrupted"] .markDot {
+  background: var(--warning);
 }
 
 /* Started, never seen to end: no colour, a hollow dot. */
 .mark[data-state="waiting"] .markDot {
   background: transparent;
   box-shadow: inset 0 0 0 1px var(--faint);
+}
+
+/* The running and waiting-for-you pulse. Declared here because a CSS module renames the
+   keyframes its `animation`s name, so global.css's `pulse` never reached these dots. */
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
 }

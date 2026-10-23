@@ -319,11 +319,11 @@ describe('FlowView', () => {
     vi.setSystemTime(DEMO_NOW);
     renderFlow();
     const call = row(1);
-    expect(within(call).getByText('Thinking · 1:23')).toBeInTheDocument();
+    expect(call).toHaveTextContent('Thinking · 1:23');
     expect(within(call).getAllByText('claude-opus-5-5').length).toBeGreaterThan(0);
     expect(within(call).getAllByText('max').length).toBeGreaterThan(0);
     act(() => vi.advanceTimersByTime(1000));
-    expect(within(call).getByText('Thinking · 1:24')).toBeInTheDocument();
+    expect(call).toHaveTextContent('Thinking · 1:24');
   });
 
   it('shows token headers, the failed Edit and the final reply in turn 1', () => {

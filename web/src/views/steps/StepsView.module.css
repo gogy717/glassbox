@@ -344,3 +344,11 @@
     padding: 6px 12px 32px;
   }
 }
+
+/* Declared here: a module renames the keyframes its animations name, so global.css's `pulse`
+   would never run in this module. */
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}

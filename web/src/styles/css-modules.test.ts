@@ -85,4 +85,59 @@ describe('CSS modules', () => {
     );
     expect(unscoped).toEqual([]);
   });
+
+  // A module's `animation: pulse …` is renamed to the module's own `_pulse_<hash>`, so keyframes
+  // declared in global.css never run there: the status dots did not pulse until W1's fix round.
+  // Modules not yet fixed (D1 hand-offs; drop each once its wave declares its own keyframes):
+  const KNOWN = ['views/composer/Composer.module.css: pulse'];
+
+  it('animates a module only with keyframes the module declares', () => {
+    const missing = moduleFiles(SRC).flatMap((file) => {
+      const root = postcss.parse(readFileSync(file, 'utf8'));
+      const declared = new Set<string>();
+      root.walkAtRules(/keyframes$/i, (at) => {
+        declared.add(at.params.trim());
+      });
+      const named = new Set<string>();
+      root.walkDecls(/^animation(-name)?$/, (d) => {
+        for (const word of d.value.split(/[\s,]+/))
+          if (/^[a-z][\w-]*$/i.test(word) && !ANIMATION_WORDS.has(word)) named.add(word);
+      });
+      return [...named]
+        .filter((name) => !declared.has(name))
+        .map((name) => `${relative(SRC, file)}: ${name}`);
+    });
+    expect(missing.filter((m) => !KNOWN.includes(m))).toEqual([]);
+  });
 });
+
+/** The non-name words an `animation` shorthand can hold. */
+const ANIMATION_WORDS = new Set([
+  'none',
+  'infinite',
+  'normal',
+  'reverse',
+  'alternate',
+  'alternate-reverse',
+  'forwards',
+  'backwards',
+  'both',
+  'running',
+  'paused',
+  'linear',
+  'ease',
+  'ease-in',
+  'ease-out',
+  'ease-in-out',
+  'step-start',
+  'step-end',
+  'steps',
+  'var',
+  'end',
+  'start',
+  'jump-start',
+  'jump-end',
+  'jump-none',
+  'jump-both',
+  'cubic-bezier',
+]);

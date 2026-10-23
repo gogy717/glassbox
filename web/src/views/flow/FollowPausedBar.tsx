@@ -26,7 +26,7 @@ export function FollowPausedBar({ newest, onBack }: Props) {
         : t('follow.paused');
   return (
     <div className={css.bar}>
-      <LiveDot state={state ?? 'complete'} />
+      <LiveDot kind="status" state={state ?? 'complete'} />
       <span className={css.text} role="status">
         {text}
       </span>

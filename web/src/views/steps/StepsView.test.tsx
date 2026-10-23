@@ -228,7 +228,7 @@ describe('StepsView', () => {
     vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
     vi.setSystemTime(DEMO_NOW);
     renderSteps();
-    expect(within(step(1)).getByText('Thinking · 1:23')).toBeInTheDocument();
+    expect(step(1)).toHaveTextContent('Thinking · 1:23');
   });
 
   it('keeps the turn being read when follow is paused and a new turn arrives', () => {

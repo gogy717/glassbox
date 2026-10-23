@@ -6,7 +6,10 @@ export interface SwitchOption<V extends string> {
   value: V;
   /** The word shown. */
   label: string;
-  /** Shown struck through and skipped by the keyboard; say why in `title`. */
+  /**
+   * Shown struck through and never chosen, but still reachable with the arrow keys, so its
+   * `title` (why it is unavailable) is read out on focus as well as shown on hover.
+   */
   disabled?: boolean;
   /** Tooltip, e.g. why a disabled choice is unavailable. */
   title?: string;
@@ -14,8 +17,14 @@ export interface SwitchOption<V extends string> {
 
 /**
  * The two-word switch (D1): two (or three) words side by side, the chosen one underlined in ink.
- * It replaces the segmented controls with a raised thumb. A radio group: one tab stop on the
- * chosen word; the arrow keys, Home and End move the choice, skipping disabled words.
+ * It replaces the segmented controls with a raised thumb. A radio group: one tab stop, on the
+ * chosen word (on the first word when none is chosen); the arrow keys, Home and End move the
+ * focus over every word and choose the enabled ones.
+ *
+ * A disabled word is `aria-disabled`, not natively disabled: it stays focusable, so a keyboard or
+ * screen reader user reaches it and hears its `title` (the reason) as its description, as a
+ * pointer user sees it on hover. It is never chosen; if it is the current value, it keeps its
+ * underline under the strike-through.
  *
  * - `label`: the group's accessible name ("View", "Order").
  * - `value` / `onChange(value)`: controlled; `onChange` fires only for a different, enabled word.
@@ -35,31 +44,32 @@ export function Switch<V extends string>({
   onChange(value: V): void;
   size?: 'small' | 'medium';
 }) {
-  const enabled = options.filter((o) => !o.disabled);
-  const choose = (v: V) => {
-    if (v !== value) onChange(v);
+  const choose = (o: SwitchOption<V>) => {
+    if (!o.disabled && o.value !== value) onChange(o.value);
   };
   const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
-    const i = enabled.findIndex((o) => o.value === value);
+    const n = options.length;
+    // From the focused word: the chosen one, or a disabled word the arrows stopped on.
+    const i = options.findIndex((o) => o.value === e.currentTarget.dataset.value);
     const next =
       e.key === 'ArrowRight' || e.key === 'ArrowDown'
-        ? enabled[(i + 1) % enabled.length]
+        ? options[(i + 1) % n]
         : e.key === 'ArrowLeft' || e.key === 'ArrowUp'
-          ? enabled[(i - 1 + enabled.length) % enabled.length]
+          ? options[i <= 0 ? n - 1 : i - 1]
           : e.key === 'Home'
-            ? enabled[0]
+            ? options[0]
             : e.key === 'End'
-              ? enabled.at(-1)
+              ? options[n - 1]
               : undefined;
     if (!next) return;
     e.preventDefault();
-    choose(next.value);
-    // Focus follows the choice, as in a native radio group.
+    choose(next);
+    // Focus follows, as in a native radio group; on a disabled word it only brings the reason.
     const group = e.currentTarget.parentElement;
     group?.querySelector<HTMLElement>(`[data-value="${CSS.escape(next.value)}"]`)?.focus();
   };
-  // If the value matches no enabled word, the first enabled word keeps the tab stop.
-  const stop = enabled.some((o) => o.value === value) ? value : enabled[0]?.value;
+  // The chosen word holds the tab stop, enabled or not; with none chosen, the first word does.
+  const stop = options.some((o) => o.value === value) ? value : options[0]?.value;
   return (
     <div className={css.switch} role="radiogroup" aria-label={label} data-size={size}>
       {options.map((o) => (
@@ -72,10 +82,9 @@ export function Switch<V extends string>({
           data-value={o.value}
           aria-checked={o.value === value}
           aria-disabled={o.disabled || undefined}
-          disabled={o.disabled}
           title={o.title}
           tabIndex={o.value === stop ? 0 : -1}
-          onClick={() => choose(o.value)}
+          onClick={() => choose(o)}
           onKeyDown={onKeyDown}
         >
           {o.label}

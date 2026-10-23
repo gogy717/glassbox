@@ -29,6 +29,9 @@
   --error: #b21e25;
   --error-tint: rgba(209, 64, 63, 0.09);
   --warning: #865301;
+  /* The soft ring around a waiting-for-you dot, and the inset edge of the permission prompt:
+     --warning at 10% (14% in dark), as on the Foundations board. */
+  --warning-tint: rgba(134, 83, 1, 0.1);
   /* Text on an accent or error fill (primary and danger buttons). */
   --on-accent: #ffffff;
   --on-error: #ffffff;
@@ -188,6 +191,7 @@
     --error: #fe8c88;
     --error-tint: rgba(240, 112, 110, 0.12);
     --warning: #e0a458;
+    --warning-tint: rgba(224, 164, 88, 0.14);
     --on-accent: #0b1526;
     --on-error: #1c0707;
     --shadow: 0 10px 32px rgba(0, 0, 0, 0.5);
@@ -255,6 +259,7 @@
   --error: #fe8c88;
   --error-tint: rgba(240, 112, 110, 0.12);
   --warning: #e0a458;
+  --warning-tint: rgba(224, 164, 88, 0.14);
   --on-accent: #0b1526;
   --on-error: #1c0707;
   --shadow: 0 10px 32px rgba(0, 0, 0, 0.5);

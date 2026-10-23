@@ -1,7 +1,11 @@
+/// <reference types="node" />
+import { join } from 'node:path';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import { moduleCssValue } from '../test/module-css';
 import { Switch, type SwitchOption } from './Switch';
+import classes from './Switch.module.css';
 
 type Mode = 'continue' | 'copy' | 'fresh';
 const OPTIONS: SwitchOption<Mode>[] = [
@@ -10,8 +14,8 @@ const OPTIONS: SwitchOption<Mode>[] = [
   { value: 'fresh', label: 'New' },
 ];
 
-function Controlled({ onChange }: { onChange(v: Mode): void }) {
-  const [value, setValue] = useState<Mode>('copy');
+function Controlled({ onChange, initial = 'copy' }: { onChange(v: Mode): void; initial?: Mode }) {
+  const [value, setValue] = useState<Mode>(initial);
   return (
     <Switch<Mode>
       label="Mode"
@@ -24,6 +28,9 @@ function Controlled({ onChange }: { onChange(v: Mode): void }) {
     />
   );
 }
+
+const cssValue = (el: Element, prop: string) =>
+  moduleCssValue(join(import.meta.dirname, 'Switch.module.css'), classes, el, prop);
 
 describe('Switch', () => {
   it('is a named radio group with one tab stop, on the chosen word', () => {
@@ -46,40 +53,90 @@ describe('Switch', () => {
     expect([readable?.tabIndex, json?.tabIndex]).toEqual([-1, 0]);
   });
 
-  it('reports a different word only', () => {
+  it('reports a different, enabled word only', () => {
     const onChange = vi.fn();
     render(<Controlled onChange={onChange} />);
     fireEvent.click(screen.getByRole('radio', { name: 'Continue in a copy' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Continue' }));
     expect(onChange).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('radio', { name: 'New' }));
     expect(onChange).toHaveBeenCalledWith('fresh');
   });
 
-  it('moves the choice and focus with the arrow keys, Home and End, skipping disabled words', () => {
+  it('moves the focus with the arrow keys, Home and End, choosing only enabled words', () => {
     const onChange = vi.fn();
     render(<Controlled onChange={onChange} />);
-    const copy = screen.getByRole('radio', { name: 'Continue in a copy' });
-    copy.focus();
-    fireEvent.keyDown(copy, { key: 'ArrowRight' });
+    const [unavailable, copy, fresh] = screen.getAllByRole('radio') as HTMLElement[];
+    copy?.focus();
+    fireEvent.keyDown(copy as HTMLElement, { key: 'ArrowRight' });
     expect(onChange).toHaveBeenLastCalledWith('fresh');
-    const fresh = screen.getByRole('radio', { name: 'New' });
     expect(fresh).toHaveFocus();
     expect(fresh).toHaveAttribute('aria-checked', 'true');
-    // Wraps around, past the disabled first word.
-    fireEvent.keyDown(fresh, { key: 'ArrowRight' });
+    // Wraps to the disabled first word: focus only, so its reason is read; the choice stays.
+    fireEvent.keyDown(fresh as HTMLElement, { key: 'ArrowRight' });
+    expect(unavailable).toHaveFocus();
+    expect(fresh).toHaveAttribute('aria-checked', 'true');
+    fireEvent.keyDown(unavailable as HTMLElement, { key: 'ArrowRight' });
     expect(onChange).toHaveBeenLastCalledWith('copy');
-    fireEvent.keyDown(copy, { key: 'End' });
+    expect(copy).toHaveFocus();
+    fireEvent.keyDown(copy as HTMLElement, { key: 'End' });
     expect(onChange).toHaveBeenLastCalledWith('fresh');
-    fireEvent.keyDown(fresh, { key: 'Home' });
-    expect(onChange).toHaveBeenLastCalledWith('copy');
+    fireEvent.keyDown(fresh as HTMLElement, { key: 'Home' });
+    expect(unavailable).toHaveFocus();
+    fireEvent.keyDown(unavailable as HTMLElement, { key: 'ArrowLeft' });
+    expect(fresh).toHaveFocus();
     expect(onChange).not.toHaveBeenCalledWith('continue');
   });
 
-  it('shows an unavailable word disabled, with its reason', () => {
+  it('keeps an unavailable word reachable, with its reason, but never chosen', () => {
     render(<Controlled onChange={vi.fn()} />);
     const unavailable = screen.getByRole('radio', { name: 'Continue' });
-    expect(unavailable).toBeDisabled();
+    // aria-disabled, not disabled: a disabled button cannot take focus, and its title would
+    // then reach no keyboard or screen reader user.
+    expect(unavailable).not.toBeDisabled();
+    expect(unavailable).toHaveAttribute('aria-disabled', 'true');
     expect(unavailable).toHaveAttribute('title', 'Open in a terminal right now');
+    expect(unavailable).toHaveAccessibleDescription('Open in a terminal right now');
     expect(unavailable.tabIndex).toBe(-1);
+    expect(cssValue(unavailable, 'text-decoration-line')).toBe('line-through');
+    expect(cssValue(unavailable, 'color')).toBe('var(--faint)');
+  });
+
+  it('with no enabled word chosen, ArrowLeft goes to the last word', () => {
+    const onChange = vi.fn();
+    render(
+      <Switch
+        label="Order"
+        value={'none' as string}
+        options={[
+          { value: 'a', label: 'A' },
+          { value: 'b', label: 'B' },
+          { value: 'c', label: 'C' },
+        ]}
+        onChange={onChange}
+      />,
+    );
+    // Nothing is chosen, so the first word holds the tab stop.
+    const [a, , c] = screen.getAllByRole('radio') as HTMLElement[];
+    expect(a?.tabIndex).toBe(0);
+    a?.focus();
+    fireEvent.keyDown(a as HTMLElement, { key: 'ArrowLeft' });
+    expect(onChange).toHaveBeenLastCalledWith('c');
+    expect(c).toHaveFocus();
+  });
+
+  it('shows a chosen word that became unavailable as still chosen, struck through', () => {
+    const onChange = vi.fn();
+    render(<Controlled onChange={onChange} initial="continue" />);
+    const unavailable = screen.getByRole('radio', { name: 'Continue' });
+    expect(unavailable).toHaveAttribute('aria-checked', 'true');
+    expect(unavailable.tabIndex).toBe(0);
+    expect(cssValue(unavailable, 'text-decoration-line')).toBe('underline line-through');
+    expect(cssValue(unavailable, 'text-decoration-color')).toBe('var(--ink)');
+    expect(cssValue(unavailable, 'font-weight')).toBe('500');
+    // From it, ArrowLeft wraps to the last word and chooses it.
+    unavailable.focus();
+    fireEvent.keyDown(unavailable, { key: 'ArrowLeft' });
+    expect(onChange).toHaveBeenLastCalledWith('fresh');
   });
 });
