@@ -371,6 +371,40 @@ describe('SessionStore', () => {
     expect(fake.parsersFor('a')[0]?.live).toBe('busy');
   });
 
+  it('drops an activity worked out for a live state the poll has since replaced', async () => {
+    const p = await session('a', rec.req('ra', T(1)));
+    await setLive({ a: 'busy' });
+    const s = await startStore({ patchMs: 60_000 });
+    await vi.waitFor(() => expect(s.listSessions()[0]?.activity?.kind).toBe('thinking'), {
+      timeout: 2000,
+    });
+    // A patch goes out now, so the parser's next summary waits a whole patch gap.
+    await appendFile(p.main, lines(rec.req('rb', T(2))));
+    await vi.waitFor(() => expect(s.listSessions()[0]?.counts?.requests).toBe(2), {
+      timeout: 2000,
+    });
+
+    await setLive({ a: 'closed' });
+
+    await vi.waitFor(() => expect(s.listSessions()[0]?.live).toBe('closed'), { timeout: 2000 });
+    expect(s.listSessions()[0]).not.toHaveProperty('activity');
+  });
+
+  it('gives an idle session that is not open its idle spell since the last write', async () => {
+    await session('a', rec.req('ra', T(4)));
+    await setLive({ a: 'idle' });
+    const s = await startStore();
+    const listed = s.listSessions()[0];
+    expect(fake.parsersFor('a')).toHaveLength(0);
+    expect(listed?.activity).toEqual({
+      kind: 'idle',
+      tool: null,
+      target: null,
+      agentId: 'main',
+      since: listed?.updatedAt,
+    });
+  });
+
   it('discovers sessions created after start', async () => {
     await session('a', rec.req('ra', T(1)));
     const s = await startStore();

@@ -3,10 +3,12 @@ import type {
   LiveState,
   QuotaSnapshot,
   RequestDetail,
+  SessionActivity,
   SessionPatch,
   SessionSnapshot,
   SessionSummary,
 } from '../core/model.js';
+import { MAIN_AGENT_ID } from '../core/model.js';
 import type { QuotaSource } from '../core/quota-source.js';
 import { Coalescer } from './coalescer.js';
 import { errorText, OpenSession } from './open-session.js';
@@ -60,6 +62,29 @@ const MISSES_BEFORE_DROP = 2;
 /** busy and waiting both mean someone is mid-task in that session right now. */
 export function isActive(live: LiveState): boolean {
   return live === 'busy' || live === 'waiting';
+}
+
+/**
+ * The summary under the latest polled live state. An open session's parser hears of a change
+ * at once but may send its next summary up to a patch gap later: its activity was worked out
+ * for the old state, so it goes until then. Idle sessions are not opened in the background;
+ * their activity needs nothing a parser knows: idle since the last write.
+ */
+function withLive(summary: SessionSummary, live: LiveState): SessionSummary {
+  let next = summary;
+  if (summary.live !== live) {
+    const { activity: _stale, ...rest } = summary;
+    next = { ...rest, live };
+  }
+  if (live !== 'idle' || next.activity) return next;
+  const activity: SessionActivity = {
+    kind: 'idle',
+    tool: null,
+    target: null,
+    agentId: MAIN_AGENT_ID,
+    since: next.updatedAt,
+  };
+  return { ...next, activity };
 }
 
 export function compareSessions(a: SessionSummary, b: SessionSummary): number {
@@ -144,9 +169,7 @@ export class SessionStore {
   }
 
   listSessions(): SessionSummary[] {
-    return [...this.entries.values()]
-      .map((e) => (e.summary.live === e.live ? e.summary : { ...e.summary, live: e.live }))
-      .sort(compareSessions);
+    return [...this.entries.values()].map((e) => withLive(e.summary, e.live)).sort(compareSessions);
   }
 
   async getSnapshot(sessionId: string): Promise<SessionSnapshot | null> {

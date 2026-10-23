@@ -705,6 +705,18 @@ export class FakeParser implements SessionParser {
       title: this.title,
       live: this.live,
       updatedAt: this.updatedAt,
+      // Like a real parser's: busy means the model is on it.
+      ...(this.live === 'busy'
+        ? {
+            activity: {
+              kind: 'thinking' as const,
+              tool: null,
+              target: null,
+              agentId: 'main',
+              since: this.updatedAt,
+            },
+          }
+        : {}),
       usage: sumUsage([...this.requests.values()].map((r) => r.usage)),
       counts: {
         turns: 0,

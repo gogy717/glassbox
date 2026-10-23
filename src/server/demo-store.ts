@@ -1,3 +1,4 @@
+import { activityField, latestTurn } from '../core/activity.js';
 import {
   createDemoQuotas,
   createDemoSessions,
@@ -80,6 +81,7 @@ export class DemoStore implements AppStore {
     this.lane = inFlight
       ? { phase: 'thinking', ticksLeft: THINK_TICKS, requestId: inFlight.id }
       : { phase: 'idle', ticksLeft: IDLE_TICKS };
+    this.refreshActivity();
   }
 
   async start(): Promise<void> {
@@ -412,6 +414,23 @@ export class DemoStore implements AppStore {
       requests: s.requests.length,
       toolCalls: s.toolCalls.length,
       agents: s.agents.length,
+    };
+    this.refreshActivity();
+  }
+
+  /** What the demo session is doing, worked out as a parser would. */
+  private refreshActivity(): void {
+    const s = this.snap;
+    const { activity: _old, ...session } = s.session;
+    s.session = {
+      ...session,
+      ...activityField({
+        live: s.session.live,
+        toolCalls: s.toolCalls,
+        requests: s.requests,
+        lastTurn: latestTurn(s.turns),
+        updatedAt: s.session.updatedAt,
+      }),
     };
   }
 
