@@ -1,7 +1,7 @@
 import type { ModelRequest, TokenUsage } from '../../../../src/core/model.js';
 import { MAIN_AGENT_ID } from '../../../../src/core/model.js';
 import { totalTokens } from '../../../../src/core/usage.js';
-import { TokenBar } from '../../components/TokenBar';
+import { FigureText } from '../../components/FigureText';
 import type { OpenSession } from '../../data/store';
 import { useI18n } from '../../i18n';
 import { formatNumber } from '../../lib/format';
@@ -13,12 +13,12 @@ interface Props {
   onPick(req: ModelRequest): void;
 }
 
+/** The costliest requests: who, where (as numbered in the execution chain), how many tokens. */
 export function TopRequests({ open, requests, onPick }: Props) {
   const { t, intl } = useI18n();
-  const scale = requests[0]?.usage ? totalTokens(requests[0].usage) : 1;
   return (
-    <section className={css.card} aria-labelledby="tok-top">
-      <div className={css.cardHead}>
+    <section className={css.section} aria-labelledby="tok-top">
+      <div className={css.sectionHead}>
         <h3 id="tok-top">{t('tokens.top', { n: requests.length })}</h3>
       </div>
       <ol className={css.top}>
@@ -34,11 +34,13 @@ export function TopRequests({ open, requests, onPick }: Props) {
                     {r.agentId === MAIN_AGENT_ID ? t('crumb.main') : (agent?.label ?? r.agentId)}
                   </span>
                   <span className={css.topRef}>
-                    {t('tokens.requestRef', { turn: turn?.index ?? '—', n: r.index })}
+                    <FigureText
+                      k="tokens.requestRef"
+                      params={{ turn: turn?.index ?? '—', n: r.index }}
+                    />
                   </span>
                 </span>
-                <TokenBar usage={usage} scale={scale} />
-                <span className={`${css.rowValue} num`}>
+                <span className={`${css.topValue} figure`}>
                   {formatNumber(totalTokens(usage), intl)}
                 </span>
               </button>

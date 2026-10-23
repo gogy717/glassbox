@@ -1,19 +1,13 @@
-import {
-  AlertCircle,
-  ArrowUpRight,
-  Brain,
-  LoaderCircle,
-  MessageSquare,
-  ShieldQuestion,
-} from 'lucide-react';
+import { ArrowUpRight, Brain, CornerDownRight, MessageSquare } from 'lucide-react';
 import { memo, type ReactNode } from 'react';
 import { CategoryIcon } from '../../components/CategoryIcon';
-import { Ticking } from '../../components/Status';
+import { FigureText } from '../../components/FigureText';
+import { StatusMark, Ticking } from '../../components/Status';
 import { useSessionAgent, useSessionAgentKind } from '../../data/session-agent';
 import { useI18n } from '../../i18n';
 import { encryptsThinking } from '../../lib/agent-names';
 import { formatClock, formatDuration, formatNumber } from '../../lib/format';
-import type { Step } from '../../lib/steps';
+import { fitSummary, type Step } from '../../lib/steps';
 import css from './StepsView.module.css';
 
 interface Props {
@@ -21,6 +15,13 @@ interface Props {
   onOpen(requestId: string): void;
 }
 
+/** Characters of a path shown in the did list before it is cut in the middle. */
+const PATH_CHARS = 56;
+
+/**
+ * One step on the phase's rail: a node in the step's category colour (red when it failed), the
+ * head line in figures, then thought → said → did, and the error that ended it.
+ */
 export const StepItem = memo(function StepItem({ step, onOpen }: Props) {
   const { t, intl } = useI18n();
   const agent = useSessionAgent();
@@ -37,31 +38,42 @@ export const StepItem = memo(function StepItem({ step, onOpen }: Props) {
       t: formatDuration(step.thought.durationMs),
     });
   else thought = t(encrypted ? 'steps.noThoughtEncrypted' : 'steps.noThought');
+  // Only what asks for attention is marked; a finished step says nothing.
+  const mark =
+    step.outcome === 'error' || step.outcome === 'interrupted' || step.outcome === 'approval'
+      ? step.outcome
+      : null;
 
   return (
     <article
       className={css.step}
       aria-label={t('steps.step', { n: step.index })}
       data-outcome={step.outcome}
+      data-cat={step.category}
     >
+      <span className={css.node} aria-hidden="true" />
       <div className={css.stepHead}>
-        <span className={css.stepNo}>#{step.index}</span>
-        <span className="num">{formatClock(step.startedAt)}</span>
+        <span className={`${css.stepNo} figure`}>#{step.index}</span>
+        <span className="figure">{formatClock(step.startedAt)}</span>
         <span
-          className="num"
+          className="figure"
           title={step.durationMs === null ? t('flow.startUnknown', { agent }) : undefined}
         >
           {formatDuration(step.durationMs)}
         </span>
-        {(step.outcome === 'error' ||
-          step.outcome === 'interrupted' ||
-          step.outcome === 'approval') && (
-          <span className={css.outcome} data-outcome={step.outcome}>
-            {t(`status.${step.outcome}`)}
+        {mark && <StatusMark status={mark} />}
+        {step.tokens > 0 && (
+          <span>
+            <FigureText k="common.tokens" params={{ n: formatNumber(step.tokens, intl) }} />
           </span>
         )}
-        {step.tokens > 0 && (
-          <span className="num">{t('common.tokens', { n: formatNumber(step.tokens, intl) })}</span>
+        {step.thought.tokens > 0 && (
+          <span className={css.chip}>
+            <FigureText
+              k="steps.thinkingChip"
+              params={{ n: formatNumber(step.thought.tokens, intl) }}
+            />
+          </span>
         )}
         <button
           type="button"
@@ -73,15 +85,9 @@ export const StepItem = memo(function StepItem({ step, onOpen }: Props) {
           <ArrowUpRight size={14} aria-hidden="true" />
         </button>
       </div>
-      {step.error && <p className={css.stepError}>{step.error}</p>}
       <div className={css.line} data-kind="thought">
         <Brain size={14} aria-label={t('steps.thought')} />
         <p className={step.thought.text ? css.text : css.muted}>{thought}</p>
-        {step.thought.tokens > 0 && (
-          <span className={css.chip}>
-            {t('steps.thinkingTokens', { n: formatNumber(step.thought.tokens, intl) })}
-          </span>
-        )}
       </div>
       {step.said && (
         <div className={css.line} data-kind="said">
@@ -90,34 +96,27 @@ export const StepItem = memo(function StepItem({ step, onOpen }: Props) {
         </div>
       )}
       {step.did.length > 0 && (
-        <ul className={css.did} aria-label={t('steps.did')}>
-          {step.did.map((a) => (
-            <li key={a.toolCallId} data-status={a.status}>
-              <CategoryIcon category={a.category} />
-              <b>{a.name}</b>
-              <code title={a.summary}>{a.summary}</code>
-              {a.status === 'error' && (
-                <span className={css.bad}>
-                  <AlertCircle size={12} aria-hidden="true" />
-                  {t('status.error')}
-                </span>
-              )}
-              {a.status === 'approval' && (
-                <span className={css.approval}>
-                  <ShieldQuestion size={12} aria-hidden="true" />
-                  {t('status.approval')}
-                </span>
-              )}
-              {a.status === 'running' && (
-                <span className={css.running}>
-                  <LoaderCircle size={12} className="spin" aria-hidden="true" />
-                  {t('status.running')}
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
+        <div className={css.line} data-kind="did">
+          <CornerDownRight size={14} aria-hidden="true" />
+          <ul className={css.did} aria-label={t('steps.did')}>
+            {step.did.map((a) => (
+              <li key={a.toolCallId} data-status={a.status}>
+                <CategoryIcon category={a.category} />
+                <b>{a.name}</b>
+                <code title={a.summary}>{fitSummary(a.summary, PATH_CHARS)}</code>
+                {a.status === 'error' || a.status === 'approval' || a.status === 'running' ? (
+                  <StatusMark status={a.status} />
+                ) : (
+                  a.durationMs !== null && (
+                    <span className={`${css.didTime} figure`}>{formatDuration(a.durationMs)}</span>
+                  )
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
+      {step.error && <p className={css.stepError}>{step.error}</p>}
     </article>
   );
 });

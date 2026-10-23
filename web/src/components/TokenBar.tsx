@@ -80,7 +80,7 @@ export function TokenLegend({ usage }: { usage: TokenUsage }) {
         <li key={b} data-sub={b === 'thinking' || undefined}>
           <span className={css.swatch} data-bucket={b} aria-hidden="true" />
           <span className={css.legendLabel}>{t(LABEL_KEYS[b])}</span>
-          <span className={`${css.legendValue} num`}>{formatNumber(values[b], intl)}</span>
+          <span className={`${css.legendValue} figure`}>{formatNumber(values[b], intl)}</span>
         </li>
       ))}
     </ul>

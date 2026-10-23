@@ -97,10 +97,15 @@ describe('StepsView', () => {
   it('groups turn 1 into explore → edit → answer phases with time and tokens', () => {
     renderSteps({ route: { turnId: 'turn_m1' }, follow: false });
     const heads = screen.getAllByRole('heading', { level: 3 });
-    expect(heads.map((h) => h.textContent)).toEqual(['Explore ×1', 'Edit ×1', 'Answer ×1']);
+    expect(heads.map((h) => h.textContent)).toEqual(['Explore', 'Edit', 'Answer']);
     const explore = heads[0]?.closest('[data-phase]') as HTMLElement;
-    expect(within(explore).getByText('14s')).toBeInTheDocument();
-    expect(within(explore).getByText('32,070 tokens')).toBeInTheDocument();
+    expect(explore).toHaveTextContent('Explore×114s · 32,070 tokens');
+    // Figures in mono, words in the UI face.
+    expect([...explore.querySelectorAll('.figure')].map((f) => f.textContent)).toEqual([
+      '×1',
+      '14s',
+      '32,070',
+    ]);
   });
 
   it('shows the share of time each phase took', () => {
@@ -121,7 +126,7 @@ describe('StepsView', () => {
     );
     expect(first).toHaveTextContent('Let me look at how sessions are discovered first.');
     expect(within(first).getByText('rg -n "sortSessions" src')).toBeInTheDocument();
-    expect(within(first).getByText('610 thinking tokens')).toBeInTheDocument();
+    expect(first.querySelector('[class*="chip"]')).toHaveTextContent('610 thinking');
 
     const second = step(2);
     expect(within(second).getByText('Thought for 12s; content not recorded')).toBeInTheDocument();

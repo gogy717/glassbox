@@ -1,5 +1,5 @@
 import { Maximize2, ZoomIn, ZoomOut } from 'lucide-react';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { MAIN_AGENT_ID } from '../../../../src/core/model.js';
 import type { OpenSession } from '../../data/store';
 import { useElementWidth } from '../../data/useElementWidth';
@@ -45,6 +45,8 @@ const MAX_ZOOM = 10_000;
 
 export function Swimlanes({ open, lanes, now, selectedAgentId, agentName, onPick }: Props) {
   const { t } = useI18n();
+  // A plain id: url(#…) takes it as written.
+  const hatchId = `idle-${useId().replace(/[^\w-]/g, '')}`;
   const boxRef = useRef<HTMLDivElement>(null);
   const viewW = useElementWidth(boxRef, 640);
   const [collapse, setCollapse] = useState(true);
@@ -243,7 +245,7 @@ export function Swimlanes({ open, lanes, now, selectedAgentId, agentName, onPick
   )[];
 
   return (
-    <section className={css.card} aria-labelledby="time-lanes">
+    <section className={css.section} aria-labelledby="time-lanes">
       <div className={css.lanesHead}>
         <h3 id="time-lanes">{t('time.lanes')}</h3>
         <ul className={css.legend} aria-label={t('time.legend')}>
@@ -257,6 +259,12 @@ export function Swimlanes({ open, lanes, now, selectedAgentId, agentName, onPick
               <span className={css.legendLabel}>{t(`time.${k}`)}</span>
             </li>
           ))}
+          {scale.breaks.length > 0 && (
+            <li>
+              <span className={`${css.swatch} ${css.idleSwatch}`} aria-hidden="true" />
+              <span className={css.legendLabel}>{t('time.idleCollapsed')}</span>
+            </li>
+          )}
         </ul>
         <span className={css.hint}>{t('time.hint')}</span>
         <div className={css.tools}>
@@ -301,7 +309,11 @@ export function Swimlanes({ open, lanes, now, selectedAgentId, agentName, onPick
         <ul className={css.labels} aria-label={t('time.agents')} style={{ paddingTop: AXIS }}>
           {rows.rows.map((r) =>
             r.kind === 'group' ? (
-              <li key={`g:${r.label}:${r.y}`} className={css.groupLabel} style={{ height: GROUP }}>
+              <li
+                key={`g:${r.label}:${r.y}`}
+                className={`${css.groupLabel} section-label`}
+                style={{ height: GROUP }}
+              >
                 {r.label}
               </li>
             ) : (
@@ -327,6 +339,18 @@ export function Swimlanes({ open, lanes, now, selectedAgentId, agentName, onPick
             className={css.svg}
             onMouseLeave={() => setHover(null)}
           >
+            <defs>
+              {/* Idle time, collapsed: hatched in the waiting colour. */}
+              <pattern
+                id={hatchId}
+                width="6"
+                height="6"
+                patternUnits="userSpaceOnUse"
+                patternTransform="rotate(45)"
+              >
+                <rect className={css.hatch} width="3" height="6" />
+              </pattern>
+            </defs>
             {rows.rows.map((r) =>
               r.kind === 'lane' && r.lane.agentId === selectedAgentId ? (
                 <rect key="sel" className={css.selBand} x={0} y={r.y} width={width} height={ROW} />
@@ -357,6 +381,7 @@ export function Swimlanes({ open, lanes, now, selectedAgentId, agentName, onPick
               <g key={b.from}>
                 <rect
                   className={css.break}
+                  fill={`url(#${hatchId})`}
                   x={b.x0}
                   y={AXIS - 6}
                   width={b.x1 - b.x0}

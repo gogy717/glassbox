@@ -437,7 +437,7 @@ describe('App', () => {
   it('switches agent from the breadcrumb dropdown', () => {
     window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}`;
     render(<App store={demoStore()} connect={noConnect} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Switch agent' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Switch sub-agent' }));
     fireEvent.click(screen.getByRole('menuitem', { name: /Explore transcript format/ }));
     expect(window.location.hash).toContain('agent=a1b2c3d4e5f60718');
   });

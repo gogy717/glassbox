@@ -1,9 +1,10 @@
+/* Where tokens went: a lede, then sections separated by hairlines. No cards. */
 .view {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 20px;
   height: 100%;
-  padding: 16px;
+  padding: 20px 32px 32px;
   overflow-y: auto;
 }
 
@@ -13,178 +14,193 @@
   text-align: center;
 }
 
-.insight {
+/* The takeaway as the section's lede, the figure in mono; the plan's window under it, muted. */
+.lede {
   display: flex;
-  gap: 10px;
-  padding: 12px 14px;
-  border: 1px solid color-mix(in srgb, var(--warning) 40%, var(--border));
-  border-radius: var(--radius-xl);
-  background: color-mix(in srgb, var(--warning) 8%, var(--layer-1));
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.lede p {
+  margin: 0;
+}
+
+.ledeText {
+  font-size: var(--fs-readout);
+  font-weight: 500;
+  line-height: var(--lh);
   color: var(--text);
 }
 
-.insight svg {
-  flex: none;
-  margin-top: 1px;
-  color: var(--warning);
+.quota {
+  font-size: var(--fs-small);
+  color: var(--muted);
 }
 
-.insight p {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.insight p + p {
-  margin-top: 4px;
-}
-
-.card {
+.section {
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-width: 0;
-  padding: 14px 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  background: var(--layer-1);
 }
 
-.cardHead {
+.sectionHead {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: 12px;
+  min-height: 22px;
 }
 
-.cardHead h3 {
+.sectionHead h3 {
   margin: 0;
-  font-size: 12px;
-  font-weight: 650;
+  font-size: var(--fs-body);
+  font-weight: 600;
 }
 
-.big {
-  font-size: 18px;
-  font-weight: 700;
+.headAgent {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.total {
+  font-size: var(--fs-total);
+  font-weight: 500;
+  line-height: 1;
 }
 
 .columns {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
-  gap: 14px;
+  gap: 24px 40px;
   align-items: start;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
 }
 
 .stack {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 20px;
   min-width: 0;
 }
 
-.segmented {
-  display: flex;
-  padding: 2px;
-  border-radius: 7px;
-  background: var(--layer-2);
-}
-
-.segmented button {
-  height: 22px;
-  padding: 0 9px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.segmented button[aria-checked="true"] {
-  background: var(--layer-1);
-  color: var(--text);
-  font-weight: 600;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+/* The costliest list sits under the chart, a hairline between them. */
+.stack > .section + .section {
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
 }
 
 .rows {
   display: flex;
   flex-direction: column;
-  gap: 2px;
 }
 
 .agentRow,
-.groupRow,
-.topRow {
+.groupRow {
   display: grid;
-  grid-template-columns: minmax(110px, 38%) minmax(60px, 1fr) auto;
+  grid-template-columns: minmax(110px, 38%) minmax(60px, 1fr) minmax(72px, auto);
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
   min-height: 30px;
-  padding: 4px 8px;
+  padding: 4px 10px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-m);
   background: transparent;
   text-align: left;
 }
 
-.agentRow,
-.topRow {
+.agentRow {
   cursor: pointer;
+  transition: background var(--motion);
 }
 
-.agentRow:hover,
-.topRow:hover {
+.agentRow:hover {
   background: var(--layer-2);
 }
 
+/* Selected: the layer-2 surface and a 2px ink bar, as in the turn list. */
 .agentRow[aria-current="true"] {
-  background: var(--accent-tint);
+  background: var(--layer-2);
+  box-shadow: inset 2px 0 0 var(--ink);
 }
 
 .groupRow {
+  font-size: var(--fs-meta);
   color: var(--muted);
-  font-size: 11px;
 }
 
 .rowLabel {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--fs-body);
 }
 
-.rowLabel > span:last-child {
+.rowLabel > [data-label] {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.groupRow .rowLabel {
+  gap: 6px;
+  font-size: var(--fs-body);
+  color: var(--text);
+}
+
+.groupRow[data-group="phase"] .rowLabel {
+  color: var(--muted);
+}
+
+.groupKind {
+  font-size: var(--fs-meta);
+  color: var(--muted);
 }
 
 .rowValue {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--fs-body);
   white-space: nowrap;
 }
 
 .rowValue small {
-  font-size: 10px;
-  font-weight: 400;
+  font-size: var(--fs-meta);
   color: var(--muted);
 }
 
 .top {
   display: flex;
   flex-direction: column;
-  gap: 2px;
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.topRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: var(--radius-m);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--motion);
+}
+
+.topRow:hover {
+  background: var(--layer-2);
 }
 
 .topWho {
@@ -197,13 +213,33 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--fs-body);
+  font-weight: 500;
 }
 
 .topRef {
-  font-size: 10px;
+  font-size: var(--fs-meta);
   color: var(--muted);
+}
+
+.topValue {
+  flex: none;
+  font-size: var(--fs-body);
+}
+
+/* Context chart */
+.chartKey {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.keyDash {
+  width: 14px;
+  border-top: 1.5px dashed var(--warning);
 }
 
 .chartBox {
@@ -221,26 +257,23 @@
 }
 
 .axis {
-  fill: var(--faint);
+  fill: var(--muted);
+  font-family: var(--font-mono);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
 
-.area {
-  fill: color-mix(in srgb, var(--accent) 12%, transparent);
-}
-
 .line {
   fill: none;
-  stroke: var(--accent);
-  stroke-width: 2;
+  stroke: var(--text);
+  stroke-width: 1.5;
   stroke-linejoin: round;
 }
 
 .dot {
-  fill: var(--accent);
+  fill: var(--text);
   stroke: var(--layer-1);
-  stroke-width: 2;
+  stroke-width: 1.5;
 }
 
 .crosshair {
@@ -250,12 +283,20 @@
 
 .compaction {
   stroke: var(--warning);
+  stroke-width: 1;
   stroke-dasharray: 4 3;
 }
 
 .compactionLabel {
   fill: var(--warning);
-  font-size: 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+/* CJK never goes into the mono face. */
+.axis:lang(zh),
+.compactionLabel:lang(zh) {
+  font-family: var(--font-ui);
 }
 
 .hit {
@@ -269,11 +310,11 @@
   display: grid;
   gap: 2px;
   padding: 7px 9px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-l);
   background: var(--layer-1);
   box-shadow: var(--shadow);
-  font-size: 11px;
+  font-size: var(--fs-meta);
   white-space: nowrap;
   pointer-events: none;
   transform: translate(-50%, -100%);
@@ -281,12 +322,11 @@
 
 @media (max-width: 560px) {
   .view {
-    padding: 10px;
+    padding: 12px 16px 24px;
   }
 
   .agentRow,
-  .groupRow,
-  .topRow {
+  .groupRow {
     grid-template-columns: minmax(90px, 42%) minmax(40px, 1fr) auto;
   }
 }

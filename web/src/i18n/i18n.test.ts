@@ -1,12 +1,44 @@
 import { renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { en } from './en';
-import { translate, useI18n } from './index';
+import { translate, translateParts, useI18n } from './index';
 import { zh } from './zh';
 
 describe('useI18n', () => {
   it('speaks English outside any provider', () => {
     expect(renderHook(() => useI18n()).result.current.locale).toBe('en');
+  });
+});
+
+describe('translateParts', () => {
+  it('keeps the named params apart, the rest as text, plurals by the real value', () => {
+    expect(translateParts('en', 'common.tokens', { n: '1' })).toEqual([
+      { param: 'n', value: '1' },
+      ' token',
+    ]);
+    expect(translateParts('en', 'common.tokens', { n: '32,070' })).toEqual([
+      { param: 'n', value: '32,070' },
+      ' tokens',
+    ]);
+    expect(translateParts('zh', 'tokens.requestRef', { turn: 2, n: 1 })).toEqual([
+      '第',
+      { param: 'turn', value: '2' },
+      '轮 · 调用 #',
+      { param: 'n', value: '1' },
+    ]);
+  });
+
+  it('leaves params not named apart in the text, and joins back to what translate says', () => {
+    const params = { agent: 'recon:prior-art', pct: '52.6%' };
+    const parts = translateParts('en', 'tokens.insightAgent', params, ['pct']);
+    expect(parts).toEqual([
+      'recon:prior-art spent ',
+      { param: 'pct', value: '52.6%' },
+      ' of all tokens.',
+    ]);
+    expect(parts.map((p) => (typeof p === 'string' ? p : p.value)).join('')).toBe(
+      translate('en', 'tokens.insightAgent', params),
+    );
   });
 });
 

@@ -1,22 +1,59 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import type { AgentKind, QuotaSnapshot } from '../../../../src/core/model.js';
+import { SessionAgentContext } from '../../data/session-agent';
+import { createStore, StoreContext } from '../../data/store';
 import { I18nContext, makeI18n } from '../../i18n';
 import { demoOpen } from '../../test/demo';
 import { UiContext } from '../../ui';
 import { TokensView } from './TokensView';
 
-function renderTokens(agentId = 'main', open = demoOpen(), locale: 'en' | 'zh' = 'en') {
+function renderTokens(
+  agentId = 'main',
+  open = demoOpen(),
+  locale: 'en' | 'zh' = 'en',
+  { kind = 'claude-code', quotas = [] }: { kind?: AgentKind; quotas?: QuotaSnapshot[] } = {},
+) {
   const navigate = vi.fn();
   const setFollow = vi.fn();
+  const store = createStore();
+  store.applyEvent({ type: 'quota', quotas });
   render(
-    <I18nContext.Provider value={makeI18n(locale)}>
-      <UiContext.Provider value={{ follow: true, setFollow }}>
-        <TokensView open={open} agentId={agentId} navigate={navigate} />
-      </UiContext.Provider>
-    </I18nContext.Provider>,
+    <StoreContext.Provider value={store}>
+      <SessionAgentContext.Provider value={kind}>
+        <I18nContext.Provider value={makeI18n(locale)}>
+          <UiContext.Provider value={{ follow: true, setFollow }}>
+            <TokensView open={open} agentId={agentId} navigate={navigate} />
+          </UiContext.Provider>
+        </I18nContext.Provider>
+      </SessionAgentContext.Provider>
+    </StoreContext.Provider>,
   );
   return { navigate, setFollow };
 }
+
+const anthropic = (over: Partial<QuotaSnapshot> = {}): QuotaSnapshot => ({
+  provider: 'anthropic',
+  agent: 'claude-code',
+  plan: 'Max',
+  fetchedAt: new Date(Date.now() - 60_000).toISOString(),
+  stale: false,
+  windows: [
+    {
+      id: 'five_hour',
+      kind: 'session',
+      label: null,
+      model: null,
+      usedPercent: 62.4,
+      resetsAt: null,
+    },
+    { id: 'seven_day', kind: 'weekly', label: null, model: null, usedPercent: 38, resetsAt: null },
+  ],
+  extraUsage: null,
+  balance: null,
+  source: 'claude-code-cache',
+  ...over,
+});
 
 describe('TokensView', () => {
   it('leads with the conclusions', () => {
@@ -26,6 +63,34 @@ describe('TokensView', () => {
       '84.1% of all tokens were cache reads: every request re-read a growing context.',
     );
     expect(note).toHaveTextContent('recon:prior-art spent 52.6% of all tokens.');
+    // A lede, not an alert: the figures are set apart in mono, the words are not.
+    expect([...note.querySelectorAll('.figure')].map((f) => f.textContent)).toEqual([
+      '84.1%',
+      '52.6%',
+    ]);
+  });
+
+  it('places the plan’s window beside the session’s tokens, without adding them up', () => {
+    renderTokens('main', demoOpen(), 'en', { quotas: [anthropic()] });
+    expect(screen.getByRole('note')).toHaveTextContent(
+      'Claude plan, 5-hour window: 62% used. This session’s tokens are a separate count.',
+    );
+  });
+
+  it('dates a stale window, and speaks Chinese', () => {
+    renderTokens('main', demoOpen(), 'zh', {
+      quotas: [
+        anthropic({ stale: true, fetchedAt: new Date(Date.now() - 3 * 3600_000).toISOString() }),
+      ],
+    });
+    expect(screen.getByRole('note')).toHaveTextContent(
+      /Claude 套餐 · 5 小时窗口：已用 62%（.+的数据）。本会话的 token 单独计数，不在其中。/,
+    );
+  });
+
+  it('says nothing of a plan for an agent that can use any provider', () => {
+    renderTokens('main', demoOpen(), 'en', { kind: 'opencode', quotas: [anthropic()] });
+    expect(screen.getByRole('note')).not.toHaveTextContent(/plan/);
   });
 
   it('names the main agent in the UI language when it spent the most', () => {
@@ -60,7 +125,7 @@ describe('TokensView', () => {
 
   it('lists agents in tree order, or by spend, and opens one on click', () => {
     const { navigate } = renderTokens();
-    const byAgent = screen.getByRole('region', { name: 'By agent' });
+    const byAgent = screen.getByRole('region', { name: 'By sub-agent' });
     const labels = () =>
       within(byAgent)
         .getAllByRole('button', { name: /tokens$/ })
@@ -135,9 +200,9 @@ describe('TokensView', () => {
 
   it('ranks the costliest requests and jumps to one in the flow tab', () => {
     const { navigate, setFollow } = renderTokens();
-    const top = screen.getByRole('region', { name: 'Costliest 10 requests' });
+    const top = screen.getByRole('region', { name: 'Costliest 5 requests' });
     const items = within(top).getAllByRole('button');
-    expect(items).toHaveLength(10);
+    expect(items).toHaveLength(5);
     expect(items[0]).toHaveTextContent('recon:prior-art');
     expect(items[0]).toHaveTextContent('Conversation 1 · call #9');
     expect(items[0]).toHaveTextContent('193,900');

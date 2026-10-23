@@ -7,7 +7,17 @@ import { totalTokens } from '../../../src/core/usage.js';
 import type { Approvals } from '../data/approvals';
 import type { OpenSession } from '../data/store';
 import { findTurn, requestsOf, startUnknown, toolStatus, toolsOf } from '../views/flow/flow-model';
+import { middleEllipsis } from './format';
 import { summarizeInput, type ToolCategory, toolCategory } from './tool-category';
+
+/**
+ * A tool's summary fitted to `n` characters: a path is cut in the middle, so its root and its
+ * file name stay readable ("src/…/server/store.ts"); anything else (a command, a pattern) is
+ * left for the line's own end-ellipsis.
+ */
+export function fitSummary(summary: string, n: number): string {
+  return /^[^\s]*[/\\][^\s]*$/.test(summary) ? middleEllipsis(summary, n) : summary;
+}
 
 /**
  * Web lookups count as exploring: like reading files, they gather context without changing
@@ -22,6 +32,8 @@ export interface StepAction {
   summary: string;
   /** 'approval': running but blocked on the person answering a permission prompt. */
   status: ToolCall['status'] | 'approval';
+  /** How long the tool took; null while it runs, or when its end was not recorded. */
+  durationMs: number | null;
 }
 
 export interface Step {
@@ -89,6 +101,7 @@ function stepOf(req: ModelRequest, tools: ToolCall[], now: number, approvals?: A
     category: toolCategory(t.name, t.input),
     summary: summarizeInput(t),
     status: toolStatus(t, approvals) === 'approval' ? ('approval' as const) : t.status,
+    durationMs: t.durationMs,
   }));
   const thinking = req.blocks.filter((b) => b.kind === 'thinking');
   const texts = thinking.map((b) => b.text).filter((t): t is string => !!t);

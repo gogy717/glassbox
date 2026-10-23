@@ -1,10 +1,12 @@
+/* The timeline: swimlanes first, then where the time went and the slowest steps, separated by
+   hairlines. No cards. */
 .view {
   --hatch-idle: repeating-linear-gradient(45deg, var(--seg-waiting) 0 3px, transparent 3px 6px);
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 24px;
   height: 100%;
-  padding: 16px;
+  padding: 20px 32px 32px;
   overflow-y: auto;
 }
 
@@ -14,40 +16,47 @@
   text-align: center;
 }
 
-.columns {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr));
-  gap: 14px;
-  align-items: start;
-}
-
-.card {
+.section {
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-width: 0;
-  padding: 14px 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  background: var(--layer-1);
 }
 
-.card h3 {
+.section h3 {
   margin: 0;
-  font-size: 12px;
-  font-weight: 650;
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+
+.headAgent {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr));
+  gap: 24px 40px;
+  align-items: start;
+}
+
+/* Each column starts at a hairline of its own. */
+.columns > .section {
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
 }
 
 .bar {
   display: flex;
   gap: 2px;
-  height: 14px;
+  height: 8px;
 }
 
 .bar > span {
   flex-basis: 0;
   min-width: 2px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
 }
 
 .legend {
@@ -57,19 +66,32 @@
   margin: 0;
   padding: 0;
   list-style: none;
-  font-size: 11px;
+  font-size: var(--fs-small);
+}
+
+/* Where the time went: a two-column legend. */
+.columns .legend {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 24px;
 }
 
 .legend li {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
 }
 
 .swatch {
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: var(--radius-xs);
+}
+
+.idleSwatch {
+  background: var(--hatch-idle);
 }
 
 .legendLabel {
@@ -77,13 +99,27 @@
 }
 
 .legendValue {
-  font-weight: 600;
+  font-weight: 500;
+}
+
+.active {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 4px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-small);
+  color: var(--muted);
+}
+
+.active .figure {
+  color: var(--text);
 }
 
 .slowList {
   display: flex;
   flex-direction: column;
-  gap: 2px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -91,17 +127,19 @@
 
 .slowRow {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
-  padding: 5px 8px;
+  min-height: 38px;
+  padding: 4px 10px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-m);
   background: transparent;
-  color: var(--muted);
+  color: var(--faint);
   text-align: left;
   cursor: pointer;
+  transition: background var(--motion);
 }
 
 .slowRow:hover {
@@ -118,13 +156,21 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--fs-body);
+  font-weight: 500;
   color: var(--text);
 }
 
 .slowWhat {
-  font-size: 10.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+
+.slowWhat code {
+  font-family: var(--font-mono);
 }
 
 .slowWhat em {
@@ -133,62 +179,72 @@
 }
 
 .slowDur {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--fs-body);
+  font-weight: 500;
   color: var(--text);
 }
 
+/* Still running: the figure is live. */
+.slowRow[data-live] .slowDur {
+  color: var(--accent);
+}
+
+/* Swimlanes: legend, hint and controls on one line. */
 .lanesHead {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px 16px;
+  gap: 8px 20px;
 }
 
 .hint {
-  font-size: 10.5px;
-  color: var(--faint);
+  margin-left: auto;
+  font-size: var(--fs-meta);
+  color: var(--muted);
 }
 
 .tools {
   display: flex;
-  gap: 4px;
-  margin-left: auto;
+  gap: 6px;
 }
 
 .tools button {
   display: inline-grid;
   place-items: center;
   min-width: 28px;
-  height: 26px;
-  padding: 0 6px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--layer-1);
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-l);
+  background: transparent;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--fs-small);
   cursor: pointer;
+  transition:
+    color var(--motion),
+    border-color var(--motion);
 }
 
 .tools button:hover {
   color: var(--text);
 }
 
+/* Pressed: an ink border, not a tint. */
 .tools .toggle[aria-pressed="true"] {
-  border-color: var(--accent);
-  background: var(--accent-tint);
-  color: var(--accent);
+  border-color: var(--ink);
+  color: var(--text);
 }
 
 .lanes {
   display: grid;
-  grid-template-columns: minmax(96px, 180px) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(96px, 200px) minmax(0, 1fr) auto;
   border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
 
 .labels {
   margin: 0;
-  padding: 0 8px 0 0;
+  padding: 0 12px 0 0;
   list-style: none;
   border-right: 1px solid var(--border);
 }
@@ -202,10 +258,7 @@
 }
 
 .groupLabel {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--faint);
+  color: var(--muted);
 }
 
 .laneLabel {
@@ -230,16 +283,17 @@
 }
 
 .laneLabel button[aria-current="true"] {
-  font-weight: 700;
-  color: var(--accent);
+  font-weight: 600;
+  color: var(--text);
 }
 
 .totals {
   margin: 0;
-  padding: 0 0 0 10px;
+  padding: 0 0 0 12px;
   list-style: none;
   border-left: 1px solid var(--border);
-  font-size: 11px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
   color: var(--muted);
 }
 
@@ -272,8 +326,9 @@
   user-select: none;
 }
 
+/* The selected agent's lane. */
 .selBand {
-  fill: var(--accent-tint);
+  fill: var(--layer-2);
 }
 
 .tick {
@@ -284,19 +339,25 @@
 .tickLabel,
 .breakLabel,
 .nowLabel {
-  fill: var(--faint);
-  font-size: 9.5px;
+  fill: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
 
+/* CJK never goes into the mono face ("空闲 4m12s"). */
+.breakLabel:lang(zh) {
+  font-family: var(--font-ui);
+}
+
+/* Collapsed idle: hatched, with dashed edges. */
 .break {
-  fill: var(--layer-2);
   stroke: var(--border-strong);
   stroke-dasharray: 3 3;
 }
 
-.breakLabel {
-  fill: var(--muted);
+.hatch {
+  fill: var(--seg-waiting);
 }
 
 .seg {
@@ -310,17 +371,17 @@
 }
 
 .seg[data-live] {
-  animation: pulse 1.6s ease-in-out infinite;
+  animation: pulse var(--pulse-period) ease-in-out infinite;
 }
 
 .nowLine {
-  stroke: var(--accent);
+  stroke: var(--text);
   stroke-width: 1.5;
 }
 
 .nowLabel {
-  fill: var(--accent);
-  font-weight: 600;
+  fill: var(--text);
+  font-weight: 500;
 }
 
 .tooltip {
@@ -330,11 +391,11 @@
   gap: 2px;
   max-width: 260px;
   padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-l);
   background: var(--layer-1);
   box-shadow: var(--shadow);
-  font-size: 11px;
+  font-size: var(--fs-meta);
   pointer-events: none;
 }
 
@@ -348,7 +409,7 @@
 
 @media (max-width: 560px) {
   .view {
-    padding: 10px;
+    padding: 12px 16px 24px;
   }
 
   .hint,
@@ -358,5 +419,9 @@
 
   .lanes {
     grid-template-columns: minmax(80px, 120px) minmax(0, 1fr);
+  }
+
+  .columns .legend {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

@@ -1,6 +1,6 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useCallback, useLayoutEffect, useMemo, useRef } from 'react';
-import { CategoryIcon } from '../../components/CategoryIcon';
+import { FigureText } from '../../components/FigureText';
 import { useApprovalsContext } from '../../data/approvals';
 import type { OpenSession } from '../../data/store';
 import { useNow } from '../../data/useNow';
@@ -94,7 +94,7 @@ export function StepsView({ open, agentId, route, navigate }: Props) {
   );
 }
 
-/** Where the turn's time went, phase by phase, with a labelled legend per category. */
+/** Where the turn's time went, phase by phase: a tape, and a legend with each category's share. */
 function PhaseShares({ phases }: { phases: Phase[] }) {
   const { t } = useI18n();
   const total = phases.reduce((s, p) => s + (p.durationMs ?? 0), 0);
@@ -109,11 +109,7 @@ function PhaseShares({ phases }: { phases: Phase[] }) {
             <span
               key={`${p.category}-${p.steps[0]?.requestId}`}
               data-cat={p.category}
-              style={{
-                flexGrow: p.durationMs,
-                background:
-                  p.category === 'other' ? 'var(--hatch-other)' : `var(--cat-${p.category})`,
-              }}
+              style={{ flexGrow: p.durationMs }}
               title={`${t(`steps.cat.${p.category}`)} ${formatDuration(p.durationMs)}`}
             />
           ) : null,
@@ -123,10 +119,11 @@ function PhaseShares({ phases }: { phases: Phase[] }) {
         {[...byCat].map(([cat, ms]) => (
           <li key={cat}>
             <span className={css.swatch} data-cat={cat} aria-hidden="true" />
-            {t('steps.share', {
-              cat: t(`steps.cat.${cat}`),
-              pct: `${Math.round((ms / total) * 100)}%`,
-            })}
+            <FigureText
+              k="steps.share"
+              params={{ cat: t(`steps.cat.${cat}`), pct: `${Math.round((ms / total) * 100)}%` }}
+              figures={['pct']}
+            />
           </li>
         ))}
       </ul>
@@ -188,16 +185,16 @@ function StepList({ phases, running, follow, onUserScrollAway, onOpen }: ListPro
             >
               {row.kind === 'phase' ? (
                 <div className={css.phaseHead} data-phase={row.phase.category}>
-                  <CategoryIcon category={row.phase.category} size={16} />
-                  <h3>
-                    {t('steps.catCount', {
-                      cat: t(`steps.cat.${row.phase.category}`),
-                      n: row.phase.steps.length,
-                    })}
-                  </h3>
-                  <span className="num">{formatDuration(row.phase.durationMs)}</span>
-                  <span className="num">
-                    {t('common.tokens', { n: formatNumber(row.phase.tokens, intl) })}
+                  <span className={css.swatch} data-cat={row.phase.category} aria-hidden="true" />
+                  <h3>{t(`steps.cat.${row.phase.category}`)}</h3>
+                  <span className={`${css.phaseCount} figure`}>×{row.phase.steps.length}</span>
+                  <span className={css.phaseMeta}>
+                    <span className="figure">{formatDuration(row.phase.durationMs)}</span>
+                    {' · '}
+                    <FigureText
+                      k="common.tokens"
+                      params={{ n: formatNumber(row.phase.tokens, intl) }}
+                    />
                   </span>
                 </div>
               ) : (

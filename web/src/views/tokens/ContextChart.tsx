@@ -41,12 +41,17 @@ function niceMax(v: number): number {
 }
 
 interface Props {
-  title: string;
+  /** Whose context this is: "Main", or a sub-agent's name. */
+  agent: string;
   points: ContextPoint[];
   onPick(requestId: string): void;
 }
 
-export function ContextChart({ title, points, onPick }: Props) {
+/**
+ * Context size per request: a line on a hairline grid, a dot per request (click opens it in the
+ * execution chain), compactions as amber dashed rules. No area fill: the line is the data.
+ */
+export function ContextChart({ agent, points, onPick }: Props) {
   const { t, intl } = useI18n();
   const boxRef = useRef<HTMLDivElement>(null);
   const width = useElementWidth(boxRef);
@@ -59,10 +64,9 @@ export function ContextChart({ title, points, onPick }: Props) {
     const x = (i: number) => labelX(i, points.length, width);
     const y = (v: number) => PAD.t + (1 - v / max) * (H - PAD.t - PAD.b);
     const line = points.map((p, i) => `${i ? 'L' : 'M'}${x(i)},${y(p.context)}`).join('');
-    const area = points.length ? `${line}L${x(points.length - 1)},${y(0)}L${x(0)},${y(0)}Z` : '';
     const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * max);
     // Each point owns exactly its share of the width, so neighbouring hit areas never overlap.
-    return { x, y, line, area, ticks, slot: points.length > 1 ? step : innerW };
+    return { x, y, line, ticks, slot: points.length > 1 ? step : innerW };
   }, [points, width]);
 
   const labels = useMemo(() => axisLabels(points.length, width), [points.length, width]);
@@ -72,11 +76,24 @@ export function ContextChart({ title, points, onPick }: Props) {
       ? `${t('flow.outsideTurns')} · ${t('flow.callTitle', { n: p.call })}`
       : t('tokens.requestRef', { turn: p.turn, n: p.call });
   const hovered = hover === null ? null : points[hover];
+  const compacted = points.some((p) => p.compacted);
 
   return (
-    <section className={css.card} aria-labelledby="tok-context">
-      <div className={css.cardHead}>
-        <h3 id="tok-context">{title}</h3>
+    <section className={css.section} aria-labelledby="tok-context">
+      <div className={css.sectionHead}>
+        <h3 id="tok-context">
+          {t('tokens.contextGrowth')} <span className={css.headAgent}>· {agent}</span>
+        </h3>
+        <span className={css.chartKey} aria-hidden="true">
+          {t('tokens.perRequest')}
+          {compacted && (
+            <>
+              {' · '}
+              <span className={css.keyDash} />
+              {t('tokens.compaction')}
+            </>
+          )}
+        </span>
       </div>
       <div className={css.chartBox} ref={boxRef}>
         <svg
@@ -122,7 +139,6 @@ export function ContextChart({ title, points, onPick }: Props) {
               </g>
             ) : null,
           )}
-          <path className={css.area} d={geo.area} />
           <path className={css.line} d={geo.line} />
           {hovered && hover !== null && (
             <line
@@ -140,7 +156,7 @@ export function ContextChart({ title, points, onPick }: Props) {
               data-active={hover === i || undefined}
               cx={geo.x(i)}
               cy={geo.y(p.context)}
-              r={hover === i ? 5 : 3.5}
+              r={hover === i ? 4 : 2.6}
             />
           ))}
           {points.map((p, i) => (

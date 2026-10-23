@@ -1,7 +1,10 @@
 import { Workflow } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import type { RunStatus } from '../../../../src/core/model.js';
 import { totalTokens } from '../../../../src/core/usage.js';
-import { LiveDot } from '../../components/Status';
+import { FigureText } from '../../components/FigureText';
+import { StatusMark, type UiStatus } from '../../components/Status';
+import { Switch } from '../../components/Switch';
 import { TokenBar } from '../../components/TokenBar';
 import { useI18n } from '../../i18n';
 import { formatNumber } from '../../lib/format';
@@ -15,6 +18,9 @@ interface Props {
   selectedId: string;
   onSelect(agentId: string): void;
 }
+
+/** A sub-agent's run status as a mark: one never seen to end is "started", not a colour. */
+const markOf = (s: RunStatus): UiStatus => (s === 'unknown' ? 'waiting' : s);
 
 export function AgentBreakdown({ rows, selectedId, onSelect }: Props) {
   const { t, intl } = useI18n();
@@ -30,43 +36,45 @@ export function AgentBreakdown({ rows, selectedId, onSelect }: Props) {
   const scale = Math.max(1, ...shown.map((r) => totalTokens(barUsage(r))));
 
   return (
-    <section className={css.card} aria-labelledby="tok-by-agent">
-      <div className={css.cardHead}>
+    <section className={css.section} aria-labelledby="tok-by-agent">
+      <div className={css.sectionHead}>
         <h3 id="tok-by-agent">{t('tokens.byAgent')}</h3>
-        <div className={css.segmented} role="radiogroup" aria-label={t('tokens.byAgent')}>
-          {(['tree', 'spend'] as const).map((s) => (
-            // biome-ignore lint/a11y/useSemanticElements: a two-option segmented control, styled as buttons
-            <button
-              key={s}
-              type="button"
-              role="radio"
-              aria-checked={sort === s}
-              onClick={() => setSort(s)}
-            >
-              {t(s === 'tree' ? 'tokens.sortTree' : 'tokens.sortSpend')}
-            </button>
-          ))}
-        </div>
+        <Switch<Sort>
+          label={t('tokens.byAgent')}
+          value={sort}
+          size="small"
+          options={[
+            { value: 'tree', label: t('tokens.sortTree') },
+            { value: 'spend', label: t('tokens.sortSpend') },
+          ]}
+          onChange={setSort}
+        />
       </div>
       <div className={css.rows}>
         {shown.map((r) => {
           const usage = barUsage(r);
           const n = formatNumber(totalTokens(usage), intl);
-          // Indent inside the label column so every bar starts at the same x.
+          // Indent inside the label column so every tape starts at the same x and compares.
           const indent = { paddingLeft: r.depth * 16 };
           if (r.kind !== 'agent')
             return (
-              <div key={`${r.kind}:${r.id}`} className={css.groupRow}>
+              <div key={`${r.kind}:${r.id}`} className={css.groupRow} data-group={r.kind}>
                 <span className={css.rowLabel} style={indent}>
                   {r.kind === 'workflow' && <Workflow size={12} aria-hidden="true" />}
-                  <span data-group={r.kind}>{r.label}</span>
+                  <span className={r.kind === 'phase' ? 'section-label' : undefined}>
+                    {r.label}
+                  </span>
+                  {r.kind === 'workflow' && (
+                    <span className={css.groupKind}>{t('tokens.workflow')}</span>
+                  )}
                 </span>
-                <TokenBar usage={usage} scale={scale} height={8} />
-                <span className={`${css.rowValue} num`}>{n}</span>
+                <TokenBar usage={usage} scale={scale} height={6} />
+                <span className={`${css.rowValue} figure`}>{n}</span>
               </div>
             );
           const hasKids = totalTokens(r.total) !== totalTokens(r.own);
           const label = r.agent.id === 'main' ? t('crumb.main') : r.label;
+          const status = markOf(r.agent.status);
           return (
             <button
               key={r.id}
@@ -74,19 +82,22 @@ export function AgentBreakdown({ rows, selectedId, onSelect }: Props) {
               className={css.agentRow}
               aria-current={r.id === selectedId ? 'true' : undefined}
               // The row's name replaces its contents, so it names the agent's state too.
-              aria-label={t('tokens.rowLabel', { label, status: t(`status.${r.agent.status}`), n })}
+              aria-label={t('tokens.rowLabel', { label, status: t(`status.${status}`), n })}
               onClick={() => onSelect(r.id)}
             >
               <span className={css.rowLabel} style={indent}>
-                <LiveDot state={r.agent.status} label={t(`status.${r.agent.status}`)} />
+                <StatusMark status={status} compact />
                 <span data-label>{label}</span>
               </span>
-              <TokenBar usage={usage} scale={scale} />
-              <span className={`${css.rowValue} num`}>
-                {n}
+              <TokenBar usage={usage} scale={scale} height={6} />
+              <span className={css.rowValue}>
+                <span className="figure">{n}</span>
                 {hasKids && sort === 'tree' && (
                   <small>
-                    {t('tokens.inclSub', { n: formatNumber(totalTokens(r.total), intl) })}
+                    <FigureText
+                      k="tokens.inclSub"
+                      params={{ n: formatNumber(totalTokens(r.total), intl) }}
+                    />
                   </small>
                 )}
               </span>

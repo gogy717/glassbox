@@ -1,6 +1,8 @@
-import { Timer, Wrench } from 'lucide-react';
+import { Timer } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import { MAIN_AGENT_ID } from '../../../../src/core/model.js';
+import { CategoryIcon } from '../../components/CategoryIcon';
+import { FigureText } from '../../components/FigureText';
 import { useApprovalsContext } from '../../data/approvals';
 import type { OpenSession } from '../../data/store';
 import { useNow } from '../../data/useNow';
@@ -8,8 +10,9 @@ import { useThrottled } from '../../data/useThrottled';
 import { type MessageKey, useI18n } from '../../i18n';
 import { subtreeIds } from '../../lib/agents';
 import { formatDuration } from '../../lib/format';
-import { slowest, timeBreakdown, timeSegments } from '../../lib/time-stats';
-import { summarizeInput, type ToolCategory } from '../../lib/tool-category';
+import { fitSummary } from '../../lib/steps';
+import { activeMs, slowest, timeBreakdown, timeSegments } from '../../lib/time-stats';
+import { summarizeInput, type ToolCategory, toolCategory } from '../../lib/tool-category';
 import type { Navigate } from '../../router';
 import { useUi } from '../../ui';
 import { Swimlanes } from './Swimlanes';
@@ -40,6 +43,8 @@ const TOOL_ORDER: ToolCategory[] = [
   'other',
 ];
 const SLOWEST_N = 10;
+/** Characters of a path in the slowest list before it is cut in the middle. */
+const PATH_CHARS = 48;
 
 export function TimeView({ open, agentId, navigate }: Props) {
   const { t } = useI18n();
@@ -106,6 +111,8 @@ export function TimeView({ open, agentId, navigate }: Props) {
     },
   ].filter((p) => p.ms > 0);
   const total = parts.reduce((s, p) => s + p.ms, 0);
+  // The same figure as the agent's lane total, so the two never disagree.
+  const active = activeMs(lanes.find((l) => l.agentId === agentId)?.segments ?? []);
 
   if (lanes.every((l) => l.segments.length === 0))
     return <p className={css.empty}>{t('time.empty')}</p>;
@@ -123,8 +130,10 @@ export function TimeView({ open, agentId, navigate }: Props) {
       />
 
       <div className={css.columns}>
-        <section className={css.card} aria-labelledby="time-breakdown">
-          <h3 id="time-breakdown">{t('time.breakdown', { agent: name(agentId) })}</h3>
+        <section className={css.section} aria-labelledby="time-breakdown">
+          <h3 id="time-breakdown">
+            {t('time.breakdown')} <span className={css.headAgent}>· {name(agentId)}</span>
+          </h3>
           {total > 0 && (
             <div className={css.bar} aria-hidden="true">
               {parts.map((p) => (
@@ -141,43 +150,62 @@ export function TimeView({ open, agentId, navigate }: Props) {
               <li key={p.key}>
                 <span className={css.swatch} style={{ background: p.color }} aria-hidden="true" />
                 <span className={css.legendLabel}>{p.label}</span>
-                <span className={`${css.legendValue} num`}>{formatDuration(p.ms)}</span>
+                <span className={`${css.legendValue} figure`}>{formatDuration(p.ms)}</span>
               </li>
             ))}
           </ul>
+          <p className={css.active}>
+            <span>{t('time.activeTime')}</span>
+            <span className="figure">{formatDuration(active)}</span>
+          </p>
         </section>
 
-        <section className={css.card} aria-labelledby="time-slowest">
+        <section className={css.section} aria-labelledby="time-slowest">
           <h3 id="time-slowest">{t('time.slowest', { n: slow.length })}</h3>
           <ol className={css.slowList}>
             {slow.map((s) => {
               const req = open.requests.get(s.requestId);
               const tool = s.kind === 'tool' ? open.toolCalls.get(s.id) : undefined;
+              const summary = tool && fitSummary(summarizeInput(tool), PATH_CHARS);
               return (
                 <li key={`${s.kind}:${s.id}`}>
                   <button
                     type="button"
                     className={css.slowRow}
+                    data-live={s.live || undefined}
                     onClick={() => openRequest(s.requestId)}
                   >
-                    {s.kind === 'tool' ? (
-                      <Wrench size={13} aria-hidden="true" />
+                    {tool ? (
+                      <CategoryIcon category={toolCategory(tool.name, tool.input)} />
                     ) : (
-                      <Timer size={13} aria-hidden="true" />
+                      <Timer size={14} aria-hidden="true" />
                     )}
                     <span className={css.slowWho}>
                       <span className={css.slowAgent}>{name(s.agentId)}</span>
                       <span className={css.slowWhat}>
-                        {s.kind === 'tool'
-                          ? [s.name, tool && summarizeInput(tool)].filter(Boolean).join(' · ')
-                          : t('tokens.requestRef', {
+                        {s.kind === 'tool' ? (
+                          <>
+                            {s.name}
+                            {summary && (
+                              <>
+                                {' · '}
+                                <code title={summarizeInput(tool)}>{summary}</code>
+                              </>
+                            )}
+                          </>
+                        ) : (
+                          <FigureText
+                            k="tokens.requestRef"
+                            params={{
                               turn: (req?.turnId && open.turns.get(req.turnId)?.index) || '—',
                               n: req?.index ?? '—',
-                            })}
+                            }}
+                          />
+                        )}
                         {s.live && <em> · {t('time.live')}</em>}
                       </span>
                     </span>
-                    <span className={`${css.slowDur} num`}>{formatDuration(s.durationMs)}</span>
+                    <span className={`${css.slowDur} figure`}>{formatDuration(s.durationMs)}</span>
                   </button>
                 </li>
               );
