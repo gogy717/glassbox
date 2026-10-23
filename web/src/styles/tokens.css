@@ -64,22 +64,55 @@
   /* Blocked on the person answering a permission prompt; follows the theme's warning colour. */
   --seg-approval: var(--warning);
 
-  /* Coding-agent tags. The fill carries the agent: its lightness and hue keep every pair of
-     agents apart, also under protanopia / deuteranopia, and away from the status, accent and
-     tool-card colours, which sit at other lightnesses. The text is a near-ink shade of the same
-     hue, ≥ 4.5:1 on its fill. tokens.test.ts holds all of this; the tag names its agent too. */
-  --agent-claude-code-fg: #4a2010;
-  --agent-claude-code-bg: #c38873;
-  --agent-codex-fg: #023538;
-  --agent-codex-bg: #7af4fc;
-  --agent-grok-fg: #31254d;
-  --agent-grok-bg: #ad91f2;
-  --agent-oh-my-pi-fg: #461e36;
-  --agent-oh-my-pi-bg: #fea2d7;
-  --agent-opencode-fg: #332f01;
-  --agent-opencode-bg: #f3eeb4;
+  /* Coding-agent tags: a quiet tint of the agent's hue (--agent-tint of it over the surface
+     the tag sits on) inside a 1px edge of the same hue, with text in a deep shade of it (a pale
+     one in dark). The tints alone sit too close to tell every pair of agents apart, so the text
+     carries the agent where its tint does not. tokens.test.ts holds every pair apart by tint or
+     text, also under protanopia / deuteranopia; keeps text, tint and edge away from the status
+     and accent colours, and Claude's text from the tool cards'; and the text ≥ 4.5:1 on its
+     tint over every surface. The tag names its agent too. */
+  --agent-tint: 16%;
+  --agent-edge: 40%;
+  --agent-claude-code-hue: #d97757;
+  --agent-claude-code-fg: #6e1723;
+  --agent-codex-hue: #0aa5c0;
+  --agent-codex-fg: #01475c;
+  --agent-grok-hue: #8b5cf6;
+  --agent-grok-fg: #410b6d;
+  --agent-oh-my-pi-hue: #e255a1;
+  --agent-oh-my-pi-fg: #9b1589;
+  --agent-opencode-hue: #d4b300;
+  --agent-opencode-fg: #2d1b00;
+  --agent-other-hue: #8a929b;
   --agent-other-fg: #2a2e33;
-  --agent-other-bg: #c9ced4;
+  --agent-claude-code-bg: color-mix(
+    in srgb,
+    var(--agent-claude-code-hue) var(--agent-tint),
+    transparent
+  );
+  --agent-claude-code-edge: color-mix(
+    in srgb,
+    var(--agent-claude-code-hue) var(--agent-edge),
+    transparent
+  );
+  --agent-codex-bg: color-mix(in srgb, var(--agent-codex-hue) var(--agent-tint), transparent);
+  --agent-codex-edge: color-mix(in srgb, var(--agent-codex-hue) var(--agent-edge), transparent);
+  --agent-grok-bg: color-mix(in srgb, var(--agent-grok-hue) var(--agent-tint), transparent);
+  --agent-grok-edge: color-mix(in srgb, var(--agent-grok-hue) var(--agent-edge), transparent);
+  --agent-oh-my-pi-bg: color-mix(in srgb, var(--agent-oh-my-pi-hue) var(--agent-tint), transparent);
+  --agent-oh-my-pi-edge: color-mix(
+    in srgb,
+    var(--agent-oh-my-pi-hue) var(--agent-edge),
+    transparent
+  );
+  --agent-opencode-bg: color-mix(in srgb, var(--agent-opencode-hue) var(--agent-tint), transparent);
+  --agent-opencode-edge: color-mix(
+    in srgb,
+    var(--agent-opencode-hue) var(--agent-edge),
+    transparent
+  );
+  --agent-other-bg: color-mix(in srgb, var(--agent-other-hue) var(--agent-tint), transparent);
+  --agent-other-edge: color-mix(in srgb, var(--agent-other-hue) var(--agent-edge), transparent);
 
   /* JSON inspector (DevTools palette). */
   --json-key: #881391;
@@ -146,18 +179,20 @@
     --json-key: #5db0d7;
     --json-string: #f28b82;
     --json-number: #99c8ff;
-    --agent-claude-code-fg: #fff0ec;
-    --agent-claude-code-bg: #7f1900;
-    --agent-codex-fg: #e1f9fd;
-    --agent-codex-bg: #03515c;
-    --agent-grok-fg: #f3f2ff;
-    --agent-grok-bg: #36017f;
-    --agent-oh-my-pi-fg: #feeef7;
-    --agent-oh-my-pi-bg: #4c0038;
-    --agent-opencode-fg: #f7f4e1;
-    --agent-opencode-bg: #6c6433;
+    --agent-tint: 24%;
+    --agent-edge: 45%;
+    --agent-claude-code-hue: #b3541a;
+    --agent-claude-code-fg: #fff0e7;
+    --agent-codex-hue: #438da3;
+    --agent-codex-fg: #9ef0f5;
+    --agent-grok-hue: #394c94;
+    --agent-grok-fg: #c7c5d4;
+    --agent-oh-my-pi-hue: #c75d8a;
+    --agent-oh-my-pi-fg: #f9b0fd;
+    --agent-opencode-hue: #806504;
+    --agent-opencode-fg: #d3e4a1;
+    --agent-other-hue: #8a929b;
     --agent-other-fg: #eff4fa;
-    --agent-other-bg: #3f4348;
   }
 }
 
@@ -211,16 +246,18 @@
   --json-key: #5db0d7;
   --json-string: #f28b82;
   --json-number: #99c8ff;
-  --agent-claude-code-fg: #fff0ec;
-  --agent-claude-code-bg: #7f1900;
-  --agent-codex-fg: #e1f9fd;
-  --agent-codex-bg: #03515c;
-  --agent-grok-fg: #f3f2ff;
-  --agent-grok-bg: #36017f;
-  --agent-oh-my-pi-fg: #feeef7;
-  --agent-oh-my-pi-bg: #4c0038;
-  --agent-opencode-fg: #f7f4e1;
-  --agent-opencode-bg: #6c6433;
+  --agent-tint: 24%;
+  --agent-edge: 45%;
+  --agent-claude-code-hue: #b3541a;
+  --agent-claude-code-fg: #fff0e7;
+  --agent-codex-hue: #438da3;
+  --agent-codex-fg: #9ef0f5;
+  --agent-grok-hue: #394c94;
+  --agent-grok-fg: #c7c5d4;
+  --agent-oh-my-pi-hue: #c75d8a;
+  --agent-oh-my-pi-fg: #f9b0fd;
+  --agent-opencode-hue: #806504;
+  --agent-opencode-fg: #d3e4a1;
+  --agent-other-hue: #8a929b;
   --agent-other-fg: #eff4fa;
-  --agent-other-bg: #3f4348;
 }

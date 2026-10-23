@@ -137,12 +137,14 @@
   margin: 4px 10px 2px;
 }
 
+/* The pressed chip's check takes its width from the padding (10px icon + 2px gap = 2 × 6px), so
+   pressing a chip never re-wraps the row. */
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 0 7px;
-  border: 1px solid color-mix(in srgb, var(--tag-fg) 24%, transparent);
+  gap: 2px;
+  padding: 0 10px;
+  border: 1px solid var(--tag-edge);
   border-radius: 999px;
   background: var(--tag-bg);
   color: var(--tag-fg);
@@ -157,6 +159,7 @@
 }
 
 .chip[aria-pressed="true"] {
+  padding: 0 4px;
   border-color: var(--tag-fg);
   box-shadow: inset 0 0 0 1px var(--tag-fg);
 }

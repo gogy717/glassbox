@@ -64,7 +64,7 @@ export function SessionSidebar({ sessions, selectedId, now, showProbes, onSelect
         // biome-ignore lint/a11y/useSemanticElements: a row of filter toggles; it is not a form fieldset
         <div className={css.agents} role="group" aria-label={t('sidebar.filterAgents')}>
           {agents.map((a) => {
-            const { fg, bg } = agentColors(a);
+            const { fg, bg, edge } = agentColors(a);
             return (
               <button
                 key={a}
@@ -75,10 +75,10 @@ export function SessionSidebar({ sessions, selectedId, now, showProbes, onSelect
                 title={t(filter === a ? 'sidebar.allAgents' : 'sidebar.onlyAgent', {
                   agent: agentName(a),
                 })}
-                style={{ '--tag-fg': fg, '--tag-bg': bg } as CSSProperties}
+                style={{ '--tag-fg': fg, '--tag-bg': bg, '--tag-edge': edge } as CSSProperties}
                 onClick={() => setOnly(filter === a ? null : a)}
               >
-                {filter === a && <Check size={11} aria-hidden="true" />}
+                {filter === a && <Check size={10} aria-hidden="true" />}
                 {agentName(a)}
               </button>
             );

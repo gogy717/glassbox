@@ -28,6 +28,7 @@ describe('agentTone / agentColors', () => {
     expect(agentColors(kind)).toEqual({
       fg: `var(--agent-${tone}-fg)`,
       bg: `var(--agent-${tone}-bg)`,
+      edge: `var(--agent-${tone}-edge)`,
     });
   });
 });

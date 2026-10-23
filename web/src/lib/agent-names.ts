@@ -20,10 +20,14 @@ export type AgentTone = (typeof AGENT_TONES)[number] | 'other';
 export const agentTone = (kind: AgentKind): AgentTone =>
   (AGENT_TONES as readonly string[]).includes(kind) ? (kind as AgentTone) : 'other';
 
-/** The tokens an agent's tag is drawn with: its text colour on its tint. */
-export const agentColors = (kind: AgentKind): { fg: string; bg: string } => {
+/** The tokens an agent's tag is drawn with: its text colour on its tint, inside its edge. */
+export const agentColors = (kind: AgentKind): { fg: string; bg: string; edge: string } => {
   const tone = agentTone(kind);
-  return { fg: `var(--agent-${tone}-fg)`, bg: `var(--agent-${tone}-bg)` };
+  return {
+    fg: `var(--agent-${tone}-fg)`,
+    bg: `var(--agent-${tone}-bg)`,
+    edge: `var(--agent-${tone}-edge)`,
+  };
 };
 
 /**

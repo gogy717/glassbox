@@ -84,10 +84,30 @@ function tokens(i: number): Map<string, string> {
   return out;
 }
 
+/** A scope's percentage token (the agent tags' tint and edge strengths), as a fraction. */
+function percent(i: number, name: string): number {
+  let value: number | undefined;
+  for (const scope of i === 0 ? [scopes[0]] : [scopes[0], scopes[i]]) {
+    const m = (scope as string).match(new RegExp(`${name}: (\\d+)%;`));
+    if (m) value = Number(m[1]) / 100;
+  }
+  expect(value, name).toBeDefined();
+  return value as number;
+}
+
+/** `colour` at `alpha` over `surface`, as `color-mix(in srgb, colour alpha, transparent)` paints. */
+function over(colour: string, alpha: number, surface: string): string {
+  const channel = (hex: string, i: number) => Number.parseInt(hex.slice(i, i + 2), 16);
+  return `#${[1, 3, 5]
+    .map((i) => Math.round(channel(colour, i) * alpha + channel(surface, i) * (1 - alpha)))
+    .map((c) => c.toString(16).padStart(2, '0'))
+    .join('')}`;
+}
+
 describe('tokens.css', () => {
   it('has the light scope and both dark scopes, with the same dark values', () => {
     expect(scopes).toHaveLength(3);
-    const values = (scope: string) => scope.match(/--[a-z0-9-]+: #[0-9a-f]{6};/g);
+    const values = (scope: string) => scope.match(/--[a-z0-9-]+: (#[0-9a-f]{6}|\d+%);/g);
     expect(values(scopes[1] as string)).toEqual(values(scopes[2] as string));
   });
 
@@ -127,39 +147,73 @@ describe('tokens.css', () => {
   );
 
   // ΔE floors (×100, OKLab; colour-blind = Machado 2009 protan / deutan). Status, accent and
-  // tool cards must never pass for an agent; agents must tell apart from each other, where the
-  // floor sits a little below the chart standard (15 / 8) because the tag names its agent too.
-  const AGENT_PAIRS = { normal: 14, protan: 7.5, deutan: 7.5 };
+  // tool cards must never pass for an agent: RESERVED is the chart standard (15 / 8).
   const RESERVED = { normal: 15, protan: 8, deutan: 8 };
   const tones = [...AGENT_TONES];
 
+  // Agent tags are a quiet tint of the agent's hue (--agent-tint of it over the surface) inside an
+  // edge of the same hue (--agent-edge), with text in a deep (light) or pale (dark) shade of it.
+  // Until U3c the tag was a solid fill, and the fills alone kept agents 14 / 7.5 / 7.5 apart.
+  // Tints are too pale for that (2–6 apart), so a pair is now judged on whichever of its texts or
+  // its tints (over --layer-1) differ more: the text carries the agent where the tint cannot.
+  // - Light keeps 14 / 7.5 / 7.5, a little below the chart standard because the tag names its
+  //   agent too.
+  // - Dark drops to 11 / 6 / 6: pale text must stay 15 / 8 clear of the status and accent
+  //   colours, which all sit near the same lightness (≈ 0.71–0.77 OKLab), so the five texts share
+  //   the strip between them and white; calm tints (≈ 24%, ink chroma ≤ 0.14) reach no further.
+  //   6 is the dataviz minimum for colour-blind separation with a label, and every tag shows its
+  //   agent's name, so colour is never the only signal.
+  const AGENT_PAIRS = [
+    { normal: 14, protan: 7.5, deutan: 7.5 },
+    { normal: 11, protan: 6, deutan: 6 },
+    { normal: 11, protan: 6, deutan: 6 },
+  ];
+  const agentTag = (t: Map<string, string>, i: number, tone: string) => {
+    const hue = t.get(`--agent-${tone}-hue`) as string;
+    const ink = t.get(`--agent-${tone}-fg`) as string;
+    expect(hue, `${tone} hue`).toBeDefined();
+    expect(ink, `${tone} text`).toBeDefined();
+    const tint = (surface = t.get('--layer-1') as string) =>
+      over(hue, percent(i, '--agent-tint'), surface);
+    const edge = over(hue, percent(i, '--agent-edge'), t.get('--layer-1') as string);
+    return { ink, tint, edge };
+  };
+
   it.each(NAMES.map((name, i) => [name, i] as const))(
-    'agent tags stay apart from each other and from status and accent colours (%s)',
+    'agent tags stay apart from each other, by text or tint (%s)',
     (_, i) => {
       const t = tokens(i);
-      const fill = (tone: string) => t.get(`--agent-${tone}-bg`) as string;
-      const ink = (tone: string) => t.get(`--agent-${tone}-fg`) as string;
+      const floor = AGENT_PAIRS[i] as (typeof AGENT_PAIRS)[number];
       for (const [a, tone] of tones.entries())
-        for (const other of tones.slice(a + 1))
+        for (const other of tones.slice(a + 1)) {
+          const [x, y] = [agentTag(t, i, tone), agentTag(t, i, other)];
           for (const v of VISIONS)
             expect(
-              deltaE(fill(tone), fill(other), v),
+              Math.max(deltaE(x.ink, y.ink, v), deltaE(x.tint(), y.tint(), v)),
               `${tone} vs ${other} (${v})`,
-            ).toBeGreaterThanOrEqual(AGENT_PAIRS[v]);
-      for (const tone of tones)
+            ).toBeGreaterThanOrEqual(floor[v]);
+        }
+    },
+  );
+
+  it.each(NAMES.map((name, i) => [name, i] as const))(
+    'agent tags do not read as a status or the accent: text, tint and edge (%s)',
+    (_, i) => {
+      const t = tokens(i);
+      for (const tone of tones) {
+        const tag = agentTag(t, i, tone);
         for (const status of ['--success', '--error', '--warning', '--accent'])
-          for (const v of VISIONS) {
-            const colour = t.get(status) as string;
-            expect(
-              deltaE(fill(tone), colour, v),
-              `${tone} fill vs ${status} (${v})`,
-            ).toBeGreaterThanOrEqual(RESERVED[v]);
-            if (status !== '--accent')
+          for (const v of VISIONS)
+            for (const [part, colour] of [
+              ['text', tag.ink],
+              ['tint', tag.tint()],
+              ['edge', tag.edge],
+            ] as const)
               expect(
-                deltaE(ink(tone), colour, v),
-                `${tone} text vs ${status} (${v})`,
+                deltaE(colour, t.get(status) as string, v),
+                `${tone} ${part} vs ${status} (${v})`,
               ).toBeGreaterThanOrEqual(RESERVED[v]);
-          }
+      }
     },
   );
 
@@ -177,28 +231,28 @@ describe('tokens.css', () => {
     },
   );
 
+  // Until U3c the Claude fill was also held 10 from the tool card's text, border and background.
+  // A tint cannot be: it and the card background are both near-white warm pastels. The tag text
+  // still is, and the tag never sits on a tool card.
   it.each(NAMES.map((name, i) => [name, i] as const))(
     'Claude Code’s clay is not the orange of the tool cards (%s)',
     (_, i) => {
       const t = tokens(i);
-      const ink = t.get('--agent-claude-code-fg') as string;
-      const fill = t.get('--agent-claude-code-bg') as string;
+      const { ink } = agentTag(t, i, 'claude-code');
       expect(deltaE(ink, t.get('--card-tool-text') as string)).toBeGreaterThanOrEqual(10);
-      for (const card of ['--card-tool-text', '--card-tool-border', '--card-tool-bg'])
-        expect(deltaE(fill, t.get(card) as string), `fill vs ${card}`).toBeGreaterThanOrEqual(10);
     },
   );
 
   it.each(NAMES.map((name, i) => [name, i] as const))(
-    'agent tags: every agent’s text reaches 4.5:1 on its tint (%s)',
+    'agent tags: every agent’s text reaches 4.5:1 on its tint over every surface (%s)',
     (_, i) => {
       const t = tokens(i);
       for (const tone of [...AGENT_TONES, 'other']) {
-        const fg = t.get(`--agent-${tone}-fg`);
-        const bg = t.get(`--agent-${tone}-bg`);
-        expect(fg, `${tone} fg`).toBeDefined();
-        expect(bg, `${tone} bg`).toBeDefined();
-        expect(contrast(fg as string, bg as string), tone).toBeGreaterThanOrEqual(4.5);
+        const tag = agentTag(t, i, tone);
+        for (const surface of SURFACES) {
+          const ratio = contrast(tag.ink, tag.tint(t.get(surface) as string));
+          expect(ratio, `${tone} on ${surface}`).toBeGreaterThanOrEqual(4.5);
+        }
       }
     },
   );

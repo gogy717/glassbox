@@ -1,7 +1,7 @@
 .tag {
   flex: none;
   padding: 0 5px;
-  border: 1px solid color-mix(in srgb, var(--tag-fg) 24%, transparent);
+  border: 1px solid var(--tag-edge);
   border-radius: 4px;
   background: var(--tag-bg);
   color: var(--tag-fg);
