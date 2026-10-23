@@ -85,34 +85,49 @@ export function SessionSidebar({ sessions, selectedId, now, showProbes, onSelect
             <li className={css.groupTitle} aria-hidden="true">
               {g.project}
             </li>
-            {g.sessions.map((s) => (
-              <li key={s.id}>
-                <button
-                  type="button"
-                  className={css.item}
-                  aria-current={s.id === selectedId ? 'true' : undefined}
-                  title={s.cwd ?? undefined}
-                  onClick={() => onSelect(s.id)}
-                >
-                  <span className={css.title}>{s.title ?? t('sidebar.untitled')}</span>
-                  <span className={css.meta}>
-                    <AgentTag kind={s.agent} />
-                    <LiveDot state={s.live} />
-                    <span>{t(`live.${s.live}`)}</span>
-                    <span className={css.sep}>·</span>
-                    <span>{formatRelative(s.updatedAt, now, intl)}</span>
-                    {s.usage && (
-                      <>
-                        <span className={css.sep}>·</span>
-                        <span className="num">
-                          {t('common.tokens', { n: formatCompact(totalTokens(s.usage), intl) })}
-                        </span>
-                      </>
-                    )}
-                  </span>
-                </button>
-              </li>
-            ))}
+            {g.sessions.map((s) => {
+              const title = s.title ?? t('sidebar.untitled');
+              const live = t(`live.${s.live}`);
+              const when = formatRelative(s.updatedAt, now, intl);
+              const tokens = s.usage
+                ? t('common.tokens', { n: formatCompact(totalTokens(s.usage), intl) })
+                : null;
+              // The row cuts long text short; the tooltip has all of it.
+              const tip = [
+                title,
+                [agentName(s.agent), live, when, tokens].filter(Boolean).join(' · '),
+                s.cwd,
+              ]
+                .filter(Boolean)
+                .join('\n');
+              return (
+                <li key={s.id}>
+                  <button
+                    type="button"
+                    className={css.item}
+                    aria-current={s.id === selectedId ? 'true' : undefined}
+                    title={tip}
+                    onClick={() => onSelect(s.id)}
+                  >
+                    <span className={css.title}>{title}</span>
+                    <span className={css.meta}>
+                      <AgentTag kind={s.agent} />
+                      <LiveDot state={s.live} />
+                      <span className={css.state}>{live}</span>
+                      <span className={css.when}>
+                        <span className={css.sep}>·</span> {when}
+                        {tokens && (
+                          <>
+                            {' '}
+                            <span className={css.sep}>·</span> <span className="num">{tokens}</span>
+                          </>
+                        )}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         ))}
       </div>

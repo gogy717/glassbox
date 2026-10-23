@@ -6,6 +6,7 @@ import { I18nContext, makeI18n } from '../i18n';
 import { DEMO_NOW } from '../test/demo';
 import tagCss from './AgentTag.module.css';
 import { SessionSidebar } from './SessionSidebar';
+import css from './SessionSidebar.module.css';
 
 const sessions = createDemoSessions(DEMO_NOW);
 
@@ -142,6 +143,28 @@ describe('SessionSidebar', () => {
     expect(screen.getAllByRole('button').filter((b) => b.closest('li'))).toHaveLength(
       sessions.length,
     );
+  });
+
+  it('cuts long text inside the row and puts all of it in the row’s tooltip', () => {
+    const long = { ...(sessions[0] as SessionSummary), title: 'A very long title '.repeat(8) };
+    render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <SessionSidebar
+          sessions={[long]}
+          selectedId={null}
+          now={DEMO_NOW.getTime()}
+          onSelect={vi.fn()}
+        />
+      </I18nContext.Provider>,
+    );
+    const row = screen.getByRole('button', { name: /A very long title/ });
+    expect(row).toHaveClass(css.item as string);
+    const tip = (row.getAttribute('title') ?? '').split('\n');
+    expect(tip[0]).toBe(long.title);
+    expect(tip[1]).toMatch(/^Claude Code · Running · .+ · 1\.9M tokens$/);
+    expect(tip[2]).toBe(long.cwd);
+    // Time and tokens sit in the part that gives way first.
+    expect(row.querySelector(`.${css.when}`)).toHaveTextContent(/1\.9M tokens/);
   });
 
   it('groups sessions by project with running ones first', () => {

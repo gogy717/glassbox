@@ -311,7 +311,7 @@ function WorkflowBlock({
       <span className={css.workflowName}>
         <Workflow size={12} aria-hidden="true" />
         {run.name ?? run.id}
-        <LiveDot state={run.status} />
+        <LiveDot state={run.status} label={t(`status.${run.status}`)} />
       </span>
       <span className={css.chips}>
         {run.phases.map((p) => {

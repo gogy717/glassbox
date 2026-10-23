@@ -8,15 +8,19 @@
   --border: #e2e5e9;
   --border-strong: #cdd2d8;
   --text: #1c2026;
-  --muted: #677079;
-  --faint: #99a0a8;
-  --accent: #2f6fd6;
+  /* Text tokens clear 4.5:1 (WCAG AA) on every surface and tint they sit on, faint included. */
+  --muted: #525a63;
+  --faint: #666c74;
+  --accent: #1c5cc2;
   --accent-tint: #eaf1fc;
-  --success: #2a9a57;
+  --success: #016c36;
   --success-tint: rgba(42, 154, 87, 0.1);
-  --error: #d1403f;
+  --error: #b21e25;
   --error-tint: rgba(209, 64, 63, 0.09);
-  --warning: #b9781f;
+  --warning: #865301;
+  /* Text on an accent or error fill (primary and danger buttons). */
+  --on-accent: #ffffff;
+  --on-error: #ffffff;
   --shadow: 0 8px 28px rgba(16, 24, 40, 0.14);
   --overlay: rgba(16, 20, 26, 0.36);
 
@@ -95,15 +99,17 @@
     --border: #2e333a;
     --border-strong: #3d434b;
     --text: #e3e6ea;
-    --muted: #9aa2ab;
-    --faint: #6e767f;
+    --muted: #a6aeb7;
+    --faint: #8f97a1;
     --accent: #6ea4ff;
     --accent-tint: #1d2a3d;
     --success: #4cc27b;
     --success-tint: rgba(76, 194, 123, 0.13);
-    --error: #f0706e;
+    --error: #fe8c88;
     --error-tint: rgba(240, 112, 110, 0.12);
     --warning: #e0a458;
+    --on-accent: #0b1526;
+    --on-error: #1c0707;
     --shadow: 0 10px 32px rgba(0, 0, 0, 0.5);
     --overlay: rgba(0, 0, 0, 0.55);
     --tok-cache-read: #5b8bd0;
@@ -156,15 +162,17 @@
   --border: #2e333a;
   --border-strong: #3d434b;
   --text: #e3e6ea;
-  --muted: #9aa2ab;
-  --faint: #6e767f;
+  --muted: #a6aeb7;
+  --faint: #8f97a1;
   --accent: #6ea4ff;
   --accent-tint: #1d2a3d;
   --success: #4cc27b;
   --success-tint: rgba(76, 194, 123, 0.13);
-  --error: #f0706e;
+  --error: #fe8c88;
   --error-tint: rgba(240, 112, 110, 0.12);
   --warning: #e0a458;
+  --on-accent: #0b1526;
+  --on-error: #1c0707;
   --shadow: 0 10px 32px rgba(0, 0, 0, 0.5);
   --overlay: rgba(0, 0, 0, 0.55);
   --tok-cache-read: #5b8bd0;
