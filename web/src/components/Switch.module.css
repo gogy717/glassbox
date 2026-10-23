@@ -1,0 +1,46 @@
+.switch {
+  display: inline-flex;
+  flex: none;
+  align-items: baseline;
+  gap: 12px;
+  font-size: var(--fs-small);
+  line-height: 20px;
+}
+
+.switch[data-size="small"] {
+  gap: 10px;
+  font-size: var(--fs-meta);
+  line-height: 18px;
+}
+
+.word {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--motion);
+}
+
+.word:hover {
+  color: var(--text);
+}
+
+/* The chosen word: ink, underlined. */
+.word[aria-checked="true"] {
+  color: var(--text);
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: var(--ink);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+
+/* Unavailable: struck through, faint; the title says why. */
+.word:disabled {
+  color: var(--faint);
+  text-decoration: line-through;
+  cursor: default;
+}

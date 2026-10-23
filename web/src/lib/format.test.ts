@@ -8,6 +8,7 @@ import {
   formatPercent,
   formatRelative,
   formatResetTime,
+  middleEllipsis,
 } from './format';
 
 describe('formatDuration (DSH rule)', () => {
@@ -142,5 +143,35 @@ describe('formatResetTime', () => {
 
   it('counts just past midnight as another day', () => {
     expect(formatResetTime('2026-10-24T00:10:00Z', now, 'en', 'UTC').date).toBe('Sat, Oct 24');
+  });
+});
+
+describe('middleEllipsis', () => {
+  it('leaves a path that fits as it is', () => {
+    expect(middleEllipsis('src/server/store.ts', 40)).toBe('src/server/store.ts');
+    expect(middleEllipsis('src/server/store.ts', 19)).toBe('src/server/store.ts');
+  });
+
+  it('keeps the first segment and as many trailing ones as fit', () => {
+    const path = 'src/adapters/omp/parser.ts';
+    expect(middleEllipsis(path, 25)).toBe('src/…/omp/parser.ts');
+    expect(middleEllipsis(path, 18)).toBe('src/…/parser.ts');
+    for (const n of [15, 18, 19, 25]) expect(middleEllipsis(path, n).length).toBeLessThanOrEqual(n);
+  });
+
+  it('keeps the root of an absolute path and backslashes as written', () => {
+    expect(middleEllipsis('/home/user/dev/glassbox/web/src/lib/format.ts', 24)).toBe(
+      '/…/web/src/lib/format.ts',
+    );
+    expect(middleEllipsis('C:\\Users\\user\\dev\\store.ts', 16)).toBe('C:\\…\\store.ts');
+  });
+
+  it('falls back to the file name, then to its head and tail', () => {
+    expect(middleEllipsis('a/b/c/a-rather-long-file-name.tsx', 30)).toBe(
+      '…/a-rather-long-file-name.tsx',
+    );
+    expect(middleEllipsis('a/b/c/a-rather-long-file-name.tsx', 12)).toBe('a-rat…me.tsx');
+    expect(middleEllipsis('just-one-very-long-name.ts', 10)).toBe('just…me.ts');
+    expect(middleEllipsis('abc', 1)).toBe('…');
   });
 });

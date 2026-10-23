@@ -139,3 +139,38 @@ export function formatCountdown(ms: number): string | null {
   const h = hours % 24;
   return h ? `${d}d${h}h` : `${d}d`;
 }
+
+const ELLIPSIS = '…';
+
+/**
+ * A path cut in the middle to at most `n` characters, keeping what identifies it: the first
+ * segment (its root) and as many trailing segments as fit, e.g. "src/…/server/store.ts". A last
+ * segment too long on its own keeps its head and its tail (and so its extension):
+ * "very-lo…name.ts". Separators are kept as written, `/` or `\`.
+ */
+export function middleEllipsis(path: string, n: number): string {
+  const max = Math.max(1, Math.floor(n));
+  if (path.length <= max) return path;
+  const parts = path.split(/([/\\])/); // segments at even indexes, separators at odd
+  const segments = parts.filter((_, i) => i % 2 === 0);
+  if (segments.length >= 3) {
+    // Head: the first segment with its separator ("src/", or "/" for an absolute path).
+    const head = `${parts[0]}${parts[1]}`;
+    let tail = segments.length - 1; // index into segments of the first one kept at the end
+    const tailText = (from: number) => parts.slice(from * 2 - 1).join('');
+    if (head.length + ELLIPSIS.length + tailText(tail).length <= max) {
+      while (tail > 2 && head.length + ELLIPSIS.length + tailText(tail - 1).length <= max) tail--;
+      return `${head}${ELLIPSIS}${tailText(tail)}`;
+    }
+  }
+  const last = segments.at(-1) ?? path;
+  if (last.length + 2 <= max && segments.length > 1) {
+    const sep = parts.at(-2) ?? '/';
+    return `${ELLIPSIS}${sep}${last}`;
+  }
+  // Even the file name is too long: keep its start and its end.
+  const keep = max - ELLIPSIS.length;
+  if (keep <= 0) return ELLIPSIS;
+  const tailLen = Math.ceil(keep / 2);
+  return `${last.slice(0, keep - tailLen)}${ELLIPSIS}${last.slice(last.length - tailLen)}`;
+}
