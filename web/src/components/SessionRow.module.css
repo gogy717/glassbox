@@ -1,6 +1,9 @@
 .row {
   display: flex;
   flex-direction: column;
+  /* Browsers start a button's items at flex-start: stretch the meta line so its tag can sit at
+     the right edge. */
+  align-items: stretch;
   gap: 4px;
   width: 100%;
   /* Long titles and meta lines are cut inside the row, so its focus ring frames it. */
