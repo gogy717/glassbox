@@ -1,7 +1,10 @@
-import { existsSync, statSync } from 'node:fs';
-import { chmod, mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { chmodSync, existsSync, readFileSync, statSync } from 'node:fs';
+import { chmod, copyFile, mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createInterface } from 'node:readline';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
@@ -19,13 +22,39 @@ import {
   xaiReport,
 } from './__fixtures__/usage-cache.js';
 import {
+  cacheDbUrl,
   createOmpUsageCacheSource,
   ompQuotaProvider,
   quotasFromCacheValues,
+  readCacheValues,
   withoutSqliteWarning,
 } from './usage-cache.js';
 
 const HOUR = 60 * 60_000;
+
+/**
+ * oh-my-pi for `ompProcess`: opens agent.db (argv: path, a cache row), writes the row to the
+ * WAL, gives all three files mode 0600 and holds them open. `truncate` checkpoints the WAL
+ * away; end of input closes the database.
+ */
+const OMP_WRITER = `
+const { DatabaseSync } = require('node:sqlite');
+const { chmodSync } = require('node:fs');
+const { createInterface } = require('node:readline');
+const [path, row] = process.argv.slice(1);
+const r = JSON.parse(row);
+const db = new DatabaseSync(path);
+db.exec('PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0');
+db.prepare('INSERT INTO cache (key, value, expires_at) VALUES (?, ?, ?)').run(r.key, r.value, r.expires_at);
+for (const suffix of ['', '-wal', '-shm']) chmodSync(path + suffix, 0o600);
+console.log('ready');
+createInterface({ input: process.stdin })
+  .on('line', (cmd) => {
+    if (cmd === 'truncate') db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+    console.log(cmd + ' done');
+  })
+  .on('close', () => db.close());
+`;
 const DAY = 24 * HOUR;
 
 /** One report with a single limit, mapped; null when it yields no snapshot. */
@@ -220,6 +249,26 @@ describe('quotasFromCacheValues', () => {
     expect(q?.windows.map((w) => w.id)).toEqual(['s', 'w', 'm', 'o']);
   });
 
+  it('skips a limit whose status is unknown, numbers or not', () => {
+    const [q] = quotasFromCacheValues(
+      [
+        cacheValue(
+          report('xai-oauth', NOW, [
+            limit('xai-oauth', {
+              id: 'a',
+              label: 'A',
+              amount: { usedFraction: 0.5, unit: 'percent' },
+              status: 'unknown',
+            }),
+            limit('xai-oauth', { id: 'b', label: 'B', amount: pct(7), status: 'warning' }),
+          ]),
+        ),
+      ],
+      NOW,
+    );
+    expect(q?.windows.map((w) => [w.id, w.usedPercent])).toEqual([['b', 7]]);
+  });
+
   it('gives no snapshot for a report without a usable limit', () => {
     const premiumOnly = report('github-copilot', NOW, [
       limit('github-copilot', {
@@ -392,20 +441,142 @@ describe('oh-my-pi cache source', () => {
     expect((await readdir(join(dir, 'agent'))).sort()).toEqual(before);
   });
 
-  it('reads rows that are still in the WAL while oh-my-pi has the database open', async () => {
-    writeDb([]);
+  /**
+   * oh-my-pi running: an xai report checkpointed into agent.db, an openai one only in the WAL.
+   * All three files get `mode`, unless one is given for -wal or -shm.
+   */
+  function runningOmp(mode = 0o600, files: { wal?: number; shm?: number } = {}): DatabaseSync {
+    writeDb([cacheRow(xaiReport(now - 60_000))]);
     const writer = new DatabaseSync(db);
+    writer.exec('PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0');
+    const r = cacheRow(openaiReport(now - 60_000));
+    writer
+      .prepare('INSERT INTO cache (key, value, expires_at) VALUES (?, ?, ?)')
+      .run(r.key, r.value, r.expires_at);
+    chmodSync(db, mode);
+    chmodSync(`${db}-wal`, files.wal ?? mode);
+    chmodSync(`${db}-shm`, files.shm ?? mode);
+    expect(statSync(`${db}-wal`).size).toBeGreaterThan(0);
+    return writer;
+  }
+
+  /** Mode, size, mtime and contents of agent.db and the files beside it. */
+  function fingerprint(path = db): string[] {
+    return ['', '-wal', '-shm'].map((suffix) => {
+      const file = `${path}${suffix}`;
+      const st = statSync(file, { throwIfNoEntry: false });
+      if (!st) return `${suffix} missing`;
+      const sha = createHash('sha256').update(readFileSync(file)).digest('hex');
+      return `${suffix} ${(st.mode & 0o777).toString(8)} ${st.size} ${st.mtimeMs} ${sha}`;
+    });
+  }
+
+  const providers = async (ompDir = dir) =>
+    (await createOmpUsageCacheSource({ ompDir }).read()).map((q) => q.provider).sort();
+
+  /**
+   * `runningOmp` in a process of its own, as oh-my-pi is: SQLite shares one `-shm` mapping
+   * between the connections of a process, so a writer in this one would hand the reader its
+   * writable mapping. Each line written to it is a command, answered once done.
+   */
+  async function ompProcess(): Promise<{ run(cmd: string): Promise<void>; stop(): Promise<void> }> {
+    writeDb([cacheRow(xaiReport(now - 60_000))]);
+    const child = spawn(
+      process.execPath,
+      ['-e', OMP_WRITER, db, JSON.stringify(cacheRow(openaiReport(now - 60_000)))],
+      {
+        stdio: ['pipe', 'pipe', 'inherit'],
+      },
+    );
+    const lines = createInterface({ input: child.stdout });
+    const next = () => new Promise<string>((resolve) => lines.once('line', resolve));
+    expect(await next()).toBe('ready');
+    return {
+      run: async (cmd) => {
+        child.stdin.write(`${cmd}\n`);
+        expect(await next()).toBe(`${cmd} done`);
+      },
+      stop: () =>
+        new Promise((resolve) => {
+          child.once('exit', () => resolve());
+          child.stdin.end();
+        }),
+    };
+  }
+
+  it('reads pages still in the WAL without changing any file', async () => {
+    const omp = await ompProcess();
     try {
-      writer.exec('PRAGMA journal_mode=WAL');
-      const r = cacheRow(openaiReport(now - 60_000));
-      writer
-        .prepare('INSERT INTO cache (key, value, expires_at) VALUES (?, ?, ?)')
-        .run(r.key, r.value, r.expires_at);
-      expect(existsSync(`${db}-wal`)).toBe(true);
-      const out = await createOmpUsageCacheSource({ ompDir: dir }).read();
-      expect(out.map((q) => q.provider)).toEqual(['openai']);
+      expect(statSync(`${db}-wal`).size).toBeGreaterThan(0);
+      const before = fingerprint();
+      expect(await providers()).toEqual(['openai', 'xai']);
+      expect(fingerprint()).toEqual(before);
+    } finally {
+      await omp.stop();
+    }
+  });
+
+  it('reads the WAL without rebuilding -shm when oh-my-pi is not running', async () => {
+    const copy = join(dir, 'copy');
+    await mkdir(join(copy, 'agent'), { recursive: true });
+    const writer = runningOmp();
+    try {
+      // What a killed oh-my-pi leaves: the three files, and nobody holding them.
+      for (const suffix of ['', '-wal', '-shm'])
+        await copyFile(`${db}${suffix}`, join(copy, 'agent', `agent.db${suffix}`));
     } finally {
       writer.close();
+    }
+    const copied = join(copy, 'agent', 'agent.db');
+    for (const suffix of ['', '-wal', '-shm']) chmodSync(`${copied}${suffix}`, 0o600);
+    const before = fingerprint(copied);
+    expect(await providers(copy)).toEqual(['openai', 'xai']);
+    expect(fingerprint(copied)).toEqual(before);
+  });
+
+  it('reads the database file alone when -wal or -shm has another mode than it', async () => {
+    for (const files of [{ wal: 0o644 }, { shm: 0o644 }]) {
+      const writer = runningOmp(0o600, files);
+      try {
+        const before = fingerprint();
+        // The openai report is only in the WAL: hidden until oh-my-pi checkpoints it.
+        expect(await providers()).toEqual(['xai']);
+        expect(fingerprint()).toEqual(before);
+      } finally {
+        writer.close();
+        await rm(db);
+      }
+    }
+  });
+
+  it('reads the database file alone when the WAL has no -shm beside it', async () => {
+    const copy = join(dir, 'copy');
+    await mkdir(join(copy, 'agent'), { recursive: true });
+    const writer = runningOmp();
+    try {
+      for (const suffix of ['', '-wal'])
+        await copyFile(`${db}${suffix}`, join(copy, 'agent', `agent.db${suffix}`));
+    } finally {
+      writer.close();
+    }
+    const copied = join(copy, 'agent', 'agent.db');
+    const before = fingerprint(copied);
+    expect(await providers(copy)).toEqual(['xai']);
+    expect(fingerprint(copied)).toEqual(before);
+  });
+
+  it('changes no file when oh-my-pi empties the WAL between the check and the read', async () => {
+    const omp = await ompProcess();
+    try {
+      const url = cacheDbUrl(db);
+      expect(url.searchParams.get('readonly_shm')).toBe('1');
+      await omp.run('truncate');
+      expect(statSync(`${db}-wal`).size).toBe(0);
+      const before = fingerprint();
+      expect(await readCacheValues(url, now)).toHaveLength(2);
+      expect(fingerprint()).toEqual(before);
+    } finally {
+      await omp.stop();
     }
   });
 

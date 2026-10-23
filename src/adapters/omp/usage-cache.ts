@@ -7,10 +7,8 @@
  * selected, and only the provider, fetch time, plan and each limit's id, label, window and
  * amount are read out of it; nothing else is kept, logged or returned.
  *
- * Read only: one short query on a read-only connection, closed straight after. A WAL that holds
- * pages is read like any other reader would (with its `-shm` index). Otherwise every page is in
- * the database file, which is opened immutable and alone: SQLite would create a missing `-wal` /
- * `-shm`, and give an empty WAL the database file's mode.
+ * Read only, the files beside the database included: one short query on a read-only connection,
+ * closed straight after. `cacheDbUrl` says how it is opened, and the one race it leaves.
  */
 import { existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -76,7 +74,7 @@ function usedPercent(amount: Obj): number | null {
     fraction !== null
       ? fraction * 100
       : used !== null && limit !== null && limit > 0
-        ? (used / limit) * 100
+        ? (used * 100) / limit
         : used !== null && amount.unit === 'percent'
           ? used
           : remaining !== null
@@ -86,15 +84,16 @@ function usedPercent(amount: Obj): number | null {
 }
 
 /**
- * A limit as a window. Its id loses oh-my-pi's `<provider>:` prefix ("xai-oauth:credits:1w" →
- * "credits:1w"), so it matches what other sources of the same provider call that window.
+ * A limit as a window; null when its status is "unknown" (its numbers are not to be trusted).
+ * Its id loses oh-my-pi's `<provider>:` prefix ("xai-oauth:credits:1w" → "credits:1w"), so it
+ * matches what other sources of the same provider call that window.
  */
 function windowOf(limit: unknown, provider: string): QuotaWindow | null {
   const l = obj(limit);
   const id = str(l?.id);
   const amount = obj(l?.amount);
   const used = amount ? usedPercent(amount) : null;
-  if (!l || !id || used === null) return null;
+  if (!l || !id || used === null || l.status === 'unknown') return null;
   const window = obj(l.window);
   const prefix = `${provider}:`;
   return {
@@ -194,14 +193,40 @@ function loadSqlite(): Promise<Sqlite> {
   return sqlite;
 }
 
-/** The `value` of every usage report oh-my-pi itself would still serve (within retention). */
-async function readReportValues(path: string, now: number): Promise<unknown[]> {
-  if (!existsSync(path)) return [];
-  const { DatabaseSync } = await loadSqlite();
-  const wal = statSync(`${path}-wal`, { throwIfNoEntry: false });
-  const live = (wal?.size ?? 0) > 0 && existsSync(`${path}-shm`);
+/**
+ * How to open agent.db so that no file beside it changes. A plain read-only connection would:
+ * SQLite creates a missing `-wal` / `-shm`, gives an empty one the database file's mode
+ * (`robust_open`), and writes read marks into `-shm` or rebuilds it.
+ *
+ * - The WAL is read only when it holds pages and `-wal` and `-shm` already have the database
+ *   file's mode, so the mode SQLite would set is the one they have, even if oh-my-pi empties
+ *   the WAL between this check and the read. `readonly_shm` makes SQLite only read `-shm`.
+ *   Only a WAL deleted in that moment (oh-my-pi's last connection closing) gets past this:
+ *   SQLite then creates an empty one in the database's mode, and the read fails once.
+ * - Otherwise agent.db is read alone, immutable: pages still in the WAL are not seen until
+ *   oh-my-pi checkpoints them. An immutable read takes no lock, so one that overlaps a
+ *   checkpoint can see a half-written page: a row that fails to parse is skipped, an SQLite
+ *   error is logged once, and the watcher reads again before it lets a provider vanish.
+ */
+export function cacheDbUrl(path: string): URL {
+  const stat = (file: string) => statSync(file, { throwIfNoEntry: false });
+  const db = stat(path);
+  const wal = stat(`${path}-wal`);
+  const sameMode = (st: ReturnType<typeof stat>) =>
+    st !== undefined && db !== undefined && (st.mode & 0o777) === (db.mode & 0o777);
   const url = pathToFileURL(path);
-  if (!live) url.searchParams.set('immutable', '1');
+  if (wal && wal.size > 0 && sameMode(wal) && sameMode(stat(`${path}-shm`))) {
+    url.searchParams.set('mode', 'ro');
+    url.searchParams.set('readonly_shm', '1');
+  } else {
+    url.searchParams.set('immutable', '1');
+  }
+  return url;
+}
+
+/** The `value` of every usage report oh-my-pi itself would still serve (within retention). */
+export async function readCacheValues(url: URL, now: number): Promise<unknown[]> {
+  const { DatabaseSync } = await loadSqlite();
   const db = new DatabaseSync(url, { readOnly: true, timeout: BUSY_TIMEOUT_MS });
   try {
     return db
@@ -227,8 +252,11 @@ export function createOmpUsageCacheSource({ ompDir }: OmpUsageCacheOptions): Quo
   return {
     id: 'oh-my-pi-cache',
     read: async () => {
+      if (!existsSync(path)) return [];
+      // Loaded first, so the files are looked at right before they are opened.
+      await loadSqlite();
       const now = Date.now();
-      return quotasFromCacheValues(await readReportValues(path, now), now);
+      return quotasFromCacheValues(await readCacheValues(cacheDbUrl(path), now), now);
     },
     watchFiles: () => [path, `${path}-wal`],
   };
