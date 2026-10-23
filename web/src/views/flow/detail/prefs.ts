@@ -6,10 +6,12 @@ export interface DetailPrefs {
   view: 'readable' | 'json';
   /** Request messages, newest or oldest first. */
   order: 'newest' | 'oldest';
+  /** Model replies' markdown rendered, or shown as written. */
+  markdown: 'rendered' | 'source';
 }
 
 const KEY = 'glassbox.detail';
-const DEFAULTS: DetailPrefs = { view: 'readable', order: 'newest' };
+const DEFAULTS: DetailPrefs = { view: 'readable', order: 'newest', markdown: 'rendered' };
 
 /** Storage can be unavailable (private windows, blocked site data); prefs are a convenience. */
 function load(): DetailPrefs {
@@ -18,6 +20,7 @@ function load(): DetailPrefs {
     return {
       view: raw?.view === 'json' ? 'json' : 'readable',
       order: raw?.order === 'oldest' ? 'oldest' : 'newest',
+      markdown: raw?.markdown === 'source' ? 'source' : 'rendered',
     };
   } catch {
     return DEFAULTS;

@@ -77,7 +77,9 @@ describe('DetailPanel', () => {
     // Readable: the newest message on top, its code a block of its own, nothing to expand.
     const [newest] = within(panel).getAllByRole('article');
     expect(newest).toHaveAccessibleName('Assistant message #2 of 2');
-    expect(newest?.querySelector('pre')?.textContent).toBe('sessions.sort(byActivity);');
+    await vi.waitFor(() =>
+      expect(newest?.querySelector('pre')?.textContent).toBe('sessions.sort(byActivity);'),
+    );
     expect(within(panel).queryByText('{} JSON')).toBeNull();
 
     fireEvent.click(within(panel).getByRole('radio', { name: 'JSON' }));
@@ -139,6 +141,22 @@ describe('DetailPanel', () => {
     expect(within(panel).getByText('Thought for 8.4s · 610 thinking tokens')).toBeInTheDocument();
     expect(panel).toHaveTextContent('Let me look at how sessions are discovered first.');
     expect(within(panel).getByRole('heading', { name: 'Usage & timing' })).toBeInTheDocument();
+  });
+
+  it('renders the reply’s markdown, with its source one click away', async () => {
+    const reply = '## Plan\n\n| Step | Done |\n|---|---|\n| sort | yes |';
+    renderPanel(
+      { ...req('req_m1'), blocks: [{ kind: 'text', text: reply, at: '2026-10-23T10:00:00.000Z' }] },
+      'response',
+    );
+    const panel = screen.getByRole('region', { name: 'Response details' });
+    expect(
+      await within(panel).findByRole('heading', { level: 2, name: 'Plan' }),
+    ).toBeInTheDocument();
+    expect(within(panel).getByRole('table')).toBeInTheDocument();
+    fireEvent.click(within(panel).getByRole('radio', { name: 'Source' }));
+    expect(within(panel).queryByRole('table')).toBeNull();
+    expect(panel.querySelector('pre')?.textContent).toContain('## Plan');
   });
 
   it('shows the usage and timing as a list, the JSON one click away', () => {

@@ -50,6 +50,11 @@
   grid-template-columns: minmax(0, 4fr) minmax(0, 3fr) minmax(0, 2fr);
 }
 
+/* A response: the reply gets the most room. */
+.responseGrid {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) minmax(0, 2fr);
+}
+
 .cell {
   display: flex;
   flex-direction: column;
@@ -64,6 +69,15 @@
   font-size: 10px;
   font-weight: 600;
   color: var(--muted);
+}
+
+/* A reply's rendered markdown, on the same surface as plain text. */
+.content {
+  max-height: 420px;
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--layer-1);
 }
 
 .cellHead {

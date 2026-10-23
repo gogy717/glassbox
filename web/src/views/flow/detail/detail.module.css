@@ -48,27 +48,7 @@
   color: var(--muted);
 }
 
-/* Shared pieces, before the rules that place them */
-
-.copy {
-  display: inline-grid;
-  place-items: center;
-  flex: none;
-  width: 22px;
-  height: 22px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.copy:hover {
-  background: var(--layer-3);
-  color: var(--text);
-}
-
-.showAll {
+.more {
   align-self: flex-start;
   padding: 3px 8px;
   border: 1px solid var(--border);
@@ -90,8 +70,8 @@
 
 .params {
   display: grid;
-  /* Names take what they need, but never more than 40%: values must stay readable. */
-  grid-template-columns: fit-content(40%) minmax(0, 1fr);
+  /* Names take what they need, but never more than half: values must stay readable. */
+  grid-template-columns: fit-content(50%) minmax(0, 1fr);
   gap: 3px 10px;
   margin: 0;
   font-size: 11px;
@@ -189,9 +169,16 @@
 
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+.toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .count {
@@ -287,7 +274,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.messageHead .copy {
+.messageHead .headCopy {
   margin-left: auto;
 }
 
@@ -317,7 +304,7 @@
   color: var(--muted);
 }
 
-.blockHead .copy {
+.blockHead .headCopy {
   margin-left: auto;
 }
 
@@ -359,62 +346,6 @@
   border-radius: 6px;
   font-size: 11px;
   color: var(--muted);
-}
-
-/* Code and arguments */
-
-.code {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--layer-2);
-}
-
-.codeHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 24px;
-  padding: 0 2px 0 8px;
-  border-bottom: 1px solid var(--border);
-}
-
-.codeCopy {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  border-radius: 5px;
-  background: var(--layer-2);
-}
-
-.lang {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--muted);
-}
-
-.codePre {
-  max-height: 320px;
-  margin: 0;
-  padding: 6px 8px;
-  overflow: auto;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 16px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-/* Room for the copy button floating over the first line. */
-.codeCopy + .codePre {
-  padding-right: 30px;
-}
-
-.code .showAll {
-  margin: 0 8px 8px;
 }
 
 .args {

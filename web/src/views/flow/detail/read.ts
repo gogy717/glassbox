@@ -9,6 +9,8 @@
  * oh-my-pi). A section that is none of these reads as null, and the view shows its JSON instead.
  */
 
+export { type Segment, splitFences } from '../../../lib/fences';
+
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
@@ -287,67 +289,6 @@ export function readTools(v: unknown): ToolDef[] | null {
 export function readParams(v: unknown): [string, unknown][] | null {
   if (v == null) return [];
   return isObj(v) ? Object.entries(v) : null;
-}
-
-export interface Segment {
-  kind: 'prose' | 'code';
-  text: string;
-  /** The info string after a code fence, e.g. "ts". */
-  lang: string | null;
-}
-
-/** An opening fence: three or more backticks or tildes, then an info string (its first word). */
-const OPEN = /^ {0,3}(`{3,}|~{3,})(.*)$/;
-/** A closing fence: the same character, at least as many, nothing after. */
-const CLOSE = /^ {0,3}(`{3,}|~{3,})\s*$/;
-
-/**
- * Markdown code fences cut out of text, so code reads as code. As in CommonMark, a backtick
- * fence's info string has no backticks ("```js```" is text) and a closing fence is at least as
- * long as its opening. A fence that never closes is text, not the rest of the message as code.
- * One pass over the lines; text without fences is one prose segment.
- */
-export function splitFences(text: string): Segment[] {
-  if (!text.includes('```') && !text.includes('~~~')) return [{ kind: 'prose', text, lang: null }];
-  const out: Segment[] = [];
-  let prose: string[] = [];
-  let code: string[] = [];
-  let fence: { marks: string; line: string; lang: string | null } | null = null;
-  const pushProse = () => {
-    if (prose.some((l) => l.trim() !== '')) {
-      const last = out.at(-1);
-      // Prose next to prose (an unclosed fence's lines) is one segment.
-      if (last?.kind === 'prose') last.text += `\n${prose.join('\n')}`;
-      else out.push({ kind: 'prose', text: prose.join('\n'), lang: null });
-    }
-    prose = [];
-  };
-  for (const line of text.split('\n')) {
-    if (fence === null) {
-      const m = OPEN.exec(line);
-      const marks = m?.[1] ?? '';
-      const info = (m?.[2] ?? '').trim();
-      if (m && !(marks.startsWith('`') && info.includes('`'))) {
-        pushProse();
-        fence = { marks, line, lang: info.split(/\s+/)[0] || null };
-      } else {
-        prose.push(line);
-      }
-      continue;
-    }
-    const close = CLOSE.exec(line);
-    const marks = close?.[1] ?? '';
-    if (close && marks[0] === fence.marks[0] && marks.length >= fence.marks.length) {
-      out.push({ kind: 'code', text: code.join('\n'), lang: fence.lang });
-      fence = null;
-      code = [];
-    } else {
-      code.push(line);
-    }
-  }
-  if (fence !== null) prose = [fence.line, ...code, ...prose];
-  pushProse();
-  return out;
 }
 
 /** A message as plain text, for its copy button. */

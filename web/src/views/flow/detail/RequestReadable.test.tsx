@@ -71,15 +71,16 @@ describe('RequestReadable', () => {
     resetDetailPrefs();
   });
 
-  it('shows the conversation readable: text, code with its line breaks, thinking, tools, results', () => {
+  it('shows the conversation readable: text, code with its line breaks, thinking, tools, results', async () => {
     renderDetail(detail({ messages: conversation }));
     const [results, assistant, user] = messages() as [HTMLElement, HTMLElement, HTMLElement];
     expect(user).toHaveTextContent('Fix the flaky test');
-    // A fenced code block is code, with real line breaks, not "\n".
-    const code = within(assistant)
-      .getAllByText(/const timeout/)
-      .find((el) => el.tagName === 'PRE');
-    expect(code?.textContent).toBe('const timeout = 5_000;\nawait run(timeout);');
+    // A fenced code block is code, with real line breaks, not "\n" (once markdown has loaded).
+    await vi.waitFor(() =>
+      expect([...assistant.querySelectorAll('pre')].map((p) => p.textContent)).toContain(
+        'const timeout = 5_000;\nawait run(timeout);',
+      ),
+    );
     expect(within(assistant).getAllByRole('button', { name: 'Copy code' }).length).toBeGreaterThan(
       0,
     );
@@ -117,16 +118,16 @@ describe('RequestReadable', () => {
     });
   });
 
-  it('opens a code block too long to show inline in one click, with its line breaks', () => {
+  it('opens a code block too long to show inline in one click, with its line breaks', async () => {
     const long = Array.from({ length: 1200 }, (_, i) => `line ${i}`).join('\n');
     renderDetail(detail({ messages: [{ role: 'assistant', content: `\`\`\`\n${long}\n\`\`\`` }] }));
-    fireEvent.click(screen.getByRole('button', { name: /^Show all/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Show all/ }));
     const dialog = screen.getByRole('dialog');
     const lines = [...dialog.querySelectorAll('[data-line]')].map((l) => l.textContent);
     expect(lines.slice(0, 3)).toEqual(['line 0', 'line 1', 'line 2']);
   });
 
-  it('stays light on a huge request: a page of messages at a time, long text clipped', () => {
+  it('stays light on a huge request: a page of messages at a time, long text clipped', async () => {
     const many = Array.from({ length: 1500 }, (_, i) => ({
       role: 'user',
       content: `message ${i}`,
@@ -138,8 +139,9 @@ describe('RequestReadable', () => {
     const huge = messages()[0] as HTMLElement;
     expect((huge.querySelector('p')?.textContent ?? '').length).toBeLessThanOrEqual(6_000);
     expect(
-      within(huge).getByRole('button', { name: 'Show all (3,000,000 characters)' }),
+      await within(huge).findByRole('button', { name: 'Show all (3,000,000 characters)' }),
     ).toBeInTheDocument();
+    expect((huge.querySelector('p')?.textContent ?? '').length).toBeLessThanOrEqual(6_000);
     fireEvent.click(screen.getByRole('button', { name: 'Show 30 more' }));
     expect(messages()).toHaveLength(60);
   });
@@ -271,6 +273,32 @@ describe('RequestReadable', () => {
     expect(screen.getByText('—')).toBeInTheDocument();
     expect(screen.getByText('40').tagName).toBe('DD');
     expect(screen.queryByText('null')).toBeNull();
+  });
+
+  it('renders the model’s markdown, not the user’s, with its source one click away', async () => {
+    renderDetail(
+      detail({
+        messages: [
+          { role: 'user', content: '# Not a heading' },
+          { role: 'assistant', content: [{ type: 'text', text: '# Title\n\n- one\n- two' }] },
+        ],
+      }),
+    );
+    const [assistant, user] = messages() as [HTMLElement, HTMLElement];
+    expect(
+      await within(assistant).findByRole('heading', { level: 1, name: 'Title' }),
+    ).toBeInTheDocument();
+    expect(within(assistant).getAllByRole('listitem')).toHaveLength(2);
+    expect(within(user).queryByRole('heading')).toBeNull();
+    expect(user).toHaveTextContent('# Not a heading');
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Source' }));
+    const [source] = messages() as [HTMLElement];
+    expect(within(source).queryByRole('heading')).toBeNull();
+    expect(source.querySelector('p')?.textContent).toBe('# Title\n\n- one\n- two');
+    expect(JSON.parse(localStorage.getItem('glassbox.detail') ?? '{}')).toMatchObject({
+      markdown: 'source',
+    });
   });
 
   it('says what was not recorded, and speaks Chinese', () => {

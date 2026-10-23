@@ -2,6 +2,7 @@ import { ChevronUp } from 'lucide-react';
 import { type ReactNode, useId, useMemo, useState } from 'react';
 import type { ModelRequest, ToolCall } from '../../../../src/core/model.js';
 import { JsonInspector } from '../../components/JsonInspector';
+import { Markdown } from '../../components/Markdown';
 import { StatusPill } from '../../components/Status';
 import { TextBlock } from '../../components/TextBlock';
 import { fetchRequestDetail, fetchToolResult } from '../../data/api';
@@ -16,7 +17,7 @@ import css from './DetailPanel.module.css';
 import { ArgsView } from './detail/ArgsView';
 import { useDetailPrefs } from './detail/prefs';
 import { KeyValues, RequestReadable } from './detail/RequestReadable';
-import { ViewToggle } from './detail/ViewToggle';
+import { MarkdownToggle, ViewToggle } from './detail/ViewToggle';
 import { toolStatus } from './flow-model';
 
 interface Props {
@@ -215,7 +216,7 @@ function ResponseBody({ req }: { req: ModelRequest }) {
   );
   const usageList = useMemo(() => usageEntries(usage), [usage]);
   return (
-    <div className={css.grid}>
+    <div className={`${css.grid} ${css.responseGrid}`}>
       <Cell title={t('detail.thinking')}>
         {thinkingText ? (
           <TextBlock label={t('detail.thinking')} text={thinkingText} />
@@ -235,8 +236,14 @@ function ResponseBody({ req }: { req: ModelRequest }) {
           </p>
         )}
       </Cell>
-      <Cell title={t('detail.content')}>
-        <TextBlock label={t('detail.content')} text={text} />
+      <Cell title={t('detail.content')} tools={text ? <MarkdownToggle /> : undefined}>
+        {text && prefs.markdown === 'rendered' ? (
+          <div className={css.content}>
+            <Markdown text={text} label={t('detail.content')} />
+          </div>
+        ) : (
+          <TextBlock label={t('detail.content')} text={text} />
+        )}
       </Cell>
       <Cell title={t('detail.usage')} tools={<ViewToggle />}>
         {prefs.view === 'readable' ? (

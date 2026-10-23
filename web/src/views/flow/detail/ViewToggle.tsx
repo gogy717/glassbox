@@ -18,3 +18,20 @@ export function ViewToggle() {
     />
   );
 }
+
+/** Rendered / Source for model replies' markdown: one choice everywhere, remembered. */
+export function MarkdownToggle() {
+  const { t } = useI18n();
+  const [prefs, setPrefs] = useDetailPrefs();
+  return (
+    <Segmented<DetailPrefs['markdown']>
+      label={t('detail.markdown')}
+      value={prefs.markdown}
+      options={[
+        { value: 'rendered', label: t('detail.mdRendered') },
+        { value: 'source', label: t('detail.mdSource') },
+      ]}
+      onChange={(markdown) => setPrefs({ markdown })}
+    />
+  );
+}

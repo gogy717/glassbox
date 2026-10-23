@@ -1,7 +1,9 @@
 import { ImageIcon, Wrench } from 'lucide-react';
 import { memo, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import type { RequestDetail } from '../../../../../src/core/model.js';
+import { CodeBlock, CopyButton } from '../../../components/CodeBlock';
 import { JsonInspector } from '../../../components/JsonInspector';
+import { Markdown } from '../../../components/Markdown';
 import { type MessageKey, useI18n } from '../../../i18n';
 import { formatClock } from '../../../lib/format';
 import { ArgsView } from './ArgsView';
@@ -21,7 +23,8 @@ import {
   span,
   type ToolDef,
 } from './read';
-import { CodeBlock, CopyButton, ReadableText, Segmented } from './text';
+import { ReadableText, Segmented } from './text';
+import { MarkdownToggle } from './ViewToggle';
 
 /** Messages rendered at first, and added each time the list is scrolled to its end. */
 const PAGE = 30;
@@ -63,11 +66,24 @@ function AsJson({ label, data }: { label: string; data: unknown }) {
   );
 }
 
-function BlockView({ block: b, label }: { block: Block; label: string }) {
+function BlockView({
+  block: b,
+  label,
+  markdown = false,
+}: {
+  block: Block;
+  label: string;
+  /** Render text as markdown (a model's reply). */
+  markdown?: boolean;
+}) {
   const { t, intl } = useI18n();
   switch (b.kind) {
     case 'text':
-      return <ReadableText text={b.text} label={label} />;
+      return markdown ? (
+        <Markdown text={b.text} label={label} />
+      ) : (
+        <ReadableText text={b.text} label={label} />
+      );
     case 'thinking':
       return b.text === null ? (
         <p className={css.muted}>{t('detail.thinkingHidden')}</p>
@@ -139,10 +155,13 @@ const MessageItem = memo(function MessageItem({
   message,
   n,
   total,
+  markdown,
 }: {
   message: Message;
   n: number;
   total: number;
+  /** Render the model's text as markdown. */
+  markdown: boolean;
 }) {
   const { t, intl } = useI18n();
   const role = shownRole(message);
@@ -164,14 +183,23 @@ const MessageItem = memo(function MessageItem({
           <span className={css.role}>{roleName}</span>
           <span className={css.position}>{position}</span>
           {message.time && <span className={css.position}>{formatClock(message.time)}</span>}
-          <CopyButton text={() => messageText(message)} label={t('detail.copyMessage')} />
+          <CopyButton
+            text={() => messageText(message)}
+            label={t('detail.copyMessage')}
+            className={css.headCopy}
+          />
         </header>
         {message.blocks.length === 0 ? (
           <p className={css.muted}>{t('detail.empty')}</p>
         ) : (
           message.blocks.map((b, i) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: blocks of one immutable message
-            <BlockView key={i} block={b} label={label} />
+            <BlockView
+              // biome-ignore lint/suspicious/noArrayIndexKey: blocks of one immutable message
+              key={i}
+              block={b}
+              label={label}
+              markdown={markdown && message.role === 'assistant'}
+            />
           ))
         )}
       </article>
@@ -243,18 +271,21 @@ export function MessageList({ entries }: { entries: Entry[] }) {
           {t('detail.messageCount', { n: total.toLocaleString(intl) })}
           {hidden > 0 && ` · ${t('detail.hiddenCount', { n: hidden.toLocaleString(intl) })}`}
         </span>
-        <Segmented
-          label={t('detail.order')}
-          value={prefs.order}
-          options={[
-            { value: 'newest', label: t('detail.newest') },
-            { value: 'oldest', label: t('detail.oldest') },
-          ]}
-          onChange={(order) => {
-            setPrefs({ order });
-            setShown(PAGE);
-          }}
-        />
+        <span className={css.toggles}>
+          <MarkdownToggle />
+          <Segmented
+            label={t('detail.order')}
+            value={prefs.order}
+            options={[
+              { value: 'newest', label: t('detail.newest') },
+              { value: 'oldest', label: t('detail.oldest') },
+            ]}
+            onChange={(order) => {
+              setPrefs({ order });
+              setShown(PAGE);
+            }}
+          />
+        </span>
       </div>
       <ol ref={list} className={css.list} data-scroll-region>
         {indices.map((i) => {
@@ -263,13 +294,19 @@ export function MessageList({ entries }: { entries: Entry[] }) {
           return isGap(e) ? (
             <GapItem key={i} gap={e.gap} first={first} total={total} />
           ) : (
-            <MessageItem key={i} message={e} n={first} total={total} />
+            <MessageItem
+              key={i}
+              message={e}
+              n={first}
+              total={total}
+              markdown={prefs.markdown === 'rendered'}
+            />
           );
         })}
         {count < entries.length && <li ref={end} className={css.end} aria-hidden="true" />}
       </ol>
       {count < entries.length && (
-        <button type="button" className={css.showAll} onClick={() => setShown((s) => s + PAGE)}>
+        <button type="button" className={css.more} onClick={() => setShown((s) => s + PAGE)}>
           {t('detail.showMore', {
             n: Math.min(PAGE, entries.length - count).toLocaleString(intl),
           })}
@@ -293,7 +330,7 @@ function SystemView({ blocks }: { blocks: string[] }) {
           <div key={i} className={css.sysBlock}>
             <div className={css.blockHead}>
               <span>{title}</span>
-              <CopyButton text={() => text} label={t('detail.copyText')} />
+              <CopyButton text={() => text} label={t('detail.copyText')} className={css.headCopy} />
             </div>
             <ReadableText text={text} label={`${t('detail.system')} · ${title}`} />
           </div>

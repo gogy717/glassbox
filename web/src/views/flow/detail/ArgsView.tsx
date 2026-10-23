@@ -1,7 +1,7 @@
 import { memo, useMemo } from 'react';
+import { CodeBlock } from '../../../components/CodeBlock';
 import { useI18n } from '../../../i18n';
 import css from './detail.module.css';
-import { CodeBlock } from './text';
 
 /** A string this short, on one line, reads fine inline; anything longer gets a code block. */
 const INLINE_MAX = 60;
