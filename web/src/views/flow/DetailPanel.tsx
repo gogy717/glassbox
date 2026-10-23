@@ -2,6 +2,7 @@ import { ChevronUp, Maximize2 } from 'lucide-react';
 import { type ReactNode, useId, useMemo, useRef, useState } from 'react';
 import type { ModelRequest, RequestDetail, ToolCall } from '../../../../src/core/model.js';
 import { CopyButton } from '../../components/CodeBlock';
+import { FigureText } from '../../components/FigureText';
 import { JsonInspector } from '../../components/JsonInspector';
 import { Markdown } from '../../components/Markdown';
 import { Modal } from '../../components/Modal';
@@ -89,7 +90,9 @@ export function DetailPanel({ sessionId, req, tools, card, onClose }: Props) {
         <span id={titleId} className={css.title}>
           {title}
         </span>
-        <span className={`${css.callRef} figure`}>{callRef}</span>
+        <span className={css.callRef}>
+          <FigureText k="detail.callRef" params={{ n: req.index }} />
+        </span>
         {detail && <Completeness detail={detail} />}
         <span className={css.headTools}>
           <ViewToggle />

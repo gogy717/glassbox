@@ -121,7 +121,10 @@ describe('DetailPanel', () => {
     renderPanel(req('req_m1'), 'request');
     const panel = screen.getByRole('region', { name: 'Request details' });
     const head = within(panel).getByText('Request details').parentElement as HTMLElement;
-    expect(within(head).getByText('call #1')).toHaveClass('figure');
+    // "call #1": the number in the mono face, the word in the UI face (调用 never goes mono).
+    expect(head).toHaveTextContent('call #1');
+    expect(within(head).getByText('1', { selector: '.figure' })).toBeInTheDocument();
+    expect(within(head).queryByText(/call/, { selector: '.figure' })).toBeNull();
     const full = await within(head).findByText('Fully reconstructed');
     // A quiet check and the word, never a filled badge.
     expect(full.closest('[data-state]')).toHaveAttribute('data-state', 'complete');

@@ -23,7 +23,6 @@ function item(n: number): TurnItem {
     label: `Conversation ${n}`,
     title: `prompt ${n}`,
     prompt: `prompt ${n}`,
-    heading: `Conversation ${n}: prompt ${n}`,
     calls: 1,
     tools: 0,
     status: 'complete',
@@ -258,5 +257,12 @@ describe('TurnList styles', () => {
     const sheet = readFileSync(join(import.meta.dirname, 'TurnList.module.css'), 'utf8');
     const row = /\n\.row \{([^}]*)\}/.exec(sheet)?.[1] ?? '';
     expect(row).toMatch(/position: relative;/);
+  });
+
+  it('keeps the "local command" note (本地命令) out of the mono face', () => {
+    const sheet = readFileSync(join(import.meta.dirname, 'TurnList.module.css'), 'utf8');
+    const note = /\n\.command \{([^}]*)\}/.exec(sheet)?.[1];
+    expect(note).toBeDefined();
+    expect(note).not.toMatch(/font-family/);
   });
 });

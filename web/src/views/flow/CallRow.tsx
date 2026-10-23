@@ -1,6 +1,6 @@
 import { memo, type ReactNode, useId } from 'react';
 import type { ModelRequest, ToolCall } from '../../../../src/core/model.js';
-import { Figures } from '../../components/Figures';
+import { FigureText } from '../../components/FigureText';
 import { StatusMark, Ticking } from '../../components/Status';
 import { useApprovalsContext } from '../../data/approvals';
 import { useSessionAgent } from '../../data/session-agent';
@@ -89,7 +89,7 @@ export const CallRow = memo(function CallRow(p: Props) {
                 {tok.thinking > 0 && (
                   <span className={css.word}>
                     {' ('}
-                    <Figures text={t('flow.thinkingOf', { n: n(tok.thinking) })} />)
+                    <FigureText k="flow.thinkingOf" params={{ n: n(tok.thinking) }} />)
                   </span>
                 )}
               </Reading>

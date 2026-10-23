@@ -1,7 +1,7 @@
 import { Search } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { Turn } from '../../../../src/core/model.js';
-import { Figures } from '../../components/Figures';
+import { FigureText } from '../../components/FigureText';
 import { StatusMark, type UiStatus } from '../../components/Status';
 import { useApprovalsContext } from '../../data/approvals';
 import { useSessionAgentKind } from '../../data/session-agent';
@@ -30,9 +30,6 @@ export interface TurnItem {
   title: string;
   /** For the open turn's heading: the whole prompt, line breaks kept, without the label. */
   prompt: string;
-  /** The label and the whole prompt in one ("Conversation 2: …"), for a heading that has no
-   *  label of its own (the Steps view, until it uses `TurnHeader`). */
-  heading: string;
   calls: number;
   tools: number;
   status: UiStatus;
@@ -63,8 +60,6 @@ export function useTurnItems(open: OpenSession, agentId: string): TurnItem[] {
           label,
           title: prompt ? truncatePrompt(prompt) : label,
           prompt: prompt || label,
-          heading:
-            prompt && !isOutsideTurn(turn) ? t('flow.turnTitle', { n: turn.index, prompt }) : label,
           calls: reqs.length,
           tools,
           status,
@@ -201,7 +196,7 @@ export const TurnList = memo(function TurnList({
           {shown.length === items.length ? (
             <span className="figure">{items.length}</span>
           ) : (
-            <Figures text={t('flow.turnsShown', { n: shown.length, total: items.length })} />
+            <FigureText k="flow.turnsShown" params={{ n: shown.length, total: items.length }} />
           )}
         </span>
       </div>
@@ -278,8 +273,9 @@ export const TurnList = memo(function TurnList({
                     <span className={css.sub}>
                       <span className={`${css.subClock} figure`}>{clock}</span>
                       <span className={css.counts}>
-                        <Figures
-                          text={t('flow.callsToolsShort', { calls: it.calls, tools: it.tools })}
+                        <FigureText
+                          k="flow.callsToolsShort"
+                          params={{ calls: it.calls, tools: it.tools }}
                         />
                       </span>
                       <span className={css.markSub}>{mark}</span>

@@ -197,7 +197,6 @@
   grid-column: 2 / -1;
   justify-self: start;
   color: var(--faint);
-  font-family: var(--font-mono);
   font-size: var(--fs-meta);
 }
 

@@ -65,7 +65,12 @@ export function StepsView({ open, agentId, route, navigate }: Props) {
           <>
             <div className={css.turnHead}>
               <div className={css.headRow}>
-                <TurnTitle key={current.turn.id} text={current.heading} className={css.title} />
+                <TurnTitle
+                  key={current.turn.id}
+                  label={current.label}
+                  text={current.prompt}
+                  className={css.title}
+                />
                 {!follow && (
                   <BackToLatest
                     onClick={() => {
