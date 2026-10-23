@@ -4,23 +4,23 @@
  * cache.
  *
  * Only `claudeAiOauth.accessToken`, `expiresAt` and the plan (`subscriptionType`, `rateLimitTier`)
- * are read out of the credentials. The token is
- * sent to api.anthropic.com and nowhere else, and is never logged or kept between requests. An
- * expired token is never refreshed: refreshing rotates it and could sign Claude Code out, so
- * glassbox waits until Claude Code has refreshed it itself.
+ * are read out of the credentials. The token is sent to api.anthropic.com and nowhere else (no
+ * redirects), and is never logged or kept between requests. An expired token is never refreshed:
+ * refreshing rotates it and could sign Claude Code out, so glassbox waits until Claude Code has
+ * refreshed it itself. The request loop is `periodicFetch`, shared with the other providers.
  */
 import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { QuotaSnapshot } from '../../core/model.js';
+import { type Attempt, getJson, periodicFetch } from '../../quota/periodic-fetch.js';
 import { type Obj, obj } from '../../quota/shared.js';
 import { planName, quotaFromUtilization } from './quota.js';
 
 export const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage';
 /** Where Claude Code keeps its sign-in on macOS, instead of `.credentials.json`. */
 const KEYCHAIN_SERVICE = 'Claude Code-credentials';
-const DEFAULT_INTERVAL_MS = 5 * 60_000;
-const TIMEOUT_MS = 10_000;
+const KEYCHAIN_TIMEOUT_MS = 10_000;
 /** Treat a token this close to expiry as expired: it could lapse mid-request. */
 const EXPIRY_MARGIN_MS = 60_000;
 
@@ -48,7 +48,7 @@ const readKeychain = () =>
     execFile(
       'security',
       ['find-generic-password', '-s', KEYCHAIN_SERVICE, '-w'],
-      { timeout: TIMEOUT_MS },
+      { timeout: KEYCHAIN_TIMEOUT_MS },
       (err, stdout) => (err ? reject(err) : resolve(stdout)),
     ),
   );
@@ -65,6 +65,8 @@ function tokenFrom(text: string, now: number): TokenRead {
   }
   const token = oauth?.accessToken;
   if (typeof token !== 'string' || token === '') return { missing: 'not signed in to Claude' };
+  // A header cannot carry it, and fetch would quote it in the error.
+  if (!/^[\x21-\x7e]+$/.test(token)) return { missing: 'the sign-in token is malformed' };
   const expiresAt = oauth?.expiresAt;
   if (typeof expiresAt === 'number' && expiresAt - EXPIRY_MARGIN_MS <= now) {
     return { missing: 'the sign-in has expired; Claude Code renews it on its next request' };
@@ -72,27 +74,18 @@ function tokenFrom(text: string, now: number): TokenRead {
   return { token, plan: planName(oauth?.subscriptionType, oauth?.rateLimitTier) };
 }
 
+/** A usage answer worth keeping, and the plan the credentials named when it was fetched. */
+interface Usage {
+  body: unknown;
+  plan: string | null;
+}
+
 export function createQuotaFetcher(opts: QuotaFetcherOptions): QuotaFetcher {
-  const intervalMs = opts.intervalMs ?? DEFAULT_INTERVAL_MS;
-  const log = opts.log ?? (() => {});
   const platform = opts.platform ?? process.platform;
   const doFetch = opts.fetch ?? fetch;
   const readText = opts.readText ?? ((path: string) => readFile(path, 'utf8'));
   const keychain = opts.keychain ?? readKeychain;
   const now = opts.now ?? Date.now;
-
-  let body: unknown = null;
-  let plan: string | null = null;
-  let fetchedAtMs = 0;
-  let lastAttempt = Number.NEGATIVE_INFINITY;
-  let inFlight: Promise<void> | null = null;
-  /** The last failure logged, so a failure repeating every interval is logged once. */
-  let lastProblem: string | null = null;
-
-  const problem = (msg: string) => {
-    if (msg !== lastProblem) log(`quota fetch: ${msg}`);
-    lastProblem = msg;
-  };
 
   async function readToken(): Promise<TokenRead> {
     let text: string | null = null;
@@ -104,53 +97,49 @@ export function createQuotaFetcher(opts: QuotaFetcherOptions): QuotaFetcher {
     return text === null ? { missing: 'no Claude Code sign-in found' } : tokenFrom(text, now());
   }
 
-  async function refresh(): Promise<void> {
+  async function attempt(): Promise<Attempt<Usage>> {
     const read = await readToken();
-    if ('missing' in read) return problem(read.missing);
-    let res: Response;
-    try {
-      res = await doFetch(USAGE_URL, {
-        headers: {
-          Authorization: `Bearer ${read.token}`,
-          'anthropic-beta': 'oauth-2025-04-20',
-          Accept: 'application/json',
-        },
-        signal: AbortSignal.timeout(TIMEOUT_MS),
-      });
-    } catch (err) {
-      return problem(`request failed (${err instanceof Error ? err.message : String(err)})`);
-    }
-    if (!res.ok) return problem(`the usage endpoint answered HTTP ${res.status}`);
-    let json: unknown;
-    try {
-      json = await res.json();
-    } catch {
-      return problem('the usage endpoint did not answer JSON');
-    }
+    if ('missing' in read) return { problem: read.missing };
+    const res = await getJson(
+      doFetch,
+      USAGE_URL,
+      {
+        Authorization: `Bearer ${read.token}`,
+        'anthropic-beta': 'oauth-2025-04-20',
+        Accept: 'application/json',
+      },
+      read.token,
+      'the usage endpoint',
+    );
+    if ('problem' in res) return res;
     // An error envelope parses as a quota with no windows; it must not replace a real one.
-    if (!quotaFromUtilization(json, now(), now(), 'anthropic-usage-api')?.windows.length) {
-      return problem('the usage endpoint answered in an unknown format');
+    if (!quotaFromUtilization(res.ok, now(), now(), 'anthropic-usage-api')?.windows.length) {
+      return { problem: 'the usage endpoint answered in an unknown format' };
     }
-    body = json;
-    plan = read.plan;
-    fetchedAtMs = now();
-    if (lastProblem !== null) log('quota fetch: working again');
-    lastProblem = null;
+    return { ok: { body: res.ok, plan: read.plan } };
   }
+
+  const loop = periodicFetch({
+    attempt,
+    name: 'quota fetch (Anthropic)',
+    intervalMs: opts.intervalMs,
+    log: opts.log,
+    now,
+  });
 
   return {
     async latest() {
-      if (!inFlight && now() - lastAttempt >= intervalMs) {
-        lastAttempt = now();
-        inFlight = refresh().finally(() => {
-          inFlight = null;
-        });
-      }
-      if (inFlight) await inFlight;
+      const last = await loop.latest();
       // Rebuilt on every read so `stale` follows the clock.
-      return body === null
-        ? null
-        : quotaFromUtilization(body, fetchedAtMs, now(), 'anthropic-usage-api', plan);
+      return last
+        ? quotaFromUtilization(
+            last.value.body,
+            last.fetchedAtMs,
+            now(),
+            'anthropic-usage-api',
+            last.value.plan,
+          )
+        : null;
     },
   };
 }

@@ -107,7 +107,7 @@ glassbox is an independent project, not affiliated with or endorsed by Anthropic
   | `xai`       | `cli-chat-proxy.grok.com/v1/billing?format=credits` | Grok CLI's sign-in: the access token in `~/.grok/auth.json`                                     |
   | `deepseek`  | `api.deepseek.com/user/balance`                     | `$DEEPSEEK_API_KEY`                                                                             |
 
-  Credentials are never logged, stored or refreshed; an expired sign-in is skipped until its own app renews it. Requests time out after 10 seconds. `--no-grok` only hides Grok sessions: it does not stop the `xai` request, which `--fetch-quota=anthropic,deepseek` leaves out. The Anthropic and xAI endpoints are the ones Claude Code's `/usage` and Grok CLI use, not public APIs, so they may change.
+  Credentials are never logged, stored or refreshed; an expired sign-in is skipped until its own app renews it. Requests time out after 10 seconds and never follow redirects. `--no-grok` only hides Grok sessions: it does not stop the `xai` request, which `--fetch-quota=anthropic,deepseek` leaves out. The Anthropic and xAI endpoints are the ones Claude Code's `/usage` and Grok CLI use, not public APIs, so they may change.
 
 ## Known limitations
 

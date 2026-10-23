@@ -131,10 +131,7 @@ async function main(): Promise<void> {
   // Network and credentials only for the providers named by --fetch-quota.
   const fetching = opts.demo ? [] : opts.fetchQuota;
   const quotaFetcher = fetching.includes('anthropic')
-    ? createQuotaFetcher({
-        claudeDir: opts.claudeDir,
-        log: (msg) => log(msg.replace(/^quota fetch:/, 'quota fetch (Anthropic):')),
-      })
+    ? createQuotaFetcher({ claudeDir: opts.claudeDir, log })
     : undefined;
   // Grok CLI's sign-in is used even with --no-grok, which only hides Grok sessions.
   if (fetching.includes('xai')) {

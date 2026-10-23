@@ -107,7 +107,7 @@ glassbox 是独立项目，与 Anthropic 没有关联，也未获其认可。
   | `xai`       | `cli-chat-proxy.grok.com/v1/billing?format=credits` | Grok CLI 的登录：`~/.grok/auth.json` 里的 access token                                |
   | `deepseek`  | `api.deepseek.com/user/balance`                     | `$DEEPSEEK_API_KEY`                                                                   |
 
-  凭据不记日志、不保存、不刷新；登录过期了就跳过，等它自己的应用续期。请求 10 秒超时。`--no-grok` 只是不显示 Grok 会话，并不会停止 `xai` 的请求；要不查 xAI，用 `--fetch-quota=anthropic,deepseek`。Anthropic 和 xAI 的接口是 Claude Code 的 `/usage` 和 Grok CLI 用的那个，不是公开 API，以后可能会变。
+  凭据不记日志、不保存、不刷新；登录过期了就跳过，等它自己的应用续期。请求 10 秒超时，不跟随重定向。`--no-grok` 只是不显示 Grok 会话，并不会停止 `xai` 的请求；要不查 xAI，用 `--fetch-quota=anthropic,deepseek`。Anthropic 和 xAI 的接口是 Claude Code 的 `/usage` 和 Grok CLI 用的那个，不是公开 API，以后可能会变。
 
 ## 已知限制
 

@@ -26,14 +26,14 @@ function setup(
     creds?: string | null;
     platform?: NodeJS.Platform;
     keychain?: string | null;
-    respond?: () => Response | Promise<Response>;
+    respond?: (init?: RequestInit) => Response | Promise<Response>;
   } = {},
 ) {
   let now = NOW;
   const logs: string[] = [];
   const fetch = vi.fn(
-    async (_url: string | URL | Request, _init?: RequestInit) =>
-      opts.respond?.() ?? Response.json(usageBody),
+    async (_url: string | URL | Request, init?: RequestInit) =>
+      opts.respond?.(init) ?? Response.json(usageBody),
   );
   const fetcher = createQuotaFetcher({
     claudeDir: '/home/u/.claude',
@@ -111,7 +111,7 @@ describe('createQuotaFetcher', () => {
     advance(10 * 60_000);
     await fetcher.latest();
     expect(fetch).not.toHaveBeenCalled();
-    expect(logs).toEqual(['quota fetch: no Claude Code sign-in found']);
+    expect(logs).toEqual(['quota fetch (Anthropic): no Claude Code sign-in found']);
   });
 
   it('reads the macOS Keychain when there is no credentials file', async () => {
@@ -135,16 +135,48 @@ describe('createQuotaFetcher', () => {
     advance(5 * 60_000);
     await fetcher.latest();
     expect(logs).toEqual([
-      'quota fetch: the usage endpoint answered HTTP 429',
-      'quota fetch: working again',
+      'quota fetch (Anthropic): the usage endpoint answered HTTP 429',
+      'quota fetch (Anthropic): working again',
     ]);
     expect(logs.join('\n')).not.toContain(TOKEN);
+  });
+
+  it('asks without following redirects, so the token reaches api.anthropic.com only', async () => {
+    const { fetcher, fetch } = setup();
+    await fetcher.latest();
+    expect(fetch.mock.calls[0]?.[1]).toMatchObject({ redirect: 'error' });
+  });
+
+  it('never logs the token, even from an error that quotes the request', async () => {
+    const { fetcher, logs } = setup({
+      respond: (init) => {
+        // How fetch reports a header it cannot send: with the header's value in the message.
+        const auth = new Headers(init?.headers).get('Authorization');
+        throw new TypeError(`Headers.append: "${auth}\n" is an invalid header value.`, {
+          cause: new Error(`while sending ${auth}`),
+        });
+      },
+    });
+    expect(await fetcher.latest()).toBeNull();
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatch(/^quota fetch \(Anthropic\): request failed/);
+    expect(logs.join('\n')).not.toContain(TOKEN);
+  });
+
+  it('sends no request with a token no header can carry, and does not log it', async () => {
+    const malformed = `${TOKEN}\nsecond-line`;
+    const { fetcher, fetch, logs } = setup({ creds: credentials({ accessToken: malformed }) });
+    expect(await fetcher.latest()).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(logs).toEqual(['quota fetch (Anthropic): the sign-in token is malformed']);
   });
 
   it('ignores a body it cannot read as a quota', async () => {
     const { fetcher, logs } = setup({ respond: () => Response.json({ error: 'nope' }) });
     expect(await fetcher.latest()).toBeNull();
-    expect(logs).toEqual(['quota fetch: the usage endpoint answered in an unknown format']);
+    expect(logs).toEqual([
+      'quota fetch (Anthropic): the usage endpoint answered in an unknown format',
+    ]);
   });
 
   it('reports a network failure without throwing', async () => {
@@ -154,6 +186,6 @@ describe('createQuotaFetcher', () => {
       },
     });
     expect(await fetcher.latest()).toBeNull();
-    expect(logs).toEqual(['quota fetch: request failed (getaddrinfo ENOTFOUND)']);
+    expect(logs).toEqual(['quota fetch (Anthropic): request failed (getaddrinfo ENOTFOUND)']);
   });
 });
