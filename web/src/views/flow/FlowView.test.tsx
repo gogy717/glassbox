@@ -94,23 +94,32 @@ describe('FlowView', () => {
   useFakeLayout();
   afterEach(() => vi.useRealTimers());
 
-  it('lists the agent’s turns and follows the newest one', () => {
+  it('lists the agent’s turns newest first and follows the newest, on top', () => {
     renderFlow();
     const turns = screen.getByRole('list', { name: 'User turns' });
+    // DOM order is display order, so Tab walks the turns as they are seen.
     const items = within(turns).getAllByRole('button');
     expect(items.map((b) => b.querySelector('[data-title]')?.textContent)).toEqual([
-      'Conversation 1: Busy sessions should be listed first in the sidebar',
+      'Conversation 3: Now write the design document from the findings',
       expect.stringMatching(
         /^Conversation 2: Research how a live viewer could read Claude Code transcripts, use ultracode\. What I need to know: - .+…$/,
       ),
-      'Conversation 3: Now write the design document from the findings',
+      'Conversation 1: Busy sessions should be listed first in the sidebar',
     ]);
-    expect(items[2]).toHaveAttribute('aria-current', 'true');
+    expect(items[0]).toHaveAttribute('aria-current', 'true');
+    expect(within(items[0] as HTMLElement).getByText('Running')).toBeInTheDocument();
     expect(
-      within(items[0] as HTMLElement).getByText('3 model calls · 3 tools'),
+      within(items[2] as HTMLElement).getByText('3 model calls · 3 tools'),
     ).toBeInTheDocument();
-    expect(within(items[0] as HTMLElement).getByText('Complete')).toBeInTheDocument();
-    expect(within(items[2] as HTMLElement).getByText('Running')).toBeInTheDocument();
+    expect(within(items[2] as HTMLElement).getByText('Complete')).toBeInTheDocument();
+  });
+
+  it('keeps an older turn picked from the URL selected while newer ones stay on top', () => {
+    renderFlow({ route: { turnId: 'turn_m1' }, follow: false });
+    const items = within(screen.getByRole('list', { name: 'User turns' })).getAllByRole('button');
+    expect(items[2]).toHaveAttribute('aria-current', 'true');
+    expect(items[2]).toHaveTextContent('Conversation 1');
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Conversation 1: /);
   });
 
   it('keeps a pasted 5 KB prompt to 120 characters in the list, all of it on hover', () => {

@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { Turn } from '../../../../src/core/model.js';
 import { StatusPill, type UiStatus } from '../../components/Status';
 import { useApprovalsContext } from '../../data/approvals';
@@ -102,23 +102,53 @@ export function useSelectedTurn(
   return current;
 }
 
+/** Space kept between a revealed card and the list's edge (the list's own padding). */
+const EDGE_PX = 10;
+
+/** Scrolls `list` itself, never an ancestor, just enough to show `el`, on either axis. */
+function reveal(list: HTMLElement, el: HTMLElement): void {
+  const l = list.getBoundingClientRect();
+  const r = el.getBoundingClientRect();
+  if (r.top < l.top) list.scrollTop -= l.top - r.top + EDGE_PX;
+  else if (r.bottom > l.bottom) list.scrollTop += r.bottom - l.bottom + EDGE_PX;
+  if (r.left < l.left) list.scrollLeft -= l.left - r.left + EDGE_PX;
+  else if (r.right > l.right) list.scrollLeft += r.right - l.right + EDGE_PX;
+}
+
 interface Props {
+  /** Chronological, as `useTurnItems` returns them. */
   items: TurnItem[];
   selectedId: string | null;
   onSelect(turnId: string): void;
 }
 
+/**
+ * The agent's turns, newest first: the turn being followed, or the one that just arrived, is on
+ * top (on the left in the narrow, horizontal layout). Numbers stay chronological, and the DOM is
+ * in display order so keyboard order matches what is seen.
+ */
 export const TurnList = memo(function TurnList({ items, selectedId, onSelect }: Props) {
   const { t } = useI18n();
+  const listRef = useRef<HTMLUListElement>(null);
+  const newestFirst = useMemo(() => [...items].reverse(), [items]);
+
+  // Follow moves the selection to each new turn and a link may select an old one: keep it in view.
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list || !selectedId) return;
+    for (const li of list.children)
+      if (li instanceof HTMLElement && li.dataset.turn === selectedId) reveal(list, li);
+  }, [selectedId]);
+
   return (
     <nav className={css.pane} aria-label={t('flow.turns')}>
       <div className={css.head}>
         {t('flow.turns')}
         <span className="num">{items.length}</span>
       </div>
-      <ul className={css.list} aria-label={t('flow.turns')}>
-        {items.map((it) => (
-          <li key={it.turn.id}>
+      <ul ref={listRef} className={css.list} aria-label={t('flow.turns')}>
+        {newestFirst.map((it) => (
+          <li key={it.turn.id} data-turn={it.turn.id}>
             <button
               type="button"
               className={css.card}

@@ -41,6 +41,17 @@ describe('StepsView', () => {
   useFakeLayout();
   afterEach(() => vi.useRealTimers());
 
+  it('lists the turns newest first, like the flow tab, with the followed turn on top', () => {
+    renderSteps();
+    const items = within(screen.getByRole('list', { name: 'User turns' })).getAllByRole('button');
+    expect(items.map((b) => b.textContent?.match(/^Conversation \d+/)?.[0])).toEqual([
+      'Conversation 3',
+      'Conversation 2',
+      'Conversation 1',
+    ]);
+    expect(items[0]).toHaveAttribute('aria-current', 'true');
+  });
+
   it('groups turn 1 into explore → edit → answer phases with time and tokens', () => {
     renderSteps({ route: { turnId: 'turn_m1' }, follow: false });
     const heads = screen.getAllByRole('heading', { level: 3 });
