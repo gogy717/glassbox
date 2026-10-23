@@ -1,4 +1,4 @@
-import { Stethoscope } from 'lucide-react';
+import { Activity } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { Diagnostics as Diag } from '../../../src/core/model.js';
 import { useSessionAgent } from '../data/session-agent';
@@ -48,7 +48,8 @@ export function Diagnostics({ diagnostics: d }: { diagnostics: Diag }) {
   // Each gap listed in the panel: missing data, unparsable lines, unrecognised record types.
   const gaps = d.unavailable.length + (d.parseErrors > 0 ? 1 : 0) + unknown.length;
   const alert = gaps > 0;
-  const count = alert ? t('diag.count', { n: gaps }) : null;
+  // Always in words, so the panel is found without hunting for an icon: "1 gap", or "No gaps".
+  const count = alert ? t('diag.count', { n: gaps }) : t('diag.none');
   const n = (v: number) => v.toLocaleString(intl);
 
   return (
@@ -56,14 +57,15 @@ export function Diagnostics({ diagnostics: d }: { diagnostics: Diag }) {
       <button
         type="button"
         className={css.button}
-        aria-label={count ? `${t('diag.title')} · ${count}` : t('diag.title')}
+        aria-label={`${t('diag.title')} · ${count}`}
         title={t('diag.title')}
         aria-expanded={open}
         data-alert={alert || undefined}
         onClick={() => setOpen(!open)}
       >
-        <Stethoscope size={14} aria-hidden="true" />
-        {count && <span className={css.count}>{count}</span>}
+        <Activity size={14} aria-hidden="true" />
+        {alert && <span className={css.dot} aria-hidden="true" />}
+        <span className={css.count}>{count}</span>
       </button>
       {open && (
         <div className={css.panel} role="dialog" aria-label={t('diag.title')}>

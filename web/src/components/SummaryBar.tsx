@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { OpenSession } from '../data/store';
 import { useNow } from '../data/useNow';
 import { useI18n } from '../i18n';
@@ -7,32 +7,61 @@ import { DASH, formatDuration, formatNumber, formatPercent } from '../lib/format
 import { Diagnostics } from './Diagnostics';
 import css from './SummaryBar.module.css';
 
+interface Figure {
+  label: string;
+  value: string;
+  /** Below 900px, behind "More figures": the bar keeps conversations, calls, duration, output. */
+  more?: boolean;
+  /** Muted after the value, e.g. the thinking share of output. */
+  aside?: string;
+}
+
+/** The readout: each figure in the mono face above its label, a hairline between them. */
 export function SummaryBar({ open, agentId }: { open: OpenSession; agentId: string }) {
   const { t, intl } = useI18n();
   const now = useNow();
+  const [more, setMore] = useState(false);
   // Counts only change with the data; the clock only moves the running duration.
   const s = useMemo(() => summarize(open, agentId, now), [open, agentId, now]);
-  const items: [string, string][] = [
-    [t('summary.turns'), formatNumber(s.turns, intl)],
-    [t('summary.requests'), formatNumber(s.requests, intl)],
-    [t('summary.toolCalls'), formatNumber(s.toolCalls, intl)],
+  // No call reported usage yet (Grok before a turn total): unknown, not zero.
+  const tokens = (n: number) => (s.measured ? formatNumber(n, intl) : DASH);
+  const figures: Figure[] = [
+    { label: t('summary.turns'), value: formatNumber(s.turns, intl) },
+    { label: t('summary.requests'), value: formatNumber(s.requests, intl) },
+    { label: t('summary.toolCalls'), value: formatNumber(s.toolCalls, intl), more: true },
     // Nothing ran yet: no duration rather than "0ms".
-    [t('summary.duration'), s.requests === 0 ? DASH : formatDuration(s.activeMs)],
-    [t('summary.input'), formatNumber(s.input, intl)],
-    [t('summary.cacheHit'), formatPercent(s.cacheHitRate, intl)],
-    [t('summary.output'), `${formatNumber(s.output, intl)} (${formatNumber(s.thinking, intl)})`],
+    {
+      label: t('summary.duration'),
+      value: s.requests === 0 ? DASH : formatDuration(s.activeMs),
+    },
+    { label: t('summary.input'), value: tokens(s.input), more: true },
+    { label: t('summary.cacheHit'), value: formatPercent(s.cacheHitRate, intl), more: true },
+    {
+      label: t('summary.output'),
+      value: tokens(s.output),
+      aside: s.measured ? `(${formatNumber(s.thinking, intl)})` : undefined,
+    },
   ];
   return (
-    <section className={css.bar} aria-label={t('summary.title')}>
+    <section className={css.bar} aria-label={t('summary.title')} data-more={more || undefined}>
       <div className={css.metrics}>
-        {items.map(([label, value]) => (
-          <div key={label} className={css.metric}>
-            <span className={`${css.value} num`} data-value>
-              {value}
+        {figures.map((f) => (
+          <div key={f.label} className={css.metric} data-extra={f.more || undefined}>
+            <span className={`${css.value} figure`} data-value>
+              {f.value}
+              {f.aside && <span className={css.aside}> {f.aside}</span>}
             </span>
-            <span className={css.label}>{label}</span>
+            <span className={`${css.label} section-label`}>{f.label}</span>
           </div>
         ))}
+        <button
+          type="button"
+          className={css.more}
+          aria-expanded={more}
+          onClick={() => setMore(!more)}
+        >
+          {t(more ? 'summary.fewer' : 'summary.more')}
+        </button>
       </div>
       <Diagnostics diagnostics={open.diagnostics} />
     </section>

@@ -73,9 +73,9 @@ describe('Diagnostics', () => {
       parseErrors: 0,
       unknownRecordTypes: { 'superseded-request': 4 },
     });
-    const button = screen.getByRole('button', { name: 'Data diagnostics' });
+    const button = screen.getByRole('button', { name: 'Data diagnostics · No gaps' });
     expect(button).not.toHaveAttribute('data-alert');
-    expect(button).toHaveTextContent('');
+    expect(button).toHaveTextContent('No gaps');
     fireEvent.click(button);
     const panel = screen.getByRole('dialog', { name: 'Data diagnostics' });
     expect(panel).toHaveTextContent('No problems found');

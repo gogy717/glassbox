@@ -62,6 +62,20 @@ describe('summarize', () => {
       cacheHitRate: 1_582_194 / 1_838_850,
       output: 42_040,
       thinking: 27_050,
+      measured: true,
+    });
+  });
+
+  it('says when no call reported usage, so the figures are unknown rather than zero', () => {
+    const open = demoOpen();
+    const unmeasured = {
+      ...open,
+      requests: new Map([...open.requests].map(([id, r]) => [id, { ...r, usage: null }])),
+    };
+    expect(summarize(unmeasured, 'main', NOW.getTime())).toMatchObject({
+      measured: false,
+      input: 0,
+      output: 0,
     });
   });
 

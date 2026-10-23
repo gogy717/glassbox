@@ -117,6 +117,8 @@ export interface Summary {
   cacheHitRate: number | null;
   output: number;
   thinking: number;
+  /** Whether any call reported usage. Until one does, the token figures are unknown, not zero. */
+  measured: boolean;
 }
 
 /** Summary-bar numbers for an agent and its descendants. */
@@ -131,6 +133,7 @@ export function summarize(open: OpenSession, agentId: string, now: number): Summ
     cacheHitRate: null,
     output: 0,
     thinking: 0,
+    measured: false,
   };
   let cacheRead = 0;
   for (const t of open.turns.values()) {
@@ -143,6 +146,7 @@ export function summarize(open: OpenSession, agentId: string, now: number): Summ
     if (!ids.has(r.agentId)) continue;
     s.requests++;
     if (!r.usage) continue;
+    s.measured = true;
     s.input += contextSize(r.usage);
     cacheRead += r.usage.cacheRead;
     s.output += r.usage.output;

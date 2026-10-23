@@ -37,6 +37,8 @@ export const en: Record<MessageKey, string> = {
   'summary.cacheHit': 'Cache hit',
   'summary.output': 'Output (thinking)',
   'summary.title': 'Summary',
+  'summary.more': 'More figures',
+  'summary.fewer': 'Fewer figures',
   'crumb.main': 'Main',
   'crumb.pick': 'Switch agent',
   'crumb.label': 'Agent',
@@ -329,6 +331,7 @@ export const en: Record<MessageKey, string> = {
   'flow.outsideTurns': 'Calls outside conversations',
   'diag.title': 'Data diagnostics',
   'diag.count': '{n} {n|gap|gaps}',
+  'diag.none': 'No gaps',
   'diag.unavailableHead': 'Not available for this session',
   'diag.u.requestDetail':
     'Request contents (system, tools, messages): not recorded by this {agent} version',
