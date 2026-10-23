@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { clipSegments } from '../../../lib/fences';
 import {
   base64Bytes,
   type Entry,
@@ -322,5 +323,54 @@ describe('helpers', () => {
         },
       ]) ?? [];
     expect(m && messageText(m)).toBe('Run it\n\nBash {\n  "command": "ls"\n}');
+  });
+});
+
+describe('fences inside list items', () => {
+  const steps = '1. Write it:\n\n   ```python\n   def f():\n       return 1\n   ```\n\n2. Run';
+
+  it('takes the fence’s indentation off its code, keeping the code’s own', () => {
+    expect(splitFences(steps)).toEqual([
+      { kind: 'prose', text: '1. Write it:\n', lang: null },
+      { kind: 'code', text: 'def f():\n    return 1', lang: 'python' },
+      { kind: 'prose', text: '\n2. Run', lang: null },
+    ]);
+  });
+
+  it('leaves indented fences in the text when asked, for a markdown renderer to nest', () => {
+    expect(splitFences(steps, 0)).toEqual([{ kind: 'prose', text: steps, lang: null }]);
+  });
+
+  it('gives back an unclosed indented fence exactly as written', () => {
+    const open = 'Intro\n   ```yaml\n   key:\n     nested: 1';
+    expect(splitFences(open)).toEqual([{ kind: 'prose', text: open, lang: null }]);
+  });
+});
+
+describe('clipSegments', () => {
+  const limits = { prose: 100, code: 300, codeClip: 200 };
+
+  it('counts code apart from prose, so a long first block does not hide the prose', () => {
+    const code = 'x'.repeat(500);
+    const { parts, cut } = clipSegments(`\`\`\`\n${code}\n\`\`\`\nAfter the code.`, limits);
+    expect(parts.map((p) => p.kind)).toEqual(['code', 'prose']);
+    expect(parts[0]?.text).toBe(code);
+    expect(cut).toBe(false);
+  });
+
+  it('stops at the code budget, each block counted as much as it shows', () => {
+    const block = (c: string) => `\`\`\`\n${c.repeat(500)}\n\`\`\``;
+    const { parts, cut } = clipSegments([block('a'), block('b'), block('c')].join('\n'), limits);
+    expect(parts.map((p) => p.text[0])).toEqual(['a', 'b']);
+    expect(cut).toBe(true);
+  });
+
+  it('cuts prose at the last line break before the limit, or keeps a surrogate pair whole', () => {
+    const lines = Array.from({ length: 20 }, (_, i) => `line ${i} of the text`).join('\n');
+    const [cutText] = clipSegments(lines, limits).parts;
+    expect(cutText?.text.endsWith('of the text')).toBe(true);
+    expect(cutText?.text.length).toBeLessThanOrEqual(100);
+    const emoji = `${'a'.repeat(99)}😀tail`;
+    expect(clipSegments(emoji, limits).parts[0]?.text).toBe('a'.repeat(99));
   });
 });

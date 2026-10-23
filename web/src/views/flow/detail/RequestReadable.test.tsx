@@ -286,7 +286,7 @@ describe('RequestReadable', () => {
     );
     const [assistant, user] = messages() as [HTMLElement, HTMLElement];
     expect(
-      await within(assistant).findByRole('heading', { level: 1, name: 'Title' }),
+      await within(assistant).findByRole('heading', { level: 5, name: 'Title' }),
     ).toBeInTheDocument();
     expect(within(assistant).getAllByRole('listitem')).toHaveLength(2);
     expect(within(user).queryByRole('heading')).toBeNull();
@@ -299,6 +299,17 @@ describe('RequestReadable', () => {
     expect(JSON.parse(localStorage.getItem('glassbox.detail') ?? '{}')).toMatchObject({
       markdown: 'source',
     });
+  });
+
+  it('scrolls a long system block in place, not the chain around it', () => {
+    renderDetail(detail({ system: ['Block one'] }));
+    expect(screen.getByText('Block one').closest('[data-scroll-region]')).not.toBeNull();
+  });
+
+  it('offers Rendered / Source only when there is a reply to render', () => {
+    renderDetail(detail({ messages: [{ role: 'user', content: '# hi' }] }));
+    expect(screen.queryByRole('radio', { name: 'Source' })).toBeNull();
+    expect(screen.getByRole('radio', { name: 'Newest first' })).toBeInTheDocument();
   });
 
   it('says what was not recorded, and speaks Chinese', () => {

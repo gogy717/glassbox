@@ -247,6 +247,14 @@ export function MessageList({ entries }: { entries: Entry[] }) {
     }
     return { firsts, total: next - 1, hidden };
   }, [entries]);
+  // Only the model's text can be rendered as markdown: without any, the toggle has no use.
+  const hasReply = useMemo(
+    () =>
+      entries.some(
+        (e) => !isGap(e) && e.role === 'assistant' && e.blocks.some((b) => b.kind === 'text'),
+      ),
+    [entries],
+  );
   const count = Math.min(shown, entries.length);
   useEffect(() => {
     const el = end.current;
@@ -272,7 +280,7 @@ export function MessageList({ entries }: { entries: Entry[] }) {
           {hidden > 0 && ` · ${t('detail.hiddenCount', { n: hidden.toLocaleString(intl) })}`}
         </span>
         <span className={css.toggles}>
-          <MarkdownToggle />
+          {hasReply && <MarkdownToggle />}
           <Segmented
             label={t('detail.order')}
             value={prefs.order}
@@ -332,7 +340,9 @@ function SystemView({ blocks }: { blocks: string[] }) {
               <span>{title}</span>
               <CopyButton text={() => text} label={t('detail.copyText')} className={css.headCopy} />
             </div>
-            <ReadableText text={text} label={`${t('detail.system')} · ${title}`} />
+            <div className={css.sysText} data-scroll-region>
+              <ReadableText text={text} label={`${t('detail.system')} · ${title}`} />
+            </div>
           </div>
         );
       })}

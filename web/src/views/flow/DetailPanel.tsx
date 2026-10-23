@@ -238,7 +238,7 @@ function ResponseBody({ req }: { req: ModelRequest }) {
       </Cell>
       <Cell title={t('detail.content')} tools={text ? <MarkdownToggle /> : undefined}>
         {text && prefs.markdown === 'rendered' ? (
-          <div className={css.content}>
+          <div className={css.content} data-scroll-region>
             <Markdown text={text} label={t('detail.content')} />
           </div>
         ) : (

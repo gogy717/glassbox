@@ -38,8 +38,10 @@ describe('Markdown', () => {
         'Some **bold**, *em*, ~~gone~~ and `npm test`.',
       ].join('\n'),
     );
-    expect(screen.getByRole('heading', { level: 1, name: 'Plan' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 2, name: 'Steps' })).toBeInTheDocument();
+    // Inside a panel whose cells are h4, a reply's headings read as levels 5 and 6.
+    expect(screen.getByRole('heading', { level: 5, name: 'Plan' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 6, name: 'Steps' })).toBeInTheDocument();
+    expect(container.querySelector('h1, h2')).toBeNull();
     expect(container.querySelectorAll('ol > li')).toHaveLength(2);
     const boxes = screen.getAllByRole('checkbox');
     expect(boxes.map((b) => (b as HTMLInputElement).checked)).toEqual([true, false]);
@@ -116,8 +118,10 @@ describe('Markdown', () => {
     expect(performance.now() - started).toBeLessThan(3000);
     // The code block comes first and shows whole; the prose after it is clipped.
     expect(container.querySelector('pre')?.textContent).toBe(code);
+    // The code does not use up the prose budget: the prose after it shows, clipped.
     const prose = [...container.querySelectorAll('p')].map((p) => p.textContent ?? '').join('');
-    expect(prose.length).toBeLessThan(6_000);
+    expect(prose.length).toBeGreaterThan(5_000);
+    expect(prose.length).toBeLessThanOrEqual(6_000);
     expect(
       screen.getByRole('button', { name: /^Show all \(1,00\d,\d{3} characters\)$/ }),
     ).toBeInTheDocument();
@@ -129,7 +133,116 @@ describe('Markdown', () => {
         <Markdown text={'# Ready\n\nSet.'} label="Content" />
       </I18nContext.Provider>,
     );
+    // First the text as written: the renderer is still loading.
+    expect(screen.queryByRole('heading')).toBeNull();
+    expect(container.querySelector('p')?.textContent).toBe('# Ready\n\nSet.');
     expect(await screen.findByRole('heading', { name: 'Ready' })).toBeInTheDocument();
     expect(container).not.toHaveTextContent('# Ready');
+  });
+
+  it('keeps numbered steps one list, their code in place and copied without the list indent', async () => {
+    const writeText = vi.fn(async () => {});
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+    const { container } = renderMd(
+      [
+        '1. Install',
+        '',
+        '   ```bash',
+        '   npm i',
+        '   ```',
+        '',
+        '2. Write it:',
+        '',
+        '   ```python',
+        '   def f():',
+        '       return 1',
+        '   ```',
+        '',
+        '3. Run',
+      ].join('\n'),
+    );
+    const lists = container.querySelectorAll('ol');
+    expect(lists).toHaveLength(1);
+    expect(lists[0]?.hasAttribute('start')).toBe(false);
+    const items = container.querySelectorAll('ol > li');
+    expect(items).toHaveLength(3);
+    expect(items[0]?.querySelector('pre')?.textContent).toBe('npm i');
+    expect(items[1]?.querySelector('pre')?.textContent).toBe('def f():\n    return 1');
+    fireEvent.click(within(items[1] as HTMLElement).getByRole('button', { name: 'Copy code' }));
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith('def f():\n    return 1'));
+  });
+
+  it('shows the prose after a code block longer than the inline clip', () => {
+    const code = 'x = 1\n'.repeat(1_400);
+    const { container } = renderMd(`\`\`\`\n${code}\`\`\`\n\nThe explanation follows.`);
+    expect(container).toHaveTextContent('The explanation follows.');
+  });
+
+  it('cuts long prose at a line break, never inside a line', () => {
+    const line = (i: number) => `Row ${i}: [a link](https://example.com/${i}) and more words.`;
+    const text = Array.from({ length: 400 }, (_, i) => line(i)).join('\n');
+    const { container } = renderMd(text);
+    const shown = container.querySelector('p')?.textContent ?? '';
+    expect(shown.length).toBeLessThanOrEqual(6_000);
+    // The last link shown is whole: the cut came at the end of a line.
+    const links = [...container.querySelectorAll('a')];
+    expect(links.at(-1)?.getAttribute('href')).toBe(`https://example.com/${links.length - 1}`);
+    expect(shown.endsWith('and more words.')).toBe(true);
+  });
+
+  it('shows footnotes as written: no English label, no in-page links', () => {
+    const { container } = renderMd('A claim[^1].\n\n[^1]: The source.');
+    expect(container).toHaveTextContent('A claim[^1].');
+    expect(container).toHaveTextContent('[^1]: The source.');
+    expect(container.querySelector('section, sup, [id]')).toBeNull();
+    expect(container).not.toHaveTextContent('Footnotes');
+  });
+
+  it('shows text nested thousands of levels deep as written, without failing the view', async () => {
+    // Load the renderer first, so the deep text really goes through it.
+    render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <Markdown text="# Loaded" label="Content" />
+      </I18nContext.Provider>,
+    );
+    await screen.findByRole('heading', { name: 'Loaded' });
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const deep = `${'>'.repeat(3_000)} deep`;
+    const { container } = render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <Markdown text={deep} label="Content" />
+      </I18nContext.Provider>,
+    );
+    await new Promise((r) => setTimeout(r, 300));
+    // The parser gives up on such nesting; the text shows as written instead.
+    expect(container).toHaveTextContent('deep');
+    expect(container.querySelector('p')?.textContent).toBe(deep);
+    errors.mockRestore();
+  });
+});
+
+describe('Markdown when its renderer cannot load', () => {
+  afterEach(() => {
+    vi.doUnmock('./MarkdownRender');
+    vi.resetModules();
+  });
+
+  it('shows the text as written instead of failing the view', async () => {
+    vi.resetModules();
+    vi.doMock('./MarkdownRender', () => {
+      throw new Error('Failed to fetch dynamically imported module');
+    });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { Markdown: Fresh } = await import('./Markdown');
+    const { I18nContext: Ctx, makeI18n: make } = await import('../i18n');
+    const { container } = render(
+      <Ctx.Provider value={make('en')}>
+        <Fresh text={'# Still here\n\nAs written.'} label="Content" />
+      </Ctx.Provider>,
+    );
+    await new Promise((r) => setTimeout(r, 50));
+    expect(container.querySelector('p')?.textContent).toBe('# Still here\n\nAs written.');
+    expect(screen.queryByRole('heading')).toBeNull();
+    vi.mocked(console.error).mockRestore();
   });
 });

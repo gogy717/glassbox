@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { CodeBlock, ShowAll } from '../../../components/CodeBlock';
+import { CODE_CLIP, CodeBlock, ShowAll } from '../../../components/CodeBlock';
 import { clipSegments } from '../../../lib/fences';
 import css from './detail.module.css';
 
@@ -11,7 +11,10 @@ const TEXT_CLIP = 6_000;
  * the rest is one click away.
  */
 export function ReadableText({ text, label }: { text: string; label: string }) {
-  const { parts, cut } = useMemo(() => clipSegments(text, TEXT_CLIP), [text]);
+  const { parts, cut } = useMemo(
+    () => clipSegments(text, { prose: TEXT_CLIP, code: 4 * CODE_CLIP, codeClip: CODE_CLIP }),
+    [text],
+  );
   return (
     <div className={css.readableText}>
       {parts.map((p, i) =>

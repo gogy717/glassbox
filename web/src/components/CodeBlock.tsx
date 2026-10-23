@@ -6,7 +6,7 @@ import { LineView } from './LineView';
 import { Modal } from './Modal';
 
 /** Characters of one code block shown inline; "show all" opens the rest. */
-const CODE_CLIP = 8_000;
+export const CODE_CLIP = 8_000;
 
 /** Copies `text()`, built only when clicked: a message's text can be megabytes. */
 export function CopyButton({

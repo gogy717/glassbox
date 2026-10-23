@@ -389,7 +389,7 @@
   min-width: 0;
 }
 
-.sysBlock .readableText {
+.sysText {
   max-height: 320px;
   overflow: auto;
 }

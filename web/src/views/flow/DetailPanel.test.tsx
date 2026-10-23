@@ -151,8 +151,12 @@ describe('DetailPanel', () => {
     );
     const panel = screen.getByRole('region', { name: 'Response details' });
     expect(
-      await within(panel).findByRole('heading', { level: 2, name: 'Plan' }),
+      await within(panel).findByRole('heading', { level: 6, name: 'Plan' }),
     ).toBeInTheDocument();
+    // The reply scrolls itself: the wheel must not be taken over by the chain around it.
+    expect(
+      within(panel).getByRole('heading', { name: 'Plan' }).closest('[data-scroll-region]'),
+    ).not.toBeNull();
     expect(within(panel).getByRole('table')).toBeInTheDocument();
     fireEvent.click(within(panel).getByRole('radio', { name: 'Source' }));
     expect(within(panel).queryByRole('table')).toBeNull();
