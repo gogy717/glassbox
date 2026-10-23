@@ -8,14 +8,8 @@
  */
 import { readFile } from 'node:fs/promises';
 import type { QuotaSnapshot, QuotaWindow } from '../../core/model.js';
-import { msToIso } from './records.js';
+import { KIND_ORDER, msToIso, num, type Obj, obj, STALE_MS } from '../../quota/shared.js';
 
-const STALE_MS = 60 * 60 * 1000;
-
-type Obj = Record<string, unknown>;
-const obj = (v: unknown): Obj | null =>
-  typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Obj) : null;
-const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const iso = (v: unknown) => (typeof v === 'string' && !Number.isNaN(Date.parse(v)) ? v : null);
 
 function fromLimit(limit: unknown): QuotaWindow | null {
@@ -152,8 +146,7 @@ export function quotaFromUtilization(
   for (const limit of Array.isArray(u.limits) ? u.limits : []) add(fromLimit(limit));
   add(fromLegacy(u.five_hour, 'five_hour', 'session'));
   add(fromLegacy(u.seven_day, 'seven_day', 'weekly'));
-  const order: QuotaWindow['kind'][] = ['session', 'weekly', 'weekly-model', 'monthly', 'other'];
-  windows.sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
+  windows.sort((a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind));
 
   return {
     provider: 'anthropic',

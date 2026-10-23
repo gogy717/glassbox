@@ -15,23 +15,21 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { QuotaProvider, QuotaSnapshot, QuotaWindow } from '../../core/model.js';
 import type { QuotaSource } from '../../core/quota-source.js';
-import { codexPlanName, spellOut, windowKind } from '../codex/quota.js';
+import {
+  codexPlanName,
+  KIND_ORDER,
+  msToIso,
+  num,
+  type Obj,
+  obj,
+  STALE_MS,
+  spellOut,
+  str,
+  windowKind,
+} from '../../quota/shared.js';
 
-const STALE_MS = 60 * 60 * 1000;
 /** How long a read may wait on oh-my-pi's lock; the query itself blocks the event loop. */
 const BUSY_TIMEOUT_MS = 100;
-
-type Obj = Record<string, unknown>;
-const obj = (v: unknown): Obj | null =>
-  typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Obj) : null;
-const str = (v: unknown) => (typeof v === 'string' && v.trim() !== '' ? v : null);
-const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
-
-function msToIso(ms: number | null): string | null {
-  if (ms === null) return null;
-  const d = new Date(ms);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString();
-}
 
 /** The model vendor whose plan an oh-my-pi provider id reports on. */
 export function ompQuotaProvider(id: string): QuotaProvider {
@@ -112,8 +110,6 @@ function planOf(provider: QuotaProvider, metadata: Obj | null): string | null {
   if (!plan) return null;
   return provider === 'openai' ? codexPlanName(plan) : spellOut(plan);
 }
-
-const KIND_ORDER: QuotaWindow['kind'][] = ['session', 'weekly', 'weekly-model', 'monthly', 'other'];
 
 /** One cached report (a `value` column) as a snapshot; null when malformed or without windows. */
 function snapshotOf(value: unknown, now: number): QuotaSnapshot | null {

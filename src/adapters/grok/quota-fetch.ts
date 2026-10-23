@@ -14,7 +14,8 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { QuotaSnapshot, QuotaWindow } from '../../core/model.js';
 import type { QuotaSource } from '../../core/quota-source.js';
-import { type Attempt, getJson, periodicFetch, STALE_MS } from '../../quota/periodic-fetch.js';
+import { type Attempt, getJson, periodicFetch } from '../../quota/periodic-fetch.js';
+import { type Obj, obj, STALE_MS } from '../../quota/shared.js';
 
 export const BILLING_URL = 'https://cli-chat-proxy.grok.com/v1/billing?format=credits';
 /** Treat a token this close to expiry as expired: it could lapse mid-request. */
@@ -22,9 +23,6 @@ const EXPIRY_MARGIN_MS = 60_000;
 /** Products as oh-my-pi labels them, so windows read the same whichever source is newer. */
 const PRODUCT_NAMES: Record<string, string> = { GrokBuild: 'Grok Build', Api: 'API' };
 
-type Obj = Record<string, unknown>;
-const obj = (v: unknown): Obj | null =>
-  typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Obj) : null;
 const percent = (v: unknown) =>
   typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 100 ? v : null;
 const isoMs = (v: unknown) => {

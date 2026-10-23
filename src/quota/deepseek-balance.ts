@@ -8,16 +8,13 @@
  */
 import type { QuotaSnapshot } from '../core/model.js';
 import type { QuotaSource } from '../core/quota-source.js';
-import { type Attempt, getJson, periodicFetch, STALE_MS } from './periodic-fetch.js';
+import { type Attempt, getJson, periodicFetch } from './periodic-fetch.js';
+import { obj, STALE_MS } from './shared.js';
 
 export const DEEPSEEK_BALANCE_URL = 'https://api.deepseek.com/user/balance';
 export const DEEPSEEK_KEY_ENV = 'DEEPSEEK_API_KEY';
 
 export type Balance = NonNullable<QuotaSnapshot['balance']>;
-
-type Obj = Record<string, unknown>;
-const obj = (v: unknown): Obj | null =>
-  typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Obj) : null;
 
 /** DeepSeek states amounts as decimal strings ("9.26"); numbers are accepted too. */
 function decimal(v: unknown): number | null {

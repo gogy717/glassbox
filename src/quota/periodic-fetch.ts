@@ -10,8 +10,6 @@
 
 export const DEFAULT_INTERVAL_MS = 5 * 60_000;
 const TIMEOUT_MS = 10_000;
-/** Fetched numbers older than this are shown as stale. */
-export const STALE_MS = 60 * 60_000;
 
 /** A usable answer, or why there is none (for the log; never includes a credential). */
 export type Attempt<T> = { ok: T } | { problem: string };

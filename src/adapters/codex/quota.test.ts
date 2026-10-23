@@ -10,7 +10,7 @@ import {
   tokenCountWithLimits,
 } from './__fixtures__/rate-limits.js';
 import { createCodexAdapter } from './index.js';
-import { codexPlanName, quotaFromRolloutLines, windowKind } from './quota.js';
+import { quotaFromRolloutLines } from './quota.js';
 
 /** Ten minutes after the fixtures' records. */
 const NOW = ms(600);
@@ -204,41 +204,6 @@ describe('quotaFromRolloutLines', () => {
     expect(q?.windows).toEqual([
       expect.objectContaining({ kind: 'weekly-model', model: 'codex_other', usedPercent: 9 }),
     ]);
-  });
-});
-
-describe('windowKind', () => {
-  it('names a window by its length in minutes', () => {
-    expect(windowKind(300)).toBe('session');
-    expect(windowKind(60)).toBe('session');
-    expect(windowKind(10080)).toBe('weekly');
-    expect(windowKind(43200)).toBe('monthly');
-    expect(windowKind(28 * 1440)).toBe('monthly');
-    expect(windowKind(31 * 1440)).toBe('monthly');
-    expect(windowKind(1440)).toBe('other');
-    expect(windowKind(0)).toBe('other');
-    expect(windowKind(null)).toBe('other');
-  });
-});
-
-describe('codexPlanName', () => {
-  it("uses the names Codex's /status shows", () => {
-    expect(codexPlanName('free')).toBe('Free');
-    expect(codexPlanName('plus')).toBe('Plus');
-    expect(codexPlanName('pro')).toBe('Pro 200');
-    expect(codexPlanName('prolite')).toBe('Pro 100');
-    expect(codexPlanName('team')).toBe('Business');
-    expect(codexPlanName('business')).toBe('Enterprise');
-    expect(codexPlanName('self_serve_business_prolite')).toBe('Business Premium');
-    expect(codexPlanName('edu_plus')).toBe('Edu Plus');
-  });
-
-  it('spells out a plan it does not know, and has none for unknown or missing', () => {
-    expect(codexPlanName('galaxy_brain')).toBe('Galaxy Brain');
-    expect(codexPlanName('unknown')).toBeNull();
-    expect(codexPlanName(null)).toBeNull();
-    expect(codexPlanName('')).toBeNull();
-    expect(codexPlanName(3)).toBeNull();
   });
 });
 

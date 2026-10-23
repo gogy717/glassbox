@@ -13,6 +13,7 @@ import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { QuotaSnapshot } from '../../core/model.js';
+import { type Obj, obj } from '../../quota/shared.js';
 import { planName, quotaFromUtilization } from './quota.js';
 
 export const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage';
@@ -41,10 +42,6 @@ export interface QuotaFetcherOptions {
   keychain?: () => Promise<string>;
   now?: () => number;
 }
-
-type Obj = Record<string, unknown>;
-const obj = (v: unknown): Obj | null =>
-  typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Obj) : null;
 
 const readKeychain = () =>
   new Promise<string>((resolve, reject) =>
