@@ -1,6 +1,6 @@
 {
   "name": "glassbox",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "description": "Live viewer for Claude Code: what it's doing, the tool-call chain, and where tokens go — including multi-agent runs",
   "type": "module",
