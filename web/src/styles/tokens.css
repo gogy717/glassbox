@@ -85,6 +85,10 @@
   --agent-opencode-fg: #2d1b00;
   --agent-other-hue: #8a929b;
   --agent-other-fg: #2a2e33;
+  /* Declared once, here, for every theme: a custom property's var()s resolve on the element that
+     declares it, and both dark scopes override --agent-*-hue / --agent-tint / --agent-edge on
+     this same :root element, so these pick up the dark values. Moving the dark overrides to
+     another selector (a class on body, say) would leave these light; redeclare them there. */
   --agent-claude-code-bg: color-mix(
     in srgb,
     var(--agent-claude-code-hue) var(--agent-tint),

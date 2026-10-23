@@ -179,6 +179,30 @@ describe('tokens.css', () => {
     return { ink, tint, edge };
   };
 
+  it('derives every tag’s tint and edge from its hue, once, on the :root that dark overrides', () => {
+    // The checks below composite --agent-*-hue at --agent-tint / --agent-edge themselves; this
+    // holds the CSS to that model.
+    const flat = css.replace(/\s+/g, ' ');
+    for (const tone of [...AGENT_TONES, 'other'])
+      for (const [part, strength] of [
+        ['bg', 'tint'],
+        ['edge', 'edge'],
+      ] as const) {
+        const decl = `--agent-${tone}-${part}: color-mix( in srgb, var(--agent-${tone}-hue) var(--agent-${strength}), transparent );`;
+        const compact = decl.replace('( ', '(').replace(' )', ')');
+        const count = flat.split(decl).length - 1 + flat.split(compact).length - 1;
+        expect(count, `--agent-${tone}-${part}`).toBe(1);
+        expect(scopes[0]?.replace(/\s+/g, ' ')).toMatch(
+          new RegExp(`--agent-${tone}-${part}: color-mix\\(`),
+        );
+      }
+    // Both dark overrides sit on :root itself, where those var()s resolve.
+    expect(css).toMatch(
+      /@media \(prefers-color-scheme: dark\) \{\s*:root:not\(\[data-theme="light"\]\) \{/,
+    );
+    expect(css).toMatch(/\n:root\[data-theme="dark"\] \{/);
+  });
+
   it.each(NAMES.map((name, i) => [name, i] as const))(
     'agent tags stay apart from each other, by text or tint (%s)',
     (_, i) => {
