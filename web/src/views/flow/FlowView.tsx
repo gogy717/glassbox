@@ -3,7 +3,7 @@ import { Clock3 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ModelRequest, Turn } from '../../../../src/core/model.js';
 import type { LivePartial } from '../../../../src/shared/runs.js';
-import { StatusPill } from '../../components/Status';
+import { StatusMark } from '../../components/Status';
 import type { OpenSession } from '../../data/store';
 import { useNow } from '../../data/useNow';
 import { useI18n } from '../../i18n';
@@ -102,7 +102,7 @@ function TurnHeader({ item, onBack }: { item: TurnItem; onBack: (() => void) | n
           {formatDuration(end === null ? null : end - Date.parse(turn.startedAt))}
         </span>
         <span>{t('flow.callsTools', { calls: item.calls, tools: item.tools })}</span>
-        <StatusPill status={item.status} />
+        <StatusMark status={item.status} />
         {onBack && <BackToLatest onClick={onBack} />}
       </span>
     </div>

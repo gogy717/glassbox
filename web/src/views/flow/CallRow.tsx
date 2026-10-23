@@ -1,7 +1,7 @@
 import { Clock3 } from 'lucide-react';
 import { memo, useId } from 'react';
 import type { ModelRequest, ToolCall } from '../../../../src/core/model.js';
-import { StatusPill, Ticking } from '../../components/Status';
+import { StatusMark, Ticking } from '../../components/Status';
 import { useApprovalsContext } from '../../data/approvals';
 import { useSessionAgent } from '../../data/session-agent';
 import type { OpenSession } from '../../data/store';
@@ -66,7 +66,7 @@ export const CallRow = memo(function CallRow(p: Props) {
             {t('flow.output', { n: n(tok.output), thinking: n(tok.thinking) })}
           </span>
         )}
-        <StatusPill status={status} />
+        <StatusMark status={status} />
       </div>
       {/* Wraps instead of scrolling: each arrow moves to the next line with its card. */}
       <div className={css.strip}>

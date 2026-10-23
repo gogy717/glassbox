@@ -3,7 +3,7 @@ import { type ReactNode, useId, useMemo, useState } from 'react';
 import type { ModelRequest, ToolCall } from '../../../../src/core/model.js';
 import { JsonInspector } from '../../components/JsonInspector';
 import { Markdown } from '../../components/Markdown';
-import { StatusPill } from '../../components/Status';
+import { StatusMark } from '../../components/Status';
 import { TextBlock } from '../../components/TextBlock';
 import { fetchRequestDetail, fetchToolResult } from '../../data/api';
 import { useApprovalsContext } from '../../data/approvals';
@@ -296,7 +296,7 @@ function ToolBody({ sessionId, tool }: { sessionId: string; tool: ToolCall }) {
         )}
       </Cell>
       <Cell title={t('detail.timing')}>
-        <StatusPill status={toolStatus(tool, approvals)} />
+        <StatusMark status={toolStatus(tool, approvals)} />
         <ul className={css.timing}>
           <li>{t('detail.started', { t: formatClock(tool.startedAt) })}</li>
           <li>{t('detail.ended', { t: formatClock(tool.endedAt) })}</li>

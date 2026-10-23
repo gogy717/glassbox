@@ -1,11 +1,4 @@
-import {
-  AlertCircle,
-  CheckCircle2,
-  CircleSlash,
-  Clock3,
-  LoaderCircle,
-  ShieldQuestion,
-} from 'lucide-react';
+import { Check, X } from 'lucide-react';
 import type { LiveState } from '../../../src/core/model.js';
 import { useNow } from '../data/useNow';
 import { type MessageKey, useI18n } from '../i18n';
@@ -36,22 +29,45 @@ export function LiveDot({
   return <span className={css.dot} data-state={state} aria-hidden="true" />;
 }
 
-const ICONS = {
-  waiting: Clock3,
-  running: LoaderCircle,
-  complete: CheckCircle2,
-  error: AlertCircle,
-  interrupted: CircleSlash,
-  approval: ShieldQuestion,
-} as const;
-
-export function StatusPill({ status, label }: { status: UiStatus; label?: string }) {
+/**
+ * A status as a quiet mark: a dot or a glyph, then the word, with no fill. Only the states that
+ * ask for attention carry colour: running (accent), waiting for you (amber, bold, ringed) and
+ * failed (red, bold). Complete is the normal case and stays muted; interrupted is amber but not
+ * bold; 'waiting' (started, never seen to end) is a hollow faint dot.
+ *
+ * - `label` replaces the state's own word.
+ * - `compact` shows only the dot or glyph, for dense lists; the word is then its accessible name
+ *   and tooltip.
+ */
+export function StatusMark({
+  status,
+  label,
+  compact = false,
+}: {
+  status: UiStatus;
+  label?: string;
+  compact?: boolean;
+}) {
   const { t } = useI18n();
-  const Icon = ICONS[status];
+  const word = label ?? t(`status.${status}`);
+  const mark =
+    status === 'complete' ? (
+      <Check size={12} strokeWidth={2.25} className={css.glyph} aria-hidden="true" />
+    ) : status === 'error' ? (
+      <X size={12} strokeWidth={2.5} className={css.glyph} aria-hidden="true" />
+    ) : (
+      <span className={css.markDot} aria-hidden="true" />
+    );
+  if (compact)
+    return (
+      <span className={css.mark} data-state={status} role="img" aria-label={word} title={word}>
+        {mark}
+      </span>
+    );
   return (
-    <span className={css.pill} data-state={status}>
-      <Icon size={12} className={status === 'running' ? 'spin' : undefined} aria-hidden="true" />
-      <span data-status-label>{label ?? t(`status.${status}`)}</span>
+    <span className={css.mark} data-state={status}>
+      {mark}
+      <span data-status-label>{word}</span>
     </span>
   );
 }

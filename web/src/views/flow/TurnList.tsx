@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { Turn } from '../../../../src/core/model.js';
-import { StatusPill, type UiStatus } from '../../components/Status';
+import { StatusMark, type UiStatus } from '../../components/Status';
 import { useApprovalsContext } from '../../data/approvals';
 import { useSessionAgentKind } from '../../data/session-agent';
 import type { OpenSession } from '../../data/store';
@@ -188,7 +188,7 @@ export const TurnList = memo(function TurnList({ items, selectedId, onSelect }: 
                   <span className={css.counts}>
                     {t('flow.callsTools', { calls: it.calls, tools: it.tools })}
                   </span>
-                  <StatusPill status={it.status} />
+                  <StatusMark status={it.status} />
                 </span>
               )}
             </button>
