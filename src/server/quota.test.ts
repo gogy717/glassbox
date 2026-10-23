@@ -35,7 +35,7 @@ const writeQuota = async (q: QuotaSnapshot) => {
 
 async function startSources(
   sources: QuotaSource[],
-  opts: { pollMs?: number; log?: (msg: string) => void } = {},
+  opts: { pollMs?: number; readTimeoutMs?: number; log?: (msg: string) => void } = {},
 ) {
   watcher = new QuotaWatcher({ sources, debounceMs: 20, log: () => {}, ...opts });
   await watcher.start();
@@ -232,6 +232,15 @@ describe('mergeQuotas', () => {
     ).toEqual([snap('anthropic', T2, 'anthropic-usage-api'), snap('openai', T2, 'oh-my-pi-cache')]);
   });
 
+  it('compares times, not strings, and treats an unreadable one as the oldest', () => {
+    const offset = snap('anthropic', '2026-10-23T02:00:00.290185+00:00', 'claude-code-cache');
+    const zulu = snap('anthropic', '2026-10-23T01:59:59.000Z', 'anthropic-usage-api');
+    expect(mergeQuotas([zulu, offset])).toEqual([offset]);
+    expect(mergeQuotas([offset, zulu])).toEqual([offset]);
+    const broken = snap('xai', 'not a time', 'broken');
+    expect(mergeQuotas([broken, snap('xai', T1)])).toEqual([snap('xai', T1)]);
+  });
+
   it('orders anthropic, openai, xai, github-copilot, deepseek, then the others by id', () => {
     const providers = [
       'zai',
@@ -292,6 +301,71 @@ describe('QuotaWatcher with several sources', () => {
       snap('openai', T1),
       snap('xai', T1),
     ]);
+  });
+
+  it('does not hold up start() or the other sources for a source that never answers', async () => {
+    const logs: string[] = [];
+    const hung: QuotaSource = { id: 'hung', read: () => new Promise(() => {}) };
+    const ok = scriptedSource('ok', [[snap('openai', T1)], [snap('openai', T2)]]);
+    const started = Date.now();
+    const w = await startSources([hung, ok], {
+      pollMs: 30,
+      readTimeoutMs: 100,
+      log: (m) => logs.push(m),
+    });
+    expect(Date.now() - started).toBeLessThan(1000);
+    expect(w.current()).toEqual([snap('openai', T1)]);
+    await vi.waitFor(() => expect(w.current()).toEqual([snap('openai', T2)]), { timeout: 2000 });
+    // Every read of the hung source times out; that counts as one failure streak.
+    await sleep(300);
+    expect(logs).toEqual(['quota (hung): no answer within 0.1s']);
+  });
+
+  it('publishes each source as soon as it answers, without waiting for a slow one', async () => {
+    // The slow source answers its first read at once; later reads wait until released.
+    let reads = 0;
+    let release: (q: QuotaSnapshot[]) => void = () => {};
+    const slow: QuotaSource = {
+      id: 'slow',
+      read: async () =>
+        reads++ === 0 ? [snap('xai', T1)] : new Promise((resolve) => (release = resolve)),
+    };
+    const fast = scriptedSource('fast', [[snap('anthropic', T1)], [snap('anthropic', T2)]]);
+    const w = await startSources([slow, fast], { pollMs: 30, readTimeoutMs: 10_000 });
+    expect(w.current()).toEqual([snap('anthropic', T1), snap('xai', T1)]);
+
+    await vi.waitFor(() => expect(w.current()[0]).toEqual(snap('anthropic', T2)), {
+      timeout: 2000,
+    });
+    expect(reads).toBe(2);
+    release([snap('xai', T2)]);
+    await vi.waitFor(() => expect(w.current()).toEqual([snap('anthropic', T2), snap('xai', T2)]), {
+      timeout: 2000,
+    });
+  });
+
+  it('cuts every pending confirmation short on stop', async () => {
+    vi.useFakeTimers();
+    try {
+      const sources = [
+        scriptedSource('a', [[snap('openai', T1)], []]),
+        scriptedSource('b', [[snap('xai', T1)], []]),
+      ];
+      watcher = new QuotaWatcher({ sources, pollMs: 1000, debounceMs: 60_000, log: () => {} });
+      await watcher.start();
+      // The poll finds both providers gone: each source waits to read again and confirm.
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(sources.map((s) => s.reads)).toEqual([2, 2]);
+      expect(vi.getTimerCount()).toBe(3);
+
+      watcher.stop();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(vi.getTimerCount()).toBe(0);
+      expect(sources.map((s) => s.reads)).toEqual([2, 2]);
+      expect(watcher.current()).toEqual([snap('openai', T1), snap('xai', T1)]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('keeps the other sources when one fails, and logs the failure once per streak', async () => {

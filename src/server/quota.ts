@@ -11,6 +11,11 @@ export interface QuotaWatcherOptions {
   pollMs?: number;
   /** After a file change, wait this long and read once; the agent rewrites its config often. */
   debounceMs?: number;
+  /**
+   * A read that takes longer counts as failed. Above the network fetchers' own timeouts, so it
+   * only catches a source that hangs; it also bounds how long `start()` waits.
+   */
+  readTimeoutMs?: number;
   log?: (msg: string) => void;
 }
 
@@ -51,10 +56,14 @@ function providerRank(p: QuotaProvider): number {
  * earlier source). Sorted by `PROVIDER_ORDER`, then by provider id.
  */
 export function mergeQuotas(snapshots: QuotaSnapshot[]): QuotaSnapshot[] {
+  const time = (q: QuotaSnapshot) => {
+    const t = Date.parse(q.fetchedAt);
+    return Number.isNaN(t) ? Number.NEGATIVE_INFINITY : t;
+  };
   const best = new Map<QuotaProvider, QuotaSnapshot>();
   for (const q of snapshots) {
     const kept = best.get(q.provider);
-    if (!kept || Date.parse(q.fetchedAt) > Date.parse(kept.fetchedAt)) best.set(q.provider, q);
+    if (!kept || time(q) > time(kept)) best.set(q.provider, q);
   }
   return [...best.values()].sort(
     (a, b) =>
@@ -63,11 +72,22 @@ export function mergeQuotas(snapshots: QuotaSnapshot[]): QuotaSnapshot[] {
   );
 }
 
-/** Current plan quota per provider, merged from every source and kept fresh from their files. */
+/** One source's read in progress: at most one at a time, a request during it runs after. */
+interface SourceRead {
+  reading: Promise<void> | null;
+  again: boolean;
+}
+
+/**
+ * Current plan quota per provider, merged from every source and kept fresh from their files.
+ * Each source is read on its own and the merge republished as each read settles, so a slow
+ * source (a network fetch) never delays another's update.
+ */
 export class QuotaWatcher {
   private readonly sources: QuotaSource[];
   private readonly pollMs: number;
   private readonly debounceMs: number;
+  private readonly readTimeoutMs: number;
   private readonly log: (msg: string) => void;
   private readonly listeners = new Set<(q: QuotaSnapshot[]) => void>();
   /** Sources whose last read failed; logged once per failure streak, not every poll. */
@@ -77,18 +97,22 @@ export class QuotaWatcher {
   private watcher: DirWatcher | null = null;
   private pollTimer: NodeJS.Timeout | null = null;
   private debounceTimer: NodeJS.Timeout | null = null;
-  private reading: Promise<void> | null = null;
-  private readAgain = false;
+  private readonly reads: Map<QuotaSource, SourceRead>;
   private stopped = false;
-  /** Each source's last snapshots, to tell a vanished quota from a file caught mid-rewrite. */
-  private readonly previous = new Map<QuotaSource, QuotaSnapshot[]>();
+  /**
+   * Each source's last snapshots: merged into `quotas`, and kept to tell a vanished quota from a
+   * file caught mid-rewrite.
+   */
+  private readonly latest = new Map<QuotaSource, QuotaSnapshot[]>();
   /** Ends each pending confirmation delay early, for `stop()`. */
   private readonly pauses = new Set<() => void>();
 
   constructor(opts: QuotaWatcherOptions) {
     this.sources = opts.sources;
+    this.reads = new Map(opts.sources.map((s) => [s, { reading: null, again: false }]));
     this.pollMs = opts.pollMs ?? 30_000;
     this.debounceMs = opts.debounceMs ?? 500;
+    this.readTimeoutMs = opts.readTimeoutMs ?? 15_000;
     this.log = opts.log ?? (() => {});
   }
 
@@ -136,31 +160,45 @@ export class QuotaWatcher {
     }, this.debounceMs);
   }
 
-  /** Read every source; at most one read in flight, a request during it runs after. */
-  private refresh(): Promise<void> {
-    if (this.reading) {
-      this.readAgain = true;
-      return this.reading;
-    }
-    this.reading = (async () => {
-      do {
-        this.readAgain = false;
-        await this.readAll();
-      } while (this.readAgain && !this.stopped);
-    })().finally(() => {
-      this.reading = null;
-    });
-    return this.reading;
+  /** Reads every source, concurrently; resolves once each has settled (or timed out). */
+  private async refresh(): Promise<void> {
+    await Promise.all([...this.reads].map(([source, read]) => this.refreshSource(source, read)));
   }
 
-  /**
-   * Reads the sources concurrently, so a slow one (a network fetch) holds the others up by no more
-   * than its own read; the results merge in list order all the same.
-   */
-  private async readAll(): Promise<void> {
-    const read = await Promise.all(this.sources.map((source) => this.readConfirmed(source)));
+  private refreshSource(source: QuotaSource, read: SourceRead): Promise<void> {
+    if (read.reading) {
+      read.again = true;
+      return read.reading;
+    }
+    read.reading = (async () => {
+      do {
+        read.again = false;
+        await this.readSource(source);
+      } while (read.again && !this.stopped);
+    })().finally(() => {
+      read.reading = null;
+    });
+    return read.reading;
+  }
+
+  private async readSource(source: QuotaSource): Promise<void> {
+    let quotas = await this.readOne(source);
+    // A config file read while it is being rewritten parses as nothing. Only believe a
+    // provider's quota disappeared when a second read a moment later agrees.
+    const before = this.latest.get(source) ?? [];
+    if (before.some((p) => !quotas.some((q) => q.provider === p.provider))) {
+      await this.pause(this.debounceMs);
+      if (this.stopped) return;
+      quotas = await this.readOne(source);
+    }
     if (this.stopped) return;
-    const quotas = mergeQuotas(read.flat());
+    this.latest.set(source, quotas);
+    this.publish();
+  }
+
+  /** Merges every source's latest snapshots, in source order, and tells listeners of a change. */
+  private publish(): void {
+    const quotas = mergeQuotas(this.sources.flatMap((s) => this.latest.get(s) ?? []));
     const json = JSON.stringify(quotas);
     if (json === this.json) return;
     this.json = json;
@@ -168,29 +206,25 @@ export class QuotaWatcher {
     for (const cb of this.listeners) cb(quotas);
   }
 
-  private async readConfirmed(source: QuotaSource): Promise<QuotaSnapshot[]> {
-    let quotas = await this.readOne(source);
-    // A config file read while it is being rewritten parses as nothing. Only believe a
-    // provider's quota disappeared when a second read a moment later agrees.
-    const before = this.previous.get(source) ?? [];
-    if (before.some((p) => !quotas.some((q) => q.provider === p.provider))) {
-      await this.pause(this.debounceMs);
-      if (this.stopped) return [];
-      quotas = await this.readOne(source);
-    }
-    this.previous.set(source, quotas);
-    return quotas;
-  }
-
   private async readOne(source: QuotaSource): Promise<QuotaSnapshot[]> {
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`no answer within ${this.readTimeoutMs / 1000}s`)),
+        this.readTimeoutMs,
+      );
+      timer.unref();
+    });
     try {
-      const quotas = await source.read();
+      const quotas = await Promise.race([source.read(), timeout]);
       this.failing.delete(source);
       return quotas;
     } catch (err) {
       if (!this.failing.has(source)) this.log(`quota (${source.id}): ${errorText(err)}`);
       this.failing.add(source);
       return [];
+    } finally {
+      clearTimeout(timer);
     }
   }
 

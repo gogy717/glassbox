@@ -146,7 +146,8 @@
   height: 5px;
 }
 
-.snapshot[data-stale] .row {
+.snapshot[data-stale] .row,
+.snapshot[data-stale] .balance {
   opacity: 0.55;
 }
 

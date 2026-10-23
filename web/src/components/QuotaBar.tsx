@@ -72,8 +72,10 @@ export function QuotaBar({ quotas, now }: Props) {
   if (shown.length === 0) return null;
   // Past its reset time the cached percentage is history: never show it as current usage.
   const isReset = (w: QuotaWindow) => !!w.resetsAt && Date.parse(w.resetsAt) <= now;
-  const meters = shown.map((q) => ({
+  const meters = shown.map((q, i) => ({
     q,
+    // The server sends one snapshot per provider, but nothing here relies on it.
+    key: `${q.provider}:${q.source}:${i}`,
     top: q.windows
       .filter((w) => !isReset(w))
       .reduce<QuotaWindow | null>((a, b) => (!a || b.usedPercent > a.usedPercent ? b : a), null),
@@ -142,7 +144,7 @@ export function QuotaBar({ quotas, now }: Props) {
           return q.windows.length > 0 ? (
             // biome-ignore lint/a11y/useSemanticElements: a native <meter> cannot carry the visible "Claude 62%" label
             <span
-              key={q.provider}
+              key={m.key}
               {...shared}
               role="meter"
               aria-label={name}
@@ -161,7 +163,7 @@ export function QuotaBar({ quotas, now }: Props) {
               </span>
             </span>
           ) : (
-            <span key={q.provider} {...shared} data-balance>
+            <span key={m.key} {...shared} data-balance>
               <span className="num">
                 {name} {value}
               </span>
@@ -174,9 +176,9 @@ export function QuotaBar({ quotas, now }: Props) {
       </button>
       {open && (
         <div className={css.popover} role="dialog" aria-label={t('quota.title')}>
-          {shown.map((q) => (
+          {meters.map(({ q, key }) => (
             <section
-              key={q.provider}
+              key={key}
               className={css.snapshot}
               aria-label={heading(q)}
               data-stale={q.stale || undefined}

@@ -1,10 +1,11 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createDemoQuota, createDemoQuotas } from '../../../src/core/fixtures/demo.js';
 import type { QuotaSnapshot } from '../../../src/core/model.js';
 import { I18nContext, type Locale, makeI18n } from '../i18n';
 import { DEMO_NOW } from '../test/demo';
 import { formatBalance, QuotaBar } from './QuotaBar';
+import css from './QuotaBar.module.css';
 
 const NOW = DEMO_NOW.getTime();
 
@@ -194,6 +195,31 @@ describe('QuotaBar', () => {
     );
     for (const text of resets) expect(text).not.toMatch(/\d\d:\d\d:\d\d/);
     expect(details).toHaveTextContent('shared by all your devices');
+  });
+
+  it('greys out a stale balance in the details too', () => {
+    renderBar([{ ...demo('deepseek'), stale: true }]);
+    const section = within(openDetails()).getByRole('region', { name: 'DeepSeek' });
+    expect(section).toHaveAttribute('data-stale');
+    expect(within(section).getByText('Balance ¥12.30')).toHaveClass(css.balance as string);
+  });
+
+  it('shows two snapshots of one provider side by side without mixing them up', () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      renderBar([
+        createDemoQuota(DEMO_NOW),
+        { ...withWindow(0, { usedPercent: 80 }), source: 'anthropic-usage-api' },
+      ]);
+      expect(screen.getAllByRole('meter').map((m) => m.textContent)).toEqual([
+        'Claude 62%',
+        'Claude 80%',
+      ]);
+      expect(within(openDetails()).getAllByRole('region')).toHaveLength(2);
+      expect(errors).not.toHaveBeenCalled();
+    } finally {
+      errors.mockRestore();
+    }
   });
 
   it('names a window without a label by its kind, monthly included', () => {
