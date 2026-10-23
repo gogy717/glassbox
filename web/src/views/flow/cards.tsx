@@ -3,6 +3,7 @@ import {
   ArrowRight,
   Bot,
   CheckCircle2,
+  ChevronDown,
   Clock3,
   LoaderCircle,
   MessageSquareText,
@@ -66,13 +67,44 @@ export function Arrow() {
   return <ArrowRight size={18} className={css.arrow} aria-hidden="true" />;
 }
 
-export function FinalReply() {
+const hasReplyText = (req: ModelRequest) =>
+  req.blocks.some((b) => b.kind === 'text' && b.text.trim() !== '');
+
+interface FinalReplyProps {
+  req: ModelRequest;
+  /** Whether the call's Response panel is open. */
+  expanded: boolean;
+  /** That panel, present while expanded. */
+  panelId: string;
+  onToggle(): void;
+}
+
+/**
+ * Ends a row that calls no tools. With reply text it toggles the call's Response panel, where
+ * the text is; without, it stays a label.
+ */
+export function FinalReply({ req, expanded, panelId, onToggle }: FinalReplyProps) {
   const { t } = useI18n();
+  if (!hasReplyText(req))
+    return (
+      <span className={css.final} title={t('flow.finalReplyEmpty')}>
+        <MessageSquareText size={14} aria-hidden="true" />
+        {t('flow.finalReply')}
+      </span>
+    );
   return (
-    <span className={css.final}>
+    <button
+      type="button"
+      className={css.final}
+      aria-expanded={expanded}
+      aria-controls={expanded ? panelId : undefined}
+      title={t(expanded ? 'flow.hideFinalReply' : 'flow.showFinalReply')}
+      onClick={onToggle}
+    >
       <MessageSquareText size={14} aria-hidden="true" />
       {t('flow.finalReply')}
-    </span>
+      <ChevronDown size={14} aria-hidden="true" className={css.chevron} />
+    </button>
   );
 }
 

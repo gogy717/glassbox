@@ -171,6 +171,41 @@
   font-size: 11px;
 }
 
+/* With reply text it is a toggle: a chevron, and the hover / pressed look of the cards. */
+button.final {
+  padding-right: 9px;
+  color: var(--text);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+button.final:hover {
+  border-color: var(--border-strong);
+  background: var(--layer-3);
+}
+
+button.final[aria-expanded="true"] {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+.chevron {
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+
+button.final[aria-expanded="true"] .chevron {
+  color: inherit;
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
+}
+
 .spawned,
 .workflow {
   display: flex;

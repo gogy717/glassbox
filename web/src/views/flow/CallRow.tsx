@@ -1,5 +1,5 @@
 import { Clock3 } from 'lucide-react';
-import { memo } from 'react';
+import { memo, useId } from 'react';
 import type { ModelRequest, ToolCall } from '../../../../src/core/model.js';
 import { StatusPill, Ticking } from '../../components/Status';
 import { useApprovalsContext } from '../../data/approvals';
@@ -30,6 +30,7 @@ export const CallRow = memo(function CallRow(p: Props) {
   const tok = tokenHeader(req.usage);
   const n = (v: number) => formatNumber(v, intl);
   const select = (card: CardKey) => p.onSelect(req, card);
+  const panelId = useId();
 
   return (
     <article
@@ -97,18 +98,26 @@ export const CallRow = memo(function CallRow(p: Props) {
         {tools.length === 0 && req.status !== 'in-flight' && (
           <div className={css.step}>
             <Arrow />
-            <FinalReply />
+            {/* The reply is the response's text: the pill opens the Response card's panel. */}
+            <FinalReply
+              req={req}
+              expanded={p.selected === 'response'}
+              panelId={panelId}
+              onToggle={() => select('response')}
+            />
           </div>
         )}
       </div>
       {p.selected && (
-        <DetailPanel
-          sessionId={p.open.id}
-          req={req}
-          tools={tools}
-          card={p.selected}
-          onClose={() => p.onSelect(req, p.selected as CardKey)}
-        />
+        <div id={panelId}>
+          <DetailPanel
+            sessionId={p.open.id}
+            req={req}
+            tools={tools}
+            card={p.selected}
+            onClose={() => p.onSelect(req, p.selected as CardKey)}
+          />
+        </div>
       )}
     </article>
   );
