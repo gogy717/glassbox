@@ -177,4 +177,40 @@ describe('middleEllipsis', () => {
     expect(middleEllipsis('just-one-very-long-name.ts', 10)).toBe('just…me.ts');
     expect(middleEllipsis('abc', 1)).toBe('…');
   });
+
+  it('counts and cuts whole characters, never half of a surrogate pair', () => {
+    const loneSurrogate = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+    // Eight characters, eleven UTF-16 units: it fits in eight.
+    expect(middleEllipsis('😀/😀/😀.ts', 8)).toBe('😀/😀/😀.ts');
+    const name = 'notes/😀😀😀😀😀😀😀😀😀😀.md';
+    for (let n = 1; n <= 16; n++) {
+      const cut = middleEllipsis(name, n);
+      expect(cut, `n=${n}`).not.toMatch(loneSurrogate);
+      expect(Array.from(cut).length, `n=${n}`).toBeLessThanOrEqual(n);
+    }
+    expect(middleEllipsis(name, 8)).toBe('😀😀😀…😀.md');
+    expect(middleEllipsis('src/𠀀𠀀𠀀/𠀁𠀁/x.ts', 10)).toBe('src/…/x.ts');
+  });
+
+  it('returns the path as it is for a limit that is not a finite number', () => {
+    for (const n of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])
+      expect(middleEllipsis('src/adapters/omp/parser.ts', n)).toBe('src/adapters/omp/parser.ts');
+    // A finite limit below one still yields one character, never more than the path.
+    expect(middleEllipsis('a', 0)).toBe('a');
+    expect(middleEllipsis('ab', -3)).toBe('…');
+  });
+
+  it('keeps a trailing separator, cutting before it', () => {
+    expect(middleEllipsis('src/adapters/omp/', 11)).toBe('src/…/omp/');
+    expect(middleEllipsis('C:\\Users\\user\\dev\\', 12)).toBe('C:\\…\\dev\\');
+    expect(middleEllipsis('a-long-directory-name/', 10)).toBe('a-lo…name/');
+    expect(middleEllipsis('src/', 1)).toBe('…');
+  });
+
+  it('keeps the host of a UNC path as its root', () => {
+    const unc = '\\\\fileserver\\projects\\glassbox\\src\\store.ts';
+    expect(middleEllipsis(unc, 28)).toBe('\\\\fileserver\\…\\src\\store.ts');
+    expect(middleEllipsis(unc, 23)).toBe('\\\\fileserver\\…\\store.ts');
+    expect(middleEllipsis('//host/share/dir/file.ts', 18)).toBe('//host/…/file.ts');
+  });
 });

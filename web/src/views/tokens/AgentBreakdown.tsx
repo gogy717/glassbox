@@ -78,7 +78,11 @@ export function AgentBreakdown({ rows, selectedId, onSelect }: Props) {
               onClick={() => onSelect(r.id)}
             >
               <span className={css.rowLabel} style={indent}>
-                <LiveDot state={r.agent.status} label={t(`status.${r.agent.status}`)} />
+                <LiveDot
+                  kind="status"
+                  state={r.agent.status}
+                  label={t(`status.${r.agent.status}`)}
+                />
                 <span data-label>{label}</span>
               </span>
               <TokenBar usage={usage} scale={scale} />

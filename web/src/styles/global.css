@@ -80,6 +80,16 @@ input {
   outline-offset: 1px;
 }
 
+/* Hover and selection change in 120ms ease-out (D1 P0) on every control. No specificity, so a
+   component's own transition replaces it; reduced motion cancels it (below). */
+:where(button, a, [role="tab"], [role="radio"], [role="option"]) {
+  transition:
+    color var(--motion),
+    background-color var(--motion),
+    border-color var(--motion),
+    box-shadow var(--motion);
+}
+
 /* Live numbers keep their width while they tick. */
 .num {
   font-variant-numeric: tabular-nums;
@@ -115,6 +125,8 @@ input {
   }
 }
 
+/* For global rules only: a CSS module renames the keyframes its `animation` names, so a module
+   declares its own (Status.module.css does; css-modules.test.ts checks). */
 @keyframes pulse {
   50% {
     opacity: 0.35;
