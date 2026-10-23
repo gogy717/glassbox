@@ -2,6 +2,8 @@
  * Pure Claude Code session parser: transcript records in, agent-neutral entities out.
  * No I/O — the server reads files and feeds lines/json here.
  */
+
+import { activityField } from '../../core/activity.js';
 import type { ChangeSet, SessionParser, SessionSource, SourceFile } from '../../core/adapter.js';
 import { emptyChanges } from '../../core/changes.js';
 import type {
@@ -13,6 +15,7 @@ import type {
   RequestStatus,
   ResponseBlock,
   RunStatus,
+  SessionActivity,
   SessionPatch,
   SessionSnapshot,
   SessionSummary,
@@ -893,6 +896,7 @@ export class ClaudeSessionParser implements SessionParser {
       version: this.version ?? base.version,
       model: main.model ?? base.model,
       ...(this.isProbe() ? { tags: [...new Set([...(base.tags ?? []), 'probe'])] } : {}),
+      ...this.activityView(),
       usage: sumUsage(requests.map((r) => this.exposedUsage(r))),
       counts: {
         turns: this.turns.size,
@@ -901,6 +905,32 @@ export class ClaudeSessionParser implements SessionParser {
         agents: this.agents.size,
       },
     };
+  }
+
+  /**
+   * Only an agent's latest request can be in flight, and only its tools running: the views of
+   * each agent's last request are all `sessionActivity` needs, however long the session.
+   */
+  private activityView(): { activity?: SessionActivity } {
+    const requests: ModelRequest[] = [];
+    const toolCalls: ToolCall[] = [];
+    for (const agent of this.agents.values()) {
+      const last = this.requests.get(agent.requestIds.at(-1) ?? '');
+      if (!last) continue;
+      requests.push(this.requestView(last));
+      for (const id of last.toolCallIds) {
+        const tool = this.tools.get(id);
+        if (tool) toolCalls.push(this.toolView(tool));
+      }
+    }
+    const lastTurn = this.turns.get(this.agents.get(MAIN_AGENT_ID)?.turnIds.at(-1) ?? '');
+    return activityField({
+      live: this.live,
+      toolCalls,
+      requests,
+      lastTurn: lastTurn ? this.turnView(lastTurn) : null,
+      updatedAt: this.updatedAt,
+    });
   }
 
   private isProbe(): boolean {

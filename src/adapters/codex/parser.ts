@@ -11,6 +11,7 @@
  * every snapshot lists `live-state-heuristic`.
  */
 import { basename } from 'node:path';
+import { activityField, latestTurn } from '../../core/activity.js';
 import type { ChangeSet, SessionParser, SessionSource, SourceFile } from '../../core/adapter.js';
 import { emptyChanges } from '../../core/changes.js';
 import type {
@@ -371,7 +372,7 @@ export class CodexSessionParser implements SessionParser {
     const turns = this.turnViews(requests);
     const agents = this.agentViews(requests, tools, turns);
     return {
-      session: this.sessionView(requests, turns),
+      session: this.sessionView(requests, turns, tools),
       agents,
       turns,
       requests,
@@ -948,7 +949,7 @@ export class CodexSessionParser implements SessionParser {
     this.diag.unknownRecordTypes[type] = (this.diag.unknownRecordTypes[type] ?? 0) + 1;
   }
 
-  private sessionView(requests: ModelRequest[], turns: Turn[]): SessionSummary {
+  private sessionView(requests: ModelRequest[], turns: Turn[], tools: ToolCall[]): SessionSummary {
     const mainTurns = [...this.turns.values()]
       .filter((turn) => turn.agentId === MAIN_AGENT_ID)
       .sort((a, b) => a.order - b.order);
@@ -968,6 +969,13 @@ export class CodexSessionParser implements SessionParser {
       live: this.live,
       version: this.version,
       model,
+      ...activityField({
+        live: this.live,
+        toolCalls: tools,
+        requests,
+        lastTurn: latestTurn(turns),
+        updatedAt: this.updatedAt,
+      }),
       usage: sumUsage(requests.map((req) => req.usage)),
       counts: {
         turns: turns.length,

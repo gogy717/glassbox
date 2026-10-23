@@ -10,6 +10,7 @@
  * session and agent totals still add up, and `per-request-usage` stays in `diagnostics.unavailable`.
  */
 import { basename } from 'node:path';
+import { activityField } from '../../core/activity.js';
 import type { ChangeSet, SessionParser, SessionSource, SourceFile } from '../../core/adapter.js';
 import { emptyChanges } from '../../core/changes.js';
 import type {
@@ -293,7 +294,7 @@ export class GrokSessionParser implements SessionParser {
     const tools = this.sortedTools();
     const pairs = this.chatPairs(requests);
     return {
-      session: this.sessionView(requests),
+      session: this.sessionView(requests, tools, pairs),
       agents: [this.agentView(requests, tools)],
       turns: this.sortedTurns().map((turn) => this.turnView(turn, requests)),
       requests: requests.map((req) => this.requestView(req, requests, pairs)),
@@ -312,7 +313,7 @@ export class GrokSessionParser implements SessionParser {
       return items.filter((item) => want.has(item.id));
     };
     return {
-      session: this.sessionView(requests),
+      session: this.sessionView(requests, tools, pairs),
       agents: changes.agents.includes(MAIN_AGENT_ID) ? [this.agentView(requests, tools)] : [],
       turns: pick(
         changes.turns,
@@ -1160,7 +1161,11 @@ export class GrokSessionParser implements SessionParser {
     };
   }
 
-  private sessionView(requests: RequestState[]): SessionSummary {
+  private sessionView(
+    requests: RequestState[],
+    tools: ToolState[],
+    pairs: Map<string, ChatLoop>,
+  ): SessionSummary {
     const usage = sumUsage(requests.map((req) => this.exposedUsage(req)));
     const cwd = this.cwd ?? this.source.summary.cwd;
     const turns = this.turns.size;
@@ -1175,6 +1180,14 @@ export class GrokSessionParser implements SessionParser {
       updatedAt: this.updatedAt ?? this.source.summary.updatedAt,
       live: this.live,
       model: this.model ?? this.sortedTurns().at(-1)?.model ?? null,
+      // Only the latest request can be in flight, and only unfinished tools running.
+      ...activityField({
+        live: this.live,
+        toolCalls: tools.filter((tool) => !tool.done).map((tool) => this.toolView(tool)),
+        requests: requests.slice(-1).map((req) => this.requestView(req, requests, pairs)),
+        lastTurn: this.lastTurnView(requests),
+        updatedAt: this.updatedAt ?? this.source.summary.updatedAt,
+      }),
       usage,
       counts: {
         turns,
@@ -1183,6 +1196,11 @@ export class GrokSessionParser implements SessionParser {
         agents: 1,
       },
     };
+  }
+
+  private lastTurnView(requests: RequestState[]): Turn | null {
+    const turn = this.sortedTurns().at(-1);
+    return turn ? this.turnView(turn, requests) : null;
   }
 
   private diagnosticsView(): Diagnostics {

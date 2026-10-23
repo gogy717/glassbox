@@ -20,6 +20,7 @@
  * entries and change sets are the difference with what clients were last given.
  */
 import { basename } from 'node:path';
+import { activityField, latestTurn } from '../../core/activity.js';
 import type { ChangeSet, SessionParser, SessionSource, SourceFile } from '../../core/adapter.js';
 import { emptyChanges } from '../../core/changes.js';
 import type {
@@ -553,6 +554,13 @@ export class OmpSessionParser implements SessionParser {
       live: this.live,
       version: this.version,
       model,
+      ...activityField({
+        live: this.live,
+        toolCalls,
+        requests,
+        lastTurn: latestTurn(turns),
+        updatedAt: this.updatedAt,
+      }),
       usage: sumUsage(requests.map((r) => r.usage)),
       counts: {
         turns: turns.length,
