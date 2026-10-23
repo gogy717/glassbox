@@ -10,6 +10,7 @@ import type { LiveState, SessionSummary } from '../../core/model.js';
 import {
   cleanPrompt,
   isProbeCwd,
+  isSlashCommand,
   PROBE_NAME,
   parseRecord,
   pickTitle,
@@ -51,7 +52,11 @@ async function scanHead(fh: FileHandle, size: number): Promise<Scan> {
     const lines = await readLines(fh, 0, Math.min(len, size));
     // The last line of a partial window is cut: drop it.
     const s = scan(whole ? lines : lines.slice(0, -1));
-    const enough = s.firstTs !== null && s.cwd !== null && (s.firstPrompt ?? s.firstAny) !== null;
+    // A first prompt that is a slash command may have been local: read on to the next one.
+    const enough =
+      s.firstTs !== null &&
+      s.cwd !== null &&
+      (s.firstPrompt !== null || (s.firstAny !== null && s.pendingCommand === null));
     if (
       enough ||
       whole ||
@@ -79,8 +84,15 @@ interface Scan {
   firstTs: string | null;
   lastTs: string | null;
   firstPrompt: string | null;
+  /**
+   * A person's slash command, until it is known whether the model saw it: a reply makes it the
+   * first prompt, the next prompt of any origin shows it was local (e.g. /effort).
+   */
+  pendingCommand: string | null;
   /** First input of any origin (peer, task notification, …). */
   firstAny: string | null;
+  /** First slash command, local or not: the title of a session with nothing else. */
+  firstCommand: string | null;
   customTitle: string | null;
   agentName: string | null;
   aiTitle: string | null;
@@ -94,7 +106,9 @@ function scan(lines: string[]): Scan {
     firstTs: null,
     lastTs: null,
     firstPrompt: null,
+    pendingCommand: null,
     firstAny: null,
+    firstCommand: null,
     customTitle: null,
     agentName: null,
     aiTitle: null,
@@ -115,10 +129,19 @@ function scan(lines: string[]): Scan {
     if (r.kind === 'agent-name' && r.title) s.agentName = r.title;
     if (r.kind === 'assistant' && r.model && r.model !== '<synthetic>' && !r.isSidechain)
       s.model = r.model;
+    if (r.kind === 'assistant' && !r.isSidechain && s.pendingCommand !== null) {
+      s.firstPrompt ??= s.pendingCommand;
+      s.firstAny ??= s.pendingCommand;
+      s.pendingCommand = null;
+    }
     if (r.kind === 'user' && !r.isSidechain && (s.firstPrompt === null || s.firstAny === null)) {
       const origin = promptOrigin(r, true);
       const title = origin === null ? null : cleanPrompt(turnInput(r, origin).prompt);
-      if (title) {
+      if (title && origin === 'human' && isSlashCommand(r.text)) {
+        s.pendingCommand ??= title;
+        s.firstCommand ??= title;
+      } else if (title) {
+        s.pendingCommand = null;
         s.firstAny ??= title;
         if (origin === 'human') s.firstPrompt ??= title;
       }
@@ -187,6 +210,7 @@ async function scanFile(
         aiTitle: t.aiTitle ?? h.aiTitle,
         firstHuman: h.firstPrompt,
         firstAny: h.firstAny,
+        command: h.firstCommand,
       }),
       cwd,
       project: cwd ? basename(cwd) : basename(dirname(path)),

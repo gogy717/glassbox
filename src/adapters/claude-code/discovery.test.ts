@@ -116,6 +116,71 @@ describe('discover', () => {
     });
   });
 
+  it('titles a session after its first real prompt, not a local slash command before it', async () => {
+    const proj = join(claudeDir, 'projects', '-work-alpha');
+    const S3 = '33333333-3333-4333-8333-333333333333';
+    const local = (name: string, sessionId: string) => [
+      userPrompt({
+        sessionId,
+        isMeta: true,
+        origin: null,
+        text: '<local-command-caveat>The command below was run directly in Claude Code.</local-command-caveat>',
+      }),
+      userPrompt({
+        sessionId,
+        origin: null,
+        text: `<command-name>${name}</command-name>\n<command-message>${name.slice(1)}</command-message>\n<command-args></command-args>`,
+      }),
+      userPrompt({
+        sessionId,
+        origin: null,
+        text: '<local-command-stdout>Done</local-command-stdout>',
+      }),
+    ];
+    // A local command, then the real prompt: the prompt names the session.
+    await put(
+      join(proj, `${S1}.jsonl`),
+      jsonl([
+        ...local('/effort', S1),
+        userPrompt({ sessionId: S1, text: 'fix the flaky login test' }),
+        ...assistantBlocks({ sessionId: S1, requestId: 'r1', blocks: ['text'] }),
+      ]),
+    );
+    // A command the model answered (a skill or custom command) still names it.
+    await put(
+      join(proj, `${S2}.jsonl`),
+      jsonl([
+        userPrompt({
+          sessionId: S2,
+          origin: null,
+          text: '<command-message>review is running…</command-message>\n<command-name>/review</command-name>\n<command-args>the parser</command-args>',
+        }),
+        userPrompt({ sessionId: S2, isMeta: true, origin: null, text: 'Review the parser.' }),
+        ...assistantBlocks({ sessionId: S2, requestId: 'r2', blocks: ['text'] }),
+        userPrompt({ sessionId: S2, text: 'now fix what you found' }),
+      ]),
+    );
+    // Nothing but local commands: the command is still better than no title.
+    await put(join(proj, `${S3}.jsonl`), jsonl(local('/login', S3)));
+    // A local command, then a message from another session: the message names it.
+    const S4 = '44444444-4444-4444-8444-444444444444';
+    await put(
+      join(proj, `${S4}.jsonl`),
+      jsonl([
+        ...local('/effort', S4),
+        peerMessage({ sessionId: S4, text: 'T2 assignment from the PM' }),
+        ...assistantBlocks({ sessionId: S4, requestId: 'r4', blocks: ['text'] }),
+      ]),
+    );
+    const sources = await createClaudeCodeAdapter({ claudeDir }).discover();
+    expect(Object.fromEntries(sources.map((s) => [s.nativeId, s.summary.title]))).toEqual({
+      [S1]: 'fix the flaky login test',
+      [S2]: '/review the parser',
+      [S3]: '/login',
+      [S4]: 'T2 assignment from the PM',
+    });
+  });
+
   it('reads titles and times from the tail of a large file and cwd from its head', async () => {
     const proj = join(claudeDir, 'projects', '-work-big');
     const filler = Array.from({ length: 900 }, (_, i) =>

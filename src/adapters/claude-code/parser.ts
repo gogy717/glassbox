@@ -41,6 +41,7 @@ import {
   cleanPrompt,
   cleanTurnPrompt,
   isProbeCwd,
+  isSlashCommand,
   PROBE_NAME,
   parseRecord,
   pickTitle,
@@ -473,6 +474,7 @@ export class ClaudeSessionParser implements SessionParser {
       requestIds: [],
       interruptedAt: null,
       endMarkAt: null,
+      command: isSlashCommand(rec.text),
     };
     // The turn this one follows is no longer the latest: its status may change.
     const previousTurn = agent.turnIds.at(-1);
@@ -481,6 +483,31 @@ export class ClaudeSessionParser implements SessionParser {
     agent.turnIds.push(turn.id);
     ch.turns.add(turn.id);
     ch.agents.add(agent.id);
+    this.claimEarlyRequest(agent, turn, previousTurn, ch);
+  }
+
+  /**
+   * Claude Code can write a queued prompt (a peer message, say) after the api-request it sent
+   * for it. A request with no reply yet that was sent at or after this prompt belongs to it,
+   * not to the turn before. One sent earlier was the previous turn's, abandoned for the queued
+   * prompt, and stays where it is.
+   */
+  private claimEarlyRequest(
+    agent: AgentState,
+    turn: TurnState,
+    previousTurnId: string | undefined,
+    ch: Changes,
+  ): void {
+    const req = this.requests.get(agent.requestIds.at(-1) ?? '');
+    const previous = previousTurnId ? this.turns.get(previousTurnId) : undefined;
+    if (!req || !previous || req.turnId !== previous.id || !req.hasApi || req.blocks.size > 0)
+      return;
+    if (!req.apiTs || req.apiTs < turn.startedAt) return;
+    previous.requestIds = previous.requestIds.filter((id) => id !== req.id);
+    req.turnId = turn.id;
+    req.index = turn.requestIds.length + 1;
+    turn.requestIds.push(req.id);
+    this.markRequest(req, ch);
   }
 
   /**
@@ -857,6 +884,7 @@ export class ClaudeSessionParser implements SessionParser {
           aiTitle: this.aiTitle,
           firstHuman: this.firstPrompt('human'),
           firstAny: this.firstPrompt(null),
+          command: this.firstPrompt(null, true),
         }) ?? base.title,
       cwd: this.cwd ?? base.cwd,
       startedAt: this.startedAt ?? base.startedAt,
@@ -885,12 +913,17 @@ export class ClaudeSessionParser implements SessionParser {
     );
   }
 
-  /** The first main-agent prompt of that origin (any origin when null), cleaned for a title. */
-  private firstPrompt(origin: TurnOrigin | null): string | null {
+  /**
+   * The first main-agent prompt of that origin (any origin when null), cleaned for a title. A
+   * person's slash command that the model never saw (/effort, /clear) is passed over unless
+   * `localCommands` asks for it, as the last resort.
+   */
+  private firstPrompt(origin: TurnOrigin | null, localCommands = false): string | null {
     const main = this.agents.get(MAIN_AGENT_ID) as AgentState;
     for (const id of main.turnIds) {
       const t = this.turns.get(id);
       if (!t || (origin !== null && t.origin !== origin)) continue;
+      if (!localCommands && t.command && t.requestIds.length === 0) continue;
       const title = cleanPrompt(t.prompt);
       if (title) return title;
     }
