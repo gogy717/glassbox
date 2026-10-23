@@ -39,20 +39,20 @@ npx --yes github:gogy717/glassbox#v0.1.1
 
 Common options:
 
-| Option                                    | Description                                                                                                                     |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `--port <n>`                              | Port, default `7788`                                                                                                            |
-| `--no-open`                               | Don't open a browser                                                                                                            |
-| `--claude-dir <path>`                     | Claude Code data dir, default `$CLAUDE_CONFIG_DIR` or `~/.claude`                                                               |
-| `--grok-dir <path>` / `--no-grok`         | Grok data dir, default `$GROK_HOME` or `~/.grok` (Grok sessions show whenever it exists) / don't show them                      |
-| `--codex-dir <path>` / `--no-codex`       | Codex data dir, default `$CODEX_HOME` or `~/.codex` (Codex sessions show whenever it exists) / don't show them                  |
-| `--omp-dir <path>` / `--no-omp`           | oh-my-pi dir, default `~/.omp` (sessions show whenever `agent/sessions` exists) / show neither its sessions nor its usage cache |
-| `--opencode-dir <path>` / `--no-opencode` | TODO(OpenCode)                                                                                                                  |
-| `--claude-bin <path>`                     | The `claude` used to send messages, default the one on `PATH`                                                                   |
-| `--use-api-key`                           | Let the `claude` started for messages use `ANTHROPIC_API_KEY` (default: the account you signed in with in the terminal)         |
-| `--fetch-quota[=<list>]`                  | Ask providers for plan usage every 5 minutes: `anthropic`, `xai`, `deepseek`; alone, all three (see Data and privacy)           |
-| `--demo`                                  | Run on built-in demo data: no local sessions are read and `claude` is never started                                             |
-| `--help`                                  | List every option                                                                                                               |
+| Option                                    | Description                                                                                                                                                  |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `--port <n>`                              | Port, default `7788`                                                                                                                                         |
+| `--no-open`                               | Don't open a browser                                                                                                                                         |
+| `--claude-dir <path>`                     | Claude Code data dir, default `$CLAUDE_CONFIG_DIR` or `~/.claude`                                                                                            |
+| `--grok-dir <path>` / `--no-grok`         | Grok data dir, default `$GROK_HOME` or `~/.grok` (Grok sessions show whenever it exists) / don't show them                                                   |
+| `--codex-dir <path>` / `--no-codex`       | Codex data dir, default `$CODEX_HOME` or `~/.codex` (Codex sessions show whenever it exists) / don't show them                                               |
+| `--omp-dir <path>` / `--no-omp`           | oh-my-pi dir, default `~/.omp` (sessions show whenever `agent/sessions` exists) / show neither its sessions nor its usage cache                              |
+| `--opencode-dir <path>` / `--no-opencode` | OpenCode data dir, default `$XDG_DATA_HOME/opencode` or `~/.local/share/opencode` (OpenCode sessions show whenever it holds `opencode.db`) / don't show them |
+| `--claude-bin <path>`                     | The `claude` used to send messages, default the one on `PATH`                                                                                                |
+| `--use-api-key`                           | Let the `claude` started for messages use `ANTHROPIC_API_KEY` (default: the account you signed in with in the terminal)                                      |
+| `--fetch-quota[=<list>]`                  | Ask providers for plan usage every 5 minutes: `anthropic`, `xai`, `deepseek`; alone, all three (see Data and privacy)                                        |
+| `--demo`                                  | Run on built-in demo data: no local sessions are read and `claude` is never started                                                                          |
+| `--help`                                  | List every option                                                                                                                                            |
 
 To install it for good: `npm install -g github:gogy717/glassbox`, then run `glassbox`; uninstall with `npm uninstall -g glassbox`. To upgrade, run the command again with the new tag.
 
@@ -69,7 +69,7 @@ To install it for good: `npm install -g github:gogy717/glassbox`, then run `glas
   - OpenAI: the ChatGPT plan's limits from Codex's session logs, or from oh-my-pi's cache.
   - xAI (SuperGrok) and GitHub Copilot: from oh-my-pi's usage cache.
   - DeepSeek: the account balance, with `--fetch-quota`.
-- **Grok, Codex, oh-my-pi and OpenCode sessions**: when Grok Build, the Codex CLI, oh-my-pi or OpenCode is installed, their sessions appear in the sidebar too (view only), with sub-agents, tokens and time broken down the same way. <!-- TODO(OpenCode): check the OpenCode wording against T2 -->
+- **Grok, Codex, oh-my-pi and OpenCode sessions**: when Grok Build, the Codex CLI, oh-my-pi or OpenCode is installed, their sessions appear in the sidebar too (view only), with sub-agents, tokens and time broken down the same way. An OpenCode session's child sessions show as its sub-agents.
 - **Diagnostics**: the small icon at the right of the summary bar lists what data this session lacks, and why.
 
 ## Sending messages from glassbox
@@ -93,8 +93,8 @@ glassbox is an independent project, not affiliated with or endorsed by Anthropic
   - `~/.claude` (session transcripts) and the `cachedUsageUtilization` entry of `~/.claude.json`;
   - `~/.grok`;
   - the session records in `~/.codex` (`sessions/`, `archived_sessions/`, `session_index.jsonl`; never credential files such as `auth.json`);
-  - oh-my-pi's sessions in `~/.omp/agent/sessions` (`$PI_CODING_AGENT_DIR` moves `~/.omp/agent`) (with the full tool output omp saves beside them), and its usage cache in `~/.omp/agent/agent.db`: only the usage reports in its `cache` table, never the credential tables. On Linux, `/proc/net/unix` tells whether oh-my-pi has a session open;
-  - TODO(OpenCode): `~/.local/share/opencode/opencode.db`.
+  - oh-my-pi's sessions in `~/.omp/agent/sessions` with the full tool output omp saves beside them (`$PI_CODING_AGENT_DIR` moves `~/.omp/agent`), and its usage cache in `~/.omp/agent/agent.db`: only the usage reports in its `cache` table, never the credential tables. On Linux, `/proc/net/unix` tells whether oh-my-pi has a session open;
+  - OpenCode's database `~/.local/share/opencode/opencode.db`: its sessions, messages and parts. The names of running processes (`/proc` on Linux, `ps` on macOS) tell whether OpenCode runs.
 - Never changes a Claude Code, Grok, Codex, oh-my-pi or OpenCode file (when you message from glassbox, `claude` writes its own records, just as in a terminal), with one caveat for the SQLite databases below.
 - oh-my-pi and OpenCode keep data in SQLite, which glassbox opens read-only for one short query at a time. While the owning app has pages waiting in its write-ahead log (`-wal`), and only when the `-wal` and `-shm` files have the database's own permissions, glassbox reads them as they are (`mode=ro`, `readonly_shm=1`: nothing is written, not even the shared-memory index); otherwise it opens the database file alone as immutable, and changes not yet checkpointed show up a little later. One rare race remains: if the app deletes its `-wal` between glassbox's check and its open, SQLite creates an empty `-wal` again (with the database's permissions, as the app itself would) and that one read fails. SQLite offers no way to rule this out.
 - Accepts connections from this machine only: it checks where a connection really comes from, and validates `Host` / `Origin` too. Every write needs a token generated at each start, so other web pages cannot read your sessions or send messages through it.
@@ -117,7 +117,8 @@ glassbox is an independent project, not affiliated with or endorsed by Anthropic
 - The transcript format is Claude Code's internal format and may change with upgrades; glassbox skips and counts anything it does not recognise instead of crashing.
 - When you message from glassbox you see the reply text and the thinking-token count grow live, but Claude Code's streaming output does not include the thinking text itself.
 - Grok and Codex sessions are view only. Grok records tokens per turn, so a turn's usage is attributed to its last call; Codex encrypts its thinking, so glassbox shows only Codex's own reasoning summaries and thinking tokens.
-- oh-my-pi and OpenCode sessions are view only, and glassbox does not show their per-request cost. <!-- TODO(OpenCode): add OpenCode's own limits from T2 -->
+- oh-my-pi and OpenCode sessions are view only, and glassbox does not show the per-request cost they record. Request details are partial at best: oh-my-pi records them for sub-agents only, OpenCode only the model and its settings. oh-my-pi writes a reply only once it is complete, and its live state is known on Linux only. OpenCode's live state is a guess: an unfinished reply while OpenCode runs means busy, and anything else shows as closed (OpenCode records no waiting or idle state).
+- glassbox counts OpenCode's reasoning tokens into output, as for every other agent, so its output reads higher than OpenCode's own. Only `opencode.db` in the data dir is read, not a database moved with `OPENCODE_DB` or another channel's `opencode-<channel>.db`; archived sessions show like the others.
 - Claude's quota comes from Claude Code's cache, refreshed by ClaudeBar or `/usage`; when neither runs, the data goes stale (the UI says so). Signing in again or switching accounts clears that cache, so the quota disappears until the next `/usage`. `--fetch-quota` keeps it fresh on its own.
 - oh-my-pi's usage cache only changes while oh-my-pi runs, so xAI, OpenAI and Copilot usage read from it goes stale when oh-my-pi is not in use.
 - Codex records the ChatGPT plan's limits only when you sign in to Codex with ChatGPT, not with an API key.

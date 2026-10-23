@@ -39,20 +39,20 @@ npx --yes github:gogy717/glassbox#v0.1.1
 
 常用参数：
 
-| 参数                                      | 说明                                                                                              |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `--port <n>`                              | 端口，默认 `7788`                                                                                 |
-| `--no-open`                               | 不自动打开浏览器                                                                                  |
-| `--claude-dir <path>`                     | Claude Code 数据目录，默认 `$CLAUDE_CONFIG_DIR` 或 `~/.claude`                                    |
-| `--grok-dir <path>` / `--no-grok`         | Grok 数据目录，默认 `$GROK_HOME` 或 `~/.grok`（目录存在就显示 Grok 会话）/ 不显示                 |
-| `--codex-dir <path>` / `--no-codex`       | Codex 数据目录，默认 `$CODEX_HOME` 或 `~/.codex`（目录存在就显示 Codex 会话）/ 不显示             |
-| `--omp-dir <path>` / `--no-omp`           | oh-my-pi 目录，默认 `~/.omp`（`agent/sessions` 存在就显示它的会话）/ 会话和用量缓存都不读         |
-| `--opencode-dir <path>` / `--no-opencode` | TODO(OpenCode)                                                                                    |
-| `--claude-bin <path>`                     | 发消息时使用的 `claude`，默认取 `PATH` 里的                                                       |
-| `--use-api-key`                           | 让发消息启动的 `claude` 使用 `ANTHROPIC_API_KEY`（默认用你在终端里登录的账号）                    |
-| `--fetch-quota[=<list>]`                  | 每 5 分钟向服务商查询用量：`anthropic`、`xai`、`deepseek`；不带列表时三家都查（见「数据与隐私」） |
-| `--demo`                                  | 用内置演示数据运行，不读取本机会话，也不会启动 `claude`                                           |
-| `--help`                                  | 查看全部参数                                                                                      |
+| 参数                                      | 说明                                                                                                                                  |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `--port <n>`                              | 端口，默认 `7788`                                                                                                                     |
+| `--no-open`                               | 不自动打开浏览器                                                                                                                      |
+| `--claude-dir <path>`                     | Claude Code 数据目录，默认 `$CLAUDE_CONFIG_DIR` 或 `~/.claude`                                                                        |
+| `--grok-dir <path>` / `--no-grok`         | Grok 数据目录，默认 `$GROK_HOME` 或 `~/.grok`（目录存在就显示 Grok 会话）/ 不显示                                                     |
+| `--codex-dir <path>` / `--no-codex`       | Codex 数据目录，默认 `$CODEX_HOME` 或 `~/.codex`（目录存在就显示 Codex 会话）/ 不显示                                                 |
+| `--omp-dir <path>` / `--no-omp`           | oh-my-pi 目录，默认 `~/.omp`（`agent/sessions` 存在就显示它的会话）/ 会话和用量缓存都不读                                             |
+| `--opencode-dir <path>` / `--no-opencode` | OpenCode 数据目录，默认 `$XDG_DATA_HOME/opencode` 或 `~/.local/share/opencode`（目录里有 `opencode.db` 就显示 OpenCode 会话）/ 不显示 |
+| `--claude-bin <path>`                     | 发消息时使用的 `claude`，默认取 `PATH` 里的                                                                                           |
+| `--use-api-key`                           | 让发消息启动的 `claude` 使用 `ANTHROPIC_API_KEY`（默认用你在终端里登录的账号）                                                        |
+| `--fetch-quota[=<list>]`                  | 每 5 分钟向服务商查询用量：`anthropic`、`xai`、`deepseek`；不带列表时三家都查（见「数据与隐私」）                                     |
+| `--demo`                                  | 用内置演示数据运行，不读取本机会话，也不会启动 `claude`                                                                               |
+| `--help`                                  | 查看全部参数                                                                                                                          |
 
 想常驻安装：`npm install -g github:gogy717/glassbox`，之后直接运行 `glassbox`；卸载用 `npm uninstall -g glassbox`。升级：把命令里的版本号换成新的 tag 再运行一次。
 
@@ -69,7 +69,7 @@ npx --yes github:gogy717/glassbox#v0.1.1
   - OpenAI：ChatGPT 套餐的限额，来自 Codex 的会话日志或 oh-my-pi 的缓存。
   - xAI（SuperGrok）和 GitHub Copilot：来自 oh-my-pi 的用量缓存。
   - DeepSeek：账户余额，需加 `--fetch-quota`。
-- **Grok、Codex、oh-my-pi 和 OpenCode 会话**：本机装了 Grok Build、Codex CLI、oh-my-pi 或 OpenCode 时，它们的会话也会出现在侧栏（只能查看），子代理、token 和时间同样可以拆开看。<!-- TODO(OpenCode): 按 T2 核对 OpenCode 的说法 -->
+- **Grok、Codex、oh-my-pi 和 OpenCode 会话**：本机装了 Grok Build、Codex CLI、oh-my-pi 或 OpenCode 时，它们的会话也会出现在侧栏（只能查看），子代理、token 和时间同样可以拆开看。OpenCode 会话的子会话显示为它的子代理。
 - **诊断**：汇总条右侧的小图标列出这个会话缺了哪些数据、为什么缺。
 
 ## 在 glassbox 里发消息
@@ -93,8 +93,8 @@ glassbox 是独立项目，与 Anthropic 没有关联，也未获其认可。
   - `~/.claude`（会话转录）和 `~/.claude.json` 里的 `cachedUsageUtilization` 一项；
   - `~/.grok`；
   - `~/.codex` 里的会话记录（`sessions/`、`archived_sessions/`、`session_index.jsonl`，不碰 `auth.json` 之类的凭据文件）；
-  - oh-my-pi 在 `~/.omp/agent/sessions` 里的会话（`$PI_CODING_AGENT_DIR` 可另指 `~/.omp/agent`）（以及 omp 存在旁边的完整工具输出），和 `~/.omp/agent/agent.db` 里的用量缓存：只读 `cache` 表里的用量报告，不碰凭据表。在 Linux 上，通过 `/proc/net/unix` 判断 oh-my-pi 是否开着某个会话；
-  - TODO(OpenCode)：`~/.local/share/opencode/opencode.db`。
+  - oh-my-pi 在 `~/.omp/agent/sessions` 里的会话以及 omp 存在旁边的完整工具输出（`$PI_CODING_AGENT_DIR` 可另指 `~/.omp/agent`），和 `~/.omp/agent/agent.db` 里的用量缓存：只读 `cache` 表里的用量报告，不碰凭据表。在 Linux 上，通过 `/proc/net/unix` 判断 oh-my-pi 是否开着某个会话；
+  - OpenCode 的数据库 `~/.local/share/opencode/opencode.db`：其中的会话、消息和片段。通过正在运行的进程名（Linux 上读 `/proc`，macOS 上用 `ps`）判断 OpenCode 是否在运行。
 - 不修改任何 Claude Code / Grok / Codex / oh-my-pi / OpenCode 文件（用 glassbox 发消息时，记录由 `claude` 自己写入，和在终端里一样），SQLite 数据库有一处例外，见下一条。
 - oh-my-pi 和 OpenCode 把数据存在 SQLite 里，glassbox 以只读方式打开，每次只做一个简短查询。只有当所属应用的预写日志（`-wal`）里还有未合并的页、并且 `-wal` 和 `-shm` 的权限与数据库文件一致时，glassbox 才直接读取它们（`mode=ro`、`readonly_shm=1`：什么都不写，共享内存索引也不写）；否则只把数据库文件当作不可变（immutable）打开，还没合并进去的改动会晚一点才显示。还剩一个罕见的竞态：如果应用恰好在 glassbox 检查之后、打开之前删掉了它的 `-wal`，SQLite 会重新建一个空的 `-wal`（权限与数据库一致，和应用自己建的一样），这一次读取失败。SQLite 没有办法完全避免这种情况。
 - 只接受本机连接：看的是连接的真实来源地址，`Host` / `Origin` 也会校验；所有写操作需要每次启动随机生成的令牌，其他网页无法借道读取会话或发消息。
@@ -117,7 +117,8 @@ glassbox 是独立项目，与 Anthropic 没有关联，也未获其认可。
 - 转录格式是 Claude Code 的内部格式，升级后可能变化；glassbox 遇到不认识的内容会跳过并计数，不会崩溃。
 - 用 glassbox 发消息时能实时看到回复文字和思考 token 的增长，但 Claude Code 的流式输出里没有思考的文字本身。
 - Grok 和 Codex 会话只能查看。Grok 只按轮次记录 token，所以一轮的用量记在这一轮的最后一次调用上；Codex 的思考内容是加密的，只能显示它自带的推理摘要和思考 token。
-- oh-my-pi 和 OpenCode 会话只能查看，glassbox 不显示它们每次请求的费用。<!-- TODO(OpenCode): 补上 T2 的 OpenCode 限制 -->
+- oh-my-pi 和 OpenCode 会话只能查看，glassbox 不显示它们记录的每次请求的费用。请求详情最多只有一部分：oh-my-pi 只为子代理记录，OpenCode 只记录模型和它的设置。oh-my-pi 在一次回复完成后才写盘，它的运行状态只在 Linux 上能看到。OpenCode 的运行状态是推测的：OpenCode 在运行且有未完成的回复时算作忙碌，其余都显示为已关闭（OpenCode 不记录等待或空闲状态）。
+- glassbox 把 OpenCode 的推理 token 计入输出（和其他代理一样），所以输出数会比 OpenCode 自己显示的大。只读数据目录里的 `opencode.db`，不跟随 `OPENCODE_DB` 指到别处的数据库，也不读其他渠道的 `opencode-<channel>.db`；已归档的会话和其他会话一样显示。
 - Claude 的额度数据来自 Claude Code 的缓存，由 ClaudeBar 或 `/usage` 刷新；两者都没有运行时，数据会变旧（界面会标出）。重新登录或切换账号会清空这份缓存，额度会消失，直到下一次 `/usage`。加 `--fetch-quota` 可以让它自己保持最新。
 - oh-my-pi 的用量缓存只在 oh-my-pi 运行时更新，所以从它读到的 xAI、OpenAI、Copilot 用量在不用 oh-my-pi 时会变旧。
 - 只有用 ChatGPT 登录 Codex 时，Codex 才会记录 ChatGPT 套餐的限额；用 API key 登录时没有。
