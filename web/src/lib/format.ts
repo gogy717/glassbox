@@ -108,17 +108,29 @@ const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
   ['second', 1000],
 ];
 
-/** "3 minutes ago", in the UI language. */
+const THIN_SPACE = '\u2009';
+
+/**
+ * "7 s ago", "3 m ago", "2 h ago", "yesterday", in the UI language: narrow units, with a thin
+ * space between the figure and a Latin unit glued to it (zh "3分钟前" stays as it is).
+ */
 export function formatRelative(iso: string | null | undefined, now: number, locale: string) {
   if (!iso) return DASH;
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return DASH;
   // A time a little ahead of this clock (a busy session's last write) is now, not "in 1 second".
   const diff = Math.min(0, t - now);
-  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto', style: 'narrow' });
   for (const [unit, size] of UNITS) {
     if (Math.abs(diff) >= size || unit === 'second')
-      return rtf.format(Math.round(diff / size), unit);
+      return rtf
+        .formatToParts(Math.round(diff / size), unit)
+        .map((p, i, all) =>
+          p.type === 'literal' && all[i - 1]?.type === 'integer' && /^[A-Za-z]/.test(p.value)
+            ? THIN_SPACE + p.value
+            : p.value,
+        )
+        .join('');
   }
   return DASH;
 }
