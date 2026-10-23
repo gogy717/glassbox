@@ -40,17 +40,18 @@
 
   /* Step categories ("How it worked") and time segments ("Timeline"). */
   /* Step categories: validated categorical slots (dataviz reference palette); answer is neutral. */
-  /* git and mcp take the two slots left (green, red); the Timeline order keeps them off their
-     colour-blind look-alikes (green next to edit, red next to edit). */
+  /* git (sky) and mcp (orchid): clear of the status colours (success, error, warning) and of
+     the agent colours, checked with the dataviz validator next to their Timeline neighbours
+     (plan, git, web, mcp, other). Pale on light, deep on dark, as the gamut leaves room. */
   --cat-explore: #2a78d6;
   --cat-edit: #eb6834;
   --cat-run: #1baf7a;
   --cat-delegate: #e87ba4;
   --cat-ask: #eda100;
   --cat-plan: #6250d6;
-  --cat-git: #008300;
+  --cat-git: #2db9f3;
   --cat-web: #2a78d6;
-  --cat-mcp: #e34948;
+  --cat-mcp: #d085fc;
   --cat-other: #a3a29a;
   --cat-answer: #a8a69d;
   --seg-thinking: #9b8bd6;
@@ -114,9 +115,9 @@
     --cat-delegate: #d55181;
     --cat-ask: #c98500;
     --cat-plan: #9085e9;
-    --cat-git: #008300;
+    --cat-git: #00668e;
     --cat-web: #3987e5;
-    --cat-mcp: #e66767;
+    --cat-mcp: #a950b2;
     --cat-other: #6e6d68;
     --cat-answer: #77766f;
     --json-key: #5db0d7;
@@ -165,9 +166,9 @@
   --cat-delegate: #d55181;
   --cat-ask: #c98500;
   --cat-plan: #9085e9;
-  --cat-git: #008300;
+  --cat-git: #00668e;
   --cat-web: #3987e5;
-  --cat-mcp: #e66767;
+  --cat-mcp: #a950b2;
   --cat-other: #6e6d68;
   --cat-answer: #77766f;
   --json-key: #5db0d7;
