@@ -183,9 +183,16 @@ export interface AgentNode {
 
 /**
  * Where a turn's input came from: a person, a background-task notification, a sub-agent's
- * initial prompt, a message from another agent session, or anything else.
+ * initial prompt, a message from another agent session, the agent resuming on its own once a
+ * usage limit reset ('auto-continuation', never a title), or anything else.
  */
-export type TurnOrigin = 'human' | 'task-notification' | 'agent-prompt' | 'peer' | 'other';
+export type TurnOrigin =
+  | 'human'
+  | 'task-notification'
+  | 'agent-prompt'
+  | 'peer'
+  | 'auto-continuation'
+  | 'other';
 
 /** One input to an agent (a human prompt, a task notification, a sub-agent's initial prompt). */
 export interface Turn {

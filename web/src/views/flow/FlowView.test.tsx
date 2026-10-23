@@ -188,6 +188,30 @@ describe('FlowView', () => {
     ).not.toHaveAttribute('data-command');
   });
 
+  it('labels work resumed after a usage limit, its calls counted as usual', () => {
+    const open = demoOpen();
+    open.turns = new Map(
+      [...open.turns].map(([id, turn]) => [
+        id,
+        id === 'turn_m1'
+          ? {
+              ...turn,
+              origin: 'auto-continuation' as const,
+              prompt:
+                'Your claude.ai usage limit has reset. Continue the task you were working on…',
+            }
+          : turn,
+      ]),
+    );
+    renderFlow({ open });
+    const card = screen.getByRole('button', {
+      name: /^Conversation 1: Continued after usage limit/,
+    });
+    expect(card).not.toHaveTextContent(/usage limit has reset/);
+    expect(card).not.toHaveAttribute('data-command');
+    expect(within(card).getByText(/model calls? · \d+ tools?/)).toBeInTheDocument();
+  });
+
   it('lists the same turn in full in another agent’s session', () => {
     const open = withLocalCommand();
     render(

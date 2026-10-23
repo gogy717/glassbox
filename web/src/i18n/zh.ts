@@ -61,6 +61,7 @@ export const zh = {
   'flow.promptMore': '展开全文',
   'flow.promptLess': '收起',
   'flow.taskNotification': '后台任务完成通知',
+  'flow.autoContinuation': '额度恢复后自动继续',
   'flow.callsTools': '{calls} 次调用 · {tools} 个工具',
   'flow.callTitle': '模型调用 #{n}',
   'flow.input': '输入 {n}',

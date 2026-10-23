@@ -31,6 +31,16 @@ describe('parseRecord', () => {
     expect(parseRecord(rawRecord('file-history-snapshot'))).toMatchObject({ known: true });
   });
 
+  it('reads an auto-continuation from turnOrigin alone, as task notifications are', () => {
+    const line = JSON.stringify({
+      type: 'user',
+      isMeta: true,
+      turnOrigin: 'auto_continuation',
+      message: { role: 'user', content: 'Your claude.ai usage limit has reset.' },
+    });
+    expect(parseRecord(line)).toMatchObject({ kind: 'user', origin: 'auto-continuation' });
+  });
+
   it('reads agent-name records', () => {
     expect(parseRecord(rawRecord('agent-name', { agentName: 'whitefish-7e' }))).toEqual({
       kind: 'agent-name',

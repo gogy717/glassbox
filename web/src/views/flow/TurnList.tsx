@@ -53,9 +53,11 @@ export function useTurnItems(open: OpenSession, agentId: string): TurnItem[] {
             ? t('flow.outsideTurns')
             : turn.origin === 'task-notification'
               ? t('flow.turnTitle', { n: turn.index, prompt: t('flow.taskNotification') })
-              : prompt
-                ? t('flow.turnTitle', { n: turn.index, prompt })
-                : t('flow.turnFallback', { n: turn.index });
+              : turn.origin === 'auto-continuation'
+                ? t('flow.turnTitle', { n: turn.index, prompt: t('flow.autoContinuation') })
+                : prompt
+                  ? t('flow.turnTitle', { n: turn.index, prompt })
+                  : t('flow.turnFallback', { n: turn.index });
         const status = turnStatus(turn, statuses);
         return {
           turn,

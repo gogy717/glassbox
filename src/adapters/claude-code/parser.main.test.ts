@@ -8,6 +8,7 @@ import {
   apiRequest,
   assistantBlocks,
   at,
+  autoContinuation,
   compactBoundary,
   customTitle,
   interrupt,
@@ -717,6 +718,37 @@ describe('session summary', () => {
     ]);
     expect(p.snapshot().requests.find((r) => r.id === 'api-9')).toMatchObject({ index: 1 });
     expect(p.snapshot().session.title).toBe('T4 assignment');
+  });
+
+  it('starts a turn of its own when work resumes after a usage limit', () => {
+    const p = parseMain(
+      userPrompt({ text: 'fix the parser', ts: at(0) }),
+      apiRequest({ id: 'api-1', ts: at(1) }),
+      assistantBlocks({ requestRef: 'api-1', blocks: ['text'], ts: at(2) }),
+      turnDuration({ ts: at(3) }),
+      autoContinuation({ ts: at(100) }),
+      apiRequest({ id: 'api-2', ts: at(101) }),
+      assistantBlocks({
+        requestRef: 'api-2',
+        blocks: [
+          { type: 'tool_use', id: 'toolu_1', name: 'Read', input: { file_path: '/w/a.ts' } },
+        ],
+        ts: at(103),
+      }),
+      toolResult({ toolUseId: 'toolu_1', ts: at(104) }),
+      apiRequest({ id: 'api-3', ts: at(105) }),
+      assistantBlocks({ requestRef: 'api-3', blocks: ['text'], ts: at(106) }),
+      turnDuration({ ts: at(107) }),
+    );
+    const snap = p.snapshot();
+    expect(checkSnapshot(snap)).toEqual([]);
+    expect(snap.turns.map((t) => [t.index, t.origin, t.requestIds, t.status, t.endedAt])).toEqual([
+      [1, 'human', ['api-1'], 'complete', at(3)],
+      [2, 'auto-continuation', ['api-2', 'api-3'], 'complete', at(107)],
+    ]);
+    // Its calls and tools count like any turn's; Claude Code's boilerplate is never the title.
+    expect(snap.session.counts).toMatchObject({ turns: 2, requests: 3, toolCalls: 1 });
+    expect(snap.session.title).toBe('fix the parser');
   });
 
   it('gives a person’s prompt the request Claude Code wrote just before it', () => {

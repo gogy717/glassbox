@@ -953,6 +953,8 @@ export class ClaudeSessionParser implements SessionParser {
     for (const id of main.turnIds) {
       const t = this.turns.get(id);
       if (!t || (origin !== null && t.origin !== origin)) continue;
+      // Boilerplate Claude Code writes itself, never what a session is about.
+      if (t.origin === 'auto-continuation') continue;
       if (!localCommands && t.command && t.requestIds.length === 0) continue;
       const title = cleanPrompt(t.prompt);
       if (title) return title;
