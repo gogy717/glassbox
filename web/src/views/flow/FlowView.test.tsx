@@ -493,6 +493,46 @@ describe('FlowView', () => {
     expect(navigate).toHaveBeenLastCalledWith({ turnId: null, requestId: null });
   });
 
+  it('puts the open card in the URL, so a tool call is a link, and clears it on close', () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{}', { status: 404 })),
+    );
+    const { navigate, setFollow } = renderFlow({ route: { turnId: 'turn_m1' }, follow: false });
+    fireEvent.click(within(row(2)).getByRole('button', { name: /^Edit/ }));
+    expect(navigate).toHaveBeenLastCalledWith(
+      { turnId: 'turn_m1', requestId: 'req_m2', card: 'tool:tu_m2b' },
+      { replace: true },
+    );
+    expect(setFollow).toHaveBeenCalledWith(false);
+    // A clicked call is where the reader is: not marked like a linked one.
+    expect(row(2)).not.toHaveAttribute('data-focused');
+    fireEvent.click(within(row(2)).getByRole('button', { name: /^Edit/ }));
+    expect(navigate).toHaveBeenLastCalledWith(
+      { requestId: null, card: undefined },
+      { replace: true },
+    );
+    vi.unstubAllGlobals();
+  });
+
+  it('opens the card a link names, in its call', () => {
+    renderFlow({
+      route: { turnId: 'turn_m1', requestId: 'req_m2', card: 'tool:tu_m2b' },
+      follow: false,
+    });
+    expect(within(row(2)).getByRole('region', { name: 'Tool call details' })).toBeInTheDocument();
+    expect(row(2)).toHaveAttribute('data-focused');
+  });
+
+  it('opens the call but no panel for a card it no longer has', () => {
+    renderFlow({
+      route: { turnId: 'turn_m1', requestId: 'req_m2', card: 'tool:gone' },
+      follow: false,
+    });
+    expect(row(2)).toHaveAttribute('data-focused');
+    expect(screen.queryByRole('region', { name: /details/ })).toBeNull();
+  });
+
   it('opens the turn of a linked request and highlights its row', () => {
     renderFlow({ route: { requestId: 'req_m2' }, follow: false });
     expect(screen.getByRole('button', { name: /Conversation 1/ })).toHaveAttribute(

@@ -25,8 +25,7 @@ import { mcpTool, summarizeInput, toolCategory } from '../../lib/tool-category';
 import css from './cards.module.css';
 import { toolStatus } from './flow-model';
 
-/** Which card of a call row is selected; tool cards use `tool:<id>`. */
-export type CardKey = 'request' | 'response' | `tool:${string}`;
+export type { CardKey } from '../../router';
 
 interface ShellProps {
   kind: 'request' | 'response' | 'tool';

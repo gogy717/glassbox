@@ -4,6 +4,12 @@ import { MAIN_AGENT_ID } from '../../src/core/model.js';
 export const TABS = ['flow', 'steps', 'tokens', 'time'] as const;
 export type Tab = (typeof TABS)[number];
 
+/** Which card of a call is open: its request, its response, or one of its tools (`tool:<id>`). */
+export type CardKey = 'request' | 'response' | `tool:${string}`;
+
+const isCardKey = (v: string | null): v is CardKey =>
+  v === 'request' || v === 'response' || (!!v && /^tool:./.test(v));
+
 /** Everything the URL remembers, so a view can be bookmarked or reloaded. */
 export interface Route {
   sessionId: string | null;
@@ -12,6 +18,9 @@ export interface Route {
   turnId: string | null;
   /** A request to scroll to and highlight (set by click-through from other tabs). */
   requestId: string | null;
+  /** The card of `requestId` whose panel is open, so a link opens that tool call; absent when
+   *  the panel is closed. Only ever set with `requestId`. */
+  card?: CardKey;
 }
 
 const HOME: Route = {
@@ -34,12 +43,15 @@ export function parseRoute(hash: string): Route {
   }
   const q = new URLSearchParams(m[2] ?? '');
   const tab = q.get('tab');
+  const requestId = q.get('req') || null;
+  const card = q.get('card');
   return {
     sessionId,
     agentId: q.get('agent') || MAIN_AGENT_ID,
     tab: TABS.includes(tab as Tab) ? (tab as Tab) : 'flow',
     turnId: q.get('turn') || null,
-    requestId: q.get('req') || null,
+    requestId,
+    ...(requestId && isCardKey(card) ? { card } : {}),
   };
 }
 
@@ -50,6 +62,8 @@ export function formatRoute(r: Route): string {
   if (r.tab !== 'flow') q.set('tab', r.tab);
   if (r.turnId) q.set('turn', r.turnId);
   if (r.requestId) q.set('req', r.requestId);
+  // A card belongs to its request: clearing the request (a new turn, agent or session) closes it.
+  if (r.requestId && r.card) q.set('card', r.card);
   const qs = q.toString();
   return `#/s/${encodeURIComponent(r.sessionId)}${qs ? `?${qs}` : ''}`;
 }

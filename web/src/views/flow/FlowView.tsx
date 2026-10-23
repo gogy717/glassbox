@@ -1,6 +1,6 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ModelRequest, Turn } from '../../../../src/core/model.js';
+import type { ModelRequest, ToolCall, Turn } from '../../../../src/core/model.js';
 import type { LivePartial } from '../../../../src/shared/runs.js';
 import type { OpenSession } from '../../data/store';
 import { useI18n } from '../../i18n';
@@ -43,6 +43,20 @@ export function FlowView({ open, agentId, route, navigate, live = null }: Props)
     [],
   );
 
+  // The open card lives in the URL (`card=`), so "that tool call" is a link. Replaced, not
+  // pushed: Back goes to the previous view, not through every card opened on the way.
+  const turnId = current?.turn.id ?? null;
+  const selectCard = useCallback(
+    (next: Selection | null) =>
+      navRef.current(
+        next
+          ? { turnId, requestId: next.requestId, card: next.card }
+          : { requestId: null, card: undefined },
+        { replace: true },
+      ),
+    [turnId],
+  );
+
   const pickTurn = useCallback(
     (turnId: string) => {
       setFollow(false);
@@ -68,6 +82,12 @@ export function FlowView({ open, agentId, route, navigate, live = null }: Props)
               open={open}
               turn={current.turn}
               focusId={follow ? null : (route.requestId ?? null)}
+              linked={
+                route.requestId && route.card
+                  ? { requestId: route.requestId, card: route.card }
+                  : null
+              }
+              onSelectCard={selectCard}
               live={current === items.at(-1) ? live : null}
               follow={follow}
               onUserScrollAway={() => setFollow(false)}
@@ -82,11 +102,20 @@ export function FlowView({ open, agentId, route, navigate, live = null }: Props)
   );
 }
 
+/** The open card of one call. */
+interface Selection {
+  requestId: string;
+  card: CardKey;
+}
+
 interface ListProps {
   open: OpenSession;
   turn: Turn;
   live: LivePartial | null;
   focusId: string | null;
+  /** The card the URL names, opened on arrival, Back or Forward. */
+  linked: Selection | null;
+  onSelectCard(next: Selection | null): void;
   follow: boolean;
   onUserScrollAway(): void;
   onEnterAgent(agentId: string): void;
@@ -94,11 +123,24 @@ interface ListProps {
 
 const ROW_GAP = 12;
 
+/** The card open in this call, if any; a tool the call does not have (a stale link) opens none. */
+function openCard(
+  selected: Selection | null,
+  requestId: string,
+  tools: ToolCall[],
+): CardKey | null {
+  if (selected?.requestId !== requestId) return null;
+  const { card } = selected;
+  return card.startsWith('tool:') && !tools.some((t) => `tool:${t.id}` === card) ? null : card;
+}
+
 function CallList({
   open,
   turn,
   live,
   focusId,
+  linked,
+  onSelectCard,
   follow,
   onUserScrollAway,
   onEnterAgent,
@@ -109,19 +151,34 @@ function CallList({
     () => requestsOf(open, turn).map((req) => ({ req, tools: toolsOf(open, req) })),
     [open, turn],
   );
-  const [selected, setSelected] = useState<{ requestId: string; card: CardKey } | null>(null);
+  const [selected, setSelected] = useState<Selection | null>(linked);
+  // The URL wins when it changes on its own: a pasted link, Back or Forward.
+  const linkedRequest = linked?.requestId ?? null;
+  const linkedCard = linked?.card ?? null;
+  useEffect(() => {
+    setSelected(
+      linkedRequest && linkedCard ? { requestId: linkedRequest, card: linkedCard } : null,
+    );
+  }, [linkedRequest, linkedCard]);
   const awayRef = useRef(onUserScrollAway);
   awayRef.current = onUserScrollAway;
+  const selectCardRef = useRef(onSelectCard);
+  selectCardRef.current = onSelectCard;
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
+  // A call opened by a click is where the reader already is: not scrolled to, not highlighted
+  // as a linked one.
+  const clickedRef = useRef<string | null>(null);
   const onSelect = useCallback((req: ModelRequest, card: CardKey) => {
     const s = selectedRef.current;
-    if (s?.requestId === req.id && s.card === card) setSelected(null);
-    else {
-      setSelected({ requestId: req.id, card });
+    const next = s?.requestId === req.id && s.card === card ? null : { requestId: req.id, card };
+    setSelected(next);
+    if (next) {
+      clickedRef.current = req.id;
       // An open card must not be scrolled away (and unmounted) by follow mode.
       awayRef.current();
     }
+    selectCardRef.current(next);
   }, []);
 
   const virtualizer = useVirtualizer({
@@ -144,9 +201,10 @@ function CallList({
   }, [follow, live]);
 
   const focusIndex = focusId ? calls.findIndex((c) => c.req.id === focusId) : -1;
+  const linkFocus = focusId !== clickedRef.current ? focusId : null;
   useEffect(() => {
-    if (focusIndex >= 0) virtualizer.scrollToIndex(focusIndex, { align: 'center' });
-  }, [focusIndex, virtualizer]);
+    if (focusIndex >= 0 && linkFocus) virtualizer.scrollToIndex(focusIndex, { align: 'center' });
+  }, [focusIndex, linkFocus, virtualizer]);
 
   useFollowScroll(parentRef, follow, onUserScrollAway);
 
@@ -173,8 +231,8 @@ function CallList({
                 req={call.req}
                 tools={call.tools}
                 open={open}
-                focused={call.req.id === focusId}
-                selected={selected?.requestId === call.req.id ? selected.card : null}
+                focused={call.req.id === linkFocus}
+                selected={openCard(selected, call.req.id, call.tools)}
                 onSelect={onSelect}
                 onEnterAgent={onEnterAgent}
               />
