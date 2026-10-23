@@ -319,22 +319,26 @@ describe('FlowView', () => {
     vi.setSystemTime(DEMO_NOW);
     renderFlow();
     const call = row(1);
-    expect(within(call).getByText('Thinking · 1:23')).toBeInTheDocument();
+    // The why line and the Response card, which say nothing yet, both count the thinking.
+    expect(within(call).getAllByText('Thinking · 1:23')).toHaveLength(2);
     expect(within(call).getAllByText('claude-opus-5-5').length).toBeGreaterThan(0);
     expect(within(call).getAllByText('max').length).toBeGreaterThan(0);
     act(() => vi.advanceTimersByTime(1000));
-    expect(within(call).getByText('Thinking · 1:24')).toBeInTheDocument();
+    expect(within(call).getAllByText('Thinking · 1:24')).toHaveLength(2);
   });
 
   it('shows token headers, the failed Edit and the final reply in turn 1', () => {
     renderFlow({ route: { turnId: 'turn_m1' }, follow: false });
     const first = row(1);
-    expect(within(first).getByText('Input 31,250')).toBeInTheDocument();
-    expect(within(first).getByText('Uncached 6')).toBeInTheDocument();
-    expect(within(first).getByText('Cache hit 244')).toBeInTheDocument();
-    expect(within(first).getByText('Cache write 31,000')).toBeInTheDocument();
-    expect(within(first).getByText('Output 820 (thinking 610)')).toBeInTheDocument();
-    expect(within(first).getByText('14s')).toBeInTheDocument();
+    // One line of readings: the words muted, the figures mono.
+    expect(within(first).getByRole('heading', { level: 3 })).toHaveTextContent('#1');
+    expect(within(first).getByRole('heading', { level: 3 })).toHaveAccessibleName('Model call #1');
+    const line = within(first).getByText('in').parentElement?.parentElement as HTMLElement;
+    expect(line).toHaveTextContent(
+      'in 31,250uncached 6cache hit 244cache write 31,000out 820 (610 thinking)',
+    );
+    expect(within(first).getByText('31,250')).toHaveClass('figure');
+    expect(within(first).getByText('14s')).toHaveClass('figure');
 
     const second = row(2);
     expect(

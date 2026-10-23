@@ -1,46 +1,80 @@
+/* A call is not a box: its line of readings, a hairline, then its cards. */
 .row {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  background: var(--layer-1);
-  overflow: hidden;
+  border-radius: var(--radius-l);
 }
 
+/* A linked call (from tokens or the timeline) is marked while it is the one asked for. */
 .row[data-focused] {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-tint);
+  background: var(--layer-2);
+  box-shadow: inset 2px 0 0 var(--ink);
 }
 
 .header {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 4px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* #1 · clock · duration │ in 52,400 · uncached 6 · … · out 3,900 (3,100 thinking) · status */
+.line {
+  display: flex;
+  align-items: baseline;
   flex-wrap: wrap;
-  gap: 4px 12px;
-  min-height: 38px;
-  padding: 6px 12px;
-  background: var(--layer-2);
-  font-size: 10px;
+  gap: 2px 14px;
+  min-height: 36px;
+  padding-top: 10px;
   color: var(--muted);
+  font-size: var(--fs-meta);
 }
 
 .title {
-  margin: 0 auto 0 0;
-  font-size: 12px;
-  font-weight: 700;
+  margin: 0;
   color: var(--text);
+  font-size: var(--fs-small);
+  font-weight: 500;
   white-space: nowrap;
 }
 
 .meta {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
   white-space: nowrap;
 }
 
-.tokens > span + span {
-  padding-left: 6px;
-  margin-left: 2px;
-  border-left: 1px solid var(--border-strong);
+/* The readings, after a hairline. */
+.readings {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  padding-left: 14px;
+  border-left: 1px solid var(--border);
+}
+
+.reading {
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.word {
+  color: var(--muted);
+}
+
+.status {
+  display: inline-flex;
+  margin-left: auto;
+}
+
+/* The call's reason, aligned with "#1": two lines at most, the rest is in the steps view. */
+.why {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--fs-small);
+  line-height: var(--lh);
+  overflow-wrap: anywhere;
 }
 
 /* Every card stays in view: the strip wraps, reading left to right, then down. */
@@ -64,7 +98,7 @@
 }
 
 @media (max-width: 560px) {
-  .header > .meta {
+  .readings {
     display: none;
   }
 }

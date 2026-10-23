@@ -114,6 +114,11 @@ interface CardProps {
   onSelect(): void;
 }
 
+interface ResponseCardProps extends CardProps {
+  /** Where an in-flight call's thinking clock starts (`thinkingSince`); its start by default. */
+  thinkingSince?: string | null;
+}
+
 export function RequestCard({ req, selected, onSelect }: CardProps) {
   const { t, intl } = useI18n();
   return (
@@ -137,7 +142,7 @@ export function RequestCard({ req, selected, onSelect }: CardProps) {
   );
 }
 
-export function ResponseCard({ req, selected, onSelect }: CardProps) {
+export function ResponseCard({ req, selected, onSelect, thinkingSince }: ResponseCardProps) {
   const { t } = useI18n();
   const text = req.blocks.find((b) => b.kind === 'text')?.text ?? null;
   const thinking = req.blocks.find((b) => b.kind === 'thinking');
@@ -149,7 +154,7 @@ export function ResponseCard({ req, selected, onSelect }: CardProps) {
 
   let preview: ReactNode;
   if (inFlight && req.startedAt)
-    preview = <Ticking since={req.startedAt} labelKey="flow.thinkingNow" />;
+    preview = <Ticking since={thinkingSince ?? req.startedAt} labelKey="flow.thinkingNow" />;
   else if (req.error) preview = <span className={css.errorText}>{req.error.message}</span>;
   else if (text) preview = plainText(text);
   else if (thinking?.kind === 'thinking' && thinking.text) preview = plainText(thinking.text);

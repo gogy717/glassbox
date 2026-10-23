@@ -1,14 +1,15 @@
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import type { ToolCall } from '../../../../src/core/model.js';
+import type { ModelRequest, ToolCall } from '../../../../src/core/model.js';
 import { I18nContext, makeI18n } from '../../i18n';
 import { demoOpen } from '../../test/demo';
 import { CallRow } from './CallRow';
 
-function renderRow(requestId: string) {
+function renderRow(requestId: string, blocks?: ModelRequest['blocks']) {
   const open = demoOpen();
-  const req = open.requests.get(requestId);
-  if (!req) throw new Error('fixture');
+  const found = open.requests.get(requestId);
+  if (!found) throw new Error('fixture');
+  const req = blocks ? { ...found, blocks } : found;
   const tools = req.toolCallIds
     .map((id) => open.toolCalls.get(id))
     .filter((t): t is ToolCall => t !== undefined);
@@ -50,5 +51,38 @@ describe('CallRow strip', () => {
   it('keeps the arrow to the final reply with it', () => {
     const row = renderRow('req_m3');
     expect(leadingArrow(within(row).getByText('Final reply'))).toBe(true);
+  });
+});
+
+describe('CallRow why line', () => {
+  const why = (row: HTMLElement) => row.querySelector('p');
+
+  it('says, under the call line, why the call did what it did', () => {
+    const row = renderRow('req_m3');
+    expect(
+      within(row).getByText('Fixed: busy sessions now sort first, then by most recent update.', {
+        selector: 'p',
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it('says nothing for a call that only ran tools, and leaves the cards’ summaries as they were', () => {
+    const row = renderRow('req_m2', []);
+    expect(why(row)).toBeNull();
+    expect(within(row).getByRole('group', { name: 'Read' })).toHaveTextContent('store.ts');
+  });
+
+  it('falls back to what the call thought', () => {
+    const row = renderRow('req_m2', [
+      {
+        kind: 'thinking',
+        text: 'The sort is in store.ts. Read it first.',
+        durationMs: 900,
+        at: '2026-10-23T09:00:00.000Z',
+      },
+    ]);
+    expect(
+      within(row).getByText('The sort is in store.ts.', { selector: 'p' }),
+    ).toBeInTheDocument();
   });
 });
