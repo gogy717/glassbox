@@ -1,5 +1,5 @@
 /**
- * Plan quota from oh-my-pi's usage cache: the `cache` table of `<ompDir>/agent/agent.db`, where
+ * Plan quota from oh-my-pi's usage cache: the `cache` table of `<agent dir>/agent.db`, where
  * oh-my-pi keeps the last usage report of every provider account it is signed in to, in rows
  * keyed `usage_cache:report:<provider>:<baseUrl>:<account>`. No network, no credentials.
  *
@@ -239,16 +239,16 @@ export async function readCacheValues(url: URL, now: number): Promise<unknown[]>
 }
 
 export interface OmpUsageCacheOptions {
-  /** oh-my-pi home, usually `~/.omp`. */
-  ompDir: string;
+  /** oh-my-pi's agent dir, usually `~/.omp/agent`: the one that holds agent.db. */
+  agentDir: string;
 }
 
 /**
  * The `oh-my-pi-cache` quota source. Empty while there is no database; rejects when there is
  * one that cannot be read (locked past the timeout, not a database, no cache table).
  */
-export function createOmpUsageCacheSource({ ompDir }: OmpUsageCacheOptions): QuotaSource {
-  const path = join(ompDir, 'agent', 'agent.db');
+export function createOmpUsageCacheSource({ agentDir }: OmpUsageCacheOptions): QuotaSource {
+  const path = join(agentDir, 'agent.db');
   return {
     id: 'oh-my-pi-cache',
     read: async () => {

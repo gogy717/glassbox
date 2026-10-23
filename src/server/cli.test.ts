@@ -1,11 +1,12 @@
 import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   bindWarning,
   browserUrl,
   codexDirToUse,
   grokDirToUse,
   ompAgentDirToUse,
+  ompUsageDirToUse,
   parseCliArgs,
 } from './args.js';
 import { browserCommand } from './open-browser.js';
@@ -260,5 +261,30 @@ describe('ompAgentDirToUse', () => {
       /--omp-dir.*\/nope/,
     );
     expect(await ompAgentDirToUse(opts(['--omp-dir', '/o']), exists(['/o']))).toBeNull();
+  });
+});
+
+describe('ompUsageDirToUse', () => {
+  const opts = (argv: string[], env: Record<string, string> = {}) =>
+    parseCliArgs(argv, { env, homedir: '/home/u' });
+  const exists = (dirs: string[]) => async (p: string) => dirs.includes(p);
+
+  it('reads the usage cache from the agent dir the sessions use, sessions or not', async () => {
+    expect(await ompUsageDirToUse(opts([]), exists(['/home/u/.omp/agent']))).toBe(
+      '/home/u/.omp/agent',
+    );
+    const moved = opts([], { PI_CODING_AGENT_DIR: '/data/agent' });
+    expect(await ompUsageDirToUse(moved, exists(['/data/agent']))).toBe('/data/agent');
+    expect(await ompUsageDirToUse(opts(['--omp-dir', '/o']), exists(['/o/agent']))).toBe(
+      '/o/agent',
+    );
+    expect(await ompUsageDirToUse(opts([]), exists(['/home/u/.omp']))).toBeNull();
+  });
+
+  it('stays off with --no-omp: no omp file is read', async () => {
+    const isDirectory = vi.fn(async () => true);
+    expect(await ompUsageDirToUse(opts(['--no-omp']), isDirectory)).toBeNull();
+    expect(await ompAgentDirToUse(opts(['--no-omp']), isDirectory)).toBeNull();
+    expect(isDirectory).not.toHaveBeenCalled();
   });
 });

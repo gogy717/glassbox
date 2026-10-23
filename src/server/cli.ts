@@ -24,6 +24,7 @@ import {
   type FetchQuotaProvider,
   grokDirToUse,
   ompAgentDirToUse,
+  ompUsageDirToUse,
   parseCliArgs,
   USAGE,
 } from './args.js';
@@ -89,10 +90,8 @@ async function main(): Promise<void> {
   let claudeBin: string | null = null;
   let grokDir: string | null = null;
   let codexDir: string | null = null;
-  // oh-my-pi's home, until its sessions get their own --omp-dir / --no-omp.
-  const ompDir = join(homedir(), '.omp');
-  let ompUsage = false;
   let ompAgentDir: string | null = null;
+  let ompUsageDir: string | null = null;
   if (!opts.demo) {
     try {
       claudeBin = await findClaudeBin({
@@ -102,8 +101,8 @@ async function main(): Promise<void> {
       });
       grokDir = await grokDirToUse(opts, isDirectory);
       codexDir = await codexDirToUse(opts, isDirectory);
-      ompUsage = await isDirectory(join(ompDir, 'agent'));
       ompAgentDir = await ompAgentDirToUse(opts, isDirectory);
+      ompUsageDir = await ompUsageDirToUse(opts, isDirectory);
     } catch (err) {
       console.error(err instanceof Error ? err.message : err);
       process.exit(2);
@@ -112,9 +111,9 @@ async function main(): Promise<void> {
 
   // Local caches first: on a fetchedAt tie the earlier source wins.
   const quotaSources: QuotaSource[] = [];
-  if (ompUsage) {
-    quotaSources.push(createOmpUsageCacheSource({ ompDir }));
-    log(`showing plan usage cached by oh-my-pi in ${ompDir}`);
+  if (ompUsageDir) {
+    quotaSources.push(createOmpUsageCacheSource({ agentDir: ompUsageDir }));
+    log(`showing plan usage cached by oh-my-pi in ${join(ompUsageDir, 'agent.db')}`);
   }
   // Network and credentials only for the providers named by --fetch-quota.
   const fetching = opts.demo ? [] : opts.fetchQuota;

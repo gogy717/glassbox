@@ -24,7 +24,10 @@ export interface CliOptions {
   /** `--codex-dir`, else $CODEX_HOME, else ~/.codex. */
   codexDir: string;
   codexDirFromFlag: boolean;
-  /** Show oh-my-pi sessions when omp has a sessions dir (`--no-omp` turns it off). */
+  /**
+   * Show oh-my-pi sessions when omp has a sessions dir, and the plan usage omp caches in its
+   * agent.db (`--no-omp` turns both off).
+   */
   omp: boolean;
   /** omp's root: `--omp-dir`, else ~/$PI_CONFIG_DIR, else ~/.omp. */
   ompDir: string;
@@ -60,7 +63,7 @@ Options:
   --omp-dir <dir>     oh-my-pi dir (default ~/.omp, or ~/$PI_CONFIG_DIR); oh-my-pi sessions
                       are shown whenever <dir>/agent/sessions exists ($PI_CODING_AGENT_DIR
                       stands in for <dir>/agent when this flag is not given)
-  --no-omp            don't show oh-my-pi sessions
+  --no-omp            don't show oh-my-pi sessions or the plan usage oh-my-pi caches
   --fetch-quota[=<list>]
                       keep plan usage fresh by asking the providers every 5 minutes:
                       anthropic (Claude Code's sign-in), xai (SuperGrok, Grok CLI's sign-in
@@ -196,6 +199,17 @@ export async function ompAgentDirToUse(
   if (opts.ompDirFromFlag && !(await isDirectory(opts.ompDir)))
     throw new Error(`--omp-dir ${opts.ompDir}: not a directory`);
   return (await isDirectory(join(opts.ompAgentDir, 'sessions'))) ? opts.ompAgentDir : null;
+}
+
+/**
+ * omp's agent dir for the plan usage omp caches in its agent.db, or null when omp is off or the
+ * dir is missing. Unlike sessions, the cache needs no sessions dir.
+ */
+export async function ompUsageDirToUse(
+  opts: CliOptions,
+  isDirectory: (p: string) => Promise<boolean>,
+): Promise<string | null> {
+  return opts.omp && (await isDirectory(opts.ompAgentDir)) ? opts.ompAgentDir : null;
 }
 
 /** A startup warning for binding `host`, or null when it is a loopback address. */

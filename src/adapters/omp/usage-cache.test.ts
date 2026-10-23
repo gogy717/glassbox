@@ -399,7 +399,7 @@ describe('oh-my-pi cache source', () => {
   const now = Date.now();
   const nowSec = Math.floor(now / 1000);
 
-  it('reads the usage reports in <ompDir>/agent/agent.db and watches it', async () => {
+  it('reads the usage reports in <agent dir>/agent.db and watches it', async () => {
     writeDb([
       cacheRow(xaiReport(now - 60_000)),
       cacheRow(copilotReport(now - 60_000), 'https://api.example.invalid'),
@@ -407,7 +407,7 @@ describe('oh-my-pi cache source', () => {
       { key: 'session:sticky', value: cacheValue(xaiReport(now)), expires_at: nowSec + 60 },
       { key: 'usage_cache:failure:report:x', value: cacheValue(null), expires_at: nowSec + 60 },
     ]);
-    const source = createOmpUsageCacheSource({ ompDir: dir });
+    const source = createOmpUsageCacheSource({ agentDir: join(dir, 'agent') });
     expect(source.id).toBe('oh-my-pi-cache');
     expect(source.watchFiles?.()).toEqual([db, `${db}-wal`]);
     const out = await source.read();
@@ -423,13 +423,15 @@ describe('oh-my-pi cache source', () => {
       cacheRow(xaiReport(now - 60_000), 'default', nowSec - 1),
       cacheRow(openaiReport(now - 60_000), 'default', nowSec + 3600),
     ]);
-    const out = await createOmpUsageCacheSource({ ompDir: dir }).read();
+    const out = await createOmpUsageCacheSource({ agentDir: join(dir, 'agent') }).read();
     expect(out.map((q) => q.provider)).toEqual(['openai']);
   });
 
   it('is empty when there is no database', async () => {
-    expect(await createOmpUsageCacheSource({ ompDir: dir }).read()).toEqual([]);
-    expect(await createOmpUsageCacheSource({ ompDir: join(dir, 'missing') }).read()).toEqual([]);
+    expect(await createOmpUsageCacheSource({ agentDir: join(dir, 'agent') }).read()).toEqual([]);
+    expect(
+      await createOmpUsageCacheSource({ agentDir: join(dir, 'missing', 'agent') }).read(),
+    ).toEqual([]);
   });
 
   it('leaves no files behind in the agent dir', async () => {
@@ -437,7 +439,9 @@ describe('oh-my-pi cache source', () => {
     // oh-my-pi is not running: closing it checkpointed the WAL away.
     expect(existsSync(`${db}-wal`)).toBe(false);
     const before = (await readdir(join(dir, 'agent'))).sort();
-    expect(await createOmpUsageCacheSource({ ompDir: dir }).read()).toHaveLength(1);
+    expect(await createOmpUsageCacheSource({ agentDir: join(dir, 'agent') }).read()).toHaveLength(
+      1,
+    );
     expect((await readdir(join(dir, 'agent'))).sort()).toEqual(before);
   });
 
@@ -472,7 +476,9 @@ describe('oh-my-pi cache source', () => {
   }
 
   const providers = async (ompDir = dir) =>
-    (await createOmpUsageCacheSource({ ompDir }).read()).map((q) => q.provider).sort();
+    (await createOmpUsageCacheSource({ agentDir: join(ompDir, 'agent') }).read())
+      .map((q) => q.provider)
+      .sort();
 
   /**
    * `runningOmp` in a process of its own, as oh-my-pi is: SQLite shares one `-shm` mapping
@@ -589,7 +595,9 @@ describe('oh-my-pi cache source', () => {
       await chmod(db, 0o600);
       await chmod(`${db}-wal`, 0o644);
       expect(statSync(`${db}-wal`).size).toBe(0);
-      expect(await createOmpUsageCacheSource({ ompDir: dir }).read()).toHaveLength(1);
+      expect(await createOmpUsageCacheSource({ agentDir: join(dir, 'agent') }).read()).toHaveLength(
+        1,
+      );
       expect(statSync(`${db}-wal`).mode & 0o777).toBe(0o644);
     } finally {
       writer.close();
@@ -598,13 +606,17 @@ describe('oh-my-pi cache source', () => {
 
   it('rejects when the database cannot be read, so the failure is logged', async () => {
     await writeFile(db, 'this is not a database, just text that is long enough to matter');
-    await expect(createOmpUsageCacheSource({ ompDir: dir }).read()).rejects.toThrow();
+    await expect(
+      createOmpUsageCacheSource({ agentDir: join(dir, 'agent') }).read(),
+    ).rejects.toThrow();
   });
 
   it('rejects when the cache table is missing', async () => {
     const w = new DatabaseSync(db);
     w.exec('CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
     w.close();
-    await expect(createOmpUsageCacheSource({ ompDir: dir }).read()).rejects.toThrow(/cache/);
+    await expect(
+      createOmpUsageCacheSource({ agentDir: join(dir, 'agent') }).read(),
+    ).rejects.toThrow(/cache/);
   });
 });
