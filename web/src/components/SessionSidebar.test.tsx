@@ -170,6 +170,37 @@ describe('SessionSidebar', () => {
     );
   });
 
+  it('keeps one tab stop across the rows the filter leaves, with the chips outside it', () => {
+    const mixed = sessions.map((s, i) => (i === 0 ? s : { ...s, agent: 'grok' }));
+    render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <SessionSidebar
+          sessions={mixed}
+          selectedId={null}
+          now={DEMO_NOW.getTime()}
+          onSelect={vi.fn()}
+        />
+      </I18nContext.Provider>,
+    );
+    const group = screen.getByRole('group', { name: 'Filter by agent' });
+    for (const chip of within(group).getAllByRole('button'))
+      expect(chip).not.toHaveAttribute('data-roving');
+    fireEvent.click(within(group).getByRole('button', { name: 'Grok' }));
+    const rows = screen.getAllByRole('button').filter((b) => b.closest('li'));
+    expect(rows).toHaveLength(sessions.length - 1);
+    // One stop, on the first row the filter left.
+    expect(rows.map((r) => r.tabIndex)).toEqual(rows.map((_, i) => (i === 0 ? 0 : -1)));
+    (rows[0] as HTMLElement).focus();
+    fireEvent.keyDown(rows[0] as HTMLElement, { key: 'ArrowDown' });
+    expect(rows[1]).toHaveFocus();
+    fireEvent.keyDown(rows[1] as HTMLElement, { key: 'End' });
+    expect(rows.at(-1)).toHaveFocus();
+    // Back to every agent: the stop stays on the row last focused.
+    fireEvent.click(within(group).getByRole('button', { name: 'Grok' }));
+    const all = screen.getAllByRole('button').filter((b) => b.closest('li'));
+    expect(all.filter((r) => r.tabIndex === 0)).toEqual([rows.at(-1)]);
+  });
+
   it('shows everything again when the filtered agent’s sessions are gone', () => {
     const mixed = sessions.map((s, i) => (i === 1 ? { ...s, agent: 'grok' } : s));
     const sidebar = (list: SessionSummary[]) => (

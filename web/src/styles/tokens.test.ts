@@ -164,6 +164,20 @@ describe('tokens.css', () => {
   );
 
   it.each(NAMES.map((name, i) => [name, i] as const))(
+    'the git and MCP tool categories do not read as a status (%s)',
+    (_, i) => {
+      const t = tokens(i);
+      for (const cat of ['--cat-git', '--cat-mcp'])
+        for (const status of ['--success', '--error', '--warning'])
+          for (const v of VISIONS)
+            expect(
+              deltaE(t.get(cat) as string, t.get(status) as string, v),
+              `${cat} vs ${status} (${v})`,
+            ).toBeGreaterThanOrEqual(RESERVED[v]);
+    },
+  );
+
+  it.each(NAMES.map((name, i) => [name, i] as const))(
     'Claude Code’s clay is not the orange of the tool cards (%s)',
     (_, i) => {
       const t = tokens(i);
