@@ -3,20 +3,11 @@
  *
  * Every read opens its own connection and closes it again: glassbox holds no lock and no read
  * transaction between reads, and never writes, not even the files SQLite keeps beside the
- * database. An ordinary read-only connection would: it creates a missing `-wal` and `-shm`,
- * writes its read marks into `-shm` (or rebuilds it when no other connection has it open), and
- * `fchmod`s any zero-byte file it opens whose mode is not the database's. See `journalUsable`
- * for how a read avoids all of that.
- *
- * `node:sqlite` is imported on first use, so glassbox loads it only when an OpenCode database
- * exists. Node 22 prints an ExperimentalWarning as it loads; that one warning is dropped.
+ * database (`openReadOnly` in `../sqlite.ts` says how).
  */
-import { existsSync, statSync } from 'node:fs';
 import type { DatabaseSync } from 'node:sqlite';
-import { pathToFileURL } from 'node:url';
+import { openReadOnly, type ReadOnlyOptions } from '../sqlite.js';
 import type { MessageRow, PartRow, SessionDocument, SessionRow } from './records.js';
-
-type Sqlite = typeof import('node:sqlite');
 
 /** How long a read waits on a lock before it fails (the event loop waits with it). */
 const BUSY_MS = 200;
@@ -51,103 +42,8 @@ const SQL = {
   messageWritten: 'SELECT max(time_updated) AS t FROM part WHERE message_id = ?',
 };
 
-/** Runs `load` with Node's experimental-SQLite warning dropped; any other warning goes through. */
-export async function withoutSqliteWarning<T>(load: () => Promise<T>): Promise<T> {
-  const emit = process.emitWarning;
-  process.emitWarning = ((warning: string | Error, ...rest: unknown[]) => {
-    if (isSqliteWarning(warning, rest[0])) return;
-    (emit as (...args: unknown[]) => void).call(process, warning, ...rest);
-  }) as typeof process.emitWarning;
-  try {
-    return await load();
-  } finally {
-    process.emitWarning = emit;
-  }
-}
-
-/** Node's "SQLite is an experimental feature" warning, given as (message, type) or (message, { type }). */
-export function isSqliteWarning(warning: unknown, typeOrOptions: unknown): boolean {
-  const type =
-    typeof typeOrOptions === 'string'
-      ? typeOrOptions
-      : (typeOrOptions as { type?: unknown } | undefined)?.type;
-  const isExperimental =
-    type === 'ExperimentalWarning' ||
-    (warning instanceof Error && warning.name === 'ExperimentalWarning');
-  const message = warning instanceof Error ? warning.message : String(warning);
-  return isExperimental && message.includes('SQLite');
-}
-
-let sqlite: Promise<Sqlite> | null = null;
-
-export function loadSqlite(): Promise<Sqlite> {
-  sqlite ??= withoutSqliteWarning(() => import('node:sqlite'));
-  return sqlite;
-}
-
 /** Test seam: runs between choosing how to open the database and opening it. */
-export interface OpenCodeDbIo {
-  beforeOpen?: () => void;
-}
-
-const modeOf = (path: string) => statSync(path).mode & 0o777;
-const octal = (mode: number) => mode.toString(8);
-
-function walHoldsPages(path: string): boolean {
-  try {
-    return statSync(`${path}-wal`).size > 0;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Whether the `-wal` journal can be read along with the database (OpenCode keeps most of its
- * data there) without SQLite changing a file: the journal holds pages, and it and `-shm` both
- * exist with the database's mode. Matching modes matter because OpenCode may empty its journal
- * (a checkpoint) between this check and the open, and SQLite `fchmod`s a zero-byte file it
- * opens to the database's mode. `-shm` is opened `readonly_shm`, so it is only ever read. Any
- * other state is read `immutable`: the database file alone, which lacks whatever OpenCode has
- * not checkpointed yet. A journal OpenCode deletes in the instant between this check and the
- * open would be created again, empty, as OpenCode itself does on its next start.
- */
-export function journalUsable(path: string): boolean {
-  return journalProblem(path) === null;
-}
-
-/** Why the `-wal` cannot be read along with the database (see `journalUsable`); null when it can. */
-export function journalProblem(path: string): string | null {
-  try {
-    const mode = modeOf(path);
-    const wal = statSync(`${path}-wal`, { throwIfNoEntry: false });
-    if (!wal || wal.size === 0) return 'its -wal holds no pages';
-    if ((wal.mode & 0o777) !== mode)
-      return `its -wal has mode ${octal(wal.mode & 0o777)}, the database ${octal(mode)}`;
-    const shm = statSync(`${path}-shm`, { throwIfNoEntry: false });
-    if (!shm) return 'its -shm is missing';
-    if ((shm.mode & 0o777) !== mode)
-      return `its -shm has mode ${octal(shm.mode & 0o777)}, the database ${octal(mode)}`;
-    return null;
-  } catch (err) {
-    return `its files cannot be inspected: ${err instanceof Error ? err.message : String(err)}`;
-  }
-}
-
-function openReadOnly(
-  Database: Sqlite['DatabaseSync'],
-  path: string,
-  journal: boolean,
-  io: OpenCodeDbIo,
-): DatabaseSync {
-  // SQLite would fchmod an empty database file too; it has no tables to read anyway.
-  if (!existsSync(path) || statSync(path).size === 0) throw new Error('no database in the file');
-  const url = pathToFileURL(path).href;
-  io.beforeOpen?.();
-  if (!journal) return new Database(`${url}?immutable=1`, { readOnly: true });
-  const db = new Database(`${url}?mode=ro&readonly_shm=1`, { readOnly: true });
-  db.exec(`PRAGMA busy_timeout = ${BUSY_MS}`);
-  return db;
-}
+export type OpenCodeDbIo = Pick<ReadOnlyOptions, 'beforeOpen'>;
 
 interface TableCache<Row> {
   count: number;
@@ -210,7 +106,7 @@ export interface SessionActivity {
 
 export class OpenCodeDb {
   private failing = false;
-  /** The journal holds pages that a read had to skip (see `journalUsable`); logged once. */
+  /** The journal holds pages that a read had to skip (see `journalUsable`, `../sqlite.ts`); logged once. */
   private skippedJournal = false;
   private readonly cache = new Map<string, SessionCache>();
   private readonly documents = new Map<string, { version: string; value: SessionDocument }>();
@@ -315,13 +211,15 @@ export class OpenCodeDb {
   /** `read` on a fresh read-only connection; null (logged once per failing streak) on failure. */
   private async use<T>(read: (db: DatabaseSync) => T): Promise<T | null> {
     try {
-      const { DatabaseSync } = await loadSqlite();
-      const problem = journalProblem(this.path);
-      if (problem && !this.skippedJournal && walHoldsPages(this.path)) {
-        this.skippedJournal = true;
-        this.log(`reading only the checkpointed part of ${this.path}: ${problem}`);
-      }
-      const db = openReadOnly(DatabaseSync, this.path, problem === null, this.io);
+      const db = await openReadOnly(this.path, {
+        busyMs: BUSY_MS,
+        beforeOpen: this.io.beforeOpen,
+        skippedJournal: (why) => {
+          if (this.skippedJournal) return;
+          this.skippedJournal = true;
+          this.log(`reading only the checkpointed part of ${this.path}: ${why}`);
+        },
+      });
       try {
         const out = read(db);
         this.failing = false;

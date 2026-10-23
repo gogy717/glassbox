@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { journalProblem } from '../sqlite.js';
 import {
   cacheRow,
   cacheValue,
@@ -22,12 +23,10 @@ import {
   xaiReport,
 } from './__fixtures__/usage-cache.js';
 import {
-  cacheDbUrl,
   createOmpUsageCacheSource,
   ompQuotaProvider,
   quotasFromCacheValues,
   readCacheValues,
-  withoutSqliteWarning,
 } from './usage-cache.js';
 
 const HOUR = 60 * 60_000;
@@ -339,36 +338,6 @@ describe('ompQuotaProvider', () => {
   });
 });
 
-describe('withoutSqliteWarning', () => {
-  it('drops only the SQLite experimental warning while loading', async () => {
-    const seen: string[] = [];
-    const original = process.emitWarning;
-    process.emitWarning = ((w: string | Error, type?: unknown) => {
-      seen.push(`${type}: ${typeof w === 'string' ? w : w.message}`);
-    }) as typeof process.emitWarning;
-    try {
-      const value = await withoutSqliteWarning(async () => {
-        process.emitWarning(
-          'SQLite is an experimental feature and might change at any time',
-          'ExperimentalWarning',
-        );
-        process.emitWarning('something else', 'ExperimentalWarning');
-        process.emitWarning('SQLite is fine', 'DeprecationWarning');
-        return 7;
-      });
-      expect(value).toBe(7);
-      process.emitWarning('SQLite is an experimental feature (after)', 'ExperimentalWarning');
-    } finally {
-      process.emitWarning = original;
-    }
-    expect(seen).toEqual([
-      'ExperimentalWarning: something else',
-      'DeprecationWarning: SQLite is fine',
-      'ExperimentalWarning: SQLite is an experimental feature (after)',
-    ]);
-  });
-});
-
 describe('oh-my-pi cache source', () => {
   let dir: string;
   let db: string;
@@ -574,12 +543,17 @@ describe('oh-my-pi cache source', () => {
   it('changes no file when oh-my-pi empties the WAL between the check and the read', async () => {
     const omp = await ompProcess();
     try {
-      const url = cacheDbUrl(db);
-      expect(url.searchParams.get('readonly_shm')).toBe('1');
-      await omp.run('truncate');
-      expect(statSync(`${db}-wal`).size).toBe(0);
-      const before = fingerprint();
-      expect(await readCacheValues(url, now)).toHaveLength(2);
+      // The journal is to be read along: it holds pages, and -wal and -shm have the db's mode.
+      expect(journalProblem(db)).toBeNull();
+      let before: string[] = [];
+      const values = await readCacheValues(db, now, {
+        beforeOpen: async () => {
+          await omp.run('truncate');
+          expect(statSync(`${db}-wal`).size).toBe(0);
+          before = fingerprint();
+        },
+      });
+      expect(values).toHaveLength(2);
       expect(fingerprint()).toEqual(before);
     } finally {
       await omp.stop();

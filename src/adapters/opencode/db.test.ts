@@ -12,15 +12,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { journalProblem, journalUsable } from '../sqlite.js';
 import { ms, ROOT_ID, SessionBuilder, text, tokens } from './__fixtures__/builders.js';
 import { createDb, insertRows, WriterProcess } from './__fixtures__/harness.js';
-import {
-  isSqliteWarning,
-  journalProblem,
-  journalUsable,
-  OpenCodeDb,
-  withoutSqliteWarning,
-} from './db.js';
+import { OpenCodeDb } from './db.js';
 
 let dir: string;
 let path: string;
@@ -309,36 +304,4 @@ describe('OpenCodeDb never changes OpenCode files', () => {
       await writer.close();
     },
   );
-});
-
-describe('loading node:sqlite', () => {
-  it('drops only the experimental-SQLite warning, and restores emitWarning after', async () => {
-    const original = process.emitWarning;
-    const seen: unknown[] = [];
-    process.emitWarning = ((w: unknown) => {
-      seen.push(w);
-    }) as typeof process.emitWarning;
-    try {
-      const installed = process.emitWarning;
-      await withoutSqliteWarning(async () => {
-        process.emitWarning(
-          'SQLite is an experimental feature and might change at any time',
-          'ExperimentalWarning',
-        );
-        process.emitWarning('Something else', 'DeprecationWarning');
-      });
-      expect(seen).toEqual(['Something else']);
-      expect(process.emitWarning).toBe(installed);
-    } finally {
-      process.emitWarning = original;
-    }
-  });
-
-  it('recognises the warning in both of emitWarning’s call shapes', () => {
-    const msg = 'SQLite is an experimental feature and might change at any time';
-    expect(isSqliteWarning(msg, 'ExperimentalWarning')).toBe(true);
-    expect(isSqliteWarning(msg, { type: 'ExperimentalWarning' })).toBe(true);
-    expect(isSqliteWarning(msg, 'DeprecationWarning')).toBe(false);
-    expect(isSqliteWarning('WASI is an experimental feature', 'ExperimentalWarning')).toBe(false);
-  });
 });
