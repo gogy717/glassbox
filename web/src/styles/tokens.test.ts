@@ -161,6 +161,22 @@ describe('tokens.css', () => {
     },
   );
 
+  // The ring around a waiting-for-you dot (and the permission prompt's inset edge) is the
+  // theme's own amber, faintly: 10% light, 14% dark, as on the Foundations board.
+  it.each(NAMES.map((name, i) => [name, i] as const))(
+    'the warning tint is the theme’s amber at the board’s strength (%s)',
+    (_, i) => {
+      let tint: number[] | undefined;
+      for (const scope of i === 0 ? [scopes[0]] : [scopes[0], scopes[i]]) {
+        const m = (scope as string).match(/--warning-tint: rgba\((\d+), (\d+), (\d+), ([\d.]+)\);/);
+        if (m) tint = m.slice(1).map(Number);
+      }
+      const warning = tokens(i).get('--warning') as string;
+      const rgb = [1, 3, 5].map((k) => Number.parseInt(warning.slice(k, k + 2), 16));
+      expect(tint).toEqual([...rgb, i === 0 ? 0.1 : 0.14]);
+    },
+  );
+
   it('keeps D1’s radius scale, nothing rounder than 8px, and ink for selection and focus', () => {
     const radii = [...(scopes[0] as string).matchAll(/--radius-([a-z]+): (\d+)px;/g)].map(
       (m) => [m[1], Number(m[2])] as const,
@@ -298,6 +314,20 @@ describe('tokens.css', () => {
               ).toBeGreaterThanOrEqual(RESERVED[v]);
             }
       }
+    },
+  );
+
+  it.each(NAMES.map((name, i) => [name, i] as const))(
+    'the git and MCP tool categories do not read as a status (%s)',
+    (_, i) => {
+      const t = tokens(i);
+      for (const cat of ['--cat-git', '--cat-mcp'])
+        for (const status of ['--success', '--error', '--warning'])
+          for (const v of VISIONS)
+            expect(
+              deltaE(t.get(cat) as string, t.get(status) as string, v),
+              `${cat} vs ${status} (${v})`,
+            ).toBeGreaterThanOrEqual(RESERVED[v]);
     },
   );
 

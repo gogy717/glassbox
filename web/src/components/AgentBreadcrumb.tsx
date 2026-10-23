@@ -33,7 +33,11 @@ export function AgentBreadcrumb({ open, agentId, onSelect }: Props) {
               aria-current={i === path.length - 1 ? 'page' : undefined}
               onClick={() => onSelect(item.agent.id)}
             >
-              <LiveDot state={item.agent.status} label={t(`status.${item.agent.status}`)} />
+              <LiveDot
+                kind="status"
+                state={item.agent.status}
+                label={t(`status.${item.agent.status}`)}
+              />
               {name(item.agent)}
             </button>
           ) : (
@@ -118,7 +122,11 @@ function AgentMenu({ open, agentId, onSelect, name }: Props & { name(a: AgentNod
                   onSelect(r.agent.id);
                 }}
               >
-                <LiveDot state={r.agent.status} label={t(`status.${r.agent.status}`)} />
+                <LiveDot
+                  kind="status"
+                  state={r.agent.status}
+                  label={t(`status.${r.agent.status}`)}
+                />
                 <span className={css.menuLabel}>{name(r.agent)}</span>
                 <span className={`${css.menuTokens} num`}>
                   {formatCompact(cumulative(r.agent.id), intl)}
