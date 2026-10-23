@@ -3,7 +3,7 @@ import type { OpenSession } from '../data/store';
 import { useNow } from '../data/useNow';
 import { useI18n } from '../i18n';
 import { summarize } from '../lib/agents';
-import { formatDuration, formatNumber, formatPercent } from '../lib/format';
+import { DASH, formatDuration, formatNumber, formatPercent } from '../lib/format';
 import { Diagnostics } from './Diagnostics';
 import css from './SummaryBar.module.css';
 
@@ -16,7 +16,8 @@ export function SummaryBar({ open, agentId }: { open: OpenSession; agentId: stri
     [t('summary.turns'), formatNumber(s.turns, intl)],
     [t('summary.requests'), formatNumber(s.requests, intl)],
     [t('summary.toolCalls'), formatNumber(s.toolCalls, intl)],
-    [t('summary.duration'), formatDuration(s.activeMs)],
+    // Nothing ran yet: no duration rather than "0ms".
+    [t('summary.duration'), s.requests === 0 ? DASH : formatDuration(s.activeMs)],
     [t('summary.input'), formatNumber(s.input, intl)],
     [t('summary.cacheHit'), formatPercent(s.cacheHitRate, intl)],
     [t('summary.output'), `${formatNumber(s.output, intl)} (${formatNumber(s.thinking, intl)})`],

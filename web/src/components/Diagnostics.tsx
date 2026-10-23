@@ -45,7 +45,10 @@ export function Diagnostics({ diagnostics: d }: { diagnostics: Diag }) {
 
   const unknown = Object.entries(d.unknownRecordTypes).filter(([k]) => k !== SUPERSEDED);
   const superseded = d.unknownRecordTypes[SUPERSEDED] ?? 0;
-  const alert = d.unavailable.length > 0 || d.parseErrors > 0 || unknown.length > 0;
+  // Each gap listed in the panel: missing data, unparsable lines, unrecognised record types.
+  const gaps = d.unavailable.length + (d.parseErrors > 0 ? 1 : 0) + unknown.length;
+  const alert = gaps > 0;
+  const count = alert ? t('diag.count', { n: gaps }) : null;
   const n = (v: number) => v.toLocaleString(intl);
 
   return (
@@ -53,13 +56,14 @@ export function Diagnostics({ diagnostics: d }: { diagnostics: Diag }) {
       <button
         type="button"
         className={css.button}
-        aria-label={t('diag.title')}
+        aria-label={count ? `${t('diag.title')} · ${count}` : t('diag.title')}
         title={t('diag.title')}
         aria-expanded={open}
         data-alert={alert || undefined}
         onClick={() => setOpen(!open)}
       >
         <Stethoscope size={14} aria-hidden="true" />
+        {count && <span className={css.count}>{count}</span>}
       </button>
       {open && (
         <div className={css.panel} role="dialog" aria-label={t('diag.title')}>

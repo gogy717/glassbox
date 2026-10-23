@@ -116,6 +116,13 @@ describe('PermissionDialog', () => {
     );
   });
 
+  it('skips a question rather than denying it', async () => {
+    const onDecide = renderDialog(ask);
+    expect(screen.queryByRole('button', { name: 'Deny' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
+    await waitFor(() => expect(onDecide).toHaveBeenCalledWith({ decision: 'deny' }));
+  });
+
   it('locks the buttons while the answer is being sent and shows a failure', async () => {
     let fail: (e: Error) => void = () => {};
     const onDecide = vi.fn(

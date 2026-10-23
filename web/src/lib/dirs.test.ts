@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { recentDirChoices, shortPath } from './dirs';
+import { dirPlaceholder, recentDirChoices, shortPath } from './dirs';
 
 describe('shortPath', () => {
   it.each([
@@ -40,5 +40,19 @@ describe('recentDirChoices', () => {
       '/Users/demo/Library/Application Support/Claude/scratch-workspaces/z',
       '/tmp/w',
     ]);
+  });
+});
+
+describe('dirPlaceholder', () => {
+  it('follows the shape of this machine’s folders, skipping temporary ones', () => {
+    expect(dirPlaceholder(['/tmp/x', '/home/u/work/garden'])).toBe('/home/u/work/…');
+    expect(dirPlaceholder(['/Users/u/code/app'])).toBe('/Users/u/code/…');
+    expect(dirPlaceholder(['C:\\Users\\u\\code\\app'])).toBe('C:\\Users\\u\\code\\…');
+    expect(dirPlaceholder(['/home/u/work/garden/'])).toBe('/home/u/work/…');
+  });
+
+  it('falls back to a neutral path without sessions to go by', () => {
+    expect(dirPlaceholder([])).toBe('/path/to/project');
+    expect(dirPlaceholder(['/'])).toBe('/path/to/project');
   });
 });

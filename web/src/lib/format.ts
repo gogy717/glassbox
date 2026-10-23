@@ -113,7 +113,8 @@ export function formatRelative(iso: string | null | undefined, now: number, loca
   if (!iso) return DASH;
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return DASH;
-  const diff = t - now;
+  // A time a little ahead of this clock (a busy session's last write) is now, not "in 1 second".
+  const diff = Math.min(0, t - now);
   const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
   for (const [unit, size] of UNITS) {
     if (Math.abs(diff) >= size || unit === 'second')

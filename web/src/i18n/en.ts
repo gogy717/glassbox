@@ -87,6 +87,8 @@ export const en: Record<MessageKey, string> = {
   'flow.moreAgents': '{n} more',
   'flow.noTurns': 'No turns for this agent yet',
   'flow.noCalls': 'No model calls in this turn yet',
+  'flow.noCallsDone': 'No model calls in this turn',
+  'flow.noTurnsDone': 'No turns for this agent',
   'tokens.insightCacheRead':
     '{pct} of all tokens were cache reads: every request re-read a growing context.',
   'tokens.insightAgent': '{agent} spent {pct} of all tokens.',
@@ -132,6 +134,7 @@ export const en: Record<MessageKey, string> = {
   'steps.phaseShares': 'Phase shares',
   'steps.share': '{cat} {pct}',
   'steps.empty': 'No steps in this turn yet',
+  'steps.emptyDone': 'No steps in this turn',
   'time.breakdown': 'Where the time went · {agent}',
   'time.thinking': 'Thinking',
   'time.generating': 'Generating',
@@ -222,6 +225,7 @@ export const en: Record<MessageKey, string> = {
   'perm.title': '{agent} wants to use {tool}',
   'perm.allow': 'Allow',
   'perm.deny': 'Deny',
+  'perm.skip': 'Skip',
   'perm.reason': 'Reason (optional)',
   'perm.confirmDeny': 'Confirm deny',
   'perm.cancel': 'Cancel',
@@ -266,6 +270,7 @@ export const en: Record<MessageKey, string> = {
   'json.collapse': 'Collapse',
   'flow.outsideTurns': 'Calls outside turns',
   'diag.title': 'Data diagnostics',
+  'diag.count': '{n} {n|gap|gaps}',
   'diag.unavailableHead': 'Not available for this session',
   'diag.u.requestDetail':
     'Request contents (system, tools, messages): not recorded by this {agent} version',

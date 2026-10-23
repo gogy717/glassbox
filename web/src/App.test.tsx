@@ -158,7 +158,7 @@ describe('App', () => {
     expect(value('Output (thinking)')).toBe('42,040 (27,050)');
 
     expect(screen.getByRole('navigation', { name: 'Agent' })).toHaveTextContent('Main');
-    expect(within(summary).getByRole('button', { name: 'Data diagnostics' })).toBeInTheDocument();
+    expect(within(summary).getByRole('button', { name: /^Data diagnostics/ })).toBeInTheDocument();
     expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
       'Execution chain',
       'How it worked',

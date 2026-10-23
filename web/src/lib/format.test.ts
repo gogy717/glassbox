@@ -86,6 +86,11 @@ describe('formatRelative', () => {
   it('uses the locale', () => {
     expect(formatRelative('2026-10-23T09:57:00.000Z', now, 'zh')).toMatch(/^3\s?分钟前$/);
   });
+
+  it('reads a time a little ahead of this clock as now, never “in 2 seconds”', () => {
+    expect(formatRelative('2026-10-23T10:00:02.000Z', now, 'en')).toBe('now');
+    expect(formatRelative('2026-10-23T10:05:00.000Z', now, 'zh')).toBe('现在');
+  });
 });
 
 describe('formatCountdown', () => {
