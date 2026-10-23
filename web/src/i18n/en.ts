@@ -219,6 +219,7 @@ export const en: Record<MessageKey, string> = {
   'detail.tools': 'Tool definitions',
   'detail.params': 'Parameters',
   'detail.full': 'Fully reconstructed',
+  'detail.callRef': 'call #{n}',
   'detail.partial': 'Partly reconstructed',
   'detail.unavailable': 'This {agent} version did not record the request',
   'detail.loading': 'Loading…',

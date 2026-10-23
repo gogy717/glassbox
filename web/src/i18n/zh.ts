@@ -216,6 +216,7 @@ export const zh = {
   'detail.tools': '工具定义',
   'detail.params': '请求参数',
   'detail.full': '完整还原',
+  'detail.callRef': '调用 #{n}',
   'detail.partial': '部分还原',
   'detail.unavailable': '此版本 {agent} 未记录请求内容',
   'detail.loading': '加载中…',

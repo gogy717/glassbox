@@ -4,6 +4,7 @@ import type { RequestDetail } from '../../../../../src/core/model.js';
 import { CodeBlock, CopyButton } from '../../../components/CodeBlock';
 import { JsonInspector } from '../../../components/JsonInspector';
 import { Markdown } from '../../../components/Markdown';
+import { Switch } from '../../../components/Switch';
 import { type MessageKey, useI18n } from '../../../i18n';
 import { formatClock } from '../../../lib/format';
 import { ArgsView } from './ArgsView';
@@ -23,7 +24,7 @@ import {
   span,
   type ToolDef,
 } from './read';
-import { ReadableText, Segmented } from './text';
+import { ReadableText } from './text';
 import { MarkdownToggle } from './ViewToggle';
 
 /** Messages rendered at first, and added each time the list is scrolled to its end. */
@@ -281,7 +282,8 @@ export function MessageList({ entries }: { entries: Entry[] }) {
         </span>
         <span className={css.toggles}>
           {hasReply && <MarkdownToggle />}
-          <Segmented
+          <Switch
+            size="small"
             label={t('detail.order')}
             value={prefs.order}
             options={[

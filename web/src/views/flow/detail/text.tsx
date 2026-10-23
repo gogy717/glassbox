@@ -32,33 +32,3 @@ export function ReadableText({ text, label }: { text: string; label: string }) {
     </div>
   );
 }
-
-/** A small radio group of two or three choices. */
-export function Segmented<V extends string>({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: V;
-  options: { value: V; label: string }[];
-  onChange(v: V): void;
-}) {
-  return (
-    <div className={css.segmented} role="radiogroup" aria-label={label}>
-      {options.map((o) => (
-        // biome-ignore lint/a11y/useSemanticElements: a segmented control, as in the JSON dialog
-        <button
-          key={o.value}
-          type="button"
-          role="radio"
-          aria-checked={value === o.value}
-          onClick={() => onChange(o.value)}
-        >
-          {o.label}
-        </button>
-      ))}
-    </div>
-  );
-}
