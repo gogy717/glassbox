@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createClaudeCodeAdapter } from './index.js';
-import { quotaFromConfig } from './quota.js';
+import { planName, quotaFromConfig } from './quota.js';
 
 const NOW = Date.parse('2026-10-23T04:00:00.000Z');
 const ACCOUNT = 'acct-0000-fixture';
@@ -18,6 +18,8 @@ function config(overrides: Record<string, unknown> = {}) {
       accountUuid: ACCOUNT,
       emailAddress: SECRET_EMAIL,
       organizationName: 'Secret Org',
+      organizationType: 'claude_max',
+      organizationRateLimitTier: 'default_claude_max_5x',
     },
     projects: { '/work/secret-project': { allowedTools: [] } },
     cachedUsageUtilization: {
@@ -70,13 +72,16 @@ function config(overrides: Record<string, unknown> = {}) {
 describe('quotaFromConfig', () => {
   it('maps limits to windows, preferring them over the legacy fields', () => {
     expect(quotaFromConfig(config(), NOW)).toEqual({
+      provider: 'anthropic',
       agent: 'claude-code',
+      plan: 'Max 5x',
       fetchedAt: '2026-10-23T03:56:00.000Z',
       stale: false,
       windows: [
         {
           id: 'five_hour',
           kind: 'session',
+          label: null,
           model: null,
           usedPercent: 62,
           resetsAt: '2026-10-23T05:37:00.000Z',
@@ -84,6 +89,7 @@ describe('quotaFromConfig', () => {
         {
           id: 'seven_day',
           kind: 'weekly',
+          label: null,
           model: null,
           usedPercent: 38,
           resetsAt: '2026-10-26T04:00:00.000Z',
@@ -91,14 +97,21 @@ describe('quotaFromConfig', () => {
         {
           id: 'weekly:Opus',
           kind: 'weekly-model',
+          label: null,
           model: 'Opus',
           usedPercent: 51,
           resetsAt: '2026-10-26T04:00:00.000Z',
         },
       ],
       extraUsage: { used: 12.34, limit: 50, currency: 'AUD' },
+      balance: null,
       source: 'claude-code-cache',
     });
+  });
+
+  it('has no plan when the config does not name a known one', () => {
+    const c = config({ oauthAccount: { accountUuid: ACCOUNT, organizationType: 'claude_new' } });
+    expect(quotaFromConfig(c, NOW)?.plan).toBeNull();
   });
 
   it('never exposes any other key of the config', () => {
@@ -154,6 +167,17 @@ describe('quotaFromConfig', () => {
   });
 });
 
+describe('planName', () => {
+  it('names the plan from the subscription type and the rate-limit tier', () => {
+    expect(planName('max', 'default_claude_max_20x')).toBe('Max 20x');
+    expect(planName('claude_max', 'default_claude_max_5x')).toBe('Max 5x');
+    expect(planName('claude_pro', null)).toBe('Pro');
+    expect(planName('team', 'default_raven')).toBe('Team');
+    expect(planName('free', null)).toBeNull();
+    expect(planName(undefined, 'default_claude_max_5x')).toBeNull();
+  });
+});
+
 describe('adapter quota()', () => {
   let dir: string;
   beforeEach(async () => {
@@ -193,11 +217,14 @@ describe('adapter quota()', () => {
     await writeFile(path, JSON.stringify(config()));
     const fetched = (fetchedAt: string) => ({
       latest: async () => ({
-        agent: 'claude-code' as const,
+        provider: 'anthropic',
+        agent: 'claude-code',
+        plan: null,
         fetchedAt,
         stale: false,
         windows: [],
         extraUsage: null,
+        balance: null,
         source: 'anthropic-usage-api',
       }),
     });

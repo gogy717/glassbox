@@ -10,6 +10,8 @@ const credentials = (oauth: Record<string, unknown> = {}) =>
       accessToken: TOKEN,
       refreshToken: 'refresh-secret',
       expiresAt: NOW + 60 * 60_000,
+      subscriptionType: 'max',
+      rateLimitTier: 'default_claude_max_20x',
       ...oauth,
     },
   });
@@ -66,6 +68,9 @@ describe('createQuotaFetcher', () => {
       'anthropic-beta': 'oauth-2025-04-20',
     });
     expect(quota).toMatchObject({
+      provider: 'anthropic',
+      agent: 'claude-code',
+      plan: 'Max 20x',
       source: 'anthropic-usage-api',
       fetchedAt: new Date(NOW).toISOString(),
       stale: false,

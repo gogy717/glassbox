@@ -538,14 +538,24 @@ export function createDemoSessions(now: Date = new Date()): SessionSummary[] {
 export function createDemoQuota(now: Date = new Date()): QuotaSnapshot {
   const inMin = (min: number) => new Date(now.getTime() + min * 60_000).toISOString();
   return {
+    provider: 'anthropic',
     agent: 'claude-code',
+    plan: 'Max 5x',
     fetchedAt: new Date(now.getTime() - 4 * 60_000).toISOString(),
     stale: false,
     windows: [
-      { id: 'five_hour', kind: 'session', model: null, usedPercent: 62, resetsAt: inMin(97) },
+      {
+        id: 'five_hour',
+        kind: 'session',
+        label: null,
+        model: null,
+        usedPercent: 62,
+        resetsAt: inMin(97),
+      },
       {
         id: 'seven_day',
         kind: 'weekly',
+        label: null,
         model: null,
         usedPercent: 38,
         resetsAt: inMin(3 * 24 * 60),
@@ -553,12 +563,14 @@ export function createDemoQuota(now: Date = new Date()): QuotaSnapshot {
       {
         id: 'weekly:Opus',
         kind: 'weekly-model',
+        label: null,
         model: 'Opus',
         usedPercent: 51,
         resetsAt: inMin(3 * 24 * 60),
       },
     ],
     extraUsage: null,
+    balance: null,
     source: 'claude-code-cache',
   };
 }

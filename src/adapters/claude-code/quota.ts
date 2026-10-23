@@ -2,8 +2,9 @@
  * Plan quota from Claude Code's own cache: `cachedUsageUtilization` in its global config file
  * (`~/.claude.json`). No network, no credentials.
  *
- * That file also holds the user's e-mail and account data. Only `cachedUsageUtilization` and
- * `oauthAccount.accountUuid` are ever read out of it; nothing else is kept, logged or returned.
+ * That file also holds the user's e-mail and account data. Only `cachedUsageUtilization`,
+ * `oauthAccount.accountUuid` and the plan (`oauthAccount.organizationType` and
+ * `organizationRateLimitTier`) are ever read out of it; nothing else is kept, logged or returned.
  */
 import { readFile } from 'node:fs/promises';
 import type { QuotaSnapshot, QuotaWindow } from '../../core/model.js';
@@ -25,16 +26,24 @@ function fromLimit(limit: unknown): QuotaWindow | null {
   const model = obj(obj(obj(l.scope)?.model))?.display_name;
   switch (l.kind) {
     case 'session':
-      return { id: 'five_hour', kind: 'session', model: null, usedPercent, resetsAt };
+      return { id: 'five_hour', kind: 'session', label: null, model: null, usedPercent, resetsAt };
     case 'weekly_all':
-      return { id: 'seven_day', kind: 'weekly', model: null, usedPercent, resetsAt };
+      return { id: 'seven_day', kind: 'weekly', label: null, model: null, usedPercent, resetsAt };
     case 'weekly_scoped':
       if (typeof model !== 'string') return null;
-      return { id: `weekly:${model}`, kind: 'weekly-model', model, usedPercent, resetsAt };
+      return {
+        id: `weekly:${model}`,
+        kind: 'weekly-model',
+        label: null,
+        model,
+        usedPercent,
+        resetsAt,
+      };
     default:
       return {
         id: typeof model === 'string' ? `${l.kind}:${model}` : l.kind,
         kind: 'other',
+        label: null,
         model: typeof model === 'string' ? model : null,
         usedPercent,
         resetsAt,
@@ -47,7 +56,7 @@ function fromLegacy(value: unknown, id: string, kind: QuotaWindow['kind']): Quot
   const usedPercent = num(w?.utilization);
   return usedPercent === null
     ? null
-    : { id, kind, model: null, usedPercent, resetsAt: iso(w?.resets_at) };
+    : { id, kind, label: null, model: null, usedPercent, resetsAt: iso(w?.resets_at) };
 }
 
 const money = (v: unknown) => {
@@ -83,14 +92,41 @@ function extraUsage(u: Obj): QuotaSnapshot['extraUsage'] {
   return null;
 }
 
+const PLANS: Record<string, string> = {
+  pro: 'Pro',
+  max: 'Max',
+  team: 'Team',
+  enterprise: 'Enterprise',
+};
+
+/**
+ * Plan name from a subscription type ("max", or "claude_max" in the config) and a rate-limit
+ * tier ("default_claude_max_5x"), e.g. "Max 5x". Null for a type not listed.
+ */
+export function planName(type: unknown, tier: unknown): string | null {
+  const name = typeof type === 'string' ? PLANS[type.replace(/^claude_/, '')] : undefined;
+  if (!name) return null;
+  const multiple = typeof tier === 'string' ? /_(\d+x)$/.exec(tier)?.[1] : undefined;
+  return multiple ? `${name} ${multiple}` : name;
+}
+
 /** Quota from a parsed global config, or null when absent, malformed or for another account. */
 export function quotaFromConfig(config: unknown, now: number = Date.now()): QuotaSnapshot | null {
   const root = obj(config);
   const cached = obj(root?.cachedUsageUtilization);
-  const account = obj(root?.oauthAccount)?.accountUuid;
+  const account = obj(root?.oauthAccount);
   if (!cached) return null;
-  if (typeof cached.accountUuid !== 'string' || cached.accountUuid !== account) return null;
-  return quotaFromUtilization(cached.utilization, cached.fetchedAtMs, now, 'claude-code-cache');
+  if (typeof cached.accountUuid !== 'string' || cached.accountUuid !== account?.accountUuid) {
+    return null;
+  }
+  const plan = planName(account.organizationType, account.organizationRateLimitTier);
+  return quotaFromUtilization(
+    cached.utilization,
+    cached.fetchedAtMs,
+    now,
+    'claude-code-cache',
+    plan,
+  );
 }
 
 /**
@@ -102,6 +138,7 @@ export function quotaFromUtilization(
   fetchedAtMsValue: unknown,
   now: number,
   source: string,
+  plan: string | null = null,
 ): QuotaSnapshot | null {
   const u = obj(utilization);
   const fetchedAtMs = num(fetchedAtMsValue);
@@ -115,15 +152,18 @@ export function quotaFromUtilization(
   for (const limit of Array.isArray(u.limits) ? u.limits : []) add(fromLimit(limit));
   add(fromLegacy(u.five_hour, 'five_hour', 'session'));
   add(fromLegacy(u.seven_day, 'seven_day', 'weekly'));
-  const order: QuotaWindow['kind'][] = ['session', 'weekly', 'weekly-model', 'other'];
+  const order: QuotaWindow['kind'][] = ['session', 'weekly', 'weekly-model', 'monthly', 'other'];
   windows.sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
 
   return {
+    provider: 'anthropic',
     agent: 'claude-code',
+    plan,
     fetchedAt,
     stale: now - fetchedAtMs > STALE_MS,
     windows,
     extraUsage: extraUsage(u),
+    balance: null,
     source,
   };
 }

@@ -70,11 +70,22 @@ export interface SessionSummary {
   tags?: string[];
 }
 
-/** One rate-limit window of the user's plan, as last reported by the agent. */
+/** Whose plan the numbers belong to: the model vendor, not the agent tool. */
+export type QuotaProvider =
+  | 'anthropic'
+  | 'openai'
+  | 'xai'
+  | 'github-copilot'
+  | 'deepseek'
+  | (string & {});
+
+/** One rate-limit window of the user's plan, as last reported. */
 export interface QuotaWindow {
-  /** Stable key, e.g. "five_hour", "seven_day", "weekly:Opus". */
+  /** Stable key within its snapshot, e.g. "five_hour", "weekly:Opus", "copilot:chat". */
   id: string;
-  kind: 'session' | 'weekly' | 'weekly-model' | 'other';
+  kind: 'session' | 'weekly' | 'weekly-model' | 'monthly' | 'other';
+  /** The provider's own name for the window ("SuperGrok Weekly Credits"); null: name it by `kind`. */
+  label: string | null;
   /** Model display name for 'weekly-model' windows. */
   model: string | null;
   /** 0..100. */
@@ -82,17 +93,26 @@ export interface QuotaWindow {
   resetsAt: IsoTime | null;
 }
 
-/** Plan quota snapshot. Account-wide: every client of the same account shares these windows. */
+/** Plan quota of one provider account. */
 export interface QuotaSnapshot {
-  agent: AgentKind;
-  /** When the agent fetched these numbers (not when glassbox read them). */
+  provider: QuotaProvider;
+  /**
+   * The agent whose cache, session log or sign-in the numbers came from; null when glassbox asked
+   * the provider with a key of its own (e.g. DEEPSEEK_API_KEY).
+   */
+  agent: AgentKind | null;
+  /** Plan name when the source states it, e.g. "Max", "SuperGrok", "Copilot Individual". */
+  plan: string | null;
+  /** When the numbers were fetched from the provider (not when glassbox read them). */
   fetchedAt: IsoTime;
   /** True when `fetchedAt` is more than an hour old. */
   stale: boolean;
   windows: QuotaWindow[];
   /** Pay-as-you-go usage beyond the plan, when enabled. Amounts in major units. */
   extraUsage: { used: number; limit: number | null; currency: string | null } | null;
-  /** Where the numbers came from, e.g. "claude-code-cache". */
+  /** Prepaid credit left on a pay-as-you-go account (DeepSeek). Major units. */
+  balance: { amount: number; currency: string } | null;
+  /** Where the numbers came from: a source id below, or a new one the UI shows as is. */
   source: string;
 }
 

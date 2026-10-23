@@ -117,7 +117,7 @@ export function QuotaBar({ quotas, now }: Props) {
       {open && (
         <div className={css.popover} role="dialog" aria-label={t('quota.title')}>
           {shown.map((q) => (
-            <div key={q.agent} className={css.snapshot}>
+            <div key={q.provider} className={css.snapshot}>
               {q.windows.map((w) => (
                 <div key={w.id} className={css.row} data-level={levelOf(w.usedPercent)}>
                   <div className={css.rowHead}>

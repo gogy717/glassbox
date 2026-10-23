@@ -3,7 +3,8 @@
  * own sign-in, so the quota stays fresh without `/usage` or ClaudeBar refreshing Claude Code's
  * cache.
  *
- * Only `claudeAiOauth.accessToken` and `expiresAt` are read out of the credentials. The token is
+ * Only `claudeAiOauth.accessToken`, `expiresAt` and the plan (`subscriptionType`, `rateLimitTier`)
+ * are read out of the credentials. The token is
  * sent to api.anthropic.com and nowhere else, and is never logged or kept between requests. An
  * expired token is never refreshed: refreshing rotates it and could sign Claude Code out, so
  * glassbox waits until Claude Code has refreshed it itself.
@@ -12,7 +13,7 @@ import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { QuotaSnapshot } from '../../core/model.js';
-import { quotaFromUtilization } from './quota.js';
+import { planName, quotaFromUtilization } from './quota.js';
 
 export const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage';
 /** Where Claude Code keeps its sign-in on macOS, instead of `.credentials.json`. */
@@ -56,7 +57,7 @@ const readKeychain = () =>
   );
 
 /** Why there is no usable token, for the log; never includes the token itself. */
-type TokenRead = { token: string } | { missing: string };
+type TokenRead = { token: string; plan: string | null } | { missing: string };
 
 function tokenFrom(text: string, now: number): TokenRead {
   let oauth: Obj | null;
@@ -71,7 +72,7 @@ function tokenFrom(text: string, now: number): TokenRead {
   if (typeof expiresAt === 'number' && expiresAt - EXPIRY_MARGIN_MS <= now) {
     return { missing: 'the sign-in has expired; Claude Code renews it on its next request' };
   }
-  return { token };
+  return { token, plan: planName(oauth?.subscriptionType, oauth?.rateLimitTier) };
 }
 
 export function createQuotaFetcher(opts: QuotaFetcherOptions): QuotaFetcher {
@@ -84,6 +85,7 @@ export function createQuotaFetcher(opts: QuotaFetcherOptions): QuotaFetcher {
   const now = opts.now ?? Date.now;
 
   let body: unknown = null;
+  let plan: string | null = null;
   let fetchedAtMs = 0;
   let lastAttempt = Number.NEGATIVE_INFINITY;
   let inFlight: Promise<void> | null = null;
@@ -133,6 +135,7 @@ export function createQuotaFetcher(opts: QuotaFetcherOptions): QuotaFetcher {
       return problem('the usage endpoint answered in an unknown format');
     }
     body = json;
+    plan = read.plan;
     fetchedAtMs = now();
     if (lastProblem !== null) log('quota fetch: working again');
     lastProblem = null;
@@ -150,7 +153,7 @@ export function createQuotaFetcher(opts: QuotaFetcherOptions): QuotaFetcher {
       // Rebuilt on every read so `stale` follows the clock.
       return body === null
         ? null
-        : quotaFromUtilization(body, fetchedAtMs, now(), 'anthropic-usage-api');
+        : quotaFromUtilization(body, fetchedAtMs, now(), 'anthropic-usage-api', plan);
     },
   };
 }

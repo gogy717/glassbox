@@ -1,11 +1,12 @@
 import { dirname } from 'node:path';
 import type { AgentAdapter } from '../core/adapter.js';
-import type { QuotaSnapshot } from '../core/model.js';
+import type { QuotaProvider, QuotaSnapshot } from '../core/model.js';
+import type { QuotaSource } from '../core/quota-source.js';
 import { errorText } from './open-session.js';
 import { type DirWatcher, watchDirs } from './tail/watch.js';
 
 export interface QuotaWatcherOptions {
-  adapters: AgentAdapter[];
+  sources: QuotaSource[];
   /** Re-read interval: a quota also turns `stale` with age, without any file changing. */
   pollMs?: number;
   /** After a file change, wait this long and read once; the agent rewrites its config often. */
@@ -13,15 +14,64 @@ export interface QuotaWatcherOptions {
   log?: (msg: string) => void;
 }
 
-/** Current plan quota of every adapter that reports one, kept fresh from its quota files. */
+/** The quota sources of adapters that report one; the source id is the agent kind. */
+export function adapterQuotaSources(adapters: AgentAdapter[]): QuotaSource[] {
+  return adapters.flatMap((a) => {
+    const { quota, quotaFiles } = a;
+    if (!quota) return [];
+    return [
+      {
+        id: a.kind,
+        read: async () => {
+          const q = await quota.call(a);
+          return q ? [q] : [];
+        },
+        watchFiles: () => quotaFiles?.call(a) ?? [],
+      },
+    ];
+  });
+}
+
+/** Display order of providers; others follow, by id. */
+const PROVIDER_ORDER: QuotaProvider[] = [
+  'anthropic',
+  'openai',
+  'xai',
+  'github-copilot',
+  'deepseek',
+];
+
+function providerRank(p: QuotaProvider): number {
+  const i = PROVIDER_ORDER.indexOf(p);
+  return i === -1 ? PROVIDER_ORDER.length : i;
+}
+
+/**
+ * One snapshot per provider: the newest `fetchedAt` wins, and on a tie the one read first (the
+ * earlier source). Sorted by `PROVIDER_ORDER`, then by provider id.
+ */
+export function mergeQuotas(snapshots: QuotaSnapshot[]): QuotaSnapshot[] {
+  const best = new Map<QuotaProvider, QuotaSnapshot>();
+  for (const q of snapshots) {
+    const kept = best.get(q.provider);
+    if (!kept || Date.parse(q.fetchedAt) > Date.parse(kept.fetchedAt)) best.set(q.provider, q);
+  }
+  return [...best.values()].sort(
+    (a, b) =>
+      providerRank(a.provider) - providerRank(b.provider) ||
+      (a.provider < b.provider ? -1 : a.provider > b.provider ? 1 : 0),
+  );
+}
+
+/** Current plan quota per provider, merged from every source and kept fresh from their files. */
 export class QuotaWatcher {
-  private readonly adapters: AgentAdapter[];
+  private readonly sources: QuotaSource[];
   private readonly pollMs: number;
   private readonly debounceMs: number;
   private readonly log: (msg: string) => void;
   private readonly listeners = new Set<(q: QuotaSnapshot[]) => void>();
-  /** Adapters whose last read failed; logged once per failure streak, not every poll. */
-  private readonly failing = new Set<AgentAdapter>();
+  /** Sources whose last read failed; logged once per failure streak, not every poll. */
+  private readonly failing = new Set<QuotaSource>();
   private quotas: QuotaSnapshot[] = [];
   private json = '[]';
   private watcher: DirWatcher | null = null;
@@ -30,22 +80,22 @@ export class QuotaWatcher {
   private reading: Promise<void> | null = null;
   private readAgain = false;
   private stopped = false;
-  /** Each adapter's last quota, to tell a vanished quota from a file caught mid-rewrite. */
-  private readonly previous = new Map<AgentAdapter, QuotaSnapshot>();
+  /** Each source's last snapshots, to tell a vanished quota from a file caught mid-rewrite. */
+  private readonly previous = new Map<QuotaSource, QuotaSnapshot[]>();
   private confirmTimer: NodeJS.Timeout | null = null;
   private confirmDone: (() => void) | null = null;
 
   constructor(opts: QuotaWatcherOptions) {
-    this.adapters = opts.adapters.filter((a) => a.quota);
+    this.sources = opts.sources;
     this.pollMs = opts.pollMs ?? 30_000;
     this.debounceMs = opts.debounceMs ?? 500;
     this.log = opts.log ?? (() => {});
   }
 
   async start(): Promise<void> {
-    if (this.adapters.length === 0) return;
+    if (this.sources.length === 0) return;
     await this.refresh();
-    const files = new Set(this.adapters.flatMap((a) => a.quotaFiles?.() ?? []));
+    const files = new Set(this.sources.flatMap((s) => s.watchFiles?.() ?? []));
     if (files.size > 0) {
       const dirs = [...new Set([...files].map((f) => dirname(f)))];
       this.watcher = watchDirs(dirs, (path) => files.has(path) && this.schedule(), {
@@ -87,7 +137,7 @@ export class QuotaWatcher {
     }, this.debounceMs);
   }
 
-  /** Read every adapter's quota; at most one read in flight, a request during it runs after. */
+  /** Read every source; at most one read in flight, a request during it runs after. */
   private refresh(): Promise<void> {
     if (this.reading) {
       this.readAgain = true;
@@ -105,24 +155,22 @@ export class QuotaWatcher {
   }
 
   private async readAll(): Promise<void> {
-    const quotas: QuotaSnapshot[] = [];
-    for (const adapter of this.adapters) {
-      let q = await this.readOne(adapter);
+    const read: QuotaSnapshot[] = [];
+    for (const source of this.sources) {
+      let quotas = await this.readOne(source);
       // A config file read while it is being rewritten parses as nothing. Only believe a
-      // quota disappeared when a second read a moment later agrees.
-      if (q === null && this.previous.has(adapter)) {
+      // provider's quota disappeared when a second read a moment later agrees.
+      const before = this.previous.get(source) ?? [];
+      if (before.some((p) => !quotas.some((q) => q.provider === p.provider))) {
         await this.pause(this.debounceMs);
         if (this.stopped) return;
-        q = await this.readOne(adapter);
+        quotas = await this.readOne(source);
       }
-      if (q) {
-        quotas.push(q);
-        this.previous.set(adapter, q);
-      } else {
-        this.previous.delete(adapter);
-      }
+      read.push(...quotas);
+      this.previous.set(source, quotas);
     }
     if (this.stopped) return;
+    const quotas = mergeQuotas(read);
     const json = JSON.stringify(quotas);
     if (json === this.json) return;
     this.json = json;
@@ -130,15 +178,15 @@ export class QuotaWatcher {
     for (const cb of this.listeners) cb(quotas);
   }
 
-  private async readOne(adapter: AgentAdapter): Promise<QuotaSnapshot | null> {
+  private async readOne(source: QuotaSource): Promise<QuotaSnapshot[]> {
     try {
-      const q = (await adapter.quota?.()) ?? null;
-      this.failing.delete(adapter);
-      return q;
+      const quotas = await source.read();
+      this.failing.delete(source);
+      return quotas;
     } catch (err) {
-      if (!this.failing.has(adapter)) this.log(`quota (${adapter.kind}): ${errorText(err)}`);
-      this.failing.add(adapter);
-      return null;
+      if (!this.failing.has(source)) this.log(`quota (${source.id}): ${errorText(err)}`);
+      this.failing.add(source);
+      return [];
     }
   }
 

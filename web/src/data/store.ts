@@ -37,7 +37,7 @@ export interface ViewState {
   /** Set when the server reports `openId` as missing after waiting for it (session-missing). */
   missingId: string | null;
   open: OpenSession | null;
-  /** Plan quota per agent that reports one (account-wide, not per session). */
+  /** Plan quota per provider (account-wide, not per session). */
   quotas: QuotaSnapshot[];
   /** Runs glassbox started (B-lite), by id; replayed by the server on every connect. */
   runs: Map<string, RunState>;

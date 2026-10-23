@@ -7,12 +7,15 @@ import type {
   SessionSnapshot,
   SessionSummary,
 } from '../core/model.js';
+import type { QuotaSource } from '../core/quota-source.js';
 import { Coalescer } from './coalescer.js';
 import { errorText, OpenSession } from './open-session.js';
-import { QuotaWatcher } from './quota.js';
+import { adapterQuotaSources, QuotaWatcher } from './quota.js';
 
 export interface SessionStoreOptions {
   adapters: AgentAdapter[];
+  /** Plan quota sources besides the adapters' own `quota()`; merged with them per provider. */
+  quotaSources?: QuotaSource[];
   /** Parsed sessions kept in memory; busy/waiting and subscribed ones don't count against it. */
   maxOpen?: number;
   /** How often to look for new or updated sessions on disk. */
@@ -103,12 +106,13 @@ export class SessionStore {
       pollMs: 1000,
       chunkBytes: 4 * 1024 * 1024,
       quotaPollMs: 30_000,
+      quotaSources: [],
       log: () => {},
       ...opts,
     };
     this.sessionsPacer = new Coalescer(this.opts.sessionsMs, () => this.emitSessions());
     this.quota = new QuotaWatcher({
-      adapters: this.opts.adapters,
+      sources: [...adapterQuotaSources(this.opts.adapters), ...this.opts.quotaSources],
       pollMs: this.opts.quotaPollMs,
       log: this.opts.log,
     });

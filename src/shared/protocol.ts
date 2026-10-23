@@ -74,7 +74,7 @@ export interface ApiErrorResponse {
 export interface TokenResponse {
   token: string;
 }
-/** One snapshot per adapter that reports quota; empty when none does. */
+/** One snapshot per provider with a known quota, merged from every source; empty when none. */
 export interface QuotaResponse {
   quotas: QuotaSnapshot[];
 }
