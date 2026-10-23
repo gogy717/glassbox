@@ -1,5 +1,5 @@
 import { Clock3 } from 'lucide-react';
-import { Fragment, memo } from 'react';
+import { memo } from 'react';
 import type { ModelRequest, ToolCall } from '../../../../src/core/model.js';
 import { StatusPill, Ticking } from '../../components/Status';
 import { useApprovalsContext } from '../../data/approvals';
@@ -67,20 +67,23 @@ export const CallRow = memo(function CallRow(p: Props) {
         )}
         <StatusPill status={status} />
       </div>
+      {/* Wraps instead of scrolling: each arrow moves to the next line with its card. */}
       <div className={css.strip}>
         <RequestCard
           req={req}
           selected={p.selected === 'request'}
           onSelect={() => select('request')}
         />
-        <Arrow />
-        <ResponseCard
-          req={req}
-          selected={p.selected === 'response'}
-          onSelect={() => select('response')}
-        />
+        <div className={css.step}>
+          <Arrow />
+          <ResponseCard
+            req={req}
+            selected={p.selected === 'response'}
+            onSelect={() => select('response')}
+          />
+        </div>
         {tools.map((tool) => (
-          <Fragment key={tool.id}>
+          <div key={tool.id} className={css.step}>
             <Arrow />
             <ToolCard
               tool={tool}
@@ -89,13 +92,13 @@ export const CallRow = memo(function CallRow(p: Props) {
               onSelect={() => select(`tool:${tool.id}`)}
               onEnterAgent={p.onEnterAgent}
             />
-          </Fragment>
+          </div>
         ))}
         {tools.length === 0 && req.status !== 'in-flight' && (
-          <>
+          <div className={css.step}>
             <Arrow />
             <FinalReply />
-          </>
+          </div>
         )}
       </div>
       {p.selected && (

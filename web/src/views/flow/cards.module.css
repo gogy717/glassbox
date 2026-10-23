@@ -5,8 +5,9 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  flex: 0 0 206px;
-  min-width: 0;
+  /* A width, not a flex-basis: the strip's wrapping goes by it, not by the preview's length. */
+  flex: none;
+  width: 206px;
   border: 1px solid var(--border-c);
   border-radius: var(--radius-m);
   background: var(--layer-1);
@@ -236,12 +237,12 @@
 
 @media (max-width: 560px) {
   .card {
-    flex-basis: 178px;
+    width: 178px;
   }
 }
 
 /* Cards that list spawned agents need room for label, status and tokens. */
 .card:has(> .spawned),
 .card:has(> .workflow) {
-  flex-basis: 252px;
+  width: 252px;
 }
