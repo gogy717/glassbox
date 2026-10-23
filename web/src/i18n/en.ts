@@ -177,6 +177,7 @@ export const en: Record<MessageKey, string> = {
   'quota.resetsAt': 'resets at {clock}',
   'quota.updated': 'Updated {age}',
   'quota.stale': 'Data from {age}',
+  'quota.old': '{age} old',
   'quota.source': 'Source: {source}',
   'quota.resetsOn': 'resets {date}, {clock}',
   'quota.sourceClaudeCodeCache': "Claude Code's cache",

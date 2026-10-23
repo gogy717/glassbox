@@ -28,6 +28,19 @@ export interface AppProps {
 }
 
 const NARROW = '(max-width: 900px)';
+const TWO_COLUMNS = '(max-width: 1199px)';
+
+export type SidebarMode = 'column' | 'overlay' | 'drawer';
+
+/**
+ * Three columns only at 1200px and up. Below that a session keeps two (the conversation list and
+ * the stage), so the session list floats over them as an overlay, closed until asked for; Home
+ * has no third column to protect and keeps it. At 900px and below it is the drawer.
+ */
+export function sidebarMode(width: number, hasSession: boolean): SidebarMode {
+  if (width <= 900) return 'drawer';
+  return width < 1200 && hasSession ? 'overlay' : 'column';
+}
 
 function useMediaQuery(query: string): boolean {
   const subscribe = useCallback(
@@ -87,9 +100,28 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
     setFollow(followsLatest);
   }
   const narrow = useMediaQuery(NARROW);
+  const twoColumns = useMediaQuery(TWO_COLUMNS);
+  const mode = sidebarMode(narrow ? 900 : twoColumns ? 1199 : 1200, route.sessionId !== null);
   const mainRef = useRef<HTMLElement>(null);
+  const asideRef = useRef<HTMLElement>(null);
+  const menuRef = useRef<HTMLButtonElement>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  // The overlay and the drawer start closed, and close again whenever the page changes under them.
+  const [floatOpen, setFloatOpen] = useState(false);
+  const [floatKey, setFloatKey] = useState(`${mode}:${route.sessionId}`);
+  if (floatKey !== `${mode}:${route.sessionId}`) {
+    setFloatKey(`${mode}:${route.sessionId}`);
+    setFloatOpen(false);
+  }
+  const floating = mode !== 'column';
+  const closeFloat = () => {
+    setFloatOpen(false);
+    menuRef.current?.focus();
+  };
+  useEffect(() => {
+    // Opened from the menu button: start in the search field, not behind the scrim.
+    if (floating && floatOpen) asideRef.current?.querySelector<HTMLElement>('input')?.focus();
+  }, [floating, floatOpen]);
   const ui = useMemo(() => ({ follow, setFollow }), [follow]);
 
   useEffect(() => {
@@ -125,7 +157,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
 
   const open = state.open;
   const summary = open?.session ?? state.sessions.find((s) => s.id === route.sessionId) ?? null;
-  const sidebarShown = narrow ? drawerOpen : !sidebarCollapsed;
+  const sidebarShown = floating ? floatOpen : !sidebarCollapsed;
 
   return (
     <UiContext.Provider value={ui}>
@@ -137,8 +169,15 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
             {t('app.skipToContent')}
           </button>
           <TopBar
+            menuRef={menuRef}
             title={route.sessionId ? (summary?.title ?? t('sidebar.untitled')) : null}
-            agent={route.sessionId ? (summary?.agent ?? null) : null}
+            // The sidebar row tags the open session; with the list away, the top bar does.
+            agent={
+              route.sessionId && !(mode === 'column' && sidebarShown)
+                ? (summary?.agent ?? null)
+                : null
+            }
+            sidebarOpen={sidebarShown}
             live={summary?.live ?? null}
             connection={state.connection}
             quotas={state.quotas}
@@ -147,20 +186,31 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
             prefs={prefs}
             onPrefs={onPrefs}
             onToggleSidebar={() =>
-              narrow ? setDrawerOpen(!drawerOpen) : setSidebarCollapsed(!sidebarCollapsed)
+              floating ? setFloatOpen(!floatOpen) : setSidebarCollapsed(!sidebarCollapsed)
             }
           />
-          <div className={css.body} data-sidebar={sidebarShown ? 'shown' : 'hidden'}>
-            {narrow && drawerOpen && (
-              <div className={css.scrim} aria-hidden="true" onClick={() => setDrawerOpen(false)} />
+          <div
+            className={css.body}
+            data-sidebar={sidebarShown ? 'shown' : 'hidden'}
+            data-sidebar-mode={mode}
+          >
+            {floating && floatOpen && (
+              <div className={css.scrim} aria-hidden="true" onClick={() => setFloatOpen(false)} />
             )}
-            <aside className={css.sidebar} hidden={!sidebarShown}>
+            <aside
+              ref={asideRef}
+              className={css.sidebar}
+              hidden={!sidebarShown}
+              onKeyDown={(e) => {
+                if (floating && e.key === 'Escape') closeFloat();
+              }}
+            >
               <SidebarContainer
                 sessions={state.sessions}
                 selectedId={route.sessionId}
                 showProbes={prefs.showProbes}
                 onSelect={(id) => {
-                  setDrawerOpen(false);
+                  setFloatOpen(false);
                   navigate({ sessionId: id, agentId: 'main', turnId: null, requestId: null });
                 }}
               />

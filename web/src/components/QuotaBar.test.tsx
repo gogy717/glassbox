@@ -48,10 +48,10 @@ describe('QuotaBar', () => {
     expect(meters.map((m) => m.getAttribute('aria-valuenow'))).toEqual(['62', '41', '25', '74']);
   });
 
-  it('colours by usage: under 70% neutral, 70–90% amber, 90% and over red', () => {
+  it('colours by usage: under 80% neutral, 80–95% amber, 95% and over red', () => {
     renderBar([
-      withWindow(0, { usedPercent: 75 }),
-      { ...withWindow(1, { usedPercent: 93 }), provider: 'openai' },
+      withWindow(0, { usedPercent: 85 }),
+      { ...withWindow(1, { usedPercent: 96 }), provider: 'openai' },
       { ...createDemoQuota(DEMO_NOW), provider: 'xai' },
     ]);
     const levels = screen.getAllByRole('meter').map((m) => m.getAttribute('data-level'));
@@ -142,6 +142,9 @@ describe('QuotaBar', () => {
     expect(claude).not.toHaveAttribute('data-stale');
     expect(grok).toHaveAttribute('data-stale');
     expect(grok).toHaveAttribute('title', expect.stringContaining('Data from 3 hours ago'));
+    // A hatched track and the age beside the figure, not a greyed-out meter.
+    expect(grok).toHaveTextContent(/25%\s*3h0m old$/);
+    expect(claude).not.toHaveTextContent(/old/);
     const details = openDetails();
     const section = within(details).getByRole('region', { name: 'xAI · SuperGrok' });
     expect(section).toHaveAttribute('data-stale');

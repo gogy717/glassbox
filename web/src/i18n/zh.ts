@@ -175,6 +175,7 @@ export const zh = {
   'quota.resetsAt': '{clock} 重置',
   'quota.updated': '{age}更新',
   'quota.stale': '{age}的数据',
+  'quota.old': '{age}前',
   'quota.source': '来源：{source}',
   'quota.resetsOn': '{date} {clock} 重置',
   'quota.sourceClaudeCodeCache': 'Claude Code 的缓存',

@@ -8,7 +8,7 @@
 .body {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(220px, 268px) minmax(0, 1fr);
+  grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
   flex: 1;
   min-height: 0;
 }
@@ -84,7 +84,7 @@
   margin: 0 14px 8px auto;
   padding: 4px 12px;
   border: 1px solid var(--warning);
-  border-radius: 999px;
+  border-radius: var(--radius-l);
   background: color-mix(in srgb, var(--warning) 10%, var(--layer-1));
   color: var(--warning);
   font-size: 12px;
@@ -92,24 +92,29 @@
   cursor: pointer;
 }
 
-@media (max-width: 900px) {
-  .body,
-  .body[data-sidebar="hidden"] {
-    grid-template-columns: minmax(0, 1fr);
-  }
+/* Below three columns (see sidebarMode): the session list floats over the page, from the top bar
+   to the composer, on its own surface; nothing else in the app floats with a shadow. */
+.body[data-sidebar-mode="overlay"],
+.body[data-sidebar-mode="drawer"] {
+  grid-template-columns: minmax(0, 1fr);
+}
 
-  .sidebar {
-    position: absolute;
-    inset: 0 auto 0 0;
-    z-index: 30;
-    width: min(300px, 86vw);
-    box-shadow: var(--shadow);
-  }
+.body[data-sidebar-mode="overlay"] .sidebar,
+.body[data-sidebar-mode="drawer"] .sidebar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 30;
+  width: 300px;
+  border-right-color: var(--border-strong);
+}
 
-  .scrim {
-    position: absolute;
-    inset: 0;
-    z-index: 29;
-    background: var(--overlay);
-  }
+.body[data-sidebar-mode="drawer"] .sidebar {
+  width: min(300px, 86vw);
+}
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 29;
+  background: var(--overlay);
 }

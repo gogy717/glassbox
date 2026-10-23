@@ -1,5 +1,5 @@
-import { Eye, Menu, Settings } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { Eye, Menu, SlidersHorizontal } from 'lucide-react';
+import { type Ref, useEffect, useRef, useState } from 'react';
 import type { AgentKind, LiveState, QuotaSnapshot } from '../../../src/core/model.js';
 import type { ConnectionState } from '../data/store';
 import { useNow } from '../data/useNow';
@@ -11,9 +11,13 @@ import { LiveDot } from './Status';
 import css from './TopBar.module.css';
 
 interface Props {
+  /** The menu button, for focus to return to when the floating session list closes. */
+  menuRef?: Ref<HTMLButtonElement>;
   title: string | null;
-  /** The coding agent of the open session. */
+  /** The coding agent of the open session, tagged here when the sidebar row is not on screen. */
   agent: AgentKind | null;
+  /** Whether the session list is open, for the menu button's pressed state. */
+  sidebarOpen: boolean;
   live: LiveState | null;
   connection: ConnectionState;
   quotas: QuotaSnapshot[];
@@ -29,14 +33,19 @@ export function TopBar(p: Props) {
   return (
     <header className={css.bar}>
       <button
+        ref={p.menuRef}
         type="button"
         className={css.iconButton}
         aria-label={t('sidebar.toggle')}
+        aria-expanded={p.sidebarOpen}
         onClick={p.onToggleSidebar}
       >
         <Menu size={16} aria-hidden="true" />
       </button>
-      <span className={css.logo}>glassbox</span>
+      <span className={css.logo}>
+        <Wordmark />
+        glassbox
+      </span>
       {p.title !== null && (
         <span className={css.session}>
           {p.agent && <AgentTag kind={p.agent} size="medium" />}
@@ -56,17 +65,41 @@ export function TopBar(p: Props) {
       <span role="status" className={css.conn} data-state={p.connection}>
         {t(`conn.${p.connection}`)}
       </span>
+      {/* Named by its word, which narrow screens hide: the eye alone still says Follow latest. */}
       <button
         type="button"
         className={css.toggle}
         aria-pressed={p.follow}
+        aria-label={t('follow.label')}
+        title={t('follow.label')}
         onClick={() => p.onFollow(!p.follow)}
       >
         <Eye size={14} aria-hidden="true" />
-        <span className={css.toggleLabel}>{t('follow.label')}</span>
+        <span className={css.toggleLabel} aria-hidden="true">
+          {t('follow.label')}
+        </span>
       </button>
       <SettingsMenu prefs={p.prefs} onPrefs={p.onPrefs} />
     </header>
+  );
+}
+
+/** The box you can see into: a rounded square with a dot. */
+function Wordmark() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" className={css.mark}>
+      <rect
+        x="2.5"
+        y="2.5"
+        width="13"
+        height="13"
+        rx="3"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <circle cx="9" cy="9" r="2.25" fill="currentColor" />
+    </svg>
   );
 }
 
@@ -103,7 +136,7 @@ function SettingsMenu({ prefs, onPrefs }: { prefs: Prefs; onPrefs(p: Prefs): voi
         aria-expanded={open}
         onClick={() => setOpen(!open)}
       >
-        <Settings size={16} aria-hidden="true" />
+        <SlidersHorizontal size={16} aria-hidden="true" />
       </button>
       {open && (
         <div className={css.popover} role="dialog" aria-label={t('settings.title')}>

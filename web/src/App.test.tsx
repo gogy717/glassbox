@@ -7,7 +7,7 @@ import {
   DEMO_SESSION_ID,
 } from '../../src/core/fixtures/demo.js';
 import type { RunState } from '../../src/shared/runs.js';
-import { App } from './App';
+import { App, sidebarMode } from './App';
 import type { RunsClient } from './data/runs';
 import { createStore } from './data/store';
 import { DEMO_NOW, demoStore } from './test/demo';
@@ -207,8 +207,6 @@ describe('App', () => {
     expect(within(banner).getByText('Live viewer research (demo)')).toBeInTheDocument();
     expect(within(banner).getByText('Running')).toBeInTheDocument();
     expect(within(banner).getByText('Connected')).toBeInTheDocument();
-    // The open session's agent, in its colours.
-    expect(within(banner).getByText('Claude Code')).toHaveAttribute('data-tone', 'claude-code');
 
     const summary = screen.getByRole('region', { name: 'Summary' });
     const value = (label: string) =>
@@ -232,6 +230,11 @@ describe('App', () => {
     expect(screen.getByRole('tabpanel')).toContainElement(
       screen.getByRole('list', { name: 'Conversations' }),
     );
+
+    // The session list's row tags the open session's agent; with the list away, the top bar does.
+    expect(within(banner).queryByText('Claude Code')).toBeNull();
+    fireEvent.click(within(banner).getByRole('button', { name: 'Sessions' }));
+    expect(within(banner).getByText('Claude Code')).toHaveAttribute('data-tone', 'claude-code');
   });
 
   it('scopes the summary and breadcrumb to the agent in the route', () => {
@@ -305,7 +308,9 @@ describe('App', () => {
     const store = createStore();
     store.applyEvent({ type: 'quota', quotas: [createDemoQuota(DEMO_NOW)] });
     render(<App store={store} connect={noConnect} />);
-    expect(within(screen.getByRole('banner')).getByText('Claude 62%')).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('banner')).getByRole('meter', { name: 'Claude' }),
+    ).toHaveTextContent('Claude 62%');
   });
 
   it('says a session does not exist once the list has loaded without it', () => {
@@ -587,5 +592,78 @@ describe('App · permission prompts in the views', () => {
       }),
     );
     expect(screen.getByRole('dialog', { name: 'Grok wants to use Bash' })).toBeInTheDocument();
+  });
+});
+
+describe('sidebarMode', () => {
+  it.each([
+    [1440, true, 'column'],
+    [1440, false, 'column'],
+    [1200, true, 'column'],
+    [1199, true, 'overlay'],
+    [1024, true, 'overlay'],
+    [1024, false, 'column'],
+    [901, true, 'overlay'],
+    [900, true, 'drawer'],
+    [768, false, 'drawer'],
+  ] as const)('%ipx, session open: %s → %s', (width, hasSession, mode) => {
+    expect(sidebarMode(width, hasSession)).toBe(mode);
+  });
+});
+
+describe('App below three columns', () => {
+  const realMatchMedia = window.matchMedia;
+  /** A screen `width` px wide: answers the app's max-width queries. */
+  const screenWidth = (width: number) => {
+    window.matchMedia = ((query: string) => ({
+      matches: width <= Number(/max-width:\s*(\d+)px/.exec(query)?.[1] ?? Number.POSITIVE_INFINITY),
+      media: query,
+      addEventListener() {},
+      removeEventListener() {},
+    })) as unknown as typeof window.matchMedia;
+  };
+  afterEach(() => {
+    window.matchMedia = realMatchMedia;
+  });
+
+  it('floats the session list over an open session, closed until the menu opens it', () => {
+    screenWidth(1024);
+    window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}`;
+    render(<App store={demoStore()} connect={noConnect} />);
+    const banner = screen.getByRole('banner');
+    const menu = within(banner).getByRole('button', { name: 'Sessions' });
+    expect(screen.queryByRole('navigation', { name: 'Sessions' })).toBeNull();
+    expect(menu).toHaveAttribute('aria-expanded', 'false');
+    // The list is away, so the top bar tags the agent.
+    expect(within(banner).getByText('Claude Code')).toBeInTheDocument();
+
+    fireEvent.click(menu);
+    const list = screen.getByRole('navigation', { name: 'Sessions' });
+    expect(menu).toHaveAttribute('aria-expanded', 'true');
+    expect(list.closest('[data-sidebar-mode]')).toHaveAttribute('data-sidebar-mode', 'overlay');
+    expect(document.activeElement).toBe(within(list).getByRole('searchbox'));
+
+    fireEvent.keyDown(within(list).getByRole('searchbox'), { key: 'Escape' });
+    expect(screen.queryByRole('navigation', { name: 'Sessions' })).toBeNull();
+    expect(document.activeElement).toBe(menu);
+  });
+
+  it('closes the overlay once a session is picked from it', () => {
+    screenWidth(1024);
+    window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}`;
+    const store = demoStore();
+    store.applyEvent({ type: 'sessions', sessions: createDemoSessions(DEMO_NOW) });
+    render(<App store={store} connect={noConnect} />);
+    fireEvent.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Sessions' }));
+    fireEvent.click(screen.getByRole('button', { name: /Fix flaky login test/ }));
+    expect(screen.queryByRole('navigation', { name: 'Sessions' })).toBeNull();
+  });
+
+  it('keeps the list as a column on Home, which has no third column to protect', () => {
+    screenWidth(1024);
+    window.location.hash = '';
+    render(<App store={demoStore()} connect={noConnect} />);
+    const list = screen.getByRole('navigation', { name: 'Sessions' });
+    expect(list.closest('[data-sidebar-mode]')).toHaveAttribute('data-sidebar-mode', 'column');
   });
 });
