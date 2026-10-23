@@ -1,0 +1,362 @@
+.view {
+  --hatch-idle: repeating-linear-gradient(45deg, var(--seg-waiting) 0 3px, transparent 3px 6px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: 100%;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.empty {
+  margin: 48px auto;
+  color: var(--muted);
+  text-align: center;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  background: var(--layer-1);
+}
+
+.card h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.bar {
+  display: flex;
+  gap: 2px;
+  height: 14px;
+}
+
+.bar > span {
+  flex-basis: 0;
+  min-width: 2px;
+  border-radius: 3px;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11px;
+}
+
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.legendLabel {
+  color: var(--muted);
+}
+
+.legendValue {
+  font-weight: 600;
+}
+
+.slowList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.slowRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+  cursor: pointer;
+}
+
+.slowRow:hover {
+  background: var(--layer-2);
+}
+
+.slowWho {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.slowAgent {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.slowWhat {
+  font-size: 10.5px;
+}
+
+.slowWhat em {
+  font-style: normal;
+  color: var(--accent);
+}
+
+.slowDur {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.lanesHead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.hint {
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+.tools {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.tools button {
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--layer-1);
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.tools button:hover {
+  color: var(--text);
+}
+
+.tools .toggle[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+.lanes {
+  display: grid;
+  grid-template-columns: minmax(96px, 180px) minmax(0, 1fr) auto;
+  border-top: 1px solid var(--border);
+}
+
+.labels {
+  margin: 0;
+  padding: 0 8px 0 0;
+  list-style: none;
+  border-right: 1px solid var(--border);
+}
+
+.labels li {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.groupLabel {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--faint);
+}
+
+.laneLabel {
+  font-size: 11.5px;
+}
+
+.laneLabel button {
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: inherit;
+  text-align: left;
+  cursor: zoom-in;
+}
+
+.laneLabel button:hover {
+  color: var(--accent);
+}
+
+.laneLabel button[aria-current="true"] {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.totals {
+  margin: 0;
+  padding: 0 0 0 10px;
+  list-style: none;
+  border-left: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.totals li {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.seg[data-merged] {
+  opacity: 0.85;
+  cursor: zoom-in;
+}
+
+.chartScroll {
+  position: relative;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  cursor: grab;
+  touch-action: pan-y;
+}
+
+.chartScroll:active {
+  cursor: grabbing;
+}
+
+.svg {
+  display: block;
+  user-select: none;
+}
+
+.selBand {
+  fill: var(--accent-tint);
+}
+
+.tick {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.tickLabel,
+.breakLabel,
+.nowLabel {
+  fill: var(--faint);
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.break {
+  fill: var(--layer-2);
+  stroke: var(--border-strong);
+  stroke-dasharray: 3 3;
+}
+
+.breakLabel {
+  fill: var(--muted);
+}
+
+.seg {
+  stroke: var(--layer-1);
+  stroke-width: 1;
+  cursor: pointer;
+}
+
+.seg:hover {
+  stroke: var(--text);
+}
+
+.seg[data-live] {
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+.nowLine {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
+.nowLabel {
+  fill: var(--accent);
+  font-weight: 600;
+}
+
+.tooltip {
+  position: absolute;
+  z-index: 4;
+  display: grid;
+  gap: 2px;
+  max-width: 260px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--layer-1);
+  box-shadow: var(--shadow);
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.tooltip code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  color: var(--muted);
+}
+
+@media (max-width: 560px) {
+  .view {
+    padding: 10px;
+  }
+
+  .hint,
+  .totals {
+    display: none;
+  }
+
+  .lanes {
+    grid-template-columns: minmax(80px, 120px) minmax(0, 1fr);
+  }
+}

@@ -1,0 +1,100 @@
+.track {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+}
+
+.bar {
+  display: flex;
+  gap: 2px;
+  min-width: 2px;
+  height: 100%;
+}
+
+.bar[data-compact] {
+  gap: 0;
+}
+
+.seg {
+  flex-basis: 0;
+  min-width: 0;
+  height: 100%;
+  background: var(--seg-color);
+}
+
+.seg:first-child {
+  border-radius: 4px 0 0 4px;
+}
+
+.seg:last-child {
+  border-radius: 0 4px 4px 0;
+}
+
+.seg:only-child {
+  border-radius: 4px;
+}
+
+.seg[data-bucket="cacheRead"],
+.swatch[data-bucket="cacheRead"] {
+  --seg-color: var(--tok-cache-read);
+}
+
+.seg[data-bucket="cacheWrite"],
+.swatch[data-bucket="cacheWrite"] {
+  --seg-color: var(--tok-cache-write);
+}
+
+.seg[data-bucket="input"],
+.swatch[data-bucket="input"] {
+  --seg-color: var(--tok-input);
+}
+
+.seg[data-bucket="output"],
+.swatch[data-bucket="output"] {
+  --seg-color: var(--tok-output);
+}
+
+/* Thinking is part of output: same green, hatched at 45°. */
+.seg[data-bucket="thinking"],
+.swatch[data-bucket="thinking"] {
+  --seg-color: repeating-linear-gradient(
+    45deg,
+    var(--tok-output) 0 3px,
+    color-mix(in srgb, var(--tok-output) 45%, transparent) 3px 6px
+  );
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11px;
+}
+
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend li[data-sub] {
+  color: var(--muted);
+}
+
+.swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--seg-color);
+}
+
+.legendLabel {
+  color: var(--muted);
+}
+
+.legendValue {
+  font-weight: 600;
+}

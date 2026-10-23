@@ -1,0 +1,41 @@
+.bar {
+  display: flex;
+  flex: none;
+  border-bottom: 1px solid var(--border);
+  background: var(--layer-1);
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  flex: none;
+  min-width: 86px;
+  padding: 7px 14px;
+  border-left: 1px solid var(--border);
+}
+
+.metric:first-child {
+  border-left: 0;
+}
+
+.value {
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.label {
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* Metrics scroll sideways on narrow screens; the diagnostics popover sits outside so it is not clipped. */
+.metrics {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}

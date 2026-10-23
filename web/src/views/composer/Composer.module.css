@@ -1,0 +1,376 @@
+/* Composer bar, permission prompts and the new-session dialog. */
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--layer-1);
+}
+
+.inputRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.textarea {
+  flex: 1;
+  min-height: 38px;
+  max-height: 200px;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  resize: none;
+}
+
+.textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.textarea:disabled {
+  opacity: 0.6;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.modes {
+  display: flex;
+  padding: 2px;
+  border-radius: 7px;
+  background: var(--layer-2);
+}
+
+.modes button {
+  height: 24px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.modes button[aria-checked="true"] {
+  background: var(--layer-1);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.modes button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.hint {
+  color: var(--warning);
+}
+
+.select select {
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--layer-1);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+}
+
+.primary,
+.secondary,
+.danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--radius-m);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primary {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.secondary {
+  border: 1px solid var(--border);
+  background: var(--layer-1);
+  color: var(--text);
+}
+
+.danger {
+  border: 1px solid var(--error);
+  background: var(--error);
+  color: #fff;
+}
+
+.primary:disabled,
+.secondary:disabled,
+.danger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+
+.error {
+  margin: 0;
+  color: var(--error);
+  font-size: 11px;
+}
+
+.prompt:focus {
+  outline: none;
+}
+
+.prompt {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  /* A long AskUserQuestion scrolls inside the prompt instead of covering the session. */
+  max-height: 55vh;
+  overflow-y: auto;
+  margin: 0 14px 10px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--warning) 55%, var(--border));
+  border-radius: var(--radius-l);
+  background: color-mix(in srgb, var(--warning) 7%, var(--layer-1));
+  box-shadow: var(--shadow);
+}
+
+.promptHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 650;
+}
+
+.promptHead svg {
+  color: var(--warning);
+}
+
+.promptText {
+  margin: 0;
+  color: var(--muted);
+}
+
+.command {
+  margin: 0;
+  padding: 8px 10px;
+  max-height: 160px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--layer-2);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.denyRow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.reason {
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.reason textarea,
+.field input,
+.field textarea {
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.question {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 10px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+}
+
+.question legend {
+  padding: 0 4px;
+  font-weight: 600;
+}
+
+.question small {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.qHeader {
+  padding: 1px 6px;
+  border-radius: var(--radius-s);
+  background: var(--layer-3);
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.option span {
+  display: grid;
+}
+
+.option small {
+  color: var(--muted);
+}
+
+.newSession {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+}
+
+.field {
+  display: grid;
+  gap: 5px;
+}
+
+.fieldLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.recent {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.moreChip {
+  padding: 4px 9px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.recentList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dirChip,
+.moreChip {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--layer-2);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.dirChip[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+
+.live {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius-l);
+  background: var(--accent-tint);
+}
+
+.liveHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--accent);
+}
+
+.liveText,
+.liveThinking,
+.liveTool {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.liveThinking {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.liveTool {
+  color: var(--card-tool-text);
+}
+
+.caret {
+  display: inline-block;
+  width: 7px;
+  height: 1em;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  background: var(--accent);
+  animation: pulse 1s steps(2) infinite;
+}
+
+.liveThinkingLine {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: var(--seg-thinking);
+  font-weight: 600;
+}

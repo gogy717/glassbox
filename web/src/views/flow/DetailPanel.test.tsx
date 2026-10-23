@@ -1,0 +1,165 @@
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ModelRequest, RequestDetail, ToolCall } from '../../../../src/core/model.js';
+import { SessionAgentContext } from '../../data/session-agent';
+import { I18nContext, makeI18n } from '../../i18n';
+import { demoOpen } from '../../test/demo';
+import { useFakeLayout } from '../../test/layout';
+import type { CardKey } from './cards';
+import { DetailPanel } from './DetailPanel';
+
+const open = demoOpen();
+const req = (id: string) => open.requests.get(id) as ModelRequest;
+const tools = (r: ModelRequest) => r.toolCallIds.map((id) => open.toolCalls.get(id) as ToolCall);
+
+function renderPanel(r: ModelRequest, card: CardKey, onClose = vi.fn(), agent = 'claude-code') {
+  render(
+    <I18nContext.Provider value={makeI18n('en')}>
+      <SessionAgentContext.Provider value={agent}>
+        <DetailPanel sessionId={open.id} req={r} tools={tools(r)} card={card} onClose={onClose} />
+      </SessionAgentContext.Provider>
+    </I18nContext.Provider>,
+  );
+  return onClose;
+}
+
+const detail: RequestDetail = {
+  requestId: 'req_m1',
+  completeness: 'partial',
+  notes: ['2 messages could not be resolved'],
+  params: { model: 'claude-opus-5-5', max_tokens: 64000 },
+  system: [{ type: 'text', text: 'You are Claude Code…' }],
+  tools: [{ name: 'Bash' }],
+  messages: [{ role: 'user', content: 'Busy sessions first' }],
+};
+
+function stubFetch(body: unknown, status = 200) {
+  const fetch = vi.fn(async () => new Response(JSON.stringify(body), { status }));
+  vi.stubGlobal('fetch', fetch);
+  return fetch;
+}
+
+describe('DetailPanel', () => {
+  useFakeLayout();
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('loads what the request sent, with completeness and notes', async () => {
+    const fetch = stubFetch(detail);
+    renderPanel(req('req_m1'), 'request');
+    const panel = screen.getByRole('region', { name: 'Request details' });
+    expect(within(panel).getByText('Loading…')).toBeInTheDocument();
+    expect(await within(panel).findByText('Partly reconstructed')).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith(
+      `/api/sessions/${encodeURIComponent(open.id)}/requests/req_m1/detail`,
+      expect.anything(),
+    );
+    expect(within(panel).getByText('2 messages could not be resolved')).toBeInTheDocument();
+    for (const h of ['System prompt', 'Messages', 'Tool definitions', 'Parameters'])
+      expect(within(panel).getByRole('heading', { name: h })).toBeInTheDocument();
+  });
+
+  it('reloads what was sent once an in-flight request completes', async () => {
+    const fetch = stubFetch(detail);
+    const live = req('req_m6');
+    const onClose = vi.fn();
+    const { rerender } = render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <DetailPanel sessionId={open.id} req={live} tools={[]} card="request" onClose={onClose} />
+      </I18nContext.Provider>,
+    );
+    await screen.findByText('Partly reconstructed');
+    expect(fetch).toHaveBeenCalledTimes(1);
+    stubFetch({ ...detail, completeness: 'full', notes: [] });
+    rerender(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <DetailPanel
+          sessionId={open.id}
+          req={{ ...live, status: 'complete', endedAt: live.startedAt }}
+          tools={[]}
+          card="request"
+          onClose={onClose}
+        />
+      </I18nContext.Provider>,
+    );
+    expect(await screen.findByText('Fully reconstructed')).toBeInTheDocument();
+  });
+
+  it('explains when the request detail could not be loaded, and retries', async () => {
+    stubFetch({ error: 'boom' }, 500);
+    renderPanel(req('req_m1'), 'request');
+    expect(await screen.findByText('Could not load: boom')).toBeInTheDocument();
+    stubFetch(detail);
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByText('Partly reconstructed')).toBeInTheDocument();
+  });
+
+  it('does not fetch when this Claude Code version recorded no request detail', () => {
+    const fetch = stubFetch(detail);
+    renderPanel({ ...req('req_m1'), hasDetail: false }, 'request');
+    expect(
+      screen.getByText('This Claude Code version did not record the request'),
+    ).toBeInTheDocument();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('shows the response: thinking with its time and tokens, the text and raw usage', () => {
+    renderPanel(req('req_m1'), 'response');
+    const panel = screen.getByRole('region', { name: 'Response details' });
+    expect(panel).toHaveTextContent('Looking for where the session list is sorted');
+    expect(within(panel).getByText('Thought for 8.4s · 610 thinking tokens')).toBeInTheDocument();
+    expect(panel).toHaveTextContent('Let me look at how sessions are discovered first.');
+    expect(within(panel).getByRole('heading', { name: 'Usage & timing' })).toBeInTheDocument();
+  });
+
+  it('swaps in the final reply when an open in-flight request completes', () => {
+    const live = req('req_m6');
+    const done = { ...req('req_m1'), id: live.id, turnId: live.turnId };
+    const { rerender } = render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <DetailPanel sessionId={open.id} req={live} tools={[]} card="response" onClose={() => {}} />
+      </I18nContext.Provider>,
+    );
+    expect(screen.queryByText(/Let me look at how sessions/)).toBeNull();
+    rerender(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <DetailPanel sessionId={open.id} req={done} tools={[]} card="response" onClose={() => {}} />
+      </I18nContext.Provider>,
+    );
+    expect(screen.getByText(/Let me look at how sessions/)).toBeInTheDocument();
+  });
+
+  it('says when thinking content was not recorded', () => {
+    renderPanel(req('req_m2'), 'response');
+    expect(screen.getByText('Thinking content not recorded')).toBeInTheDocument();
+  });
+
+  it('says Codex thinking is encrypted rather than missing', () => {
+    renderPanel(req('req_m2'), 'response', vi.fn(), 'codex');
+    expect(
+      screen.getByText('Codex encrypts its thinking, so it cannot be shown'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Thinking content not recorded')).toBeNull();
+  });
+
+  it('shows a tool call’s arguments, result and timing, and loads the full result on request', async () => {
+    const fetch = stubFetch({ toolCallId: 'tu_m2b', result: 'FULL RESULT TEXT' });
+    renderPanel(req('req_m2'), 'tool:tu_m2b');
+    const panel = screen.getByRole('region', { name: 'Tool call details' });
+    expect(within(panel).getByRole('heading', { name: 'Arguments' })).toBeInTheDocument();
+    expect(panel).toHaveTextContent('String to replace not found in file.');
+    expect(panel).toHaveTextContent('Failed');
+    expect(panel).toHaveTextContent('50ms');
+    fireEvent.click(within(panel).getByRole('button', { name: 'Load full result' }));
+    expect(await within(panel).findByText('FULL RESULT TEXT')).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith(
+      `/api/sessions/${encodeURIComponent(open.id)}/tool-calls/tu_m2b/result`,
+      expect.anything(),
+    );
+  });
+
+  it('closes from its header', () => {
+    const onClose = renderPanel(req('req_m1'), 'response');
+    fireEvent.click(screen.getByRole('button', { name: 'Hide details' }));
+    expect(onClose).toHaveBeenCalled();
+  });
+});

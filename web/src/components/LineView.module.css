@@ -1,0 +1,24 @@
+.view {
+  height: 100%;
+  overflow: auto;
+  padding: 8px 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 0 16px;
+  white-space: pre;
+}
+
+/* Soft-wrapped continuation of a long line. */
+.line[data-continued]::before {
+  content: "↪";
+  position: absolute;
+  left: 3px;
+  color: var(--faint);
+}

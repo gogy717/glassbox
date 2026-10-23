@@ -1,0 +1,149 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createDemoQuota, DEMO_SESSION_ID } from '../core/fixtures/demo.js';
+import { checkSnapshot } from '../core/invariants.js';
+import type { SessionPatch, SessionSnapshot, SessionSummary } from '../core/model.js';
+import { applyPatch } from './__tests__/apply-patch.js';
+import { DemoStore } from './demo-store.js';
+
+let store: DemoStore;
+
+beforeEach(async () => {
+  vi.useFakeTimers({ now: new Date('2026-10-23T02:00:00.000Z') });
+  store = new DemoStore();
+  await store.start();
+});
+
+afterEach(async () => {
+  await store.stop();
+  vi.useRealTimers();
+});
+
+describe('DemoStore', () => {
+  it('serves the demo session list with the busy demo session first', () => {
+    const list = store.listSessions();
+    expect(list.map((s) => s.id)[0]).toBe(DEMO_SESSION_ID);
+    expect(list[0]?.live).toBe('busy');
+    expect(list).toHaveLength(3);
+  });
+
+  it('serves the snapshot, details and results of the demo session only', async () => {
+    const snap = (await store.getSnapshot(DEMO_SESSION_ID)) as SessionSnapshot;
+    expect(checkSnapshot(snap)).toEqual([]);
+    expect(await store.getSnapshot('claude-code:nope')).toBeNull();
+
+    expect((await store.getRequestDetail(DEMO_SESSION_ID, 'req_m1'))?.completeness).toBe('full');
+    expect(await store.getRequestDetail(DEMO_SESSION_ID, 'nope')).toBeNull();
+    expect(await store.getRequestDetail('claude-code:nope', 'req_m1')).toBeNull();
+
+    expect(await store.getToolResult(DEMO_SESSION_ID, 'tu_m1a')).toEqual({
+      found: true,
+      result: 'src/server/store.ts:41:export function sortSessions(',
+    });
+    expect(await store.getToolResult(DEMO_SESSION_ID, 'nope')).toEqual({
+      found: false,
+      result: undefined,
+    });
+  });
+
+  it('emits a patch every 2 s', async () => {
+    const patches: SessionPatch[] = [];
+    store.onPatch(DEMO_SESSION_ID, (p) => patches.push(p));
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(patches).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(patches).toHaveLength(1);
+    expect(patches[0]?.session.updatedAt).toBe('2026-10-23T02:00:02.000Z');
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(patches).toHaveLength(3);
+  });
+
+  it('completes the running tool and the in-flight request, then starts new work', async () => {
+    const before = (await store.getSnapshot(DEMO_SESSION_ID)) as SessionSnapshot;
+    const running = before.toolCalls.filter((t) => t.status === 'running').map((t) => t.id);
+    const inFlight = before.requests.filter((r) => r.status === 'in-flight').map((r) => r.id);
+    expect(running.length).toBeGreaterThan(0);
+    expect(inFlight.length).toBeGreaterThan(0);
+
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    const after = (await store.getSnapshot(DEMO_SESSION_ID)) as SessionSnapshot;
+    for (const id of running)
+      expect(after.toolCalls.find((t) => t.id === id)?.status).toBe('complete');
+    const mainInFlight = inFlight.filter(
+      (id) => before.requests.find((r) => r.id === id)?.agentId === 'main',
+    );
+    for (const id of mainInFlight) {
+      const r = after.requests.find((x) => x.id === id);
+      expect(r?.status).toBe('complete');
+      expect(r?.usage?.output).toBeGreaterThan(0);
+    }
+    expect(after.requests.length).toBeGreaterThan(before.requests.length);
+    expect(after.turns.length).toBeGreaterThan(before.turns.length);
+    expect(checkSnapshot(after)).toEqual([]);
+  });
+
+  it('keeps patches consistent with the snapshot a reconnecting client would get', async () => {
+    let client = (await store.getSnapshot(DEMO_SESSION_ID)) as SessionSnapshot;
+    store.onPatch(DEMO_SESSION_ID, (p) => {
+      client = applyPatch(client, p);
+    });
+
+    for (let i = 0; i < 40; i++) {
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(client).toEqual(await store.getSnapshot(DEMO_SESSION_ID));
+    }
+  });
+
+  it('pushes the updated session to the list', async () => {
+    const lists: SessionSummary[][] = [];
+    store.onSessions((l) => lists.push(l));
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(lists.at(-1)?.[0]?.updatedAt).toBe('2026-10-23T02:00:02.000Z');
+    expect(store.listSessions()[0]?.updatedAt).toBe('2026-10-23T02:00:02.000Z');
+  });
+
+  it('stops notifying after unsubscribe and after stop', async () => {
+    const patches: SessionPatch[] = [];
+    const lists: SessionSummary[][] = [];
+    const off = store.onPatch(DEMO_SESSION_ID, (p) => patches.push(p));
+    store.onSessions((l) => lists.push(l));
+    await vi.advanceTimersByTimeAsync(2000);
+    off();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(patches).toHaveLength(1);
+
+    await store.stop();
+    const seen = lists.length;
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(lists).toHaveLength(seen);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('hands out copies, so callers cannot corrupt its state', async () => {
+    const a = (await store.getSnapshot(DEMO_SESSION_ID)) as SessionSnapshot;
+    a.requests.length = 0;
+    const b = (await store.getSnapshot(DEMO_SESSION_ID)) as SessionSnapshot;
+    expect(b.requests.length).toBeGreaterThan(0);
+  });
+});
+
+describe('DemoStore quota', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ now: new Date('2026-10-23T02:00:00.000Z') });
+  });
+
+  it('serves the demo quota', async () => {
+    const demo = new DemoStore();
+    expect(demo.listQuotas()).toEqual([createDemoQuota(new Date('2026-10-23T02:00:00.000Z'))]);
+    const off = demo.onQuota(() => {});
+    off();
+  });
+});
+
+describe('DemoStore.expectSession', () => {
+  it('knows the demo session and nothing else', async () => {
+    const demo = new DemoStore();
+    expect(await demo.expectSession(DEMO_SESSION_ID)).toBe(true);
+    expect(await demo.expectSession('claude-code:nope')).toBe(false);
+  });
+});

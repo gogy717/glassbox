@@ -1,0 +1,177 @@
+.inspector {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  background: var(--layer-1);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 4px 0 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.badge {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.icon {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.icon:hover {
+  background: var(--layer-2);
+  color: var(--text);
+}
+
+.viewport {
+  container-type: inline-size;
+  max-height: 220px;
+  overflow: auto;
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 17px;
+}
+
+.dialogTree {
+  container-type: inline-size;
+  padding: 12px 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.tree {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.tree {
+  --indent: 14px;
+}
+
+.child {
+  margin: 0;
+  padding: 0 0 0 var(--indent);
+}
+
+.children {
+  margin: 0;
+  padding: 0;
+}
+
+/*
+ * Hundreds of levels deep (`data-json-level`, set from --level-cap down): the first deep row
+ * steps back to the left edge and spans the whole width, deeper rows stop indenting, and each
+ * says its level instead, so the content keeps a readable width however narrow the panel.
+ * CSS modules do not scope attribute selectors: these stay under .tree and use their own name.
+ */
+.tree [data-json-level]:not([data-json-level] [data-json-level]) {
+  width: 100cqw;
+  margin-left: calc(var(--indent) * var(--level-cap) * -1);
+}
+
+.tree [data-json-level] [data-json-level] {
+  padding-left: 0;
+}
+
+.tree [data-json-level]::before {
+  content: attr(data-json-level);
+  margin-right: 5px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--layer-2);
+  color: var(--muted);
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.key {
+  margin-right: 5px;
+  color: var(--json-key);
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+.string {
+  color: var(--json-string);
+}
+
+.number,
+.keyword {
+  color: var(--json-number);
+}
+
+.punct {
+  color: var(--muted);
+}
+
+.expand,
+.collapse {
+  display: inline-block;
+  width: 10px;
+  margin-right: 3px;
+  color: var(--muted);
+  user-select: none;
+  cursor: pointer;
+}
+
+.expand::after {
+  content: "›";
+}
+
+.collapse::after {
+  content: "⌄";
+}
+
+.collapsed {
+  margin-right: 4px;
+  color: var(--muted);
+}
+
+.collapsed::after {
+  content: "…";
+}
+
+.segmented {
+  display: flex;
+  padding: 2px;
+  border-radius: 7px;
+  background: var(--layer-2);
+}
+
+.segmented button {
+  height: 24px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.segmented button[aria-checked="true"] {
+  background: var(--layer-1);
+  color: var(--text);
+  font-weight: 600;
+}

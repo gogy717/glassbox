@@ -1,0 +1,104 @@
+.flow {
+  display: grid;
+  grid-template-columns: minmax(220px, 264px) minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+}
+
+.main {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.turnHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  flex: none;
+  min-height: 52px;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* A title too long for the row pushes the meta onto the next line instead of squeezing it. */
+.turnTitle {
+  flex: 1 1 auto;
+}
+
+.turnMeta {
+  display: flex;
+  margin-left: auto;
+  align-items: center;
+  gap: 12px;
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.turnMeta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.calls {
+  flex: 1;
+  min-height: 0;
+  padding: 14px 16px 24px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.slot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+}
+
+.empty {
+  margin: 48px auto;
+  color: var(--muted);
+  text-align: center;
+}
+
+.back {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--layer-1);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .flow {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .turnHeader {
+    min-height: 40px;
+    padding: 6px 12px;
+  }
+
+  .calls {
+    padding: 10px 8px 24px;
+  }
+}

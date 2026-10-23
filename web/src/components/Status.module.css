@@ -1,0 +1,72 @@
+.dot {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--faint);
+}
+
+.dot[data-state="busy"],
+.dot[data-state="running"] {
+  background: var(--accent);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.dot[data-state="waiting"],
+.dot[data-state="approval"] {
+  background: var(--warning);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 25%, transparent);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.dot[data-state="idle"],
+.dot[data-state="complete"] {
+  background: var(--success);
+}
+
+.dot[data-state="error"] {
+  background: var(--error);
+}
+
+.dot[data-state="interrupted"] {
+  background: var(--warning);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 1px 7px 1px 5px;
+  border-radius: 999px;
+  font-size: 10px;
+  line-height: 16px;
+  white-space: nowrap;
+  color: var(--muted);
+  background: var(--layer-3);
+}
+
+.pill[data-state="running"] {
+  color: var(--accent);
+  background: var(--accent-tint);
+}
+
+.pill[data-state="complete"] {
+  color: var(--success);
+  background: var(--success-tint);
+}
+
+.pill[data-state="error"] {
+  color: var(--error);
+  background: var(--error-tint);
+}
+
+.pill[data-state="interrupted"] {
+  color: var(--warning);
+}
+
+.pill[data-state="approval"] {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 14%, transparent);
+}
