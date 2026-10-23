@@ -116,7 +116,9 @@ describe('FlowView', () => {
 
   it('keeps an older turn picked from the URL selected while newer ones stay on top', () => {
     renderFlow({ route: { turnId: 'turn_m1' }, follow: false });
-    const items = within(screen.getByRole('list', { name: 'Conversations' })).getAllByRole('button');
+    const items = within(screen.getByRole('list', { name: 'Conversations' })).getAllByRole(
+      'button',
+    );
     expect(items[2]).toHaveAttribute('aria-current', 'true');
     expect(items[2]).toHaveTextContent('Conversation 1');
     expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Conversation 1: /);
@@ -376,9 +378,14 @@ describe('FlowView', () => {
     expect(navigate).toHaveBeenLastCalledWith({ turnId: 'turn_m1', requestId: null });
   });
 
-  it('offers “Back to latest” while follow is paused', () => {
+  it('offers “Back to latest” in the turn header while follow is paused', () => {
     const { navigate, setFollow } = renderFlow({ route: { turnId: 'turn_m1' }, follow: false });
-    fireEvent.click(screen.getByRole('button', { name: 'Back to latest' }));
+    const back = screen.getByRole('button', { name: 'Back to latest' });
+    // In the header row, beside the turn's meta, not floating over the calls.
+    expect(screen.getByRole('heading', { level: 2 }).parentElement?.parentElement).toContainElement(
+      back,
+    );
+    fireEvent.click(back);
     expect(setFollow).toHaveBeenLastCalledWith(true);
     expect(navigate).toHaveBeenLastCalledWith({ turnId: null, requestId: null });
   });

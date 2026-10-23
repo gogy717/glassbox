@@ -1,5 +1,4 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { ArrowDown } from 'lucide-react';
 import { useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import { useApprovalsContext } from '../../data/approvals';
 import type { OpenSession } from '../../data/store';
@@ -9,6 +8,7 @@ import { formatDuration, formatNumber } from '../../lib/format';
 import { buildSteps, type Phase, type PhaseCategory, type Step } from '../../lib/steps';
 import type { Navigate, Route } from '../../router';
 import { useUi } from '../../ui';
+import { BackToLatest } from '../flow/BackToLatest';
 import { TurnList, useSelectedTurn, useTurnItems } from '../flow/TurnList';
 import { TurnTitle } from '../flow/TurnTitle';
 import { useFollowScroll } from '../flow/useFollowScroll';
@@ -61,7 +61,17 @@ export function StepsView({ open, agentId, route, navigate }: Props) {
         {current ? (
           <>
             <div className={css.turnHead}>
-              <TurnTitle key={current.turn.id} text={current.heading} />
+              <div className={css.headRow}>
+                <TurnTitle key={current.turn.id} text={current.heading} className={css.title} />
+                {!follow && (
+                  <BackToLatest
+                    onClick={() => {
+                      setFollow(true);
+                      navigate({ turnId: null, requestId: null });
+                    }}
+                  />
+                )}
+              </div>
               <PhaseShares phases={phases} />
             </div>
             <StepList
@@ -74,19 +84,6 @@ export function StepsView({ open, agentId, route, navigate }: Props) {
           </>
         ) : (
           <p className={css.empty}>{t('flow.noTurns')}</p>
-        )}
-        {!follow && (
-          <button
-            type="button"
-            className={css.back}
-            onClick={() => {
-              setFollow(true);
-              navigate({ turnId: null, requestId: null });
-            }}
-          >
-            <ArrowDown size={14} aria-hidden="true" />
-            {t('follow.back')}
-          </button>
         )}
       </section>
     </div>

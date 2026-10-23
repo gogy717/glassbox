@@ -123,3 +123,11 @@
   font-size: 10.5px;
   color: var(--accent);
 }
+
+/* Short of room (a narrow turn column or the strip): the number and prompt matter more than the
+   clock, which the open turn's header still shows. */
+@container session-panel (max-width: 1000px) {
+  .time {
+    display: none;
+  }
+}
