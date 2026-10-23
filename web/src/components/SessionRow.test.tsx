@@ -34,7 +34,8 @@ describe('SessionRow', () => {
     const meta = row.lastElementChild as HTMLElement;
     const parts = [...meta.children].map((c) => c.textContent?.trim());
     expect(parts[0]).toBe('Running');
-    expect(parts[1]).toMatch(/^· (now|\d+s ago) · 1\.9M1\.9M tokens$/);
+    // The age as formatRelative words it ("now", "7 seconds ago", or "7 s ago").
+    expect(parts[1]).toMatch(/^· (now|\d+\s?s(econds?)? ago) · 1\.9M1\.9M tokens$/);
     expect(parts.at(-1)).toBe('Claude Code');
     // The figure is mono and silent; the spoken text says what it counts.
     expect(meta.querySelector('.figure')).toHaveAttribute('aria-hidden', 'true');
@@ -49,7 +50,7 @@ describe('SessionRow', () => {
     expect(onSelect).toHaveBeenCalledWith(idle.id);
   });
 
-  it('shows short ages in Chinese too', () => {
+  it('words its age in Chinese too', () => {
     const row = renderRow(
       { ...idle, updatedAt: new Date(DEMO_NOW.getTime() - 2 * 3_600_000).toISOString() },
       false,

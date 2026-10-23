@@ -1,5 +1,5 @@
 import { Search } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
+import { type Ref, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { AgentKind, SessionSummary } from '../../../src/core/model.js';
 import { useRovingFocus } from '../data/useRovingFocus';
 import { type MessageKey, useI18n } from '../i18n';
@@ -64,9 +64,28 @@ export function SessionSidebar({ sessions, selectedId, now, showProbes, onSelect
       ).filter(([, n]) => n > 0),
     [listed],
   );
-  // A filter whose sessions are all gone shows everything again.
-  const agent = onlyAgent !== null && agentCounts.some(([a]) => a === onlyAgent) ? onlyAgent : null;
-  const live = onlyLive !== null && liveCounts.some(([f]) => f === onlyLive) ? onlyLive : null;
+  // A filter whose sessions are all gone is cleared, not left armed behind a pressed "All": the
+  // next session in that state or of that agent must not filter the list again unasked. The chip
+  // goes with it, so focus on it moves to its row's "All".
+  const [refocus, setRefocus] = useState<'agent' | 'live' | null>(null);
+  if (onlyAgent !== null && !agentCounts.some(([a]) => a === onlyAgent)) {
+    setOnlyAgent(null);
+    setRefocus('agent');
+  }
+  if (onlyLive !== null && !liveCounts.some(([f]) => f === onlyLive)) {
+    setOnlyLive(null);
+    setRefocus('live');
+  }
+  const allAgentsRef = useRef<HTMLButtonElement>(null);
+  const allStatesRef = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    if (!refocus) return;
+    setRefocus(null);
+    const lost = document.activeElement === null || document.activeElement === document.body;
+    if (lost) (refocus === 'agent' ? allAgentsRef : allStatesRef).current?.focus();
+  }, [refocus]);
+  const agent = onlyAgent;
+  const live = onlyLive;
   const groups = useMemo(
     // The open session keeps its row, so the list never loses what the page shows.
     () => groupSessions(sessions, query, { showProbes, agent, live, keep: selectedId }),
@@ -103,6 +122,7 @@ export function SessionSidebar({ sessions, selectedId, now, showProbes, onSelect
           // biome-ignore lint/a11y/useSemanticElements: a row of filter toggles, not a form fieldset
           <div className={css.chips} role="group" aria-label={t('sidebar.filterAgents')}>
             <Chip
+              ref={allAgentsRef}
               pressed={agent === null}
               count={listed.length}
               title={t('sidebar.allAgents')}
@@ -129,6 +149,7 @@ export function SessionSidebar({ sessions, selectedId, now, showProbes, onSelect
           // biome-ignore lint/a11y/useSemanticElements: a row of filter toggles, not a form fieldset
           <div className={css.chips} role="group" aria-label={t('sidebar.filterStates')}>
             <Chip
+              ref={allStatesRef}
               pressed={live === null}
               title={t('sidebar.allStates')}
               onClick={() => setOnlyLive(null)}
@@ -140,6 +161,7 @@ export function SessionSidebar({ sessions, selectedId, now, showProbes, onSelect
                 key={f}
                 pressed={live === f}
                 count={n}
+                title={f === 'running' ? t('sidebar.runningIncludesWaiting') : undefined}
                 onClick={() => setOnlyLive(live === f ? null : f)}
               >
                 {t(LIVE_WORD[f])}
@@ -185,12 +207,14 @@ export function SessionSidebar({ sessions, selectedId, now, showProbes, onSelect
 
 /** A text toggle: pressed is an ink border; the count in the mono face. */
 function Chip({
+  ref,
   pressed,
   count,
   title,
   onClick,
   children,
 }: {
+  ref?: Ref<HTMLButtonElement>;
   pressed: boolean;
   count?: number;
   title?: string;
@@ -199,6 +223,7 @@ function Chip({
 }) {
   return (
     <button
+      ref={ref}
       type="button"
       className={css.chip}
       aria-pressed={pressed}

@@ -38,7 +38,7 @@ export function SessionRow({
   const [clipped, setClipped] = useState(false);
   const title = s.title ?? t('sidebar.untitled');
   const live = t(`live.${s.live}`);
-  const when = formatRelative(s.updatedAt, now, intl, 'narrow');
+  const when = formatRelative(s.updatedAt, now, intl);
   const figure = s.usage ? formatCompact(totalTokens(s.usage), intl) : null;
   const tokens = figure ? t('common.tokens', { n: figure }) : null;
   const tip = clipped

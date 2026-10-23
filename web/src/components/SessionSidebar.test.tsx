@@ -448,4 +448,65 @@ describe('SessionSidebar', () => {
       sessions.length,
     );
   });
+
+  it('clears a state filter whose sessions are gone, so the next one does not filter again', () => {
+    const sidebar = (list: SessionSummary[]) => (
+      <I18nContext.Provider value={makeI18n('en')}>
+        <SessionSidebar
+          sessions={list}
+          selectedId={null}
+          now={DEMO_NOW.getTime()}
+          onSelect={vi.fn()}
+        />
+      </I18nContext.Provider>
+    );
+    const { rerender } = render(sidebar(sessions));
+    const group = () => screen.getByRole('group', { name: 'Filter by state' });
+    const running = within(group()).getByRole('button', { name: /^Running/ });
+    expect(running).toHaveAttribute('title', 'Running, including sessions waiting for you');
+    fireEvent.click(running);
+    running.focus();
+    // The running session stops: no running chip to keep pressed.
+    const stopped = sessions.map((x) => (x.live === 'busy' ? { ...x, live: 'idle' as const } : x));
+    rerender(sidebar(stopped));
+    const all = within(group()).getByRole('button', { name: 'All' });
+    expect(all).toHaveAttribute('aria-pressed', 'true');
+    expect(document.activeElement).toBe(all);
+    // A session starts running again: the list stays whole.
+    rerender(sidebar(sessions));
+    expect(screen.getAllByRole('button').filter((b) => b.closest('li'))).toHaveLength(
+      sessions.length,
+    );
+    expect(within(group()).getByRole('button', { name: 'All' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
+  it('clears an agent filter whose sessions are gone, so its next session does not filter again', () => {
+    const three = sessions.map((x, i) =>
+      i === 1 ? { ...x, agent: 'grok' } : i === 2 ? { ...x, agent: 'codex' } : x,
+    );
+    const sidebar = (list: SessionSummary[]) => (
+      <I18nContext.Provider value={makeI18n('en')}>
+        <SessionSidebar
+          sessions={list}
+          selectedId={null}
+          now={DEMO_NOW.getTime()}
+          onSelect={vi.fn()}
+        />
+      </I18nContext.Provider>
+    );
+    const { rerender } = render(sidebar(three));
+    const group = () => screen.getByRole('group', { name: 'Filter by agent' });
+    const grok = within(group()).getByRole('button', { name: /^Grok/ });
+    fireEvent.click(grok);
+    grok.focus();
+    rerender(sidebar(three.filter((x) => x.agent !== 'grok')));
+    const all = within(group()).getByRole('button', { name: /^All/ });
+    expect(all).toHaveAttribute('aria-pressed', 'true');
+    expect(document.activeElement).toBe(all);
+    rerender(sidebar(three));
+    expect(screen.getAllByRole('button').filter((b) => b.closest('li'))).toHaveLength(three.length);
+  });
 });

@@ -33,8 +33,9 @@
   /* A flex button lets its children grow to their content: hold them to its width. */
   max-width: 100%;
   min-width: 0;
-  font-size: var(--fs-body);
-  font-weight: 500;
+  /* D1's row title: 12.5/600, as the turn rows. */
+  font-size: 12.5px;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -78,4 +79,9 @@
 
 .sep {
   color: var(--faint);
+}
+
+/* Tags line up in a column at the row's right edge. */
+.meta > :last-child {
+  margin-left: auto;
 }

@@ -33,14 +33,14 @@
   border: 0;
   outline: 0;
   background: transparent;
-  font-size: var(--fs-body);
+  font-size: var(--fs-small);
 }
 
 /* Filter chips: text toggles, never coloured; zero counts are not drawn at all. */
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 2px;
+  gap: 4px;
 }
 
 .chip {
@@ -53,7 +53,7 @@
   border-radius: var(--radius-m);
   background: transparent;
   color: var(--muted);
-  font-size: var(--fs-small);
+  font-size: var(--fs-meta);
   white-space: nowrap;
   cursor: pointer;
   transition:

@@ -109,19 +109,13 @@ const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
 ];
 
 /** "3 minutes ago", in the UI language. */
-export function formatRelative(
-  iso: string | null | undefined,
-  now: number,
-  locale: string,
-  /** 'narrow' for dense rows: "7s ago", "2h ago". */
-  style: Intl.RelativeTimeFormatStyle = 'long',
-) {
+export function formatRelative(iso: string | null | undefined, now: number, locale: string) {
   if (!iso) return DASH;
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return DASH;
   // A time a little ahead of this clock (a busy session's last write) is now, not "in 1 second".
   const diff = Math.min(0, t - now);
-  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto', style });
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
   for (const [unit, size] of UNITS) {
     if (Math.abs(diff) >= size || unit === 'second')
       return rtf.format(Math.round(diff / size), unit);
