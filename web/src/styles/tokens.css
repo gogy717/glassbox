@@ -55,6 +55,22 @@
   /* Blocked on the person answering a permission prompt; follows the theme's warning colour. */
   --seg-approval: var(--warning);
 
+  /* Coding-agent tags: tint background + text, ≥ 4.5:1 in both themes. The text colours stay
+     apart on every pair under protanopia / deuteranopia (OKLab ΔE ≥ 9) and away from status
+     colours; the tag always carries the agent's name too. */
+  --agent-claude-code-fg: #9f4f25;
+  --agent-claude-code-bg: #fee3d7;
+  --agent-codex-fg: #016f82;
+  --agent-codex-bg: #c5f3ff;
+  --agent-grok-fg: #7541b8;
+  --agent-grok-bg: #ede5ff;
+  --agent-oh-my-pi-fg: #760c50;
+  --agent-oh-my-pi-bg: #fee0ee;
+  --agent-opencode-fg: #433f01;
+  --agent-opencode-bg: #efecbe;
+  --agent-other-fg: #54585f;
+  --agent-other-bg: #e6eaef;
+
   /* JSON inspector (DevTools palette). */
   --json-key: #881391;
   --json-string: #c41a16;
@@ -116,6 +132,18 @@
     --json-key: #5db0d7;
     --json-string: #f28b82;
     --json-number: #99c8ff;
+    --agent-claude-code-fg: #da8b64;
+    --agent-claude-code-bg: #492614;
+    --agent-codex-fg: #9aedff;
+    --agent-codex-bg: #003740;
+    --agent-grok-fg: #9e8afa;
+    --agent-grok-bg: #302a4c;
+    --agent-oh-my-pi-fg: #f09fd9;
+    --agent-oh-my-pi-bg: #44243b;
+    --agent-opencode-fg: #ddd486;
+    --agent-opencode-bg: #363106;
+    --agent-other-fg: #bfc5cc;
+    --agent-other-bg: #2e3134;
   }
 }
 
@@ -165,4 +193,16 @@
   --json-key: #5db0d7;
   --json-string: #f28b82;
   --json-number: #99c8ff;
+  --agent-claude-code-fg: #da8b64;
+  --agent-claude-code-bg: #492614;
+  --agent-codex-fg: #9aedff;
+  --agent-codex-bg: #003740;
+  --agent-grok-fg: #9e8afa;
+  --agent-grok-bg: #302a4c;
+  --agent-oh-my-pi-fg: #f09fd9;
+  --agent-oh-my-pi-bg: #44243b;
+  --agent-opencode-fg: #ddd486;
+  --agent-opencode-bg: #363106;
+  --agent-other-fg: #bfc5cc;
+  --agent-other-bg: #2e3134;
 }
