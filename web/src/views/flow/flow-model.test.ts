@@ -243,23 +243,31 @@ describe('isLocalCommand', () => {
   it.each([
     ['/effort', 0, 'complete', true],
     ['/model opus', 0, 'complete', true],
+    ['/add-dir /home/user/other', 0, 'complete', true],
     ['/superpowers:brainstorm', 0, 'interrupted', true],
     ['  /clear', 0, 'complete', true],
     // Answered by the model (a skill, a custom command): a conversation like any other.
-    ['/review the parser', 2, 'complete', false],
+    ['/review', 2, 'complete', false],
     // Still starting: its first call may be on the way.
     ['/review', 0, 'running', false],
     ['/review', 0, 'approval', false],
-    // A path is not a command.
+    // A path, or a sentence that starts with one, is not a command.
+    ['/tmp is full', 0, 'complete', false],
     ['/home/user/app.log what is wrong here', 0, 'complete', false],
+    ['/home/user/app.log', 0, 'complete', false],
     ['/', 0, 'complete', false],
     ['fix /effort handling', 0, 'complete', false],
   ] as const)('%s with %i calls (%s) → %s', (prompt, calls, status, expected) => {
-    expect(isLocalCommand(t(prompt), calls, status)).toBe(expected);
+    expect(isLocalCommand(t(prompt), calls, status, 'claude-code')).toBe(expected);
   });
 
   it('only counts what a person typed', () => {
-    expect(isLocalCommand(t('/effort', 'peer'), 0, 'complete')).toBe(false);
-    expect(isLocalCommand(t('/effort', 'agent-prompt'), 0, 'complete')).toBe(false);
+    expect(isLocalCommand(t('/effort', 'peer'), 0, 'complete', 'claude-code')).toBe(false);
+    expect(isLocalCommand(t('/effort', 'agent-prompt'), 0, 'complete', 'claude-code')).toBe(false);
+  });
+
+  it('only applies to Claude Code, which runs these commands itself', () => {
+    for (const agent of ['codex', 'grok', 'oh-my-pi', 'opencode'])
+      expect(isLocalCommand(t('/effort'), 0, 'complete', agent)).toBe(false);
   });
 });

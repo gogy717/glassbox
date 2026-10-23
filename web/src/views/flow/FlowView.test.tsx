@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LivePartial } from '../../../../src/shared/runs.js';
+import { SessionAgentContext } from '../../data/session-agent';
 import type { OpenSession } from '../../data/store';
 import { I18nContext, makeI18n } from '../../i18n';
 import type { Route } from '../../router';
@@ -87,6 +88,29 @@ function withPrompt(turnId: string, prompt: string): OpenSession {
   return open;
 }
 
+/** The demo session with a /effort turn before the first prompt (no model call followed). */
+function withLocalCommand(): OpenSession {
+  const open = demoOpen();
+  const first = open.turns.get('turn_m1');
+  if (!first) throw new Error('fixture');
+  open.turns = new Map([
+    [
+      'turn_cmd',
+      {
+        ...first,
+        id: 'turn_cmd',
+        index: 1,
+        prompt: '/effort',
+        startedAt: '2026-10-23T00:00:00.000Z',
+        endedAt: '2026-10-23T00:00:00.000Z',
+        requestIds: [],
+      },
+    ],
+    ...open.turns,
+  ]);
+  return open;
+}
+
 const callScroller = (container: HTMLElement) =>
   container.querySelector('[data-index]')?.parentElement?.parentElement as HTMLElement;
 
@@ -125,32 +149,38 @@ describe('FlowView', () => {
   });
 
   it('lists a local slash command compactly, and a prompt like it with calls in full', () => {
-    const open = demoOpen();
-    const first = open.turns.get('turn_m1');
-    if (!first) throw new Error('fixture');
-    // The person ran /effort before the first prompt: no model call followed.
-    open.turns = new Map([
-      [
-        'turn_cmd',
-        {
-          ...first,
-          id: 'turn_cmd',
-          index: 1,
-          prompt: '/effort',
-          startedAt: '2026-10-23T00:00:00.000Z',
-          endedAt: '2026-10-23T00:00:00.000Z',
-          requestIds: [],
-        },
-      ],
-      ...open.turns,
-    ]);
-    renderFlow({ open });
+    renderFlow({ open: withLocalCommand() });
     const card = screen.getByRole('button', { name: /\/effort/ });
     expect(card).toHaveAttribute('data-command');
     expect(within(card).getByText('local command')).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: /Busy sessions should be listed/ }),
     ).not.toHaveAttribute('data-command');
+  });
+
+  it('lists the same turn in full in another agent’s session', () => {
+    const open = withLocalCommand();
+    render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <SessionAgentContext.Provider value="codex">
+          <UiContext.Provider value={{ follow: true, setFollow: vi.fn() }}>
+            <FlowView
+              open={open}
+              agentId="main"
+              route={{
+                sessionId: open.id,
+                agentId: 'main',
+                tab: 'flow',
+                turnId: null,
+                requestId: null,
+              }}
+              navigate={vi.fn()}
+            />
+          </UiContext.Provider>
+        </SessionAgentContext.Provider>
+      </I18nContext.Provider>,
+    );
+    expect(screen.getByRole('button', { name: /\/effort/ })).not.toHaveAttribute('data-command');
   });
 
   it('keeps a pasted 5 KB prompt to 120 characters in the list, all of it on hover', () => {

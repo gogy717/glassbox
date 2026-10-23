@@ -2,6 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { Turn } from '../../../../src/core/model.js';
 import { StatusPill, type UiStatus } from '../../components/Status';
 import { useApprovalsContext } from '../../data/approvals';
+import { useSessionAgentKind } from '../../data/session-agent';
 import type { OpenSession } from '../../data/store';
 import { useRovingFocus } from '../../data/useRovingFocus';
 import { useI18n } from '../../i18n';
@@ -36,6 +37,7 @@ export interface TurnItem {
 export function useTurnItems(open: OpenSession, agentId: string): TurnItem[] {
   const { t } = useI18n();
   const approvals = useApprovalsContext();
+  const agent = useSessionAgentKind();
   return useMemo(
     () =>
       turnsOf(open, agentId).map((turn) => {
@@ -62,10 +64,10 @@ export function useTurnItems(open: OpenSession, agentId: string): TurnItem[] {
           calls: reqs.length,
           tools,
           status,
-          command: isLocalCommand(turn, reqs.length, status),
+          command: isLocalCommand(turn, reqs.length, status, agent),
         };
       }),
-    [open, agentId, t, approvals],
+    [open, agentId, t, approvals, agent],
   );
 }
 
@@ -172,13 +174,11 @@ export const TurnList = memo(function TurnList({ items, selectedId, onSelect }: 
                 <span className={css.title} data-title>
                   {it.command ? it.turn.prompt.trim() : it.title}
                 </span>
-                {it.command && (
-                  <span className={css.command} title={t('flow.localCommandHint')}>
-                    {t('flow.localCommand')}
-                  </span>
-                )}
+                {it.command && <span className={css.command}>{t('flow.localCommand')}</span>}
                 <span className={`${css.time} num`}>{formatClock(it.turn.startedAt)}</span>
               </span>
+              {/* Part of the card's text, so screen readers read it; shown on hover and focus. */}
+              {it.command && <span className={css.hint}>{t('flow.localCommandHint')}</span>}
               {/* A local command has no calls or status to show: one line is enough. */}
               {!it.command && it.turn.origin !== 'human' && it.turn.sender && (
                 <span className={css.sender}>{t('flow.from', { sender: it.turn.sender })}</span>

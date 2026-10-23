@@ -163,10 +163,9 @@ describe('TurnList', () => {
     const card = screen.getByRole('button', { name: /^\/effort/ });
     expect(card.querySelector('[data-title]')).toHaveTextContent(/^\/effort$/);
     expect(card).toHaveAttribute('data-command');
-    expect(within(card).getByText('local command')).toHaveAttribute(
-      'title',
-      'Run by Claude Code itself; the model was not called',
-    );
+    expect(within(card).getByText('local command')).toBeInTheDocument();
+    // The explanation is part of the card's text, so keyboard and screen-reader users get it too.
+    expect(card).toHaveAccessibleName(/Run by Claude Code itself; the model was not called/);
     expect(within(card).queryByText(/model call/)).toBeNull();
     expect(within(card).queryByText('Complete')).toBeNull();
     // Ordinary turns keep their counts and status.
