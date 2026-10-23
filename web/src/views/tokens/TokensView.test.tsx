@@ -102,7 +102,7 @@ describe('TokensView', () => {
       usage: { ...main.usage, cacheRead: 50_000_000 },
     });
     renderTokens('main', open, 'zh');
-    expect(screen.getByRole('note')).toHaveTextContent(/^.*主会话 花掉了全部 token 的/);
+    expect(screen.getByRole('note')).toHaveTextContent(/^.*上下文。主会话 花掉了全部 token 的/);
   });
 
   it('breaks the selected agent’s total into labelled buckets', () => {

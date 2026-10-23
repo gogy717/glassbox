@@ -29,7 +29,7 @@ interface Props {
 const TOP_N = 5;
 
 export function TokensView({ open, agentId, navigate }: Props) {
-  const { t, intl } = useI18n();
+  const { t, intl, locale } = useI18n();
   const { setFollow } = useUi();
 
   const rows = useMemo(() => rollupByAgent(open), [open]);
@@ -65,7 +65,8 @@ export function TokensView({ open, agentId, navigate }: Props) {
             <p className={css.ledeText}>
               {found.map((i, n) => (
                 <span key={i.key}>
-                  {n > 0 && ' '}
+                  {/* Chinese sentences follow one another without a space. */}
+                  {n > 0 && locale !== 'zh' && ' '}
                   {i.key === 'tokens.insightCacheRead' ? (
                     <FigureText k={i.key} params={{ pct: formatPercent(i.share, intl) }} />
                   ) : (
