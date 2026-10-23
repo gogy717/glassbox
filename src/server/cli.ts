@@ -8,14 +8,18 @@ import { createClaudeCodeAdapter } from '../adapters/claude-code/index.js';
 import { createQuotaFetcher } from '../adapters/claude-code/quota-fetch.js';
 import { createCodexAdapter } from '../adapters/codex/index.js';
 import { createGrokAdapter } from '../adapters/grok/index.js';
+import { createXaiQuotaSource } from '../adapters/grok/quota-fetch.js';
 import type { AgentAdapter } from '../core/adapter.js';
 import type { SessionSummary } from '../core/model.js';
+import type { QuotaSource } from '../core/quota-source.js';
+import { createDeepSeekBalanceSource } from '../quota/deepseek-balance.js';
 import { createApp } from './app.js';
 import {
   bindWarning,
   browserUrl,
   type CliOptions,
   codexDirToUse,
+  type FetchQuotaProvider,
   grokDirToUse,
   parseCliArgs,
   USAGE,
@@ -31,6 +35,13 @@ import { RunManager } from './runners/run-manager.js';
 import { SessionStore } from './store.js';
 
 const log = (msg: string) => console.error(`[glassbox] ${msg}`);
+
+/** Whom `--fetch-quota` asks, and with which credential, for the startup log. */
+const FETCH_QUOTA_WITH: Record<FetchQuotaProvider, string> = {
+  anthropic: 'Anthropic (your Claude Code sign-in)',
+  xai: 'xAI (your Grok CLI sign-in)',
+  deepseek: 'DeepSeek ($DEEPSEEK_API_KEY)',
+};
 
 /** The built web UI sits next to the built server (dist/web beside dist/server). */
 /** The run manager for messages sent from glassbox, or null (runs API answers 503). */
@@ -90,11 +101,24 @@ async function main(): Promise<void> {
     }
   }
 
-  const quotaFetcher =
-    opts.fetchQuota && !opts.demo
-      ? createQuotaFetcher({ claudeDir: opts.claudeDir, log })
-      : undefined;
-  if (quotaFetcher) log('asking Anthropic for the plan quota with your Claude Code sign-in');
+  // Network and credentials only for the providers named by --fetch-quota.
+  const fetching = opts.demo ? [] : opts.fetchQuota;
+  const quotaFetcher = fetching.includes('anthropic')
+    ? createQuotaFetcher({
+        claudeDir: opts.claudeDir,
+        log: (msg) => log(msg.replace(/^quota fetch:/, 'quota fetch (Anthropic):')),
+      })
+    : undefined;
+  const quotaSources: QuotaSource[] = [];
+  // Grok CLI's sign-in is used even with --no-grok, which only hides Grok sessions.
+  if (fetching.includes('xai')) {
+    quotaSources.push(createXaiQuotaSource({ grokDir: opts.grokDir, log }));
+  }
+  if (fetching.includes('deepseek')) quotaSources.push(createDeepSeekBalanceSource({ log }));
+  if (fetching.length > 0) {
+    const whom = fetching.map((p) => FETCH_QUOTA_WITH[p]).join(', ');
+    log(`asking for plan usage every 5 minutes: ${whom}`);
+  }
   const adapters: AgentAdapter[] = [
     createClaudeCodeAdapter({ claudeDir: opts.claudeDir, quotaFetcher }),
   ];
@@ -106,7 +130,7 @@ async function main(): Promise<void> {
     adapters.push(createCodexAdapter({ codexDir }));
     log(`showing Codex sessions from ${codexDir} (--no-codex to hide them)`);
   }
-  const store = opts.demo ? new DemoStore() : new SessionStore({ adapters, log });
+  const store = opts.demo ? new DemoStore() : new SessionStore({ adapters, quotaSources, log });
   await store.start();
 
   const staticDir = findStaticDir();

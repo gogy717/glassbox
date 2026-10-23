@@ -24,9 +24,13 @@ export interface CliOptions {
   /** `--codex-dir`, else $CODEX_HOME, else ~/.codex. */
   codexDir: string;
   codexDirFromFlag: boolean;
-  /** Ask Anthropic's usage endpoint for the plan quota with Claude Code's sign-in. */
-  fetchQuota: boolean;
+  /** Providers to ask for plan usage over the network (`--fetch-quota`); [] asks none. */
+  fetchQuota: FetchQuotaProvider[];
 }
+
+/** Providers `--fetch-quota` can refresh, in the order the quota bar shows them. */
+export const FETCH_QUOTA_PROVIDERS = ['anthropic', 'xai', 'deepseek'] as const;
+export type FetchQuotaProvider = (typeof FETCH_QUOTA_PROVIDERS)[number];
 
 export const USAGE = `Usage: glassbox [options]
 
@@ -46,21 +50,50 @@ Options:
   --codex-dir <dir>   Codex home (default $CODEX_HOME, else ~/.codex); Codex sessions are
                       shown whenever that dir exists
   --no-codex          don't show Codex sessions
-  --fetch-quota       keep the plan quota fresh by asking Anthropic for it every 5 minutes,
-                      using Claude Code's sign-in (off by default: glassbox otherwise reads no
-                      credentials and makes no network requests)
+  --fetch-quota[=<list>]
+                      keep plan usage fresh by asking the providers every 5 minutes:
+                      anthropic (Claude Code's sign-in), xai (SuperGrok, Grok CLI's sign-in
+                      in the Grok data dir), deepseek (balance, $DEEPSEEK_API_KEY). Alone it
+                      asks all of them; a list asks only those, e.g.
+                      --fetch-quota=anthropic,deepseek. Off by default: glassbox otherwise
+                      reads no credentials and makes no network requests
   --help              show this help
 
 glassbox only answers connections from this machine: transcripts are private and the API
 can start Claude Code. Binding another --host does not open it to the network; requests from
 other machines are refused.`;
 
+/** `--fetch-quota` takes an optional value; alone, it means every provider. */
+const ALL_PROVIDERS_ARG = `--fetch-quota=${FETCH_QUOTA_PROVIDERS.join(',')}`;
+
+/** The providers named by every `--fetch-quota=<list>`, in display order. */
+function fetchQuotaProviders(lists: string[] | undefined): FetchQuotaProvider[] {
+  if (!lists) return [];
+  const known: readonly string[] = FETCH_QUOTA_PROVIDERS;
+  const choices = FETCH_QUOTA_PROVIDERS.join(', ');
+  const names = new Set<string>();
+  for (const list of lists) {
+    const named = list
+      .split(',')
+      .map((n) => n.trim().toLowerCase())
+      .filter((n) => n !== '');
+    if (named.length === 0) throw new Error(`--fetch-quota=: name a provider (${choices})`);
+    for (const name of named) {
+      if (!known.includes(name)) {
+        throw new Error(`--fetch-quota: unknown provider "${name}" (choose from ${choices})`);
+      }
+      names.add(name);
+    }
+  }
+  return FETCH_QUOTA_PROVIDERS.filter((p) => names.has(p));
+}
+
 export function parseCliArgs(
   argv: string[],
   ctx: { env: Record<string, string | undefined>; homedir: string },
 ): CliOptions {
   const { values } = parseArgs({
-    args: argv,
+    args: argv.map((a) => (a === '--fetch-quota' ? ALL_PROVIDERS_ARG : a)),
     strict: true,
     allowPositionals: false,
     options: {
@@ -76,7 +109,7 @@ export function parseCliArgs(
       'no-grok': { type: 'boolean' },
       'codex-dir': { type: 'string' },
       'no-codex': { type: 'boolean' },
-      'fetch-quota': { type: 'boolean' },
+      'fetch-quota': { type: 'string', multiple: true },
     },
   });
   const portText = values.port ?? String(DEFAULT_PORT);
@@ -98,7 +131,7 @@ export function parseCliArgs(
     codex: !values['no-codex'],
     codexDir: resolve(values['codex-dir'] ?? ctx.env.CODEX_HOME ?? join(ctx.homedir, '.codex')),
     codexDirFromFlag: values['codex-dir'] !== undefined,
-    fetchQuota: values['fetch-quota'] ?? false,
+    fetchQuota: fetchQuotaProviders(values['fetch-quota']),
   };
 }
 

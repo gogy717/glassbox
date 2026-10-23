@@ -22,7 +22,7 @@ describe('parseCliArgs', () => {
       codex: true,
       codexDir: '/home/u/.codex',
       codexDirFromFlag: false,
-      fetchQuota: false,
+      fetchQuota: [],
     });
   });
 
@@ -66,8 +66,29 @@ describe('parseCliArgs', () => {
       codex: false,
       codexDir: '/data/x',
       codexDirFromFlag: true,
-      fetchQuota: true,
+      fetchQuota: ['anthropic', 'xai', 'deepseek'],
     });
+  });
+
+  it('limits --fetch-quota to the providers listed, in display order', () => {
+    const fetchQuota = (...argv: string[]) => parseCliArgs(argv, ctx).fetchQuota;
+    expect(fetchQuota('--fetch-quota=deepseek,anthropic')).toEqual(['anthropic', 'deepseek']);
+    expect(fetchQuota('--fetch-quota=xai', '--fetch-quota=DeepSeek')).toEqual(['xai', 'deepseek']);
+    expect(fetchQuota('--fetch-quota=xai', '--fetch-quota')).toEqual([
+      'anthropic',
+      'xai',
+      'deepseek',
+    ]);
+    expect(fetchQuota('--fetch-quota', '--no-open')).toEqual(['anthropic', 'xai', 'deepseek']);
+  });
+
+  it('rejects an unknown or empty --fetch-quota list', () => {
+    expect(() => parseCliArgs(['--fetch-quota=anthropic,openai'], ctx)).toThrow(
+      '--fetch-quota: unknown provider "openai" (choose from anthropic, xai, deepseek)',
+    );
+    expect(() => parseCliArgs(['--fetch-quota='], ctx)).toThrow(/name a provider/);
+    // The list is attached with "=": a separate word is a stray argument.
+    expect(() => parseCliArgs(['--fetch-quota', 'deepseek'], ctx)).toThrow();
   });
 
   it('takes the claude dir from --claude-dir, then CLAUDE_CONFIG_DIR, then ~/.claude', () => {
