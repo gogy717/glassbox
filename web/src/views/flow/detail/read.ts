@@ -33,6 +33,22 @@ export interface Message {
   blocks: Block[];
 }
 
+/**
+ * Messages the agent could not reconstruct, standing in their place. Claude Code writes
+ * `{ unresolved: <hash> }` for one message and `{ unresolved: 'base:<id>', messages: <n> }` for
+ * the n earlier messages of a request it does not have.
+ */
+export interface Gap {
+  gap: number;
+}
+
+export type Entry = Message | Gap;
+
+export const isGap = (e: Entry): e is Gap => 'gap' in e;
+
+/** How many conversation positions an entry takes. */
+export const span = (e: Entry): number => (isGap(e) ? e.gap : 1);
+
 /** Bytes behind a base64 string, without decoding it. */
 export function base64Bytes(data: string): number {
   const pad = data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0;
@@ -157,8 +173,12 @@ function responsesItem(item: Obj): Message | null {
 }
 
 /** One message in any known format; anything else is a message of one raw block. */
-export function readMessage(m: unknown): Message {
+export function readMessage(m: unknown): Entry {
   if (!isObj(m)) return { role: '?', time: null, blocks: [readBlock(m)] };
+  if (typeof m.unresolved === 'string' && m.role === undefined) {
+    const n = m.messages;
+    return { gap: typeof n === 'number' && Number.isInteger(n) && n > 0 ? n : 1 };
+  }
   const fromItem = responsesItem(m);
   if (fromItem) return fromItem;
   const role = str(m.role);
@@ -202,7 +222,7 @@ export function readMessage(m: unknown): Message {
 }
 
 /** The messages, or null when the section is not a list (shown as JSON). */
-export function readMessages(v: unknown): Message[] | null {
+export function readMessages(v: unknown): Entry[] | null {
   return Array.isArray(v) ? v.map(readMessage) : null;
 }
 
@@ -241,18 +261,26 @@ export interface ToolDef {
 /** Tool definitions, or null when the section is not a list (shown as JSON). */
 export function readTools(v: unknown): ToolDef[] | null {
   if (!Array.isArray(v)) return null;
-  return v.map((t): ToolDef => {
-    if (typeof t === 'string') return { name: t, description: null, schema: null, type: null };
-    const o = isObj(t) ? t : {};
-    const fn = isObj(o.function) ? o.function : isObj(o.definition) ? o.definition : {};
-    const type = str(o.type);
-    return {
-      name: str(o.name) ?? str(fn.name) ?? type ?? '?',
-      description: str(o.description) ?? str(fn.description),
-      schema: o.input_schema ?? o.inputSchema ?? o.parameters ?? fn.parameters ?? null,
+  const out: ToolDef[] = [];
+  for (const t of v) {
+    if (typeof t === 'string') {
+      out.push({ name: t, description: null, schema: null, type: null });
+      continue;
+    }
+    // Anything that is not a named tool: the list is shown as JSON instead.
+    if (!isObj(t)) return null;
+    const fn = isObj(t.function) ? t.function : isObj(t.definition) ? t.definition : {};
+    const type = str(t.type);
+    const name = str(t.name) ?? str(fn.name) ?? type;
+    if (name === null) return null;
+    out.push({
+      name,
+      description: str(t.description) ?? str(fn.description),
+      schema: t.input_schema ?? t.inputSchema ?? t.parameters ?? fn.parameters ?? null,
       type: type && type !== 'function' && type !== 'custom' ? type : null,
-    };
-  });
+    });
+  }
+  return out;
 }
 
 /** Parameters as key/value pairs, or null when they are not an object (shown as JSON). */
@@ -268,39 +296,57 @@ export interface Segment {
   lang: string | null;
 }
 
-const FENCE = /^ {0,3}(`{3,}|~{3,})\s*([\w+#.-]*)/;
+/** An opening fence: three or more backticks or tildes, then an info string (its first word). */
+const OPEN = /^ {0,3}(`{3,}|~{3,})(.*)$/;
+/** A closing fence: the same character, at least as many, nothing after. */
+const CLOSE = /^ {0,3}(`{3,}|~{3,})\s*$/;
 
 /**
- * Markdown code fences cut out of text, so code reads as code. An unclosed fence runs to the
- * end. One pass over the lines; text without fences is one prose segment.
+ * Markdown code fences cut out of text, so code reads as code. As in CommonMark, a backtick
+ * fence's info string has no backticks ("```js```" is text) and a closing fence is at least as
+ * long as its opening. A fence that never closes is text, not the rest of the message as code.
+ * One pass over the lines; text without fences is one prose segment.
  */
 export function splitFences(text: string): Segment[] {
   if (!text.includes('```') && !text.includes('~~~')) return [{ kind: 'prose', text, lang: null }];
   const out: Segment[] = [];
-  let buf: string[] = [];
-  let fence: string | null = null;
-  let lang: string | null = null;
-  const flush = (kind: Segment['kind']) => {
-    if (buf.length > 0 && (kind === 'code' || buf.some((l) => l.trim() !== ''))) {
-      out.push({ kind, text: buf.join('\n'), lang: kind === 'code' ? lang : null });
+  let prose: string[] = [];
+  let code: string[] = [];
+  let fence: { marks: string; line: string; lang: string | null } | null = null;
+  const pushProse = () => {
+    if (prose.some((l) => l.trim() !== '')) {
+      const last = out.at(-1);
+      // Prose next to prose (an unclosed fence's lines) is one segment.
+      if (last?.kind === 'prose') last.text += `\n${prose.join('\n')}`;
+      else out.push({ kind: 'prose', text: prose.join('\n'), lang: null });
     }
-    buf = [];
+    prose = [];
   };
   for (const line of text.split('\n')) {
-    const m = FENCE.exec(line);
-    if (fence === null && m) {
-      flush('prose');
-      fence = m[1] as string;
-      lang = m[2] || null;
-    } else if (fence !== null && m && (m[1] as string).startsWith(fence) && !m[2]) {
-      flush('code');
+    if (fence === null) {
+      const m = OPEN.exec(line);
+      const marks = m?.[1] ?? '';
+      const info = (m?.[2] ?? '').trim();
+      if (m && !(marks.startsWith('`') && info.includes('`'))) {
+        pushProse();
+        fence = { marks, line, lang: info.split(/\s+/)[0] || null };
+      } else {
+        prose.push(line);
+      }
+      continue;
+    }
+    const close = CLOSE.exec(line);
+    const marks = close?.[1] ?? '';
+    if (close && marks[0] === fence.marks[0] && marks.length >= fence.marks.length) {
+      out.push({ kind: 'code', text: code.join('\n'), lang: fence.lang });
       fence = null;
-      lang = null;
+      code = [];
     } else {
-      buf.push(line);
+      code.push(line);
     }
   }
-  flush(fence === null ? 'prose' : 'code');
+  if (fence !== null) prose = [fence.line, ...code, ...prose];
+  pushProse();
   return out;
 }
 

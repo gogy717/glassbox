@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { RequestDetail } from '../../../../../src/core/model.js';
 import { I18nContext, makeI18n } from '../../../i18n';
 import { useFakeLayout } from '../../../test/layout';
@@ -206,6 +206,71 @@ describe('RequestReadable', () => {
     expect(screen.getByText('Tool call · run_command')).toBeInTheDocument();
     expect(screen.getByText('Arguments not recorded')).toBeInTheDocument();
     expect(screen.getByText('The result is not part of this record')).toBeInTheDocument();
+  });
+
+  it('shows the messages Claude Code could not reconstruct, counted in every position', () => {
+    renderDetail(
+      detail({
+        messages: [
+          { unresolved: 'base:req_0123', messages: 120 },
+          { role: 'user', content: 'next' },
+          { unresolved: 'a3f1c9e0' },
+          { role: 'assistant', content: 'done' },
+        ],
+      }),
+    );
+    expect(screen.getByText('123 messages · 121 not reconstructed')).toBeInTheDocument();
+    expect(positions()).toEqual(['Assistant message #123 of 123', 'User message #121 of 123']);
+    const list = screen.getByRole('list');
+    expect(list).toHaveTextContent('#122 of 123Message not reconstructed');
+    expect(list).toHaveTextContent('#1–120 of 123120 earlier messages not reconstructed');
+    expect(screen.queryByText(/Unrecognised block/)).toBeNull();
+  });
+
+  it('names roles it knows, and others generically', () => {
+    renderDetail(
+      detail({
+        messages: [
+          { role: 'developer', content: 'Be terse' },
+          { role: 'critic', content: 'Hmm' },
+          42,
+        ],
+      }),
+    );
+    expect(positions()).toEqual([
+      'Unknown message #3 of 3',
+      'Role “critic” message #2 of 3',
+      'Developer message #1 of 3',
+    ]);
+  });
+
+  it('looks ahead for the next page inside the scrolling list', () => {
+    const roots: unknown[] = [];
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        constructor(_cb: unknown, opts: { root: unknown }) {
+          roots.push(opts.root);
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    try {
+      const many = Array.from({ length: 40 }, (_, i) => ({ role: 'user', content: `m ${i}` }));
+      renderDetail(detail({ messages: many }));
+      expect(roots).toEqual([screen.getByRole('list')]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('says an empty system prompt has no content, and shows absent values as a dash', () => {
+    renderDetail(detail({ system: [], params: { model: 'm', temperature: null, top_k: 40 } }));
+    expect(screen.getByText('No content')).toBeInTheDocument();
+    expect(screen.getByText('—')).toBeInTheDocument();
+    expect(screen.getByText('40').tagName).toBe('DD');
+    expect(screen.queryByText('null')).toBeNull();
   });
 
   it('says what was not recorded, and speaks Chinese', () => {

@@ -1,4 +1,6 @@
 .panel {
+  /* The cells lay out by the panel's own width: beside the session list it is narrow. */
+  container-type: inline-size;
   margin: 0 14px 14px;
   border-radius: var(--radius-m);
   background: var(--layer-2);
@@ -41,6 +43,11 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1px;
   background: var(--border);
+}
+
+/* A tool call: the arguments get the most room, the timing the least. */
+.toolGrid {
+  grid-template-columns: minmax(0, 4fr) minmax(0, 3fr) minmax(0, 2fr);
 }
 
 .cell {
@@ -137,7 +144,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-@media (max-width: 900px) {
+@container (max-width: 760px) {
   .grid {
     grid-template-columns: minmax(0, 1fr);
   }

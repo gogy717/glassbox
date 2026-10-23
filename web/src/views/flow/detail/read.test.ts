@@ -1,14 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import {
   base64Bytes,
+  type Entry,
+  isGap,
+  type Message,
   messageText,
-  readMessages,
+  readMessages as readEntries,
   readParams,
   readSystem,
   readTools,
   shownRole,
   splitFences,
 } from './read';
+
+/** The messages of a list that holds no gaps. */
+const readMessages = (v: unknown) => readEntries(v) as Message[] | null;
 
 describe('readMessages', () => {
   it('reads Anthropic Messages, block by block', () => {
@@ -181,6 +187,26 @@ describe('readMessages', () => {
     expect(readMessages('hello')).toBeNull();
   });
 
+  it('reads the messages Claude Code could not reconstruct as gaps of their size', () => {
+    // As src/adapters/claude-code/request-detail.ts writes them: the earlier messages of a
+    // request it does not have, then one message whose hash it cannot resolve.
+    const entries = readEntries([
+      { unresolved: 'base:req_0123', messages: 120 },
+      { role: 'user', content: 'next' },
+      { unresolved: 'a3f1c9e0' },
+      { role: 'assistant', content: 'done' },
+    ]) as Entry[];
+    expect(entries.map((e) => (isGap(e) ? `gap ${e.gap}` : e.role))).toEqual([
+      'gap 120',
+      'user',
+      'gap 1',
+      'assistant',
+    ]);
+    // Anything odd in the count is one message.
+    expect(readEntries([{ unresolved: 'base:x', messages: -3 }])).toEqual([{ gap: 1 }]);
+    expect(readEntries([{ unresolved: 'base:x', messages: 'many' }])).toEqual([{ gap: 1 }]);
+  });
+
   it('keeps a message’s time when the format records one', () => {
     const [m] =
       readMessages([{ role: 'user', content: 'hi', timestamp: '2026-10-24T01:00:00Z' }]) ?? [];
@@ -224,6 +250,9 @@ describe('readTools', () => {
       { name: 'read', description: null, schema: null, type: null },
     ]);
     expect(readTools({ tools: [] })).toBeNull();
+    // Not a list of named tools: shown as JSON instead.
+    expect(readTools(['read', 42])).toBeNull();
+    expect(readTools([{ description: 'no name' }])).toBeNull();
   });
 });
 
@@ -247,13 +276,29 @@ describe('splitFences', () => {
     ]);
   });
 
-  it('runs an unclosed fence to the end, and leaves text without fences whole', () => {
-    expect(splitFences('x\n~~~\nopen')).toEqual([
-      { kind: 'prose', text: 'x', lang: null },
-      { kind: 'code', text: 'open', lang: null },
+  it('keeps a fence that never closes as text, and text without fences whole', () => {
+    expect(splitFences('x\n~~~~~~\nnot code')).toEqual([
+      { kind: 'prose', text: 'x\n~~~~~~\nnot code', lang: null },
+    ]);
+    expect(splitFences('a\n```ts\nconst a = 1;\n```\nb\n```\nopen')).toEqual([
+      { kind: 'prose', text: 'a', lang: null },
+      { kind: 'code', text: 'const a = 1;', lang: 'ts' },
+      { kind: 'prose', text: 'b\n```\nopen', lang: null },
     ]);
     expect(splitFences('plain\ntext')).toEqual([
       { kind: 'prose', text: 'plain\ntext', lang: null },
+    ]);
+  });
+
+  it('follows CommonMark: no backticks after a backtick fence, closing at least as long', () => {
+    expect(splitFences('```js```\nstill text')).toEqual([
+      { kind: 'prose', text: '```js```\nstill text', lang: null },
+    ]);
+    expect(splitFences('````md\n```\ninner\n```\n````')).toEqual([
+      { kind: 'code', text: '```\ninner\n```', lang: 'md' },
+    ]);
+    expect(splitFences('~~~ py extra words\nx = 1\n~~~')).toEqual([
+      { kind: 'code', text: 'x = 1', lang: 'py' },
     ]);
   });
 });

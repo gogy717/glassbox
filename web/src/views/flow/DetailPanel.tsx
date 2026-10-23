@@ -264,7 +264,7 @@ function ToolBody({ sessionId, tool }: { sessionId: string; tool: ToolCall }) {
     [tool.input],
   );
   return (
-    <div className={css.grid}>
+    <div className={`${css.grid} ${css.toolGrid}`}>
       <Cell title={t('detail.args')} tools={<ViewToggle />}>
         {prefs.view === 'readable' ? (
           <ArgsView input={tool.input} label={tool.name} />

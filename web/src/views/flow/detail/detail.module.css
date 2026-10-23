@@ -90,7 +90,8 @@
 
 .params {
   display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
+  /* Names take what they need, but never more than 40%: values must stay readable. */
+  grid-template-columns: fit-content(40%) minmax(0, 1fr);
   gap: 3px 10px;
   margin: 0;
   font-size: 11px;
@@ -103,15 +104,17 @@
 .params dt {
   font-family: var(--font-mono);
   color: var(--muted);
+  overflow-wrap: anywhere;
 }
 
 .params dd {
   margin: 0;
+  font-family: var(--font-mono);
   overflow-wrap: anywhere;
 }
 
-.params code {
-  font-family: var(--font-mono);
+.absent {
+  color: var(--muted);
 }
 
 .tools {
@@ -209,6 +212,19 @@
 
 .end {
   height: 1px;
+}
+
+/* Messages the agent could not reconstruct, where they belong. */
+.gap {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-m);
+  font-size: 11px;
+  color: var(--muted);
 }
 
 .message {

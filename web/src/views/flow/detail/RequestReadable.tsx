@@ -9,6 +9,8 @@ import css from './detail.module.css';
 import { useDetailPrefs } from './prefs';
 import {
   type Block,
+  type Entry,
+  isGap,
   type Message,
   messageText,
   readMessages,
@@ -16,6 +18,7 @@ import {
   readSystem,
   readTools,
   shownRole,
+  span,
   type ToolDef,
 } from './read';
 import { CodeBlock, CopyButton, ReadableText, Segmented } from './text';
@@ -28,6 +31,7 @@ const ROLES: Record<string, MessageKey> = {
   assistant: 'detail.roleAssistant',
   tool: 'detail.roleTool',
   system: 'detail.roleSystem',
+  developer: 'detail.roleDeveloper',
 };
 
 function formatBytes(n: number, intl: string): string {
@@ -142,7 +146,12 @@ const MessageItem = memo(function MessageItem({
 }) {
   const { t, intl } = useI18n();
   const role = shownRole(message);
-  const roleName = ROLES[role] ? t(ROLES[role] as MessageKey) : role;
+  const known = ROLES[role];
+  const roleName = known
+    ? t(known)
+    : role === '?'
+      ? t('detail.roleUnknown')
+      : t('detail.roleOther', { role });
   const position = t('detail.position', {
     n: n.toLocaleString(intl),
     total: total.toLocaleString(intl),
@@ -170,38 +179,69 @@ const MessageItem = memo(function MessageItem({
   );
 });
 
+/** Messages the agent could not reconstruct: a muted line where they belong. */
+function GapItem({ gap, first, total }: { gap: number; first: number; total: number }) {
+  const { t, intl } = useI18n();
+  const n = (v: number) => v.toLocaleString(intl);
+  const position =
+    gap === 1
+      ? t('detail.position', { n: n(first), total: n(total) })
+      : t('detail.positionRange', { from: n(first), to: n(first + gap - 1), total: n(total) });
+  return (
+    <li className={css.gap}>
+      <span className={css.position}>{position}</span>
+      <span>{gap === 1 ? t('detail.gapOne') : t('detail.gapMany', { n: n(gap) })}</span>
+    </li>
+  );
+}
+
 /**
- * The conversation, newest or oldest first (remembered), each message with its position.
- * Renders a page at a time and adds the next as the list is scrolled to its end, so thousands
- * of messages cost no more than the ones in view.
+ * The conversation, newest or oldest first (remembered), each message with its position among
+ * all the messages sent, those the agent could not reconstruct included. Renders a page at a
+ * time and adds the next as the list is scrolled near its end, so thousands of messages cost no
+ * more than the ones in view.
  */
-export function MessageList({ messages }: { messages: Message[] }) {
+export function MessageList({ entries }: { entries: Entry[] }) {
   const { t, intl } = useI18n();
   const [prefs, setPrefs] = useDetailPrefs();
   const [shown, setShown] = useState(PAGE);
+  const list = useRef<HTMLOListElement>(null);
   const end = useRef<HTMLLIElement>(null);
-  const total = messages.length;
-  const count = Math.min(shown, total);
+  // Where each entry starts among the messages sent (1-based); a gap takes several places.
+  const { firsts, total, hidden } = useMemo(() => {
+    const firsts: number[] = [];
+    let next = 1;
+    let hidden = 0;
+    for (const e of entries) {
+      firsts.push(next);
+      next += span(e);
+      if (isGap(e)) hidden += e.gap;
+    }
+    return { firsts, total: next - 1, hidden };
+  }, [entries]);
+  const count = Math.min(shown, entries.length);
   useEffect(() => {
     const el = end.current;
-    if (!el || count >= total || typeof IntersectionObserver === 'undefined') return;
+    if (!el || count >= entries.length || typeof IntersectionObserver === 'undefined') return;
     const io = new IntersectionObserver(
       (seen) => {
         if (seen.some((s) => s.isIntersecting)) setShown((s) => s + PAGE);
       },
-      { rootMargin: '600px 0px' },
+      // The list scrolls on its own: look ahead inside it, not the page.
+      { root: list.current, rootMargin: '600px 0px' },
     );
     io.observe(el);
     return () => io.disconnect();
-  }, [count, total]);
+  }, [count, entries.length]);
   const indices = Array.from({ length: count }, (_, i) =>
-    prefs.order === 'newest' ? total - 1 - i : i,
+    prefs.order === 'newest' ? entries.length - 1 - i : i,
   );
   return (
     <div className={css.messages}>
       <div className={css.toolbar}>
         <span className={css.count}>
           {t('detail.messageCount', { n: total.toLocaleString(intl) })}
+          {hidden > 0 && ` · ${t('detail.hiddenCount', { n: hidden.toLocaleString(intl) })}`}
         </span>
         <Segmented
           label={t('detail.order')}
@@ -216,15 +256,23 @@ export function MessageList({ messages }: { messages: Message[] }) {
           }}
         />
       </div>
-      <ol className={css.list} data-scroll-region>
-        {indices.map((i) => (
-          <MessageItem key={i} message={messages[i] as Message} n={i + 1} total={total} />
-        ))}
-        {count < total && <li ref={end} className={css.end} aria-hidden="true" />}
+      <ol ref={list} className={css.list} data-scroll-region>
+        {indices.map((i) => {
+          const e = entries[i] as Entry;
+          const first = firsts[i] as number;
+          return isGap(e) ? (
+            <GapItem key={i} gap={e.gap} first={first} total={total} />
+          ) : (
+            <MessageItem key={i} message={e} n={first} total={total} />
+          );
+        })}
+        {count < entries.length && <li ref={end} className={css.end} aria-hidden="true" />}
       </ol>
-      {count < total && (
+      {count < entries.length && (
         <button type="button" className={css.showAll} onClick={() => setShown((s) => s + PAGE)}>
-          {t('detail.showMore', { n: Math.min(PAGE, total - count).toLocaleString(intl) })}
+          {t('detail.showMore', {
+            n: Math.min(PAGE, entries.length - count).toLocaleString(intl),
+          })}
         </button>
       )}
     </div>
@@ -288,11 +336,13 @@ function ToolItem({ tool }: { tool: ToolDef }) {
   );
 }
 
+/** One value as text, in one font: as written, a list of scalars joined, the rest as JSON. */
 function ParamValue({ value }: { value: unknown }) {
-  if (typeof value === 'string') return <>{value}</>;
+  if (value === null || value === undefined) return <span className={css.absent}>—</span>;
+  if (typeof value !== 'object') return <>{String(value)}</>;
   if (Array.isArray(value) && value.every((v) => typeof v !== 'object' || v === null))
     return <>{value.map(String).join(', ')}</>;
-  return <code>{JSON.stringify(value)}</code>;
+  return <>{JSON.stringify(value)}</>;
 }
 
 /** Fields as a compact name/value list: request params, a response's usage and timing. */
@@ -332,7 +382,7 @@ export const RequestReadable = memo(function RequestReadable({
       {d.messages == null ? (
         none
       ) : messages ? (
-        <MessageList messages={messages} />
+        <MessageList entries={messages} />
       ) : (
         <AsJson label="messages" data={d.messages} />
       )}
@@ -342,6 +392,8 @@ export const RequestReadable = memo(function RequestReadable({
     <Section title={t('detail.system')}>
       {d.system == null ? (
         none
+      ) : system?.length === 0 ? (
+        <p className={css.muted}>{t('detail.empty')}</p>
       ) : system ? (
         <SystemView blocks={system} />
       ) : (
