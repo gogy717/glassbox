@@ -197,6 +197,19 @@ describe('static files', () => {
     }
   });
 
+  it('serves the self-hosted fonts as fonts', async () => {
+    const { store } = stubStore();
+    const dir = await site();
+    await mkdir(join(dir, 'fonts'));
+    await writeFile(join(dir, 'fonts', 'IBMPlexMono-Regular-Latin1.woff2'), 'wOF2');
+    const res = await createApp({ store, staticDir: dir }).request(
+      '/fonts/IBMPlexMono-Regular-Latin1.woff2',
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('font/woff2');
+    expect(await res.text()).toBe('wOF2');
+  });
+
   it('keeps json 404s for unknown api paths when serving static files', async () => {
     const { store } = stubStore();
     const res = await createApp({ store, staticDir: await site() }).request('/api/nope');
