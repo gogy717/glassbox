@@ -292,20 +292,37 @@ export async function readLiveStatus(
 const ARTIFACT_NAME = /^(\d+)\.[A-Za-z0-9_-]+\.log$/;
 
 /**
- * The text of `artifact://<id>` for a session, read synchronously because `toolResult` is.
- * Regular files only (a FIFO cannot stall the server); the first ARTIFACT_MAX_BYTES at most.
- * Sub-agents share their session's artifact dir and id space.
+ * The text of `artifact://<id>`, read synchronously because `toolResult` is. Sub-agents usually
+ * share their session's artifact dir and id space; one started from a prepared session or a
+ * seance keeps its own beside its transcript (`<session dir>/<agent>/`), so a sub-agent's id is
+ * looked up there first. Regular files only (a FIFO cannot stall the server); the first
+ * ARTIFACT_MAX_BYTES at most.
  */
-export function readArtifact(source: SessionSource, id: string): string | null {
+export function readArtifact(
+  source: SessionSource,
+  id: string,
+  agent: string | null = null,
+): string | null {
   if (!/^\d+$/.test(id)) return null;
-  const dir = sessionStem(source.location);
+  const stem = sessionStem(source.location);
+  const parts = agent?.split('/') ?? [];
+  const own = parts.length > 0 && parts.every((p) => p !== '' && p !== '.' && p !== '..');
+  for (const dir of own ? [join(stem, ...parts), stem] : [stem]) {
+    const text = readArtifactIn(dir, id);
+    if (text !== undefined) return text;
+  }
+  return null;
+}
+
+/** The artifact's text; null when it is there but cannot be read, undefined when it is not. */
+function readArtifactIn(dir: string, id: string): string | null | undefined {
   let name: string | undefined;
   try {
     name = readdirSync(dir).find((n) => ARTIFACT_NAME.exec(n)?.[1] === id);
   } catch {
-    return null;
+    return undefined;
   }
-  if (!name) return null;
+  if (!name) return undefined;
   let fd: number;
   try {
     fd = openSync(

@@ -268,6 +268,12 @@ export const en: Record<MessageKey, string> = {
   'diag.u.archivedSessions':
     'Some archived sessions cannot be unpacked (needs zstd support in Node)',
   'diag.u.compactionMarkers': 'Compaction points are inferred from sharp context drops',
+  'diag.u.liveState':
+    'Live state: on this system glassbox cannot see whether {agent} has the session open, so it always shows as closed',
+  'diag.u.otherBranches':
+    'Other branches (prompts edited and re-sent, jumps back in the session tree) are not shown, only the branch {agent} would resume',
+  'diag.u.brokenTree':
+    'Damaged history: an entry points at a missing parent, loops, or repeats an id, so part of the session may not be shown',
   'diag.parseErrors': 'Unparsable lines: {n}',
   'diag.unknownHead': 'Unrecognised record types',
   'diag.superseded': 'Silently re-sent requests filtered out: {n}',

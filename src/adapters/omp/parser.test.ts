@@ -142,6 +142,7 @@ describe('OmpSessionParser', () => {
     expect(snap.requests.map((r) => r.id)).toEqual(['e6']);
     expect(snap.session.usage).toMatchObject({ input: 30, output: 4 });
     expect(snap.diagnostics.unavailable).toContain('other-branches');
+    expect(snap.diagnostics.unavailable).not.toContain('broken-tree');
   });
 
   it('keeps the leaf where omp says it is, and counts side calls hanging off the branch', () => {
@@ -167,6 +168,45 @@ describe('OmpSessionParser', () => {
     });
     expect(snap.turns[0]?.status).toBe('complete');
     expect(snap.session.usage).toMatchObject({ input: 17, output: 3 });
+    expect(snap.diagnostics.unavailable).not.toContain('other-branches');
+  });
+
+  it('calls a parent missing from the file a broken tree, not another branch', () => {
+    const t = new Transcript();
+    t.user('Plant roses', 1);
+    t.answer({ sec: 2, text: 'Roses.' });
+    // The file lost the entry the rest hangs off (a cut or torn copy).
+    t.leaf = 'gone';
+    t.user('Plant tulips', 3);
+    t.answer({ sec: 4, text: 'Tulips.' });
+    const snap = feed([...head, ...t.lines]).snapshot();
+    expect(checkSnapshot(snap)).toEqual([]);
+    expect(snap.turns.map((x) => x.prompt)).toEqual(['Plant tulips']);
+    expect(snap.diagnostics.unavailable).toContain('broken-tree');
+    expect(snap.diagnostics.unavailable).not.toContain('other-branches');
+  });
+
+  it('stops at a loop in the tree and says the tree is broken', () => {
+    const t = new Transcript();
+    t.user('Loop', 1);
+    t.answer({ sec: 2, text: 'Round and round.' });
+    // The first entry claims the second as its parent.
+    t.lines[0] = JSON.stringify({ ...JSON.parse(t.lines[0] as string), parentId: 'e2' });
+    const snap = feed([...head, ...t.lines]).snapshot();
+    expect(checkSnapshot(snap)).toEqual([]);
+    expect(snap.requests.map((r) => r.id)).toEqual(['e2']);
+    expect(snap.diagnostics.unavailable).toContain('broken-tree');
+  });
+
+  it('counts an entry written twice once, and says the tree is broken', () => {
+    const t = new Transcript();
+    t.user('Go', 1);
+    t.answer({ sec: 2, text: 'Done.', usage: { input: 10, output: 2 } });
+    const snap = feed([...head, ...t.lines, t.lines[1] as string]).snapshot();
+    expect(checkSnapshot(snap)).toEqual([]);
+    expect(snap.requests.map((r) => r.id)).toEqual(['e2']);
+    expect(snap.session.usage).toMatchObject({ input: 10, output: 2 });
+    expect(snap.diagnostics.unavailable).toContain('broken-tree');
     expect(snap.diagnostics.unavailable).not.toContain('other-branches');
   });
 
@@ -284,20 +324,38 @@ describe('OmpSessionParser', () => {
     t.toolResult('c2', 'read', 'also cut', 3, {
       details: { meta: { truncation: { direction: 'head', artifactId: '9' } } },
     });
-    const asked: string[] = [];
-    const parser = feed([...head, ...t.lines], [], 'closed', {
-      readArtifact: (id) => {
-        asked.push(id);
-        return id === '4' ? 'first lines\nand the rest' : null;
-      },
+    // A sub-agent's own result: its artifact may sit in its own dir.
+    const sub = new Transcript('k');
+    sub.user('Read more', 4, { attribution: 'agent' });
+    sub.answer({ sec: 5, tools: [{ id: 'c3', name: 'read' }] });
+    sub.toolResult('c3', 'read', 'sub head', 6, {
+      details: { meta: { truncation: { direction: 'head', artifactId: '4' } } },
     });
+    const asked: [string, string | null][] = [];
+    const parser = feed(
+      [...head, ...t.lines],
+      [{ file: subFile('Scout/Helper'), lines: sub.lines }],
+      'closed',
+      {
+        readArtifact: (id, agent) => {
+          asked.push([id, agent]);
+          if (id !== '4') return null;
+          return agent ? 'sub head and the rest' : 'first lines\nand the rest';
+        },
+      },
+    );
     const snap = parser.snapshot();
     expect(asked).toEqual([]);
     expect(snap.toolCalls[0]).toMatchObject({ resultPreview: 'first lines', hasFullResult: true });
     expect(parser.toolResult('c1')).toBe('first lines\nand the rest');
     // An artifact that cannot be read leaves the result as recorded.
     expect(parser.toolResult('c2')).toBe('also cut');
-    expect(asked).toEqual(['4', '9']);
+    expect(parser.toolResult('Scout/Helper/c3')).toBe('sub head and the rest');
+    expect(asked).toEqual([
+      ['4', null],
+      ['9', null],
+      ['4', 'Scout/Helper'],
+    ]);
   });
 
   it('keeps a repeated tool call id apart from the first', () => {

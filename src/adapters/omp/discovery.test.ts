@@ -192,6 +192,26 @@ describe('files of a session', () => {
       /\[glassbox: the first 8\.0 MB of 9\.0 MB; the rest is in .*9\.bash\.log\]$/,
     );
   });
+
+  it('reads a sub-agent’s artifact from its own dir first, then from the session’s', async () => {
+    await put(join(stem(), '5.read.log'), 'the session’s artifact 5');
+    await put(join(stem(), 'Scout', '5.read.log'), 'Scout’s own artifact 5');
+    await put(join(stem(), 'Scout', 'Helper', '2.bash.log'), 'Helper’s own artifact 2');
+    await put(join(stem(), '3.bash.log'), 'shared artifact 3');
+    expect(readArtifact(source, '5', 'Scout')).toBe('Scout’s own artifact 5');
+    expect(readArtifact(source, '5', null)).toBe('the session’s artifact 5');
+    expect(readArtifact(source, '2', 'Scout/Helper')).toBe('Helper’s own artifact 2');
+    // A sub-agent that shares the session's artifacts.
+    expect(readArtifact(source, '3', 'Scout')).toBe('shared artifact 3');
+    expect(readArtifact(source, '5', 'Other')).toBe('the session’s artifact 5');
+    // Found in its own dir but not readable: never another agent's output instead.
+    await symlink(join(stem(), '3.bash.log'), join(stem(), 'Scout', '7.read.log'));
+    await put(join(stem(), '7.read.log'), 'the session’s artifact 7');
+    expect(readArtifact(source, '7', 'Scout')).toBeNull();
+    // A malformed agent path only ever means the session's dir.
+    expect(readArtifact(source, '5', '../Scout')).toBe('the session’s artifact 5');
+    expect(readArtifact(source, '5', 'Scout/../..')).toBe('the session’s artifact 5');
+  });
 });
 
 describe('readLiveStatus', () => {
@@ -254,20 +274,27 @@ describe('createOmpAdapter', () => {
     expect(adapter.watchDirs(source)).toContain(join(stem, 'Scout', 'Helper'));
   });
 
-  it('gives its parser the session’s artifacts', async () => {
+  it('gives its parser the session’s artifacts, and a sub-agent’s own', async () => {
+    const cut = { details: { meta: { truncation: { direction: 'head', artifactId: '0' } } } };
     const t = new Transcript();
     t.user('Read it', 1);
     t.answer({ sec: 2, tools: [{ id: 'c1', name: 'read' }] });
-    t.toolResult('c1', 'read', 'head only', 3, {
-      details: { meta: { truncation: { direction: 'head', artifactId: '0' } } },
-    });
+    t.toolResult('c1', 'read', 'head only', 3, cut);
+    const k = new Transcript('k');
+    k.user('Read yours', 4, { attribution: 'agent' });
+    k.answer({ sec: 5, tools: [{ id: 'c2', name: 'read' }] });
+    k.toolResult('c2', 'read', 'its head', 6, cut);
+    const stem = sessionPath().slice(0, -'.jsonl'.length);
     await put(sessionPath(), session(SESSION_ID, t.lines));
-    await put(join(sessionPath().slice(0, -'.jsonl'.length), '0.read.log'), 'head only\nand tail');
+    await put(join(stem, '0.read.log'), 'head only\nand tail');
+    await put(join(stem, 'Scout.jsonl'), session(CHILD_ID, k.lines));
+    await put(join(stem, 'Scout', '0.read.log'), 'its head\nand its tail');
     const adapter = createOmpAdapter({ ompDir });
     const [source] = (await adapter.discover()) as [SessionSource];
     const parser = adapter.createParser(source);
     for (const file of await adapter.listFiles(source))
       parser.ingestLines(file, readFileSync(file.path, 'utf8').split('\n'));
     expect(parser.toolResult('c1')).toBe('head only\nand tail');
+    expect(parser.toolResult('Scout/c2')).toBe('its head\nand its tail');
   });
 });

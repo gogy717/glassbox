@@ -4,7 +4,8 @@
  * Entries form a tree through `id` / `parentId`. Only the active branch is shown: the path from
  * the root to the leaf omp would resume at, plus the side calls (`model_usage`) hanging off it.
  * Entries on other branches (an edit-and-resend, a `/tree` jump) are left out, and diagnostics
- * list `other-branches` when there are any.
+ * list `other-branches` when there are any. A tree that is damaged (a parent that is missing, a
+ * loop, a repeated id) is `broken-tree` instead: what it hides is not a branch anyone chose.
  *
  * Each assistant message is one `ModelRequest` with its own usage; each `model_usage` entry is
  * one more, with no blocks. A turn starts at every user message, and at injected input (a
@@ -61,9 +62,11 @@ export interface OmpParserOptions {
   liveSignal?: boolean;
   /**
    * Text of `artifact://<id>`, the whole output omp saved for a result it cut short; null when
-   * it cannot be read. Called by `toolResult()` only, on demand, never while ingesting.
+   * it cannot be read. `agent` is the sub-agent's path below the session dir (`Scout/Helper`),
+   * null for the session's own calls. Called by `toolResult()` only, on demand, never while
+   * ingesting.
    */
-  readArtifact?: (id: string) => string | null;
+  readArtifact?: (id: string, agent: string | null) => string | null;
 }
 
 interface Entry {
@@ -74,6 +77,8 @@ interface Entry {
 /** One session file: the main session's, or a sub-agent's. */
 interface AgentFile {
   id: string;
+  /** The file's path below the session dir, without `.jsonl`; null for the session's own. */
+  key: string | null;
   entries: Map<string, Entry>;
   /** File order; a repeated id leaves its earlier copy here, unused. */
   order: Entry[];
@@ -131,7 +136,9 @@ interface AgentWalk {
   /** The latest `model_change`, as `provider/modelId`. */
   model: string | null;
   init: SessionInitBody | null;
+  /** Messages off the branch, or the tree damaged (see `activeBranch`). */
   hidden: boolean;
+  broken: boolean;
   parentId: string;
   spawnedBy: ToolBuild | null;
   outcome: SpawnedAgent['outcome'];
@@ -139,7 +146,7 @@ interface AgentWalk {
 
 interface Built {
   snap: SessionSnapshot;
-  results: Map<string, ToolResultBody>;
+  results: Map<string, { result: ToolResultBody; agent: string | null }>;
   details: Map<string, RequestDetail>;
 }
 
@@ -191,14 +198,22 @@ function leafOf(order: Entry[], byId: Map<string, Entry>): string | null {
   return null;
 }
 
-/** The active branch in file order, and whether any message sits on another branch. */
-function activeBranch(file: AgentFile): { entries: Entry[]; hidden: boolean } {
+/**
+ * The active branch in file order; whether any message is left out; and whether the tree is
+ * damaged: the walk to the root met a parent that is not in the file, or went round a loop, or
+ * an id was written twice (omp never reuses one).
+ */
+function activeBranch(file: AgentFile): { entries: Entry[]; hidden: boolean; broken: boolean } {
   const order = file.order.filter((e) => file.entries.get(e.node.id) === e);
+  let broken = order.length < file.order.length;
   const path = new Set<string>();
   let id = leafOf(order, file.entries);
-  while (id !== null && !path.has(id)) {
+  while (id !== null) {
     const entry = file.entries.get(id);
-    if (!entry) break;
+    if (!entry || path.has(id)) {
+      broken = true;
+      break;
+    }
     path.add(id);
     id = entry.node.parentId;
   }
@@ -210,7 +225,7 @@ function activeBranch(file: AgentFile): { entries: Entry[]; hidden: boolean } {
   const hidden = order.some(
     (e) => !shown(e) && (e.body.kind === 'user' || e.body.kind === 'assistant'),
   );
-  return { entries, hidden };
+  return { entries, hidden, broken };
 }
 
 function userOrigin(agentId: string, body: UserBody): TurnOrigin {
@@ -255,7 +270,7 @@ export class OmpSessionParser implements SessionParser {
   private startedAt: string | null;
   private updatedAt: string;
   private readonly liveSignal: boolean;
-  private readonly readArtifact: ((id: string) => string | null) | null;
+  private readonly readArtifact: OmpParserOptions['readArtifact'] | null;
   private readonly files = new Map<string, AgentFile>();
   private readonly diag = { unknownRecordTypes: {} as Record<string, number>, parseErrors: 0 };
   /** What clients were last given, as JSON per entity. */
@@ -287,13 +302,14 @@ export class OmpSessionParser implements SessionParser {
     this.updatedAt = source.summary.updatedAt;
     this.liveSignal = options.liveSignal ?? true;
     this.readArtifact = options.readArtifact ?? null;
-    this.fileFor(MAIN_AGENT_ID);
+    this.fileFor(MAIN_AGENT_ID, null);
   }
 
   ingestLines(file: SourceFile, lines: string[]): ChangeSet {
-    const agentId = this.agentOf(file);
-    if (agentId === null) return emptyChanges();
-    const state = this.fileFor(agentId);
+    const agent = this.agentOf(file);
+    if (agent === null) return emptyChanges();
+    const agentId = agent.id;
+    const state = this.fileFor(agentId, agent.key);
     for (const line of lines) {
       const rec = parseOmpLine(line);
       if (rec.kind === 'invalid') {
@@ -377,10 +393,11 @@ export class OmpSessionParser implements SessionParser {
 
   /** The result as omp recorded it, or the whole output from its artifact when it was cut. */
   toolResult(toolCallId: string): unknown {
-    const result = this.built().results.get(toolCallId);
-    if (!result) return undefined;
+    const found = this.built().results.get(toolCallId);
+    if (!found) return undefined;
+    const { result, agent } = found;
     if (result.artifactId && this.readArtifact) {
-      const full = this.readArtifact(result.artifactId);
+      const full = this.readArtifact(result.artifactId, agent);
       if (full !== null) return full;
     }
     return result.text;
@@ -388,19 +405,19 @@ export class OmpSessionParser implements SessionParser {
 
   // --- ingestion -----------------------------------------------------------------------
 
-  /** The agent a file belongs to; null for a role this parser does not read. */
-  private agentOf(file: SourceFile): string | null {
-    if (file.role === 'main') return MAIN_AGENT_ID;
+  /** The agent a file belongs to and its path key; null for a role this parser does not read. */
+  private agentOf(file: SourceFile): { id: string; key: string | null } | null {
+    if (file.role === 'main') return { id: MAIN_AGENT_ID, key: null };
     if (file.role !== 'subagent') return null;
-    const id = file.agentId ?? basename(file.path, '.jsonl');
+    const key = file.agentId ?? basename(file.path, '.jsonl');
     // A sub-agent may be called anything, `main` included.
-    return id === MAIN_AGENT_ID ? `agent:${id}` : id;
+    return { id: key === MAIN_AGENT_ID ? `agent:${key}` : key, key };
   }
 
-  private fileFor(agentId: string): AgentFile {
+  private fileFor(agentId: string, key: string | null): AgentFile {
     const existing = this.files.get(agentId);
     if (existing) return existing;
-    const file: AgentFile = { id: agentId, entries: new Map(), order: [], startedAt: null };
+    const file: AgentFile = { id: agentId, key, entries: new Map(), order: [], startedAt: null };
     this.files.set(agentId, file);
     return file;
   }
@@ -504,7 +521,7 @@ export class OmpSessionParser implements SessionParser {
       .map((file) => this.walk(file));
     this.link(walks);
 
-    const results = new Map<string, ToolResultBody>();
+    const results: Built['results'] = new Map();
     const details = new Map<string, RequestDetail>();
     const turns: Turn[] = [];
     const requests: ModelRequest[] = [];
@@ -546,7 +563,8 @@ export class OmpSessionParser implements SessionParser {
     };
     const unavailable = ['request-detail', 'in-flight'];
     if (!this.liveSignal) unavailable.push('live-state');
-    if (walks.some((w) => w.hidden)) unavailable.push('other-branches');
+    if (walks.some((w) => w.hidden && !w.broken)) unavailable.push('other-branches');
+    if (walks.some((w) => w.broken)) unavailable.push('broken-tree');
     const diagnostics: Diagnostics = {
       unknownRecordTypes: { ...this.diag.unknownRecordTypes },
       parseErrors: this.diag.parseErrors,
@@ -561,7 +579,7 @@ export class OmpSessionParser implements SessionParser {
 
   /** Turns, requests and tool calls on one agent's active branch, in order. */
   private walk(file: AgentFile): AgentWalk {
-    const { entries, hidden } = activeBranch(file);
+    const { entries, hidden, broken } = activeBranch(file);
     const walk: AgentWalk = {
       id: file.id,
       file,
@@ -571,6 +589,7 @@ export class OmpSessionParser implements SessionParser {
       model: null,
       init: null,
       hidden,
+      broken,
       parentId: MAIN_AGENT_ID,
       spawnedBy: null,
       outcome: null,
@@ -886,11 +905,11 @@ export class OmpSessionParser implements SessionParser {
     };
   }
 
-  private toolViews(walk: AgentWalk, results: Map<string, ToolResultBody>): ToolCall[] {
+  private toolViews(walk: AgentWalk, results: Built['results']): ToolCall[] {
     const lastAnswer = walk.requests.findLast((r) => r.purpose === null);
     return walk.tools.map((tool) => {
       const result = tool.result;
-      if (result) results.set(tool.id, result);
+      if (result) results.set(tool.id, { result, agent: walk.file.key });
       const startedAt = tool.startedAt ?? tool.request.endedAt;
       const endedAt = result?.at ?? null;
       let status: ToolStatus = 'unknown';

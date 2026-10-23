@@ -57,7 +57,7 @@ export function createOmpAdapter({
     createParser: (source) =>
       new OmpSessionParser(source, {
         liveSignal: process.platform === 'linux',
-        readArtifact: (id) => readArtifact(source, id),
+        readArtifact: (id, agent) => readArtifact(source, id, agent),
       }),
   };
 }
