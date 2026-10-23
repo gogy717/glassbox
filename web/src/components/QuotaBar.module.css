@@ -44,8 +44,15 @@
   color: var(--muted);
 }
 
+/* The age speaks where a meter stands alone (one provider, or the narrow lead-only button);
+   beside others, the hatched track says "old" and the tooltip and details say how old. */
 .age {
+  display: none;
   font-size: var(--fs-label);
+}
+
+.wrap[data-single] .age {
+  display: inline;
 }
 
 .meter[data-level="warn"],
@@ -174,7 +181,8 @@
     display: none;
   }
 
-  .more {
+  .more,
+  .meter[data-top] .age {
     display: inline;
   }
 }
@@ -213,7 +221,8 @@
     display: none;
   }
 
-  .wrap[data-many] .more {
+  .wrap[data-many] .more,
+  .wrap[data-many] .meter[data-top] .age {
     display: inline;
   }
 }

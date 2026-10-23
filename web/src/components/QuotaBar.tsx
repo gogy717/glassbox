@@ -124,7 +124,12 @@ export function QuotaBar({ quotas, now }: Props) {
   );
 
   return (
-    <div className={css.wrap} ref={ref} data-many={shown.length >= MANY || undefined}>
+    <div
+      className={css.wrap}
+      ref={ref}
+      data-many={shown.length >= MANY || undefined}
+      data-single={shown.length === 1 || undefined}
+    >
       <button type="button" className={css.bar} aria-expanded={open} onClick={() => setOpen(!open)}>
         <Gauge size={14} aria-hidden="true" className={css.icon} />
         <span className="visually-hidden">{t('quota.title')}</span>
