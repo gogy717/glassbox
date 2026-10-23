@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { RunState } from '../../src/shared/runs.js';
 import css from './App.module.css';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -76,8 +76,18 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
   const { t } = useI18n();
   const state = useSyncExternalStore(store.subscribe, store.getState);
   const [route, navigate] = useRoute();
-  const [follow, setFollow] = useState(true);
+  // Pausing follow is about the session being read: opening another one starts it afresh,
+  // following its latest turn, unless the link names a turn or a request (a pasted link, Back or
+  // Forward), which then stays on screen.
+  const followsLatest = !route.turnId && !route.requestId;
+  const [follow, setFollow] = useState(followsLatest);
+  const [followSession, setFollowSession] = useState(route.sessionId);
+  if (followSession !== route.sessionId) {
+    setFollowSession(route.sessionId);
+    setFollow(followsLatest);
+  }
   const narrow = useMediaQuery(NARROW);
+  const mainRef = useRef<HTMLElement>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const ui = useMemo(() => ({ follow, setFollow }), [follow]);
@@ -121,6 +131,11 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
     <UiContext.Provider value={ui}>
       <SessionAgentContext.Provider value={summary?.agent ?? 'claude-code'}>
         <div className={css.app}>
+          {/* The first Tab stop: past the top bar and the session list, straight to the content.
+              A button, not a link to #main: the hash holds the route. */}
+          <button type="button" className={css.skip} onClick={() => mainRef.current?.focus()}>
+            {t('app.skipToContent')}
+          </button>
           <TopBar
             title={route.sessionId ? (summary?.title ?? t('sidebar.untitled')) : null}
             agent={route.sessionId ? (summary?.agent ?? null) : null}
@@ -150,7 +165,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
                 }}
               />
             </aside>
-            <main className={css.main}>
+            <main ref={mainRef} tabIndex={-1} className={css.main}>
               {open ? (
                 <ErrorBoundary key={open.id}>
                   <ApprovalsContext.Provider value={approvals}>

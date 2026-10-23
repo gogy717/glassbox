@@ -29,6 +29,32 @@
   overflow: hidden;
 }
 
+/* Focus lands here from the skip link only to move on to the next Tab stop inside. */
+.main:focus {
+  outline: none;
+}
+
+/* Off screen until focused: the first Tab stop on every page. */
+.skip {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 100;
+  padding: 7px 12px;
+  border: 2px solid var(--accent);
+  border-radius: var(--radius-m);
+  background: var(--layer-1);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transform: translateY(-200%);
+}
+
+.skip:focus {
+  transform: none;
+}
+
 .empty {
   max-width: 420px;
   margin: 18vh auto 0;

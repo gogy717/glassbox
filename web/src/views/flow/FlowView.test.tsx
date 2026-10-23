@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LivePartial } from '../../../../src/shared/runs.js';
+import { SessionAgentContext } from '../../data/session-agent';
 import type { OpenSession } from '../../data/store';
 import { I18nContext, makeI18n } from '../../i18n';
 import type { Route } from '../../router';
@@ -87,6 +88,29 @@ function withPrompt(turnId: string, prompt: string): OpenSession {
   return open;
 }
 
+/** The demo session with a /effort turn before the first prompt (no model call followed). */
+function withLocalCommand(): OpenSession {
+  const open = demoOpen();
+  const first = open.turns.get('turn_m1');
+  if (!first) throw new Error('fixture');
+  open.turns = new Map([
+    [
+      'turn_cmd',
+      {
+        ...first,
+        id: 'turn_cmd',
+        index: 1,
+        prompt: '/effort',
+        startedAt: '2026-10-23T00:00:00.000Z',
+        endedAt: '2026-10-23T00:00:00.000Z',
+        requestIds: [],
+      },
+    ],
+    ...open.turns,
+  ]);
+  return open;
+}
+
 const callScroller = (container: HTMLElement) =>
   container.querySelector('[data-index]')?.parentElement?.parentElement as HTMLElement;
 
@@ -94,7 +118,7 @@ describe('FlowView', () => {
   useFakeLayout();
   afterEach(() => vi.useRealTimers());
 
-  it('says “yet” of an empty turn or agent only while more may still arrive', () => {
+  it('says “yet” of an empty conversation or agent only while more may still arrive', () => {
     const base = demoOpen();
     const first = [...base.turns.values()][0];
     if (!first) throw new Error('fixture');
@@ -104,10 +128,10 @@ describe('FlowView', () => {
       requests: new Map([...base.requests].filter(([, r]) => r.turnId !== first.id)),
     });
     renderFlow({ open: emptyTurn('complete'), route: { turnId: first.id }, follow: false });
-    expect(screen.getByText('No model calls in this turn')).toBeInTheDocument();
+    expect(screen.getByText('No model calls in this conversation')).toBeInTheDocument();
     cleanup();
     renderFlow({ open: emptyTurn('running'), route: { turnId: first.id }, follow: false });
-    expect(screen.getByText('No model calls in this turn yet')).toBeInTheDocument();
+    expect(screen.getByText('No model calls in this conversation yet')).toBeInTheDocument();
     cleanup();
 
     // An agent with no turns: "yet" only while the session runs.
@@ -115,32 +139,78 @@ describe('FlowView', () => {
       open: { ...base, session: { ...base.session, live: 'closed' } },
       route: { agentId: 'nobody' },
     });
-    expect(screen.getByText('No turns for this agent')).toBeInTheDocument();
+    expect(screen.getByText('No conversations for this agent')).toBeInTheDocument();
     cleanup();
     renderFlow({
       open: { ...base, session: { ...base.session, live: 'busy' } },
       route: { agentId: 'nobody' },
     });
-    expect(screen.getByText('No turns for this agent yet')).toBeInTheDocument();
+    expect(screen.getByText('No conversations for this agent yet')).toBeInTheDocument();
   });
 
-  it('lists the agent’s turns and follows the newest one', () => {
+  it('lists the agent’s turns newest first and follows the newest, on top', () => {
     renderFlow();
-    const turns = screen.getByRole('list', { name: 'User turns' });
+    const turns = screen.getByRole('list', { name: 'Conversations' });
+    // DOM order is display order, so Tab walks the turns as they are seen.
     const items = within(turns).getAllByRole('button');
     expect(items.map((b) => b.querySelector('[data-title]')?.textContent)).toEqual([
-      'Conversation 1: Busy sessions should be listed first in the sidebar',
+      'Conversation 3: Now write the design document from the findings',
       expect.stringMatching(
         /^Conversation 2: Research how a live viewer could read Claude Code transcripts, use ultracode\. What I need to know: - .+…$/,
       ),
-      'Conversation 3: Now write the design document from the findings',
+      'Conversation 1: Busy sessions should be listed first in the sidebar',
     ]);
-    expect(items[2]).toHaveAttribute('aria-current', 'true');
+    expect(items[0]).toHaveAttribute('aria-current', 'true');
+    expect(within(items[0] as HTMLElement).getByText('Running')).toBeInTheDocument();
     expect(
-      within(items[0] as HTMLElement).getByText('3 model calls · 3 tools'),
+      within(items[2] as HTMLElement).getByText('3 model calls · 3 tools'),
     ).toBeInTheDocument();
-    expect(within(items[0] as HTMLElement).getByText('Complete')).toBeInTheDocument();
-    expect(within(items[2] as HTMLElement).getByText('Running')).toBeInTheDocument();
+    expect(within(items[2] as HTMLElement).getByText('Complete')).toBeInTheDocument();
+  });
+
+  it('keeps an older turn picked from the URL selected while newer ones stay on top', () => {
+    renderFlow({ route: { turnId: 'turn_m1' }, follow: false });
+    const items = within(screen.getByRole('list', { name: 'Conversations' })).getAllByRole(
+      'button',
+    );
+    expect(items[2]).toHaveAttribute('aria-current', 'true');
+    expect(items[2]).toHaveTextContent('Conversation 1');
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Conversation 1: /);
+  });
+
+  it('lists a local slash command compactly, and a prompt like it with calls in full', () => {
+    renderFlow({ open: withLocalCommand() });
+    const card = screen.getByRole('button', { name: /\/effort/ });
+    expect(card).toHaveAttribute('data-command');
+    expect(within(card).getByText('local command')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Busy sessions should be listed/ }),
+    ).not.toHaveAttribute('data-command');
+  });
+
+  it('lists the same turn in full in another agent’s session', () => {
+    const open = withLocalCommand();
+    render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <SessionAgentContext.Provider value="codex">
+          <UiContext.Provider value={{ follow: true, setFollow: vi.fn() }}>
+            <FlowView
+              open={open}
+              agentId="main"
+              route={{
+                sessionId: open.id,
+                agentId: 'main',
+                tab: 'flow',
+                turnId: null,
+                requestId: null,
+              }}
+              navigate={vi.fn()}
+            />
+          </UiContext.Provider>
+        </SessionAgentContext.Provider>
+      </I18nContext.Provider>,
+    );
+    expect(screen.getByRole('button', { name: /\/effort/ })).not.toHaveAttribute('data-command');
   });
 
   it('keeps a pasted 5 KB prompt to 120 characters in the list, all of it on hover', () => {
@@ -206,7 +276,7 @@ describe('FlowView', () => {
     expect(screen.getByRole('button', { name: /Conversation 1/ })).not.toHaveTextContent('from');
   });
 
-  it('lists calls that belong to no turn under “Calls outside turns”', () => {
+  it('lists calls that belong to no turn under “Calls outside conversations”', () => {
     const open = demoOpen();
     const m1 = open.requests.get('req_m1');
     if (!m1) throw new Error('fixture');
@@ -218,7 +288,7 @@ describe('FlowView', () => {
       toolCallIds: [],
     });
     const { navigate } = renderFlow({ open, follow: false });
-    const card = screen.getByRole('button', { name: /Calls outside turns/ });
+    const card = screen.getByRole('button', { name: /Calls outside conversations/ });
     expect(card).toHaveTextContent('1 model call · 0 tools');
     fireEvent.click(card);
     expect(navigate).toHaveBeenLastCalledWith({ turnId: 'outside:main', requestId: null });
@@ -397,9 +467,14 @@ describe('FlowView', () => {
     expect(navigate).toHaveBeenLastCalledWith({ turnId: 'turn_m1', requestId: null });
   });
 
-  it('offers “Back to latest” while follow is paused', () => {
+  it('offers “Back to latest” in the turn header while follow is paused', () => {
     const { navigate, setFollow } = renderFlow({ route: { turnId: 'turn_m1' }, follow: false });
-    fireEvent.click(screen.getByRole('button', { name: 'Back to latest' }));
+    const back = screen.getByRole('button', { name: 'Back to latest' });
+    // In the header row, beside the turn's meta, not floating over the calls.
+    expect(screen.getByRole('heading', { level: 2 }).parentElement?.parentElement).toContainElement(
+      back,
+    );
+    fireEvent.click(back);
     expect(setFollow).toHaveBeenLastCalledWith(true);
     expect(navigate).toHaveBeenLastCalledWith({ turnId: null, requestId: null });
   });

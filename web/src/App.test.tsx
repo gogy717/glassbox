@@ -133,6 +133,70 @@ describe('App', () => {
     expect(connect).toHaveBeenLastCalledWith(store, DEMO_SESSION_ID);
   });
 
+  it('offers a skip link as the first stop, which moves focus to the content', () => {
+    window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}`;
+    render(<App store={demoStore()} connect={noConnect} />);
+    const skip = screen.getByRole('button', { name: 'Skip to main content' });
+    const focusable = document.querySelectorAll('button, [href], input, [tabindex="0"]');
+    expect(focusable[0]).toBe(skip);
+    fireEvent.click(skip);
+    expect(document.activeElement).toBe(screen.getByRole('main'));
+    expect(window.location.hash).toBe(`#/s/${encodeURIComponent(DEMO_SESSION_ID)}`);
+  });
+
+  it('starts follow afresh when another session opens', async () => {
+    window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}`;
+    const store = createStore();
+    store.applyEvent({ type: 'sessions', sessions: createDemoSessions(DEMO_NOW) });
+    render(<App store={store} connect={noConnect} />);
+    const follow = () => within(screen.getByRole('banner')).getByRole('button', { name: /Follow/ });
+    fireEvent.click(follow());
+    expect(follow()).toHaveAttribute('aria-pressed', 'false');
+
+    fireEvent.click(within(sidebar()).getByRole('button', { name: /Fix flaky login test/ }));
+    await waitFor(() => expect(follow()).toHaveAttribute('aria-pressed', 'true'));
+  });
+
+  it('opens a link to another session’s turn on that turn, paused', async () => {
+    window.location.hash = '';
+    // The snapshot arrives once the session opens, as it does from the server.
+    const connect = (store: ReturnType<typeof createStore>, id: string | null) => {
+      if (id === DEMO_SESSION_ID)
+        store.applyEvent({
+          type: 'snapshot',
+          sessionId: id,
+          snapshot: createDemoSnapshot(DEMO_NOW),
+        });
+      return () => {};
+    };
+    render(<App store={createStore()} connect={connect} />);
+    window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}?turn=turn_m1`;
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Conversation 1: /),
+    );
+    const follow = within(screen.getByRole('banner')).getByRole('button', { name: /Follow/ });
+    expect(follow).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('loads a link to a turn on that turn, paused', () => {
+    window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}?turn=turn_m1`;
+    render(<App store={demoStore()} connect={noConnect} />);
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Conversation 1: /);
+    expect(
+      within(screen.getByRole('banner')).getByRole('button', { name: /Follow/ }),
+    ).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('keeps follow paused while the same session stays open', async () => {
+    window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}`;
+    render(<App store={demoStore()} connect={noConnect} />);
+    const follow = () => within(screen.getByRole('banner')).getByRole('button', { name: /Follow/ });
+    fireEvent.click(follow());
+    fireEvent.click(screen.getByRole('tab', { name: 'Timeline' }));
+    await waitFor(() => expect(window.location.hash).toContain('tab=time'));
+    expect(follow()).toHaveAttribute('aria-pressed', 'false');
+  });
+
   it('shows title, live state, summary, breadcrumb and tabs for the open session', () => {
     window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}`;
     const store = demoStore();
@@ -149,7 +213,7 @@ describe('App', () => {
     const summary = screen.getByRole('region', { name: 'Summary' });
     const value = (label: string) =>
       within(summary).getByText(label).parentElement?.querySelector('[data-value]')?.textContent;
-    expect(value('Turns')).toBe('3');
+    expect(value('Conversations')).toBe('3');
     expect(value('Model calls')).toBe('28');
     expect(value('Tool calls')).toBe('24');
     expect(value('Duration')).toBe('3m4s');
@@ -166,7 +230,7 @@ describe('App', () => {
       'Timeline',
     ]);
     expect(screen.getByRole('tabpanel')).toContainElement(
-      screen.getByRole('list', { name: 'User turns' }),
+      screen.getByRole('list', { name: 'Conversations' }),
     );
   });
 

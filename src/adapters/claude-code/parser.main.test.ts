@@ -661,6 +661,103 @@ describe('session summary', () => {
     ).toBeNull();
   });
 
+  it('titles a session after its first real prompt, not a local slash command before it', () => {
+    const command = (name: string, args = '') =>
+      userPrompt({
+        text: `<command-name>${name}</command-name>\n<command-message>${name.slice(1)}</command-message>\n<command-args>${args}</command-args>`,
+        origin: null,
+      });
+    const stdout = userPrompt({
+      text: '<local-command-stdout>Set effort level to high</local-command-stdout>',
+      origin: null,
+    });
+    const reply = (requestId: string) => assistantBlocks({ requestId, blocks: ['text'] });
+    expect(
+      parseMain(
+        command('/effort'),
+        stdout,
+        userPrompt({ text: 'fix the login test' }),
+        reply('r1'),
+      ).snapshot().session.title,
+    ).toBe('fix the login test');
+    // Answered by the model (a skill, a custom command): it names the session.
+    expect(
+      parseMain(
+        command('/review', 'the parser'),
+        reply('r2'),
+        userPrompt({ text: 'now fix it' }),
+      ).snapshot().session.title,
+    ).toBe('/review the parser');
+    expect(parseMain(command('/login'), stdout).snapshot().session.title).toBe('/login');
+    // A message from another session is the first real input.
+    expect(
+      parseMain(
+        command('/effort'),
+        stdout,
+        peerMessage({ text: 'T2 assignment' }),
+        reply('r3'),
+      ).snapshot().session.title,
+    ).toBe('T2 assignment');
+  });
+
+  it('gives a queued prompt the request Claude Code wrote just before it', () => {
+    // On disk: the api-request for the peer message comes before the message itself, though
+    // the message is older (2.1.309 queues it). The reply names the api-request.
+    const p = parseMain(
+      userPrompt({ text: '<command-name>/effort</command-name>', origin: null, ts: at(1) }),
+      userPrompt({ text: '<local-command-stdout>done</local-command-stdout>', origin: null }),
+      apiRequest({ id: 'api-9', ts: at(31) }),
+      peerMessage({ text: 'T4 assignment', ts: at(30) }),
+      assistantBlocks({ requestRef: 'api-9', blocks: ['text'], ts: at(33) }),
+    );
+    const turns = p.snapshot().turns.filter((t) => t.agentId === 'main');
+    expect(turns.map((t) => [t.prompt, t.requestIds])).toEqual([
+      ['/effort', []],
+      ['T4 assignment', ['api-9']],
+    ]);
+    expect(p.snapshot().requests.find((r) => r.id === 'api-9')).toMatchObject({ index: 1 });
+    expect(p.snapshot().session.title).toBe('T4 assignment');
+  });
+
+  it('gives a person’s prompt the request Claude Code wrote just before it', () => {
+    const p = parseMain(
+      userPrompt({ text: 'first', ts: at(1) }),
+      apiRequest({ id: 'api-1', ts: at(2) }),
+      assistantBlocks({ requestRef: 'api-1', blocks: ['text'], ts: at(3) }),
+      apiRequest({ id: 'api-2', ts: at(21) }),
+      userPrompt({ text: 'second', ts: at(20) }),
+      assistantBlocks({ requestRef: 'api-2', blocks: ['text'], ts: at(23) }),
+    );
+    const snap = p.snapshot();
+    expect(snap.turns.map((t) => [t.prompt, t.requestIds])).toEqual([
+      ['first', ['api-1']],
+      ['second', ['api-2']],
+    ]);
+    // Numbered within its own turn: "Conversation 2 · call #1".
+    expect(snap.requests.find((r) => r.id === 'api-2')).toMatchObject({ index: 1 });
+  });
+
+  it('keeps an answered request with its turn when the next prompt follows it on disk', () => {
+    const p = parseMain(
+      userPrompt({ text: 'first', ts: at(1) }),
+      apiRequest({ id: 'api-1', ts: at(30) }),
+      assistantBlocks({ requestRef: 'api-1', blocks: ['text'], ts: at(31) }),
+      userPrompt({ text: 'second', ts: at(20) }),
+    );
+    // Its reply is already in: it was the first prompt's, whatever the clocks say.
+    expect(p.snapshot().turns.map((t) => t.requestIds)).toEqual([['api-1'], []]);
+  });
+
+  it('leaves a request sent before a queued prompt with the turn it was sent for', () => {
+    const p = parseMain(
+      userPrompt({ text: 'first', ts: at(1) }),
+      apiRequest({ id: 'api-1', ts: at(2) }),
+      peerMessage({ text: 'queued', ts: at(5) }),
+    );
+    const turns = p.snapshot().turns.filter((t) => t.agentId === 'main');
+    expect(turns.map((t) => t.requestIds)).toEqual([['api-1'], []]);
+  });
+
   it('reads cwd, latest version, main model, start and update times', () => {
     const s = parseMain(
       userPrompt({ ts: at(5), cwd: '/work/other', version: '2.1.300' }),

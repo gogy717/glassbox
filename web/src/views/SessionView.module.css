@@ -51,4 +51,6 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  /* The tabs lay themselves out by the room the panel has, sidebar open or not. */
+  container: session-panel / inline-size;
 }

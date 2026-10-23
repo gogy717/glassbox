@@ -668,6 +668,14 @@ function cleanFull(text: string): string {
   return first ? `[${first}]` : '';
 }
 
+/**
+ * A slash command the person ran (`<command-name>`). Local ones (/effort, /clear, /login) are
+ * handled by Claude Code itself and never reach the model; others (skills, custom commands) do.
+ */
+export function isSlashCommand(text: string): boolean {
+  return tagContent(text, 'command-name') !== undefined;
+}
+
 /** A prompt as a one-line session title; null when nothing a person typed is left. */
 export function cleanPrompt(text: string): string | null {
   const cleaned = cleanTurnPrompt(text);
@@ -675,15 +683,19 @@ export function cleanPrompt(text: string): string | null {
   return cleaned.replace(/\s+/g, ' ').trim().slice(0, 80) || null;
 }
 
-/** Session title by precedence; empty strings count as missing. */
+/**
+ * Session title by precedence; empty strings count as missing. `command` is a local slash
+ * command (/effort): a title only when the session has no other input.
+ */
 export function pickTitle(t: {
   customTitle: string | null;
   agentName: string | null;
   aiTitle: string | null;
   firstHuman: string | null;
   firstAny: string | null;
+  command?: string | null;
 }): string | null {
-  for (const v of [t.customTitle, t.agentName, t.aiTitle, t.firstHuman, t.firstAny])
+  for (const v of [t.customTitle, t.agentName, t.aiTitle, t.firstHuman, t.firstAny, t.command])
     if (v?.trim()) return v.trim();
   return null;
 }

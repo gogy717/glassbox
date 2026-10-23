@@ -6,12 +6,16 @@ import type { SessionSource } from '../../core/adapter.js';
 import {
   agentMeta,
   aiTitle,
+  apiError,
+  apiRequest,
   assistantBlocks,
   at,
   customTitle,
+  interrupt,
   journalLine,
   peerMessage,
   rawRecord,
+  SESSION_ID,
   toolResult,
   userPrompt,
   workflowState,
@@ -113,6 +117,71 @@ describe('discover', () => {
       [S1]: '/model opus',
       [S2]: 'whitefish-7e',
       [S3]: 'from a peer',
+    });
+  });
+
+  it('titles a session after its first real prompt, not a local slash command before it', async () => {
+    const proj = join(claudeDir, 'projects', '-work-alpha');
+    const S3 = '33333333-3333-4333-8333-333333333333';
+    const local = (name: string, sessionId: string) => [
+      userPrompt({
+        sessionId,
+        isMeta: true,
+        origin: null,
+        text: '<local-command-caveat>The command below was run directly in Claude Code.</local-command-caveat>',
+      }),
+      userPrompt({
+        sessionId,
+        origin: null,
+        text: `<command-name>${name}</command-name>\n<command-message>${name.slice(1)}</command-message>\n<command-args></command-args>`,
+      }),
+      userPrompt({
+        sessionId,
+        origin: null,
+        text: '<local-command-stdout>Done</local-command-stdout>',
+      }),
+    ];
+    // A local command, then the real prompt: the prompt names the session.
+    await put(
+      join(proj, `${S1}.jsonl`),
+      jsonl([
+        ...local('/effort', S1),
+        userPrompt({ sessionId: S1, text: 'fix the flaky login test' }),
+        ...assistantBlocks({ sessionId: S1, requestId: 'r1', blocks: ['text'] }),
+      ]),
+    );
+    // A command the model answered (a skill or custom command) still names it.
+    await put(
+      join(proj, `${S2}.jsonl`),
+      jsonl([
+        userPrompt({
+          sessionId: S2,
+          origin: null,
+          text: '<command-message>review is running…</command-message>\n<command-name>/review</command-name>\n<command-args>the parser</command-args>',
+        }),
+        userPrompt({ sessionId: S2, isMeta: true, origin: null, text: 'Review the parser.' }),
+        ...assistantBlocks({ sessionId: S2, requestId: 'r2', blocks: ['text'] }),
+        userPrompt({ sessionId: S2, text: 'now fix what you found' }),
+      ]),
+    );
+    // Nothing but local commands: the command is still better than no title.
+    await put(join(proj, `${S3}.jsonl`), jsonl(local('/login', S3)));
+    // A local command, then a message from another session: the message names it.
+    const S4 = '44444444-4444-4444-8444-444444444444';
+    await put(
+      join(proj, `${S4}.jsonl`),
+      jsonl([
+        ...local('/effort', S4),
+        peerMessage({ sessionId: S4, text: 'T2 assignment from the PM' }),
+        ...assistantBlocks({ sessionId: S4, requestId: 'r4', blocks: ['text'] }),
+      ]),
+    );
+    const sources = await createClaudeCodeAdapter({ claudeDir }).discover();
+    expect(Object.fromEntries(sources.map((s) => [s.nativeId, s.summary.title]))).toEqual({
+      [S1]: 'fix the flaky login test',
+      [S2]: '/review the parser',
+      [S3]: '/login',
+      [S4]: 'T2 assignment from the PM',
     });
   });
 
@@ -408,5 +477,174 @@ describe('discovery window edges', () => {
       title: 'Renamed',
       live: 'busy',
     });
+  });
+});
+
+describe('session titles: discovery agrees with the opened session', () => {
+  const command = (name: string, args = '', sec = 1) =>
+    userPrompt({
+      origin: null,
+      ts: at(sec),
+      text: `<command-name>${name}</command-name>\n<command-message>${name.slice(1)}</command-message>\n<command-args>${args}</command-args>`,
+    });
+  const stdout = (sec: number) =>
+    userPrompt({
+      origin: null,
+      ts: at(sec),
+      text: '<local-command-stdout>Done</local-command-stdout>',
+    });
+  const expanded = (sec: number) =>
+    userPrompt({ origin: null, isMeta: true, ts: at(sec), text: 'Review the parser.' });
+  const reply = (requestRef: string, sec: number) =>
+    assistantBlocks({ requestRef, requestId: `req-${requestRef}`, blocks: ['text'], ts: at(sec) });
+
+  const cases: [string, string[], string][] = [
+    [
+      'a local command, then a prompt',
+      [
+        command('/effort'),
+        stdout(2),
+        userPrompt({ text: 'fix it', ts: at(10) }),
+        apiRequest({ id: 'a1', ts: at(11) }),
+        ...reply('a1', 12),
+      ],
+      'fix it',
+    ],
+    [
+      'a local command, then an answered one',
+      [
+        command('/model', 'opus'),
+        stdout(2),
+        command('/review', 'the parser', 5),
+        expanded(5),
+        apiRequest({ id: 'a1', ts: at(6) }),
+        ...reply('a1', 7),
+      ],
+      '/review the parser',
+    ],
+    [
+      'an answered command, then a local one',
+      [
+        command('/review', 'the parser'),
+        apiRequest({ id: 'a1', ts: at(2) }),
+        ...reply('a1', 3),
+        command('/clear', '', 10),
+        stdout(11),
+      ],
+      '/review the parser',
+    ],
+    [
+      'a local command, then a peer message written after its api-request',
+      [
+        command('/effort'),
+        stdout(2),
+        apiRequest({ id: 'a1', ts: at(31) }),
+        peerMessage({ text: 'T2 assignment', ts: at(30) }),
+        ...reply('a1', 33),
+      ],
+      'T2 assignment',
+    ],
+    [
+      'a local command, then a prompt written after its api-request',
+      [
+        command('/effort'),
+        stdout(2),
+        apiRequest({ id: 'a1', ts: at(21) }),
+        userPrompt({ text: 'fix it', ts: at(20) }),
+        ...reply('a1', 23),
+      ],
+      'fix it',
+    ],
+    [
+      'a command whose call failed',
+      [
+        command('/review'),
+        apiRequest({ id: 'a1', ts: at(2) }),
+        apiError({ ts: at(3) }),
+        userPrompt({ text: 'try again', ts: at(10) }),
+        apiRequest({ id: 'a2', ts: at(11) }),
+        ...reply('a2', 12),
+      ],
+      '/review',
+    ],
+    [
+      'a command whose call was interrupted',
+      [
+        command('/review'),
+        apiRequest({ id: 'a1', ts: at(2) }),
+        interrupt({ ts: at(3) }),
+        userPrompt({ text: 'try again', ts: at(10) }),
+        apiRequest({ id: 'a2', ts: at(11) }),
+        ...reply('a2', 12),
+      ],
+      '/review',
+    ],
+    [
+      'a command whose call was abandoned for a queued message',
+      [
+        command('/review'),
+        apiRequest({ id: 'a1', ts: at(2) }),
+        peerMessage({ text: 'queued', ts: at(10) }),
+        apiRequest({ id: 'a2', ts: at(11) }),
+        ...reply('a2', 12),
+      ],
+      'queued',
+    ],
+    [
+      'a command answered after the next prompt arrived',
+      [
+        command('/review'),
+        apiRequest({ id: 'a1', ts: at(2) }),
+        peerMessage({ text: 'queued', ts: at(10) }),
+        ...reply('a1', 12),
+      ],
+      '/review',
+    ],
+    [
+      'an answered command, before Claude Code wrote api-requests',
+      [
+        command('/review'),
+        expanded(1),
+        ...assistantBlocks({ requestId: 'r1', blocks: ['text'], ts: at(3) }),
+        userPrompt({ text: 'next', ts: at(10) }),
+        ...assistantBlocks({ requestId: 'r2', blocks: ['text'], ts: at(11) }),
+      ],
+      '/review',
+    ],
+    [
+      'a command still waiting for its reply',
+      [command('/review'), apiRequest({ id: 'a1', ts: at(2) })],
+      '/review',
+    ],
+    [
+      'nothing but local commands',
+      [command('/login'), stdout(2), command('/effort', '', 3), stdout(4)],
+      '/login',
+    ],
+    [
+      'an ordinary first prompt',
+      [userPrompt({ text: 'hello there', ts: at(1) }), command('/effort', '', 5), stdout(6)],
+      'hello there',
+    ],
+  ];
+
+  it.each(cases)('%s', async (_name, lines, title) => {
+    const dir = await mkdtemp(join(tmpdir(), 'glassbox-titles-'));
+    try {
+      const file = join(dir, 'projects', '-work-alpha', `${SESSION_ID}.jsonl`);
+      await mkdir(join(dir, 'projects', '-work-alpha'), { recursive: true });
+      await writeFile(file, jsonl(lines));
+      const adapter = createClaudeCodeAdapter({ claudeDir: dir });
+      const [source] = await adapter.discover();
+      if (!source) throw new Error('not discovered');
+      const parser = adapter.createParser(source);
+      for (const f of await adapter.listFiles(source)) parser.ingestLines(f, lines);
+      expect({ discovery: source.summary.title, parser: parser.snapshot().session.title }).toEqual({
+        discovery: title,
+        parser: title,
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

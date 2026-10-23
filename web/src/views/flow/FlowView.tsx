@@ -1,5 +1,5 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { ArrowDown, Clock3 } from 'lucide-react';
+import { Clock3 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ModelRequest, Turn } from '../../../../src/core/model.js';
 import type { LivePartial } from '../../../../src/shared/runs.js';
@@ -12,6 +12,7 @@ import { formatClock, formatDuration } from '../../lib/format';
 import type { Navigate, Route } from '../../router';
 import { useUi } from '../../ui';
 import { LiveOverlay } from '../composer/LiveOverlay';
+import { BackToLatest } from './BackToLatest';
 import { CallRow } from './CallRow';
 import type { CardKey } from './cards';
 import css from './FlowView.module.css';
@@ -53,6 +54,10 @@ export function FlowView({ open, agentId, route, navigate, live = null }: Props)
     },
     [navigate, setFollow],
   );
+  const backToLatest = () => {
+    setFollow(true);
+    navigate({ turnId: null, requestId: null });
+  };
 
   return (
     <div className={css.flow}>
@@ -60,7 +65,7 @@ export function FlowView({ open, agentId, route, navigate, live = null }: Props)
       <section className={css.main}>
         {current ? (
           <>
-            <TurnHeader item={current} />
+            <TurnHeader item={current} onBack={follow ? null : backToLatest} />
             <CallList
               key={current.turn.id}
               open={open}
@@ -75,25 +80,12 @@ export function FlowView({ open, agentId, route, navigate, live = null }: Props)
         ) : (
           <p className={css.empty}>{t(running ? 'flow.noTurns' : 'flow.noTurnsDone')}</p>
         )}
-        {!follow && (
-          <button
-            type="button"
-            className={css.back}
-            onClick={() => {
-              setFollow(true);
-              navigate({ turnId: null, requestId: null });
-            }}
-          >
-            <ArrowDown size={14} aria-hidden="true" />
-            {t('follow.back')}
-          </button>
-        )}
       </section>
     </div>
   );
 }
 
-function TurnHeader({ item }: { item: TurnItem }) {
+function TurnHeader({ item, onBack }: { item: TurnItem; onBack: (() => void) | null }) {
   const { t } = useI18n();
   const now = useNow();
   const { turn } = item;
@@ -111,6 +103,7 @@ function TurnHeader({ item }: { item: TurnItem }) {
         </span>
         <span>{t('flow.callsTools', { calls: item.calls, tools: item.tools })}</span>
         <StatusPill status={item.status} />
+        {onBack && <BackToLatest onClick={onBack} />}
       </span>
     </div>
   );

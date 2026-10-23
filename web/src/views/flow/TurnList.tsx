@@ -1,13 +1,16 @@
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { Turn } from '../../../../src/core/model.js';
 import { StatusPill, type UiStatus } from '../../components/Status';
 import { useApprovalsContext } from '../../data/approvals';
+import { useSessionAgentKind } from '../../data/session-agent';
 import type { OpenSession } from '../../data/store';
+import { useRovingFocus } from '../../data/useRovingFocus';
 import { useI18n } from '../../i18n';
 import { formatClock } from '../../lib/format';
 import type { Route } from '../../router';
 import {
   callStatus,
+  isLocalCommand,
   isOutsideTurn,
   requestsOf,
   toolsOf,
@@ -26,12 +29,15 @@ export interface TurnItem {
   calls: number;
   tools: number;
   status: UiStatus;
+  /** A local slash command (no model call): listed compactly. */
+  command: boolean;
 }
 
 /** The agent's turns with display titles, counts and statuses (shared by the flow and steps tabs). */
 export function useTurnItems(open: OpenSession, agentId: string): TurnItem[] {
   const { t } = useI18n();
   const approvals = useApprovalsContext();
+  const agent = useSessionAgentKind();
   return useMemo(
     () =>
       turnsOf(open, agentId).map((turn) => {
@@ -50,16 +56,18 @@ export function useTurnItems(open: OpenSession, agentId: string): TurnItem[] {
               : prompt
                 ? t('flow.turnTitle', { n: turn.index, prompt })
                 : t('flow.turnFallback', { n: turn.index });
+        const status = turnStatus(turn, statuses);
         return {
           turn,
           title: label(truncatePrompt(turn.prompt)),
           heading: label(turn.prompt.trim()),
           calls: reqs.length,
           tools,
-          status: turnStatus(turn, statuses),
+          status,
+          command: isLocalCommand(turn, reqs.length, status, agent),
         };
       }),
-    [open, agentId, t, approvals],
+    [open, agentId, t, approvals, agent],
   );
 }
 
@@ -102,45 +110,87 @@ export function useSelectedTurn(
   return current;
 }
 
+/** Space kept between a revealed card and the list's edge (the list's own padding). */
+const EDGE_PX = 10;
+
+/** Scrolls `list` itself, never an ancestor, just enough to show `el`, on either axis. */
+function reveal(list: HTMLElement, el: HTMLElement): void {
+  const l = list.getBoundingClientRect();
+  const r = el.getBoundingClientRect();
+  if (r.top < l.top) list.scrollTop -= l.top - r.top + EDGE_PX;
+  else if (r.bottom > l.bottom) list.scrollTop += r.bottom - l.bottom + EDGE_PX;
+  if (r.left < l.left) list.scrollLeft -= l.left - r.left + EDGE_PX;
+  else if (r.right > l.right) list.scrollLeft += r.right - l.right + EDGE_PX;
+}
+
 interface Props {
+  /** Chronological, as `useTurnItems` returns them. */
   items: TurnItem[];
   selectedId: string | null;
   onSelect(turnId: string): void;
 }
 
+/**
+ * The agent's turns, newest first: the turn being followed, or the one that just arrived, is on
+ * top (on the left in the narrow, horizontal layout). Numbers stay chronological, and the DOM is
+ * in display order so keyboard order matches what is seen.
+ */
 export const TurnList = memo(function TurnList({ items, selectedId, onSelect }: Props) {
   const { t } = useI18n();
+  const listRef = useRef<HTMLUListElement>(null);
+  const newestFirst = useMemo(() => [...items].reverse(), [items]);
+  const ids = useMemo(() => newestFirst.map((it) => it.turn.id), [newestFirst]);
+  // One tab stop for the whole list; the arrow keys move between turns.
+  const roving = useRovingFocus(listRef, ids, selectedId);
+
+  // Follow moves the selection to each new turn and a link may select an old one: keep it in view.
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list || !selectedId) return;
+    for (const li of list.children)
+      if (li instanceof HTMLElement && li.dataset.turn === selectedId) reveal(list, li);
+  }, [selectedId]);
+
   return (
     <nav className={css.pane} aria-label={t('flow.turns')}>
       <div className={css.head}>
         {t('flow.turns')}
         <span className="num">{items.length}</span>
       </div>
-      <ul className={css.list} aria-label={t('flow.turns')}>
-        {items.map((it) => (
-          <li key={it.turn.id}>
+      <ul ref={listRef} className={css.list} aria-label={t('flow.turns')}>
+        {newestFirst.map((it) => (
+          <li key={it.turn.id} data-turn={it.turn.id}>
             <button
               type="button"
               className={css.card}
+              {...roving(it.turn.id)}
               aria-current={it.turn.id === selectedId ? 'true' : undefined}
+              data-command={it.command || undefined}
               title={it.turn.prompt}
               onClick={() => onSelect(it.turn.id)}
             >
               <span className={css.line}>
+                {/* Not a conversation, so not numbered like one: the command says what it was. */}
                 <span className={css.title} data-title>
-                  {it.title}
+                  {it.command ? it.turn.prompt.trim() : it.title}
                 </span>
+                {it.command && <span className={css.command}>{t('flow.localCommand')}</span>}
                 <span className={`${css.time} num`}>{formatClock(it.turn.startedAt)}</span>
               </span>
-              {it.turn.origin !== 'human' && it.turn.sender && (
+              {/* Part of the card's text, so screen readers read it; shown on hover and focus. */}
+              {it.command && <span className={css.hint}>{t('flow.localCommandHint')}</span>}
+              {/* A local command has no calls or status to show: one line is enough. */}
+              {!it.command && it.turn.origin !== 'human' && it.turn.sender && (
                 <span className={css.sender}>{t('flow.from', { sender: it.turn.sender })}</span>
               )}
-              <span className={css.line}>
-                <span className={css.counts}>
-                  {t('flow.callsTools', { calls: it.calls, tools: it.tools })}
+              {!it.command && (
+                <span className={css.line}>
+                  <span className={css.counts}>
+                    {t('flow.callsTools', { calls: it.calls, tools: it.tools })}
+                  </span>
+                  <StatusPill status={it.status} />
                 </span>
-                <StatusPill status={it.status} />
-              </span>
+              )}
             </button>
           </li>
         ))}

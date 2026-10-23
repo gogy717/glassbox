@@ -50,6 +50,8 @@ export interface TurnState {
   interruptedAt: string | null;
   /** Set by a `turn_duration` record. */
   endMarkAt: string | null;
+  /** The prompt was a slash command; with no request it was local and names nothing. */
+  command: boolean;
 }
 
 export interface RequestState {

@@ -94,6 +94,52 @@
   white-space: nowrap;
 }
 
+/* A local slash command (/effort): one slim line, not a full conversation card. */
+.card[data-command] {
+  gap: 0;
+  padding: 6px 12px;
+  border-style: dashed;
+  background: transparent;
+}
+
+.card[data-command] .title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.command {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--layer-3);
+  color: var(--muted);
+  font-size: 10px;
+}
+
+/* Read out with the card; seen only when the card is hovered or focused. */
+.hint {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.card[data-command]:hover .hint,
+.card[data-command]:focus-visible .hint {
+  position: static;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip-path: none;
+  white-space: normal;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
 @media (max-width: 900px) {
   .pane {
     border-right: 0;
@@ -122,4 +168,12 @@
   white-space: nowrap;
   font-size: 10.5px;
   color: var(--accent);
+}
+
+/* Short of room (a narrow turn column or the strip): the number and prompt matter more than the
+   clock, which the open turn's header still shows. */
+@container session-panel (max-width: 1000px) {
+  .time {
+    display: none;
+  }
 }

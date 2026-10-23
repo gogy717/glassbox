@@ -41,19 +41,19 @@ describe('StepsView', () => {
   useFakeLayout();
   afterEach(() => vi.useRealTimers());
 
-  it('says “yet” of an empty agent or turn only while more may still arrive', () => {
+  it('says “yet” of an empty agent or conversation only while more may still arrive', () => {
     const base = demoOpen();
     renderSteps({
       open: { ...base, session: { ...base.session, live: 'closed' } },
       route: { agentId: 'nobody' },
     });
-    expect(screen.getByText('No turns for this agent')).toBeInTheDocument();
+    expect(screen.getByText('No conversations for this agent')).toBeInTheDocument();
     cleanup();
     renderSteps({
       open: { ...base, session: { ...base.session, live: 'busy' } },
       route: { agentId: 'nobody' },
     });
-    expect(screen.getByText('No turns for this agent yet')).toBeInTheDocument();
+    expect(screen.getByText('No conversations for this agent yet')).toBeInTheDocument();
     cleanup();
 
     const first = base.turns.get('turn_m1');
@@ -64,10 +64,34 @@ describe('StepsView', () => {
       requests: new Map([...base.requests].filter(([, r]) => r.turnId !== first.id)),
     });
     renderSteps({ open: emptyTurn('complete'), route: { turnId: first.id }, follow: false });
-    expect(screen.getByText('No steps in this turn')).toBeInTheDocument();
+    expect(screen.getByText('No steps in this conversation')).toBeInTheDocument();
     cleanup();
     renderSteps({ open: emptyTurn('running'), route: { turnId: first.id }, follow: false });
-    expect(screen.getByText('No steps in this turn yet')).toBeInTheDocument();
+    expect(screen.getByText('No steps in this conversation yet')).toBeInTheDocument();
+  });
+
+  it('lists the turns newest first, like the flow tab, with the followed turn on top', () => {
+    renderSteps();
+    const items = within(screen.getByRole('list', { name: 'Conversations' })).getAllByRole(
+      'button',
+    );
+    expect(items.map((b) => b.textContent?.match(/^Conversation \d+/)?.[0])).toEqual([
+      'Conversation 3',
+      'Conversation 2',
+      'Conversation 1',
+    ]);
+    expect(items[0]).toHaveAttribute('aria-current', 'true');
+  });
+
+  it('offers “Back to latest” in the turn header while follow is paused', () => {
+    const { navigate, setFollow } = renderSteps({ route: { turnId: 'turn_m1' }, follow: false });
+    const back = screen.getByRole('button', { name: 'Back to latest' });
+    expect(screen.getByRole('heading', { level: 2 }).parentElement?.parentElement).toContainElement(
+      back,
+    );
+    fireEvent.click(back);
+    expect(setFollow).toHaveBeenLastCalledWith(true);
+    expect(navigate).toHaveBeenLastCalledWith({ turnId: null, requestId: null });
   });
 
   it('groups turn 1 into explore → edit → answer phases with time and tokens', () => {

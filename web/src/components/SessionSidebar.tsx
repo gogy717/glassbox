@@ -1,7 +1,8 @@
 import { Check, Search } from 'lucide-react';
-import { type CSSProperties, useMemo, useState } from 'react';
+import { type CSSProperties, useMemo, useRef, useState } from 'react';
 import type { AgentKind, SessionSummary } from '../../../src/core/model.js';
 import { totalTokens } from '../../../src/core/usage.js';
+import { type RovingItemProps, useRovingFocus } from '../data/useRovingFocus';
 import { useI18n } from '../i18n';
 import { AGENT_TONES, agentColors, agentName } from '../lib/agent-names';
 import { formatCompact, formatRelative } from '../lib/format';
@@ -42,6 +43,10 @@ export function SessionSidebar({ sessions, selectedId, now, showProbes, onSelect
       ),
     [sessions, filter, selectedId, query, showProbes],
   );
+  // One tab stop for the whole list; the arrow keys move between sessions, across projects.
+  const listRef = useRef<HTMLDivElement>(null);
+  const ids = useMemo(() => groups.flatMap((g) => g.sessions.map((s) => s.id)), [groups]);
+  const roving = useRovingFocus(listRef, ids, selectedId);
 
   return (
     <nav className={css.sidebar} aria-label={t('sidebar.title')}>
@@ -80,7 +85,7 @@ export function SessionSidebar({ sessions, selectedId, now, showProbes, onSelect
           })}
         </div>
       )}
-      <div className={css.list}>
+      <div ref={listRef} className={css.list}>
         {groups.length === 0 && (
           <p className={css.empty}>{t(sessions.length ? 'sidebar.noMatch' : 'sidebar.empty')}</p>
         )}
@@ -95,6 +100,7 @@ export function SessionSidebar({ sessions, selectedId, now, showProbes, onSelect
                   session={s}
                   selected={s.id === selectedId}
                   now={now}
+                  roving={roving(s.id)}
                   onSelect={onSelect}
                 />
               </li>
@@ -110,11 +116,13 @@ function SessionRow({
   session: s,
   selected,
   now,
+  roving,
   onSelect,
 }: {
   session: SessionSummary;
   selected: boolean;
   now: number;
+  roving: RovingItemProps;
   onSelect(id: string): void;
 }) {
   const { t, intl } = useI18n();
@@ -136,6 +144,7 @@ function SessionRow({
     <button
       type="button"
       className={css.item}
+      {...roving}
       aria-current={selected ? 'true' : undefined}
       title={tip}
       onPointerEnter={(e) =>

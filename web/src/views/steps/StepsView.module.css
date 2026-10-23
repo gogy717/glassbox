@@ -22,6 +22,17 @@
   border-bottom: 1px solid var(--border);
 }
 
+.headRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .shares {
   display: flex;
   flex-direction: column;
@@ -319,24 +330,11 @@
   text-align: center;
 }
 
-.back {
-  position: absolute;
-  right: 20px;
-  bottom: 20px;
-  z-index: 5;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 14px;
-  border: 1px solid var(--accent);
-  border-radius: 999px;
-  background: var(--layer-1);
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 600;
-  box-shadow: var(--shadow);
-  cursor: pointer;
+/* As in the execution chain: a session panel short of room gets a narrower turn column. */
+@container session-panel (max-width: 1000px) {
+  .layout {
+    grid-template-columns: 200px minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 900px) {

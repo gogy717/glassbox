@@ -1,5 +1,6 @@
 /** Pure helpers behind the execution-chain (flow) tab. */
 import type {
+  AgentKind,
   ModelRequest,
   RunStatus,
   TokenUsage,
@@ -24,6 +25,30 @@ const OUTSIDE = 'outside:';
 
 /** True for the pseudo-turn that holds an agent's requests that belong to no turn. */
 export const isOutsideTurn = (t: Turn) => t.id.startsWith(OUTSIDE);
+
+/** The whole prompt a command name, with one argument at most: "/effort", "/model opus". */
+const COMMAND = /^\/[A-Za-z][\w:.-]*(\s+\S+)?$/;
+
+/**
+ * A person's slash command that never reached the model: Claude Code runs /effort, /clear and
+ * /login itself. The model has no flag for it, so in a Claude Code session: a command-shaped
+ * prompt, finished, with no calls. A path or a sentence ("/tmp is full") is not one.
+ */
+export function isLocalCommand(
+  turn: Turn,
+  calls: number,
+  status: UiStatus,
+  agent: AgentKind,
+): boolean {
+  return (
+    agent === 'claude-code' &&
+    turn.origin === 'human' &&
+    calls === 0 &&
+    status !== 'running' &&
+    status !== 'approval' &&
+    COMMAND.test(turn.prompt.trim())
+  );
+}
 
 /**
  * Requests the adapter could not place in a turn (e.g. before the agent's first prompt) are
