@@ -301,6 +301,20 @@ describe('tokens.css', () => {
     },
   );
 
+  it.each(NAMES.map((name, i) => [name, i] as const))(
+    'the git and MCP tool categories do not read as a status (%s)',
+    (_, i) => {
+      const t = tokens(i);
+      for (const cat of ['--cat-git', '--cat-mcp'])
+        for (const status of ['--success', '--error', '--warning'])
+          for (const v of VISIONS)
+            expect(
+              deltaE(t.get(cat) as string, t.get(status) as string, v),
+              `${cat} vs ${status} (${v})`,
+            ).toBeGreaterThanOrEqual(RESERVED[v]);
+    },
+  );
+
   // Until U3c the Claude fill was also held 10 from the tool card's text, border and background.
   // A tint cannot be: it and the card background are both near-white warm pastels. The tag text
   // still is, and the tag never sits on a tool card.
