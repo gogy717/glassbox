@@ -23,8 +23,11 @@ import type {
 import { applyPatch } from './__tests__/apply-patch.js';
 import {
   createFakeAdapter,
+  createFakeDbAdapter,
   encodeFake,
+  FAKE_DB_AGENT,
   type FakeAdapter,
+  type FakeDbAdapter,
   fakePaths,
   lines,
   rec,
@@ -956,5 +959,131 @@ describe('SessionStore with encoded (archived) files', () => {
       { timeout: 3000 },
     );
     expect(existsSync(p.main)).toBe(false);
+  });
+});
+
+describe('SessionStore with sources the adapter supplies (readJson)', () => {
+  let db: FakeDbAdapter;
+  const sid = `${FAKE_DB_AGENT}:a`;
+
+  beforeEach(() => {
+    db = createFakeDbAdapter(root);
+  });
+
+  /** Rewrites the fake database; `records` are toy record lines. */
+  const writeDb = (rows: Record<string, { version: string; records: string[] }>) =>
+    put(
+      db.dbPath,
+      JSON.stringify(
+        Object.fromEntries(
+          Object.entries(rows).map(([id, r]) => [
+            id,
+            { version: r.version, records: r.records.map((l) => JSON.parse(l)) },
+          ]),
+        ),
+      ),
+    );
+  let walWrites = 0;
+  /** A write to the journal only, as a database writer makes between checkpoints. */
+  const touchWal = () => writeFile(`${db.dbPath}-wal`, String(++walWrites));
+
+  /** Opens session `a` with one subscriber; returns what the subscriber has seen. */
+  async function watchA(s: SessionStore) {
+    let client = (await s.getSnapshot(sid)) as SessionSnapshot;
+    const patches: SessionPatch[] = [];
+    s.onPatch(sid, (x) => {
+      patches.push(x);
+      client = applyPatch(client, x);
+    });
+    return { patches, client: () => client };
+  }
+
+  it('reads a session through the adapter instead of from disk', async () => {
+    await writeDb({
+      a: { version: 'v1', records: [rec.title('From the db'), rec.req('r1', T(1))] },
+    });
+    const s = await startStore({ adapters: [db] });
+
+    const snap = (await s.getSnapshot(sid)) as SessionSnapshot;
+    expect(ids(snap.requests)).toEqual(['r1']);
+    expect(snap.session.title).toBe('From the db');
+    expect(db.parsers[0]?.ingested).toEqual(['db-session']);
+    expect(checkSnapshot(snap)).toEqual([]);
+  });
+
+  it('reads again when a path classify maps to the source changes, and patches the news in', async () => {
+    await writeDb({ a: { version: 'v1', records: [rec.req('r1', T(1))] } });
+    const s = await startStore({ adapters: [db] });
+    const seen = await watchA(s);
+
+    await writeDb({ a: { version: 'v2', records: [rec.req('r1', T(1)), rec.req('r2', T(2))] } });
+    await touchWal();
+
+    await vi.waitFor(() => expect(ids(seen.client().requests)).toEqual(['r1', 'r2']), {
+      timeout: 2000,
+    });
+    expect(seen.client()).toEqual(await s.getSnapshot(sid));
+    expect(db.parsers).toHaveLength(1);
+  });
+
+  it('feeds the parser nothing while the version stays the same', async () => {
+    await writeDb({ a: { version: 'v1', records: [rec.req('r1', T(1))] } });
+    const s = await startStore({ adapters: [db] });
+    const seen = await watchA(s);
+    const readsBefore = db.reads;
+
+    // The journal moves (both paths report it) but the session's version does not.
+    await touchWal();
+    await vi.waitFor(() => expect(db.reads).toBeGreaterThan(readsBefore), { timeout: 2000 });
+    await touchWal();
+    await sleep(300);
+
+    expect(db.parsers[0]?.ingested).toEqual(['db-session']);
+    expect(seen.patches).toEqual([]);
+  });
+
+  it('keeps what it has while the adapter cannot read, logging once per failing streak', async () => {
+    await writeDb({ a: { version: 'v1', records: [rec.req('r1', T(1))] } });
+    const logs: string[] = [];
+    const s = await startStore({ adapters: [db], log: (m) => logs.push(m) });
+    const seen = await watchA(s);
+    const failures = () => logs.filter((m) => m.includes('database is locked'));
+
+    db.failWith = new Error('database is locked');
+    const readsBefore = db.reads;
+    await touchWal();
+    await vi.waitFor(() => expect(db.reads).toBeGreaterThan(readsBefore), { timeout: 2000 });
+    await touchWal();
+    await vi.waitFor(() => expect(db.reads).toBeGreaterThan(readsBefore + 1), { timeout: 2000 });
+    expect(failures()).toHaveLength(1);
+    expect(failures()[0]).toContain(db.dbPath);
+    expect(ids(seen.client().requests)).toEqual(['r1']);
+
+    db.failWith = null;
+    await writeDb({ a: { version: 'v2', records: [rec.req('r1', T(1)), rec.req('r2', T(2))] } });
+    await touchWal();
+    await vi.waitFor(() => expect(ids(seen.client().requests)).toEqual(['r1', 'r2']), {
+      timeout: 2000,
+    });
+
+    // A new streak is logged again.
+    db.failWith = new Error('database is locked');
+    await touchWal();
+    await vi.waitFor(() => expect(failures()).toHaveLength(2), { timeout: 2000 });
+  });
+
+  it('keeps what it has when the adapter has nothing to read', async () => {
+    await writeDb({ a: { version: 'v1', records: [rec.req('r1', T(1))] } });
+    const s = await startStore({ adapters: [db] });
+    const seen = await watchA(s);
+    const readsBefore = db.reads;
+
+    await writeDb({});
+    await touchWal();
+    await vi.waitFor(() => expect(db.reads).toBeGreaterThan(readsBefore), { timeout: 2000 });
+    await sleep(100);
+
+    expect(ids(seen.client().requests)).toEqual(['r1']);
+    expect(seen.patches).toEqual([]);
   });
 });

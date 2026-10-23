@@ -116,4 +116,19 @@ export interface AgentAdapter {
    * be decoded. Required whenever the adapter lists any encoded file.
    */
   readFile?(file: SourceFile): Promise<string>;
+  /**
+   * Current contents of a `json` source whose data is not the file at `path`, e.g. one session's
+   * rows in the agent's database. When present, the server reads every `json` source of the
+   * adapter through it instead of from disk: on a full parse, and whenever a path that
+   * `classify` maps to the source changes (several paths, e.g. a database and its journal, may
+   * map to one source). `version` changes whenever `value` does; the parser is fed `value` only
+   * when `version` differs from the one it was last fed. Resolves undefined when there is
+   * nothing to read right now, and the parser keeps what it has; rejects on a failure, which the
+   * server logs once until a read succeeds again. Optional: adapters whose sessions are files
+   * omit it.
+   */
+  readJson?(
+    source: SessionSource,
+    file: SourceFile,
+  ): Promise<{ version: string; value: unknown } | undefined>;
 }

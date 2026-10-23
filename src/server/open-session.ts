@@ -54,10 +54,15 @@ export interface OpenSessionOptions {
 interface Tracked {
   file: SourceFile;
   tailer: JsonlTailer | null;
-  /** Last ingested json document, serialised, to skip re-ingesting unchanged files. */
+  /**
+   * Version of the last ingested json document (a file's text, or what `readJson` called it),
+   * to skip re-ingesting unchanged sources.
+   */
   lastJson: string | null;
   /** Encoded files only: read once, whole, during a full parse. */
   archive: 'unread' | 'read' | 'failed' | null;
+  /** The adapter's `readJson` failed last time, and that was logged. */
+  failing: boolean;
 }
 
 /** Lines of a decoded archive fed to the parser between two yields to the event loop. */
@@ -198,7 +203,9 @@ export class OpenSession {
       this.refreshWatchDirs();
       return null;
     }
-    const tracked = newTracked(file);
+    // A database's journal stands for the source keyed by the database: share its entry.
+    const tracked = this.files.get(file.path) ?? newTracked(file);
+    this.files.set(file.path, tracked);
     this.files.set(path, tracked);
     return tracked;
   }
@@ -267,11 +274,10 @@ export class OpenSession {
       return tracked.archive === 'read' ? { reset: false, changes: [], lines: 0 } : { reset: true };
     }
     if (file.format === 'json') {
-      const json = await readJsonFile(file.path);
-      // Compared as text: re-serializing the value would throw on a deeply nested file.
-      if (json === undefined || json.text === tracked.lastJson)
+      const json = await this.readJson(tracked);
+      if (json === undefined || json.version === tracked.lastJson)
         return { reset: false, changes: [], lines: 0 };
-      tracked.lastJson = json.text;
+      tracked.lastJson = json.version;
       return { reset: false, changes: [parser.ingestJson(file, json.value)], lines: 0 };
     }
     const tailer = tracked.tailer as JsonlTailer;
@@ -290,6 +296,27 @@ export class OpenSession {
       await new Promise<void>((resolve) => setImmediate(resolve));
     }
     return { reset: false, changes, lines };
+  }
+
+  /** A json source's current value: from the adapter when it supplies its sources, else from disk. */
+  private async readJson(
+    tracked: Tracked,
+  ): Promise<{ version: string; value: unknown } | undefined> {
+    if (!this.adapter.readJson) {
+      const json = await readJsonFile(tracked.file.path);
+      // The text is the version: re-serializing the value would throw on a deeply nested file.
+      return json && { version: json.text, value: json.value };
+    }
+    try {
+      const json = await this.adapter.readJson(this.source, tracked.file);
+      tracked.failing = false;
+      return json;
+    } catch (err) {
+      if (!tracked.failing)
+        this.opts.log(`session ${this.id}: could not read ${tracked.file.path}: ${errorText(err)}`);
+      tracked.failing = true;
+      return undefined;
+    }
   }
 
   private async readArchive(parser: SessionParser, tracked: Tracked): Promise<ReadResult> {
@@ -353,6 +380,7 @@ function newTracked(file: SourceFile): Tracked {
     tailer: file.format === 'jsonl' && !file.encoded ? new JsonlTailer(file.path) : null,
     lastJson: null,
     archive: file.encoded ? 'unread' : null,
+    failing: false,
   };
 }
 
