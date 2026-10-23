@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SessionSummary } from '../../../src/core/model.js';
-import { groupSessions } from './sessions';
+import { groupSessions, liveFilterOf } from './sessions';
 
 const base: SessionSummary = {
   id: 'x',
@@ -73,5 +73,35 @@ describe('groupSessions', () => {
     expect(ids(groupSessions(sessions, 'parser'))).toEqual([['alpha', ['a2']]]);
     expect(ids(groupSessions(sessions, ' GAMMA-T '))).toEqual([['gamma', ['c1']]]);
     expect(groupSessions(sessions, 'nothing matches')).toEqual([]);
+  });
+});
+
+describe('groupSessions filters', () => {
+  const mixed: SessionSummary[] = [
+    s('busy', 'alpha', '09:00', { live: 'busy', title: 'Port the theme' }),
+    s('wait', 'beta', '09:10', { live: 'waiting', agent: 'codex', title: 'Tighten retry' }),
+    s('idle', 'alpha', '09:20', { live: 'idle', title: 'Port the tokens' }),
+    s('shut', 'gamma', '09:30', { live: 'closed', agent: 'codex' }),
+    s('lost', 'gamma', '09:40', { live: 'unknown' }),
+  ];
+  const listed = (opts: Parameters<typeof groupSessions>[2], query = '') =>
+    groupSessions(mixed, query, opts).flatMap((g) => g.sessions.map((x) => x.id));
+
+  it('counts waiting as running, and an unknown state as closed', () => {
+    expect(mixed.map(liveFilterOf)).toEqual(['running', 'running', 'idle', 'closed', 'closed']);
+    expect(listed({ live: 'running' }).sort()).toEqual(['busy', 'wait']);
+    expect(listed({ live: 'closed' }).sort()).toEqual(['lost', 'shut']);
+  });
+
+  it('composes the live filter with the agent filter and the text query', () => {
+    expect(listed({ live: 'running', agent: 'codex' })).toEqual(['wait']);
+    expect(listed({ live: 'running' }, 'port')).toEqual(['busy']);
+    expect(listed({ agent: 'claude-code' }, 'port').sort()).toEqual(['busy', 'idle']);
+  });
+
+  it('keeps the open session whatever the filters say, but not past the text query', () => {
+    expect(listed({ live: 'running', keep: 'shut' }).sort()).toEqual(['busy', 'shut', 'wait']);
+    expect(listed({ agent: 'codex', keep: 'idle' }).sort()).toEqual(['idle', 'shut', 'wait']);
+    expect(listed({ live: 'running', keep: 'shut' }, 'retry')).toEqual(['wait']);
   });
 });

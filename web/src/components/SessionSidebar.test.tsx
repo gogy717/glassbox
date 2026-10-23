@@ -5,8 +5,8 @@ import type { SessionSummary } from '../../../src/core/model.js';
 import { I18nContext, makeI18n } from '../i18n';
 import { DEMO_NOW } from '../test/demo';
 import tagCss from './AgentTag.module.css';
+import rowCss from './SessionRow.module.css';
 import { SessionSidebar } from './SessionSidebar';
-import css from './SessionSidebar.module.css';
 
 const sessions = createDemoSessions(DEMO_NOW);
 
@@ -82,11 +82,11 @@ describe('SessionSidebar', () => {
     );
     const group = screen.getByRole('group', { name: 'Filter by agent' });
     const chips = within(group).getAllByRole('button');
-    expect(chips.map((c) => c.textContent)).toEqual(['Claude Code', 'Grok']);
+    expect(chips.map((c) => c.textContent)).toEqual(['All 3', 'Claude Code 2', 'Grok 1']);
     const rows = () => screen.getAllByRole('button').filter((b) => b.closest('li'));
     expect(rows()).toHaveLength(sessions.length);
 
-    const grok = within(group).getByRole('button', { name: 'Grok' });
+    const grok = within(group).getByRole('button', { name: /^Grok/ });
     expect(grok).toHaveAttribute('aria-pressed', 'false');
     expect(grok).toHaveAttribute('title', 'Show only Grok sessions');
     fireEvent.click(grok);
@@ -120,7 +120,7 @@ describe('SessionSidebar', () => {
       within(group)
         .getAllByRole('button')
         .map((c) => c.textContent),
-    ).toEqual(['Claude Code', 'Grok', 'aider']);
+    ).toEqual(['All 3', 'Claude Code 1', 'Grok 1', 'aider 1']);
   });
 
   it('offers chips only for agents with listed sessions, probes included only when shown', () => {
@@ -145,7 +145,7 @@ describe('SessionSidebar', () => {
       within(group)
         .getAllByRole('button')
         .map((c) => c.textContent),
-    ).toEqual(['Claude Code', 'Grok']);
+    ).toEqual(['All 2', 'Claude Code 1', 'Grok 1']);
   });
 
   it('keeps the open session’s row while another agent is picked', () => {
@@ -162,7 +162,7 @@ describe('SessionSidebar', () => {
       </I18nContext.Provider>,
     );
     const group = screen.getByRole('group', { name: 'Filter by agent' });
-    fireEvent.click(within(group).getByRole('button', { name: 'Grok' }));
+    fireEvent.click(within(group).getByRole('button', { name: /^Grok/ }));
     const rows = screen.getAllByRole('button').filter((b) => b.closest('li'));
     expect(rows).toHaveLength(2);
     expect(rows.find((b) => b.getAttribute('aria-current') === 'true')).toHaveTextContent(
@@ -185,7 +185,7 @@ describe('SessionSidebar', () => {
     const group = screen.getByRole('group', { name: 'Filter by agent' });
     for (const chip of within(group).getAllByRole('button'))
       expect(chip).not.toHaveAttribute('data-roving');
-    fireEvent.click(within(group).getByRole('button', { name: 'Grok' }));
+    fireEvent.click(within(group).getByRole('button', { name: /^Grok/ }));
     const rows = screen.getAllByRole('button').filter((b) => b.closest('li'));
     expect(rows).toHaveLength(sessions.length - 1);
     // One stop, on the first row the filter left.
@@ -196,7 +196,7 @@ describe('SessionSidebar', () => {
     fireEvent.keyDown(rows[1] as HTMLElement, { key: 'End' });
     expect(rows.at(-1)).toHaveFocus();
     // Back to every agent: the stop stays on the row last focused.
-    fireEvent.click(within(group).getByRole('button', { name: 'Grok' }));
+    fireEvent.click(within(group).getByRole('button', { name: /^Grok/ }));
     const all = screen.getAllByRole('button').filter((b) => b.closest('li'));
     expect(all.filter((r) => r.tabIndex === 0)).toEqual([rows.at(-1)]);
   });
@@ -215,7 +215,7 @@ describe('SessionSidebar', () => {
     );
     const { rerender } = render(sidebar(mixed));
     const group = screen.getByRole('group', { name: '按 agent 筛选' });
-    fireEvent.click(within(group).getByRole('button', { name: 'Grok' }));
+    fireEvent.click(within(group).getByRole('button', { name: /^Grok/ }));
     expect(screen.getAllByRole('button').filter((b) => b.closest('li'))).toHaveLength(1);
     rerender(sidebar(sessions));
     expect(screen.getAllByRole('button').filter((b) => b.closest('li'))).toHaveLength(
@@ -236,13 +236,13 @@ describe('SessionSidebar', () => {
       </I18nContext.Provider>,
     );
     const row = screen.getByRole('button', { name: /A very long title/ });
-    expect(row).toHaveClass(css.item as string);
+    expect(row).toHaveClass(rowCss.row as string);
     // Nothing cut short (jsdom lays nothing out): the tooltip only adds the folder, so a screen
     // reader does not hear the row's text twice.
     fireEvent.pointerEnter(row);
     expect(row).toHaveAttribute('title', long.cwd);
     // Cut short: the tooltip has all of it.
-    const title = row.querySelector<HTMLElement>(`.${css.title}`) as HTMLElement;
+    const title = row.querySelector<HTMLElement>(`.${rowCss.title}`) as HTMLElement;
     Object.defineProperty(title, 'scrollWidth', { configurable: true, value: 400 });
     Object.defineProperty(title, 'clientWidth', { configurable: true, value: 200 });
     fireEvent.pointerEnter(row);
@@ -251,7 +251,7 @@ describe('SessionSidebar', () => {
     expect(tip[1]).toMatch(/^Claude Code · Running · .+ · 1\.9M tokens$/);
     expect(tip[2]).toBe(long.cwd);
     // Time and tokens sit in the part that gives way first.
-    expect(row.querySelector(`.${css.when}`)).toHaveTextContent(/1\.9M tokens/);
+    expect(row.querySelector(`.${rowCss.when}`)).toHaveTextContent(/1\.9M tokens/);
   });
 
   it('groups sessions by project with running ones first', () => {
@@ -329,5 +329,123 @@ describe('SessionSidebar', () => {
     const onSelect = renderSidebar();
     fireEvent.click(screen.getByRole('button', { name: /Fix flaky login/ }));
     expect(onSelect).toHaveBeenCalledWith(sessions[1]?.id);
+  });
+
+  it('filters by state from chips, counting waiting as running, and offers the rest back', () => {
+    // The demo lists one running, one idle and one closed session; make the closed one waiting.
+    const states = sessions.map((x, i) => (i === 2 ? { ...x, live: 'waiting' as const } : x));
+    const extra = {
+      ...(sessions[1] as SessionSummary),
+      id: 'claude-code:extra',
+      live: 'closed' as const,
+    };
+    render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <SessionSidebar
+          sessions={[...states, extra]}
+          selectedId={null}
+          now={DEMO_NOW.getTime()}
+          onSelect={vi.fn()}
+        />
+      </I18nContext.Provider>,
+    );
+    const group = screen.getByRole('group', { name: 'Filter by state' });
+    const chips = within(group).getAllByRole('button');
+    expect(chips.map((c) => c.textContent)).toEqual(['All', 'Running 2', 'Idle 1', 'Closed 1']);
+    expect(chips[0]).toHaveAttribute('aria-pressed', 'true');
+    const rows = () => screen.getAllByRole('button').filter((b) => b.closest('li'));
+
+    fireEvent.click(within(group).getByRole('button', { name: /^Running/ }));
+    expect(
+      rows()
+        .map((r) => r.querySelector('[data-state]')?.getAttribute('data-state'))
+        .sort(),
+    ).toEqual(['busy', 'waiting']);
+    expect(screen.getByText(/^2 more sessions are idle or closed\./)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show all' }));
+    expect(rows()).toHaveLength(4);
+    expect(within(group).getByRole('button', { name: 'All' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.queryByText(/more sessions? (is|are)/)).toBeNull();
+  });
+
+  it('draws no chip for a state no session is in, and no state row for a single state', () => {
+    const noIdle = sessions.filter((x) => x.live !== 'idle');
+    const { rerender } = render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <SessionSidebar
+          sessions={noIdle}
+          selectedId={null}
+          now={DEMO_NOW.getTime()}
+          onSelect={vi.fn()}
+        />
+      </I18nContext.Provider>,
+    );
+    const group = screen.getByRole('group', { name: 'Filter by state' });
+    expect(within(group).queryByRole('button', { name: /^Idle/ })).toBeNull();
+    const closed = sessions.map((x) => ({ ...x, live: 'closed' as const }));
+    rerender(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <SessionSidebar
+          sessions={closed}
+          selectedId={null}
+          now={DEMO_NOW.getTime()}
+          onSelect={vi.fn()}
+        />
+      </I18nContext.Provider>,
+    );
+    expect(screen.queryByRole('group', { name: 'Filter by state' })).toBeNull();
+  });
+
+  it('keeps the open session’s row under a state filter, marked as the one open', () => {
+    const open = sessions.find((x) => x.live === 'closed') as SessionSummary;
+    render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <SessionSidebar
+          sessions={sessions}
+          selectedId={open.id}
+          now={DEMO_NOW.getTime()}
+          onSelect={vi.fn()}
+        />
+      </I18nContext.Provider>,
+    );
+    const group = screen.getByRole('group', { name: 'Filter by state' });
+    fireEvent.click(within(group).getByRole('button', { name: /^Running/ }));
+    const current = screen
+      .getAllByRole('button')
+      .filter((b) => b.getAttribute('aria-current') === 'true');
+    expect(current).toHaveLength(1);
+    expect(current[0]?.querySelector('[data-state]')).toHaveAttribute('data-state', 'closed');
+  });
+
+  it('shows every agent again from the All chip', () => {
+    const mixed = sessions.map((x, i) => (i === 1 ? { ...x, agent: 'grok' } : x));
+    render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <SessionSidebar
+          sessions={mixed}
+          selectedId={null}
+          now={DEMO_NOW.getTime()}
+          onSelect={vi.fn()}
+        />
+      </I18nContext.Provider>,
+    );
+    const group = screen.getByRole('group', { name: 'Filter by agent' });
+    fireEvent.click(within(group).getByRole('button', { name: /^Grok/ }));
+    expect(within(group).getByRole('button', { name: /^All/ })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+    fireEvent.click(within(group).getByRole('button', { name: /^All/ }));
+    expect(within(group).getByRole('button', { name: /^All/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getAllByRole('button').filter((b) => b.closest('li'))).toHaveLength(
+      sessions.length,
+    );
   });
 });

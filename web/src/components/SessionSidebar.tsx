@@ -1,15 +1,18 @@
-import { Check, Search } from 'lucide-react';
-import { type CSSProperties, useMemo, useRef, useState } from 'react';
+import { Search } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
 import type { AgentKind, SessionSummary } from '../../../src/core/model.js';
-import { totalTokens } from '../../../src/core/usage.js';
-import { type RovingItemProps, useRovingFocus } from '../data/useRovingFocus';
-import { useI18n } from '../i18n';
-import { AGENT_TONES, agentColors, agentName } from '../lib/agent-names';
-import { formatCompact, formatRelative } from '../lib/format';
-import { groupSessions, isListed } from '../lib/sessions';
-import { AgentTag } from './AgentTag';
+import { useRovingFocus } from '../data/useRovingFocus';
+import { type MessageKey, useI18n } from '../i18n';
+import { AGENT_TONES, agentName } from '../lib/agent-names';
+import {
+  groupSessions,
+  isListed,
+  LIVE_FILTERS,
+  type LiveFilter,
+  liveFilterOf,
+} from '../lib/sessions';
+import { SessionRow } from './SessionRow';
 import css from './SessionSidebar.module.css';
-import { LiveDot } from './Status';
 
 interface Props {
   sessions: SessionSummary[];
@@ -19,30 +22,65 @@ interface Props {
   onSelect(id: string): void;
 }
 
+/** A live-state chip's word: the state's own name. */
+const LIVE_WORD: Record<LiveFilter, MessageKey> = {
+  running: 'live.busy',
+  idle: 'live.idle',
+  closed: 'live.closed',
+};
+
+/** What the live filter hides, said as what those sessions are. */
+const HIDDEN: Record<LiveFilter, MessageKey> = {
+  running: 'sidebar.hiddenRunning',
+  idle: 'sidebar.hiddenIdle',
+  closed: 'sidebar.hiddenClosed',
+};
+
 export function SessionSidebar({ sessions, selectedId, now, showProbes, onSelect }: Props) {
   const { t } = useI18n();
   const [query, setQuery] = useState('');
-  const [only, setOnly] = useState<AgentKind | null>(null);
-  // Agents with sessions in the list (probes count only when shown), in a fixed order so the
-  // chips do not move as sessions update.
-  const agents = useMemo(() => {
-    const present = new Set(sessions.filter((s) => isListed(s, showProbes)).map((s) => s.agent));
-    const known = AGENT_TONES.filter((a) => present.has(a));
-    const others = [...present].filter((a) => !(AGENT_TONES as readonly string[]).includes(a));
-    return [...known, ...others.sort()];
-  }, [sessions, showProbes]);
-  // A filter on an agent whose sessions are all gone shows everything again.
-  const filter = only !== null && agents.includes(only) ? only : null;
-  const groups = useMemo(
-    () =>
-      groupSessions(
-        // The open session keeps its row, so the list never loses what the page shows.
-        filter ? sessions.filter((s) => s.agent === filter || s.id === selectedId) : sessions,
-        query,
-        { showProbes },
-      ),
-    [sessions, filter, selectedId, query, showProbes],
+  const [onlyAgent, setOnlyAgent] = useState<AgentKind | null>(null);
+  const [onlyLive, setOnlyLive] = useState<LiveFilter | null>(null);
+  // Chip counts are of every listed session, not of what the other filters leave: chips do not
+  // come and go while typing, and the rows always add up.
+  const listed = useMemo(
+    () => sessions.filter((s) => isListed(s, showProbes)),
+    [sessions, showProbes],
   );
+  const agentCounts = useMemo(() => {
+    const counts = new Map<AgentKind, number>();
+    for (const s of listed) counts.set(s.agent, (counts.get(s.agent) ?? 0) + 1);
+    // A fixed order, so chips do not move as sessions update.
+    const known = AGENT_TONES.filter((a) => counts.has(a));
+    const others = [...counts.keys()].filter(
+      (a) => !(AGENT_TONES as readonly string[]).includes(a),
+    );
+    return [...known, ...others.sort()].map((a) => [a, counts.get(a) ?? 0] as const);
+  }, [listed]);
+  const liveCounts = useMemo(
+    () =>
+      LIVE_FILTERS.map(
+        (f) => [f, listed.filter((s) => liveFilterOf(s) === f).length] as const,
+      ).filter(([, n]) => n > 0),
+    [listed],
+  );
+  // A filter whose sessions are all gone shows everything again.
+  const agent = onlyAgent !== null && agentCounts.some(([a]) => a === onlyAgent) ? onlyAgent : null;
+  const live = onlyLive !== null && liveCounts.some(([f]) => f === onlyLive) ? onlyLive : null;
+  const groups = useMemo(
+    // The open session keeps its row, so the list never loses what the page shows.
+    () => groupSessions(sessions, query, { showProbes, agent, live, keep: selectedId }),
+    [sessions, query, showProbes, agent, live, selectedId],
+  );
+  // Sessions the live filter alone hides, for "5 more are idle or closed".
+  const hidden = useMemo(() => {
+    if (!live) return 0;
+    const shown = new Set(groups.flatMap((g) => g.sessions.map((s) => s.id)));
+    return groupSessions(sessions, query, { showProbes, agent }).reduce(
+      (n, g) => n + g.sessions.filter((s) => !shown.has(s.id)).length,
+      0,
+    );
+  }, [groups, sessions, query, showProbes, agent, live]);
   // One tab stop for the whole list; the arrow keys move between sessions, across projects.
   const listRef = useRef<HTMLDivElement>(null);
   const ids = useMemo(() => groups.flatMap((g) => g.sessions.map((s) => s.id)), [groups]);
@@ -50,48 +88,73 @@ export function SessionSidebar({ sessions, selectedId, now, showProbes, onSelect
 
   return (
     <nav className={css.sidebar} aria-label={t('sidebar.title')}>
-      <label className={css.search}>
-        <Search size={14} aria-hidden="true" />
-        <input
-          type="search"
-          value={query}
-          placeholder={t('sidebar.search')}
-          aria-label={t('sidebar.search')}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-      </label>
-      {agents.length > 1 && (
-        // biome-ignore lint/a11y/useSemanticElements: a row of filter toggles; it is not a form fieldset
-        <div className={css.agents} role="group" aria-label={t('sidebar.filterAgents')}>
-          {agents.map((a) => {
-            const { fg, bg, edge } = agentColors(a);
-            return (
-              <button
+      <div className={css.head}>
+        <label className={css.search}>
+          <Search size={14} aria-hidden="true" />
+          <input
+            type="search"
+            value={query}
+            placeholder={t('sidebar.search')}
+            aria-label={t('sidebar.search')}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </label>
+        {agentCounts.length > 1 && (
+          // biome-ignore lint/a11y/useSemanticElements: a row of filter toggles, not a form fieldset
+          <div className={css.chips} role="group" aria-label={t('sidebar.filterAgents')}>
+            <Chip
+              pressed={agent === null}
+              count={listed.length}
+              title={t('sidebar.allAgents')}
+              onClick={() => setOnlyAgent(null)}
+            >
+              {t('sidebar.all')}
+            </Chip>
+            {agentCounts.map(([a, n]) => (
+              <Chip
                 key={a}
-                type="button"
-                className={css.chip}
-                data-agent={a}
-                aria-pressed={filter === a}
-                title={t(filter === a ? 'sidebar.allAgents' : 'sidebar.onlyAgent', {
+                pressed={agent === a}
+                count={n}
+                title={t(agent === a ? 'sidebar.allAgents' : 'sidebar.onlyAgent', {
                   agent: agentName(a),
                 })}
-                style={{ '--tag-fg': fg, '--tag-bg': bg, '--tag-edge': edge } as CSSProperties}
-                onClick={() => setOnly(filter === a ? null : a)}
+                onClick={() => setOnlyAgent(agent === a ? null : a)}
               >
-                {filter === a && <Check size={10} aria-hidden="true" />}
                 {agentName(a)}
-              </button>
-            );
-          })}
-        </div>
-      )}
+              </Chip>
+            ))}
+          </div>
+        )}
+        {liveCounts.length > 1 && (
+          // biome-ignore lint/a11y/useSemanticElements: a row of filter toggles, not a form fieldset
+          <div className={css.chips} role="group" aria-label={t('sidebar.filterStates')}>
+            <Chip
+              pressed={live === null}
+              title={t('sidebar.allStates')}
+              onClick={() => setOnlyLive(null)}
+            >
+              {t('sidebar.all')}
+            </Chip>
+            {liveCounts.map(([f, n]) => (
+              <Chip
+                key={f}
+                pressed={live === f}
+                count={n}
+                onClick={() => setOnlyLive(live === f ? null : f)}
+              >
+                {t(LIVE_WORD[f])}
+              </Chip>
+            ))}
+          </div>
+        )}
+      </div>
       <div ref={listRef} className={css.list}>
         {groups.length === 0 && (
           <p className={css.empty}>{t(sessions.length ? 'sidebar.noMatch' : 'sidebar.empty')}</p>
         )}
         {groups.map((g) => (
           <ul key={g.project} aria-label={g.project} className={css.group}>
-            <li className={css.groupTitle} aria-hidden="true">
+            <li className={`${css.groupTitle} section-label`} aria-hidden="true">
               {g.project}
             </li>
             {g.sessions.map((s) => (
@@ -107,72 +170,44 @@ export function SessionSidebar({ sessions, selectedId, now, showProbes, onSelect
             ))}
           </ul>
         ))}
+        {live && hidden > 0 && (
+          <p className={css.hidden}>
+            {t(HIDDEN[live], { n: hidden })}{' '}
+            <button type="button" className={css.showAll} onClick={() => setOnlyLive(null)}>
+              {t('sidebar.showAll')}
+            </button>
+          </p>
+        )}
       </div>
     </nav>
   );
 }
 
-function SessionRow({
-  session: s,
-  selected,
-  now,
-  roving,
-  onSelect,
+/** A text toggle: pressed is an ink border; the count in the mono face. */
+function Chip({
+  pressed,
+  count,
+  title,
+  onClick,
+  children,
 }: {
-  session: SessionSummary;
-  selected: boolean;
-  now: number;
-  roving: RovingItemProps;
-  onSelect(id: string): void;
+  pressed: boolean;
+  count?: number;
+  title?: string;
+  onClick(): void;
+  children: string;
 }) {
-  const { t, intl } = useI18n();
-  // Whether the row cut its text short when the pointer arrived: only then does the tooltip
-  // repeat the row's text (whole), so a screen reader does not hear it twice.
-  const [clipped, setClipped] = useState(false);
-  const title = s.title ?? t('sidebar.untitled');
-  const live = t(`live.${s.live}`);
-  const when = formatRelative(s.updatedAt, now, intl);
-  const tokens = s.usage
-    ? t('common.tokens', { n: formatCompact(totalTokens(s.usage), intl) })
-    : null;
-  const tip = clipped
-    ? [title, [agentName(s.agent), live, when, tokens].filter(Boolean).join(' · '), s.cwd]
-        .filter(Boolean)
-        .join('\n')
-    : (s.cwd ?? undefined);
   return (
     <button
       type="button"
-      className={css.item}
-      {...roving}
-      aria-current={selected ? 'true' : undefined}
-      title={tip}
-      onPointerEnter={(e) =>
-        setClipped(
-          [...e.currentTarget.querySelectorAll<HTMLElement>('[data-clip]')].some(
-            (el) => el.scrollWidth > el.clientWidth,
-          ),
-        )
-      }
-      onClick={() => onSelect(s.id)}
+      className={css.chip}
+      aria-pressed={pressed}
+      title={title}
+      onClick={onClick}
     >
-      <span className={css.title} data-clip>
-        {title}
-      </span>
-      <span className={css.meta}>
-        <AgentTag kind={s.agent} />
-        <LiveDot state={s.live} />
-        <span className={css.state}>{live}</span>
-        <span className={css.when} data-clip>
-          <span className={css.sep}>·</span> {when}
-          {tokens && (
-            <>
-              {' '}
-              <span className={css.sep}>·</span> <span className="num">{tokens}</span>
-            </>
-          )}
-        </span>
-      </span>
+      {children}
+      {/* Spoken as "Grok 1"; the gap on screen is the chip's. */}
+      {count !== undefined && <span className={`${css.count} figure`}> {count}</span>}
     </button>
   );
 }
