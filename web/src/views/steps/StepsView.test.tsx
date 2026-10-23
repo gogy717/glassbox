@@ -138,6 +138,9 @@ describe('StepsView', () => {
     const edit = within(second).getByText('Edit').closest('li') as HTMLElement;
     expect(edit).toHaveAttribute('data-status', 'error');
     expect(edit).toHaveTextContent('Failed');
+    // What the tool said, under the did list, without Claude Code's wrapper.
+    expect(within(second).getByText('String to replace not found in file.')).toBeInTheDocument();
+    expect(second).not.toHaveTextContent('tool_use_error');
   });
 
   it('badges failed and interrupted steps', () => {

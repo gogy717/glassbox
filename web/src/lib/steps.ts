@@ -34,6 +34,14 @@ export interface StepAction {
   status: ToolCall['status'] | 'approval';
   /** How long the tool took; null while it runs, or when its end was not recorded. */
   durationMs: number | null;
+  /** What a failed tool said, as far as it was recorded. */
+  error: string | null;
+}
+
+/** A failed tool's message, without Claude Code's `<tool_use_error>` wrapper. */
+function toolError(t: ToolCall): string | null {
+  if (t.status !== 'error' || !t.resultPreview) return null;
+  return t.resultPreview.replace(/<\/?tool_use_error>/g, '').trim() || null;
 }
 
 export interface Step {
@@ -102,6 +110,7 @@ function stepOf(req: ModelRequest, tools: ToolCall[], now: number, approvals?: A
     summary: summarizeInput(t),
     status: toolStatus(t, approvals) === 'approval' ? ('approval' as const) : t.status,
     durationMs: t.durationMs,
+    error: toolError(t),
   }));
   const thinking = req.blocks.filter((b) => b.kind === 'thinking');
   const texts = thinking.map((b) => b.text).filter((t): t is string => !!t);

@@ -116,6 +116,13 @@ export const StepItem = memo(function StepItem({ step, onOpen }: Props) {
           </ul>
         </div>
       )}
+      {step.did.map((a) =>
+        a.error ? (
+          <p key={a.toolCallId} className={css.stepError} title={a.error}>
+            {a.error}
+          </p>
+        ) : null,
+      )}
       {step.error && <p className={css.stepError}>{step.error}</p>}
     </article>
   );
