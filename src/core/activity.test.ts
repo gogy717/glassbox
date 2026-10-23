@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type ActivityInput, activityTarget, sessionActivity } from './activity.js';
+import { type ActivityInput, activityTarget, sessionActivity, thinkingSince } from './activity.js';
 import type { ModelRequest, ToolCall, Turn } from './model.js';
 
 const at = (sec: number) => new Date(Date.UTC(2026, 0, 1, 0, 0, sec)).toISOString();
@@ -306,5 +306,165 @@ describe('activityTarget', () => {
     const target = activityTarget('Bash', { command: `echo ${'x'.repeat(500)}\nsecond line` });
     expect(target).toHaveLength(121);
     expect(target?.endsWith('…')).toBe(true);
+  });
+});
+
+describe('activityTarget masks credentials before they leave the server', () => {
+  // Synthetic: the shapes of real tokens, none of their values.
+  const ghp = `ghp_${'a'.repeat(36)}`;
+  const ant = `sk-ant-api03-${'b'.repeat(40)}`;
+  const proj = `sk-proj-${'c'.repeat(40)}`;
+  const jwt = `eyJ${'d'.repeat(20)}.${'e'.repeat(20)}.${'f'.repeat(20)}`;
+  const bash = (command: string) => activityTarget('Bash', { command });
+
+  it.each([
+    ['a token in the environment', `GITHUB_TOKEN=${ghp} gh pr list`, 'GITHUB_TOKEN=••• gh pr list'],
+    [
+      'an exported API key',
+      `export OPENAI_API_KEY=${proj} && codex`,
+      'export OPENAI_API_KEY=••• && codex',
+    ],
+    ['a quoted password', `PGPASSWORD='hunter2 x' psql -h db`, 'PGPASSWORD=••• psql -h db'],
+    ['a session cookie flag', 'tool --session=abc123 run', 'tool --session=••• run'],
+    [
+      'a query-string key',
+      'curl "https://api.x.io/v1?api_key=abc123&q=1"',
+      'curl "https://api.x.io/v1?api_key=•••&q=1"',
+    ],
+    [
+      'a bearer header',
+      `curl -H "Authorization: Bearer ${ant}" https://api.x.io`,
+      'curl -H "Authorization: •••" https://api.x.io',
+    ],
+    [
+      'a bearer token in code',
+      `fetch(u, { headers: { Authorization: 'Bearer ${ant}' } })`,
+      "fetch(u, { headers: { Authorization: 'Bearer •••' } })",
+    ],
+    [
+      'an API key header',
+      "curl -H 'X-Api-Key: abc123' https://api.x.io",
+      "curl -H 'X-Api-Key: •••' https://api.x.io",
+    ],
+    [
+      'a JSON body key',
+      `curl -d '{"token": "abc123", "n": 1}' https://x.io`,
+      `curl -d '{"token": "•••", "n": 1}' https://x.io`,
+    ],
+    [
+      'a password flag with a space',
+      'vault login --password hunter2 --method=userpass',
+      'vault login --password ••• --method=userpass',
+    ],
+    ['a token flag with a space', `gh auth login --token ${ghp}`, 'gh auth login --token •••'],
+    ['mysql -p', 'mysql -u root -phunter2 shop', 'mysql -u root -p••• shop'],
+    ['curl -u', 'curl -u admin:hunter2 https://x.io', 'curl -u admin:••• https://x.io'],
+    [
+      'URL userinfo',
+      'git clone https://bob:hunter2@git.x.io/r.git',
+      'git clone https://bob:•••@git.x.io/r.git',
+    ],
+    [
+      'a bare GitHub token',
+      `echo ${ghp} | gh auth login --with-token`,
+      'echo ••• | gh auth login --with-token',
+    ],
+    ['a bare Anthropic key', `claude --api ${ant}`, 'claude --api •••'],
+    [
+      'a fine-grained GitHub token',
+      `git push https://github_pat_${'g'.repeat(30)}@github.com/x`,
+      'git push https://•••@github.com/x',
+    ],
+    ['a GitLab token', `glab auth login -t glpat-${'h'.repeat(20)}`, 'glab auth login -t •••'],
+    ['a Slack token', `slack post xoxb-${'1'.repeat(12)}-abc`, 'slack post •••'],
+    [
+      'an AWS key id',
+      'aws configure set aws_access_key_id AKIAABCDEFGHIJKLMNOP',
+      'aws configure set aws_access_key_id •••',
+    ],
+    ['a Google key', `gcloud x --key=AIza${'i'.repeat(35)}`, 'gcloud x --key=•••'],
+    ['a JWT', `http :8080 "Cookie:${jwt}"`, 'http :8080 "Cookie:•••"'],
+  ])('%s', (_name, command, expected) => {
+    expect(bash(command)).toBe(expected);
+  });
+
+  it('masks code, patterns and argv as well as command strings', () => {
+    expect(activityTarget('exec', `const key = '${ant}';\nrun(key)`)).toBe(
+      "const key = '•••'; run(key)",
+    );
+    expect(activityTarget('Grep', { pattern: `token=${ghp}` })).toBe('token=•••');
+    expect(
+      activityTarget('shell', { command: ['bash', '-lc', `export OPENAI_API_KEY=${proj}; codex`] }),
+    ).toBe('export OPENAI_API_KEY=•••; codex');
+  });
+
+  it('masks a secret whole before cutting the line, wherever it falls', () => {
+    const target = bash(`${'x'.repeat(110)} GITHUB_TOKEN=${ghp} gh pr list`) ?? '';
+    expect(target).not.toMatch(/ghp_|aaaa/);
+    expect(target.endsWith('…')).toBe(true);
+  });
+
+  it.each([
+    'npm test -- --run',
+    'git log --oneline -5',
+    'rg -n "sessionActivity" src',
+    'psql -h localhost -p 5432 -U app shop',
+    'sort --key 2 data.txt',
+    'ssh git@github.com',
+    'cat secret_notes.md',
+    'grep -n "password" config.example',
+    'curl https://example.com/api/v1/items?page=2',
+    'echo sk-short',
+    'GITHUB_TOKEN=$GH_TOKEN gh pr list',
+    `API_KEY=\${OPENAI_API_KEY} node run.js`,
+    'grep -n "key=\\|meters.map" web/src/QuotaBar.tsx',
+    "grep -E '^export DEEPSEEK_API_KEY=' ~/.bashrc | wc -l",
+    'grep -n "key={item.id}" web/src/List.tsx',
+  ])('leaves an ordinary command alone: %s', (command) => {
+    expect(bash(command)).toBe(command);
+  });
+
+  it('shows the home directory as ~, and only the home directory', () => {
+    const home = process.env.HOME ?? '';
+    expect(bash(`cd ${home}/dev/app && npm test`)).toBe('cd ~/dev/app && npm test');
+    expect(bash(`ls ${home}`)).toBe('ls ~');
+    expect(bash(`ls ${home}2/x`)).toBe(`ls ${home}2/x`);
+    expect(activityTarget('Grep', { pattern: `${home}/notes` })).toBe('~/notes');
+  });
+
+  it('has no host for a URL without one', () => {
+    expect(activityTarget('WebFetch', { url: 'file:///etc/hosts' })).toBeNull();
+    expect(activityTarget('WebFetch', { url: 'user:pass@host/x' })).toBeNull();
+    expect(activityTarget('WebFetch', { url: 'https://bob:pw@example.com/x' })).toBe('example.com');
+  });
+});
+
+describe('thinkingSince', () => {
+  it('runs from the call’s last step: the end of its latest own tool', () => {
+    const own = tool({ id: 'own', name: 'exec', startSec: 4, status: 'complete', endedAt: at(8) });
+    const other = tool({
+      id: 'other',
+      name: 'Read',
+      startSec: 4,
+      status: 'complete',
+      endedAt: at(20),
+    });
+    const c = call({ startSec: 3, toolCallIds: [own.id] });
+    expect(thinkingSince(c, [own, other])).toBe(at(8));
+    expect(thinkingSince({ ...c, toolCallIds: [] }, [own, other])).toBe(at(3));
+    // The session's line uses it too, so it does not jump back once the tool ends.
+    expect(sessionActivity(input({ requests: [c], toolCalls: [own, other] }))).toMatchObject({
+      kind: 'thinking',
+      since: at(8),
+    });
+  });
+});
+
+describe('comparing times', () => {
+  it('orders by instant, not by text: …:05.100Z is after …:05Z', () => {
+    const whole = tool({ name: 'Read', startSec: 0, startedAt: '2026-01-01T00:00:05Z' });
+    const later = tool({ name: 'Grep', startSec: 0, startedAt: '2026-01-01T00:00:05.100Z' });
+    expect(sessionActivity(input({ toolCalls: [later, whole] }))?.tool).toBe('Grep');
+    expect(sessionActivity(input({ toolCalls: [whole, later] }))?.tool).toBe('Grep');
   });
 });

@@ -21,7 +21,7 @@ import type {
 import { MAIN_AGENT_ID } from '../core/model.js';
 import { emptyUsage, sumUsage } from '../core/usage.js';
 import type { AppStore } from './app.js';
-import { compareSessions } from './store.js';
+import { compareSessions, listedSummary } from './store.js';
 
 const TICK_MS = 2000;
 /** Ticks a main-agent request stays in flight, and a tool stays running. */
@@ -96,7 +96,10 @@ export class DemoStore implements AppStore {
   }
 
   listSessions(): SessionSummary[] {
-    return [structuredClone(this.snap.session), ...this.others].sort(compareSessions);
+    // Listed as the real store lists them: idle sessions say since when.
+    return [structuredClone(this.snap.session), ...this.others]
+      .map((s) => listedSummary(s))
+      .sort(compareSessions);
   }
 
   async getSnapshot(sessionId: string): Promise<SessionSnapshot | null> {

@@ -915,6 +915,8 @@ export class ClaudeSessionParser implements SessionParser {
     const requests: ModelRequest[] = [];
     const toolCalls: ToolCall[] = [];
     for (const agent of this.agents.values()) {
+      // An ended sub-agent has nothing in flight or running.
+      if (this.agentEnded(agent)) continue;
       const last = this.requests.get(agent.requestIds.at(-1) ?? '');
       if (!last) continue;
       requests.push(this.requestView(last));

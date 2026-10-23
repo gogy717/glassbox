@@ -1,14 +1,13 @@
+import { idleActivity } from '../core/activity.js';
 import type { AgentAdapter, SessionSource } from '../core/adapter.js';
 import type {
   LiveState,
   QuotaSnapshot,
   RequestDetail,
-  SessionActivity,
   SessionPatch,
   SessionSnapshot,
   SessionSummary,
 } from '../core/model.js';
-import { MAIN_AGENT_ID } from '../core/model.js';
 import type { QuotaSource } from '../core/quota-source.js';
 import { Coalescer } from './coalescer.js';
 import { errorText, OpenSession } from './open-session.js';
@@ -70,21 +69,14 @@ export function isActive(live: LiveState): boolean {
  * for the old state, so it goes until then. Idle sessions are not opened in the background;
  * their activity needs nothing a parser knows: idle since the last write.
  */
-function withLive(summary: SessionSummary, live: LiveState): SessionSummary {
+export function listedSummary(summary: SessionSummary, live = summary.live): SessionSummary {
   let next = summary;
   if (summary.live !== live) {
     const { activity: _stale, ...rest } = summary;
     next = { ...rest, live };
   }
   if (live !== 'idle' || next.activity) return next;
-  const activity: SessionActivity = {
-    kind: 'idle',
-    tool: null,
-    target: null,
-    agentId: MAIN_AGENT_ID,
-    since: next.updatedAt,
-  };
-  return { ...next, activity };
+  return { ...next, activity: idleActivity(next.updatedAt) };
 }
 
 export function compareSessions(a: SessionSummary, b: SessionSummary): number {
@@ -169,7 +161,9 @@ export class SessionStore {
   }
 
   listSessions(): SessionSummary[] {
-    return [...this.entries.values()].map((e) => withLive(e.summary, e.live)).sort(compareSessions);
+    return [...this.entries.values()]
+      .map((e) => listedSummary(e.summary, e.live))
+      .sort(compareSessions);
   }
 
   async getSnapshot(sessionId: string): Promise<SessionSnapshot | null> {
@@ -304,6 +298,8 @@ export class SessionStore {
       return session;
     }
     entry.open = session;
+    // The live poll may have moved on while it loaded, with no open session to tell.
+    session.setLive(entry.live);
     this.evict(entry);
     return session;
   }

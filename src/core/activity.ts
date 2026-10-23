@@ -25,9 +25,8 @@ export function sessionActivity(input: ActivityInput): SessionActivity | null {
   if (live !== 'busy' && live !== 'waiting' && live !== 'idle') return null;
   // A step after the turn's end mark (work Claude Code resumed without a new turn) is later.
   if (live === 'idle') {
-    if (!lastTurn) return idle(input.updatedAt);
-    const step = lastStep(input, lastTurn);
-    return idle(lastTurn.endedAt && lastTurn.endedAt > step ? lastTurn.endedAt : step);
+    if (!lastTurn) return idleActivity(input.updatedAt);
+    return idleActivity(latest(lastTurn.endedAt, lastStep(input, lastTurn)));
   }
 
   const calls = [...input.requests].filter((r) => r.status === 'in-flight');
@@ -59,7 +58,7 @@ export function sessionActivity(input: ActivityInput): SessionActivity | null {
       tool: null,
       target: null,
       agentId: call.agentId,
-      since: call.startedAt,
+      since: thinkingSince(call, input.toolCalls),
     };
   }
   // Busy mid-turn with nothing running: the model is on its next step, which agents that write
@@ -88,8 +87,32 @@ export function latestTurn(turns: Iterable<Turn>, agentId = MAIN_AGENT_ID): Turn
   return last;
 }
 
-function idle(since: IsoTime | null): SessionActivity {
+/** Between turns since `since`: the whole activity of an idle session. */
+export function idleActivity(since: IsoTime | null): SessionActivity {
   return { kind: 'idle', tool: null, target: null, agentId: MAIN_AGENT_ID, since };
+}
+
+/**
+ * Where a call in flight's "Thinking · m:ss" clock starts: at its last step, the end of the
+ * latest of its own tools, else the call's start. A call that spans its tools (Codex, Grok,
+ * OpenCode) would otherwise jump back to its start once a tool ends. `tools` may hold others.
+ */
+export function thinkingSince(call: ModelRequest, tools: Iterable<ToolCall>): IsoTime | null {
+  const own = new Set(call.toolCallIds);
+  let since = call.startedAt;
+  for (const t of tools) if (own.has(t.id)) since = latest(since, t.endedAt);
+  return since;
+}
+
+/** Epoch ms of `t`; -Infinity when unknown or unreadable, so it sorts first. */
+const ms = (t: IsoTime | null): number => {
+  const v = t === null ? Number.NaN : Date.parse(t);
+  return Number.isNaN(v) ? Number.NEGATIVE_INFINITY : v;
+};
+
+/** The later of two times, by instant: "…:05Z" and "…:04.900Z" do not compare as text. */
+function latest<T extends IsoTime | null>(a: T, b: IsoTime | null): T | IsoTime {
+  return b !== null && ms(b) > ms(a) ? b : a;
 }
 
 /**
@@ -115,18 +138,14 @@ function runningTool(tools: Iterable<ToolCall>, calls: ModelRequest[]): ToolCall
 
 /** Whether `a` started after `b`; an unknown start counts as earliest. */
 function later(a: { startedAt: IsoTime | null }, b: { startedAt: IsoTime | null } | null): boolean {
-  if (b === null) return true;
-  return (a.startedAt ?? '') > (b.startedAt ?? '');
+  return b === null || ms(a.startedAt) > ms(b.startedAt);
 }
 
 /** When the turn's last step ended: its agent's latest call or tool end, else the turn's start. */
 function lastStep(input: ActivityInput, turn: Turn): IsoTime {
-  let since = turn.startedAt;
-  const consider = (t: IsoTime | null, agentId: string) => {
-    if (t !== null && agentId === turn.agentId && t > since) since = t;
-  };
-  for (const r of input.requests) consider(r.endedAt, r.agentId);
-  for (const t of input.toolCalls) consider(t.endedAt, t.agentId);
+  let since: IsoTime = turn.startedAt;
+  for (const r of input.requests) if (r.agentId === turn.agentId) since = latest(since, r.endedAt);
+  for (const t of input.toolCalls) if (t.agentId === turn.agentId) since = latest(since, t.endedAt);
   return since;
 }
 
@@ -134,12 +153,83 @@ function lastStep(input: ActivityInput, turn: Turn): IsoTime {
 
 const MAX = 120;
 
-/** The start of `s` on one line, cut at MAX characters with "…". */
+/**
+ * The start of `s` on one line, cut at MAX characters with "…", secrets masked and the home
+ * directory shown as "~". Masking runs on the whole head before the cut, so a secret is masked
+ * entire or not shown at all.
+ */
 function clip(s: string): string {
   // Only the start shows: collapse the whitespace of that, not of a megabyte of input.
   const head = s.slice(0, MAX * 4);
-  const line = head.replace(/\s+/g, ' ').trim();
+  const line = homeless(redact(head)).replace(/\s+/g, ' ').trim();
   return line.length > MAX || head.length < s.trimEnd().length ? `${line.slice(0, MAX)}…` : line;
+}
+
+const MASK = '•••';
+
+/** Words that make a variable, flag, header or JSON key name a secret. */
+const SECRET_NAME = String.raw`[\w-]*(?:token|secret|key|pass|pwd|auth|credential|cookie|session)[\w-]*`;
+
+/**
+ * Credentials a command line, code or a pattern can carry, masked in place: targets go to every
+ * client in the session list. Each pattern is linear and runs on at most MAX * 4 characters.
+ */
+const SECRETS: [RegExp, string][] = [
+  // GITHUB_TOKEN=ghp_…, --password=…, ?api_key=…: up to a space, quote or separator. Not a
+  // reference ($GH_TOKEN, ${…}, JSX's key={…}), a regex escape (grep "key=\|…"), or a closing
+  // quote ('^export API_KEY=' file): nothing secret shows there.
+  [
+    new RegExp(
+      String.raw`\b(${SECRET_NAME})=(?![{$\\])(?:"[^"\s][^"]*"|'[^'\s][^']*'|[^\s"'&;|]+)`,
+      'gi',
+    ),
+    `$1=${MASK}`,
+  ],
+  // {"token": "…"}
+  [new RegExp(String.raw`("${SECRET_NAME}"\s*:\s*)"[^"]*"`, 'gi'), `$1"${MASK}"`],
+  // -H "X-Api-Key: …", --header 'Cookie: …'
+  [
+    new RegExp(String.raw`((?:-H|--header)[\s=]*["']?${SECRET_NAME}\s*:\s*)[^"'\n]+`, 'gi'),
+    `$1${MASK}`,
+  ],
+  [/\b(Bearer|Basic)\s+[\w.~+/=-]+/g, `$1 ${MASK}`],
+  // --password hunter2, --token …: the value as the next word.
+  [
+    /(--(?:password|passwd|token|secret|api-?key|access-token|auth-token|client-secret)\s+)[^\s"']+/gi,
+    `$1${MASK}`,
+  ],
+  // curl -u user:pass
+  [/((?:\s|^)(?:-u|--user)[\s=]+[^\s:"']+):[^\s"']+/g, `$1:${MASK}`],
+  // mysql -phunter2 (psql's -p is the port).
+  [/\b((?:mysql|mysqldump|mysqladmin|mariadb)\b[^|;&\n]*?\s-p)[^\s"']+/g, `$1${MASK}`],
+  // https://user:pass@host
+  [/\b([a-z][a-z0-9+.-]*:\/\/[^/\s:@]+):[^/\s@]+@/gi, `$1:${MASK}@`],
+  // Tokens known by their prefix: Anthropic and OpenAI, GitHub, GitLab, Slack, AWS, Google, xAI,
+  // Stripe, and JWTs.
+  [
+    /\b(?:sk-[\w-]{16,}|gh[pousr]_\w{20,}|github_pat_\w{20,}|glpat-[\w-]{20,}|xox[abprs]-[\w-]{10,}|(?:AKIA|ASIA)[0-9A-Z]{16}|AIza[\w-]{35}|xai-\w{20,}|[sr]k_(?:live|test)_\w{16,}|eyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,})/g,
+    MASK,
+  ],
+];
+
+function redact(s: string): string {
+  let out = s;
+  for (const [re, to] of SECRETS) out = out.replace(re, to);
+  return out;
+}
+
+/** The server's home directory. The web imports this module too (`thinkingSince`): no node:os. */
+const HOME =
+  (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.HOME ??
+  '';
+const HOME_AT =
+  HOME.length > 1
+    ? new RegExp(`${HOME.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=/|$|[\\s"'])`, 'g')
+    : null;
+
+/** The home directory as "~", as a shell prompt shows it. */
+function homeless(s: string): string {
+  return HOME_AT ? s.replace(HOME_AT, '~') : s;
 }
 
 type Obj = Record<string, unknown>;
@@ -152,11 +242,12 @@ const str = (o: Obj, k: string): string | null => {
 const basename = (path: string) => path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
 const isUrl = (s: string) => /^https?:\/\//i.test(s);
 
-function hostOf(url: string): string {
+/** A URL's host; null when it has none (file:, "user:pass@host/x" read as a scheme). */
+function hostOf(url: string): string | null {
   try {
-    return new URL(url).host;
+    return new URL(url).host || null;
   } catch {
-    return clip(url);
+    return clip(url) || null;
   }
 }
 

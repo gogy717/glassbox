@@ -390,6 +390,22 @@ describe('SessionStore', () => {
     expect(s.listSessions()[0]).not.toHaveProperty('activity');
   });
 
+  it('tells a session that opens the live state that changed while it loaded', async () => {
+    const p = await session('a', rec.req('ra', T(1)));
+    const s = await startStore();
+    let release = () => {};
+    fake.listFilesGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const opening = s.getSnapshot(p.id);
+    await setLive({ a: 'idle' });
+    await vi.waitFor(() => expect(s.listSessions()[0]?.live).toBe('idle'), { timeout: 2000 });
+    fake.listFilesGate = null;
+    release();
+    await opening;
+    expect(fake.parsersFor('a').at(-1)?.live).toBe('idle');
+  });
+
   it('gives an idle session that is not open its idle spell since the last write', async () => {
     await session('a', rec.req('ra', T(4)));
     await setLive({ a: 'idle' });
