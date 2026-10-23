@@ -150,7 +150,6 @@ export function Composer({ session, run, client, onNewSession, onRunStarted }: P
           <Plus size={13} aria-hidden="true" />
           {t('composer.newSession')}
         </button>
-        {blocked && session && <span className={css.hint}>{blocked}</span>}
         {error && <span className={css.error}>{t('composer.error', { msg: error })}</span>}
       </div>
     </div>

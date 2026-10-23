@@ -81,11 +81,10 @@ describe('Composer', () => {
     const modes = screen.getAllByRole('radio');
     expect(modes).toHaveLength(2);
     for (const m of modes) expect(m).toBeDisabled();
-    expect(
-      screen.getByText(
-        'Grok sessions are view-only; start a Claude Code session with “New session”',
-      ),
-    ).toBeInTheDocument();
+    expect(box).toHaveAttribute(
+      'placeholder',
+      'Grok sessions are view-only; start a Claude Code session with “New session”',
+    );
     expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
     // Nothing will be sent from here, so there is no permission mode to pick.
     expect(screen.queryByRole('combobox', { name: 'Permissions' })).toBeNull();
@@ -113,7 +112,7 @@ describe('Composer', () => {
   it('will not write into a session a terminal has open, until "continue in a copy" is picked', async () => {
     const { client, box } = renderComposer({ session: busy });
     expect(box).toBeDisabled();
-    expect(screen.getByText(/open in a terminal/)).toBeInTheDocument();
+    expect(box.getAttribute('placeholder')).toMatch(/open in a terminal/);
     fireEvent.click(screen.getByRole('radio', { name: 'Continue in a copy' }));
     expect(box).toBeEnabled();
     type(box, 'hi');
@@ -152,7 +151,7 @@ describe('Composer', () => {
   it('waits while the run is replying, and can stop it', async () => {
     const { client, box } = renderComposer({ session: closed, run: runOf({ status: 'running' }) });
     expect(box).toBeDisabled();
-    expect(screen.getByText('Waiting for the reply to finish')).toBeInTheDocument();
+    expect(box).toHaveAttribute('placeholder', 'Waiting for the reply to finish');
     fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
     await waitFor(() => expect(client.interrupt).toHaveBeenCalledWith('run_1'));
   });

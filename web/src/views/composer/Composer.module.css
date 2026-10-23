@@ -26,6 +26,8 @@
   color: var(--text);
   font: inherit;
   resize: none;
+  /* Grows with what is typed (and with a long placeholder) up to max-height, where supported. */
+  field-sizing: content;
 }
 
 .textarea:focus {
@@ -34,7 +36,14 @@
 }
 
 .textarea:disabled {
-  opacity: 0.6;
+  /* Not faded: the placeholder says why sending is blocked and must stay readable. */
+  background: var(--layer-2);
+  cursor: not-allowed;
+}
+
+/* The send / stop button lines up with the single-line textarea. */
+.inputRow > button {
+  height: 38px;
 }
 
 .controls {
@@ -75,18 +84,34 @@
   cursor: not-allowed;
 }
 
-.hint {
-  color: var(--warning);
+.select {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
 }
 
 .select select {
-  height: 26px;
+  height: 28px;
+  padding: 0 26px 0 9px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 7px;
   background: var(--layer-1);
   color: var(--text);
   font: inherit;
   font-size: 11px;
+  appearance: none;
+  cursor: pointer;
+}
+
+.select select:hover {
+  border-color: var(--border-strong);
+}
+
+.select svg {
+  position: absolute;
+  right: 9px;
+  color: var(--muted);
+  pointer-events: none;
 }
 
 .primary,
@@ -127,6 +152,13 @@
 .danger:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+/* Buttons in the controls row match the 28px segmented control and select beside them. */
+.controls .secondary {
+  height: 28px;
+  padding: 0 11px;
+  font-size: 11px;
 }
 
 .actions {

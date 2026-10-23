@@ -64,6 +64,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  /* A button's flex column doesn't stretch rows by itself: without this a long title pushes the
+     row (and the clock) out of the card instead of ellipsizing. */
+  width: 100%;
   min-width: 0;
 }
 
@@ -109,6 +112,7 @@
 
   .list > li {
     flex: 0 0 210px;
+    min-width: 0;
   }
 }
 

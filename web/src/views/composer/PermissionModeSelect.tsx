@@ -1,3 +1,4 @@
+import { ChevronDown } from 'lucide-react';
 import type { RunPermissionMode } from '../../../../src/shared/runs.js';
 import { useI18n } from '../../i18n';
 import css from './Composer.module.css';
@@ -22,6 +23,7 @@ export function PermissionModeSelect({
         <option value="acceptEdits">{t('composer.permAcceptEdits')}</option>
         <option value="plan">{t('composer.permPlan')}</option>
       </select>
+      <ChevronDown size={12} aria-hidden="true" />
     </label>
   );
 }
