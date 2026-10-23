@@ -7,6 +7,7 @@ import { demoOpen } from '../../test/demo';
 import { useFakeLayout } from '../../test/layout';
 import type { CardKey } from './cards';
 import { DetailPanel } from './DetailPanel';
+import { resetDetailPrefs } from './detail/prefs';
 
 const open = demoOpen();
 const req = (id: string) => open.requests.get(id) as ModelRequest;
@@ -41,7 +42,11 @@ function stubFetch(body: unknown, status = 200) {
 
 describe('DetailPanel', () => {
   useFakeLayout();
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+    resetDetailPrefs();
+  });
 
   it('loads what the request sent, with completeness and notes', async () => {
     const fetch = stubFetch(detail);
@@ -56,6 +61,31 @@ describe('DetailPanel', () => {
     expect(within(panel).getByText('2 messages could not be resolved')).toBeInTheDocument();
     for (const h of ['System prompt', 'Messages', 'Tool definitions', 'Parameters'])
       expect(within(panel).getByRole('heading', { name: h })).toBeInTheDocument();
+  });
+
+  it('shows what was sent readable by default, with the JSON one click away and remembered', async () => {
+    stubFetch({
+      ...detail,
+      messages: [
+        { role: 'user', content: 'Busy sessions first' },
+        { role: 'assistant', content: 'Sorting now:\n```ts\nsessions.sort(byActivity);\n```' },
+      ],
+    });
+    renderPanel(req('req_m1'), 'request');
+    const panel = screen.getByRole('region', { name: 'Request details' });
+    await within(panel).findByText('Partly reconstructed');
+    // Readable: the newest message on top, its code a block of its own, nothing to expand.
+    const [newest] = within(panel).getAllByRole('article');
+    expect(newest).toHaveAccessibleName('Assistant message #2 of 2');
+    expect(newest?.querySelector('pre')?.textContent).toBe('sessions.sort(byActivity);');
+    expect(within(panel).queryByText('{} JSON')).toBeNull();
+
+    fireEvent.click(within(panel).getByRole('radio', { name: 'JSON' }));
+    expect(within(panel).queryByRole('article')).toBeNull();
+    expect(within(panel).getAllByText('{} JSON')).toHaveLength(4);
+    expect(JSON.parse(localStorage.getItem('glassbox.detail') ?? '{}')).toMatchObject({
+      view: 'json',
+    });
   });
 
   it('reloads what was sent once an in-flight request completes', async () => {
@@ -139,6 +169,17 @@ describe('DetailPanel', () => {
       screen.getByText('Codex encrypts its thinking, so it cannot be shown'),
     ).toBeInTheDocument();
     expect(screen.queryByText('Thinking content not recorded')).toBeNull();
+  });
+
+  it('shows a tool call’s arguments readable, with the JSON one click away', () => {
+    renderPanel(req('req_m2'), 'tool:tu_m2b');
+    const panel = screen.getByRole('region', { name: 'Tool call details' });
+    const args = within(panel).getByRole('heading', { name: 'Arguments' }).closest('div')
+      ?.parentElement as HTMLElement;
+    expect(within(args).getByText('file_path')).toBeInTheDocument();
+    expect(within(args).queryByText('{} JSON')).toBeNull();
+    fireEvent.click(within(args).getByRole('radio', { name: 'JSON' }));
+    expect(within(args).getByText('{} JSON')).toBeInTheDocument();
   });
 
   it('shows a tool call’s arguments, result and timing, and loads the full result on request', async () => {

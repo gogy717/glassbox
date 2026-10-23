@@ -1,0 +1,481 @@
+/*
+ * What a request sent, readable: the conversation beside params, system prompt and tools; one
+ * column when the panel itself is narrow (the session list and turns take most of a laptop).
+ */
+.readable {
+  container-type: inline-size;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 1px;
+  background: var(--border);
+}
+
+.main,
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 12px 12px;
+  background: var(--layer-2);
+}
+
+.main .section,
+.side .section:last-child {
+  flex: 1;
+}
+
+.section h4 {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.muted {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Shared pieces, before the rules that place them */
+
+.copy {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.copy:hover {
+  background: var(--layer-3);
+  color: var(--text);
+}
+
+.showAll {
+  align-self: flex-start;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--layer-1);
+  color: var(--accent);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.inline {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--layer-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.params {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 3px 10px;
+  margin: 0;
+  font-size: 11px;
+}
+
+.params div {
+  display: contents;
+}
+
+.params dt {
+  font-family: var(--font-mono);
+  color: var(--muted);
+}
+
+.params dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.params code {
+  font-family: var(--font-mono);
+}
+
+.tools {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tool > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  padding: 3px 4px;
+  border-radius: 5px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.tool > summary:hover {
+  background: var(--layer-1);
+}
+
+.tool > summary code {
+  flex: none;
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.desc {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag {
+  flex: none;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--layer-3);
+  color: var(--text);
+  font-size: 10px;
+}
+
+.toolBody {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 4px 8px 16px;
+}
+
+.toolBody h5 {
+  margin: 4px 0 0;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* Messages */
+
+.messages {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.count {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: min(70vh, 900px);
+  margin: 0;
+  padding: 0 4px 0 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.end {
+  height: 1px;
+}
+
+.message {
+  --role-bg: var(--layer-3);
+  --role-text: var(--text);
+  --role-border: var(--border);
+  flex: none;
+  min-width: 0;
+  padding: 8px 10px 10px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--role-border);
+  border-radius: var(--radius-m);
+  background: var(--layer-1);
+}
+
+.message[data-role="user"] {
+  --role-bg: var(--card-req-bg);
+  --role-text: var(--card-req-text);
+  --role-border: var(--card-req-border);
+}
+
+.message[data-role="assistant"] {
+  --role-bg: var(--card-res-bg);
+  --role-text: var(--card-res-text);
+  --role-border: var(--card-res-border);
+}
+
+.message[data-role="tool"] {
+  --role-bg: var(--card-tool-bg);
+  --role-text: var(--card-tool-text);
+  --role-border: var(--card-tool-border);
+}
+
+.message article {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.messageHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+}
+
+.role {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--role-bg);
+  color: var(--role-text);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.position {
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.messageHead .copy {
+  margin-left: auto;
+}
+
+/* Blocks */
+
+.readableText {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.prose {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.blockHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.blockHead .copy {
+  margin-left: auto;
+}
+
+.thinking > summary {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.thinking[open] > summary {
+  margin-bottom: 6px;
+}
+
+.toolUse,
+.toolResult,
+.raw {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.toolUse .blockHead {
+  color: var(--card-tool-text);
+}
+
+.toolResult[data-error] .blockHead {
+  color: var(--error);
+}
+
+.media {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Code and arguments */
+
+.code {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--layer-2);
+}
+
+.codeHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 24px;
+  padding: 0 2px 0 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.codeCopy {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  border-radius: 5px;
+  background: var(--layer-2);
+}
+
+.lang {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.codePre {
+  max-height: 320px;
+  margin: 0;
+  padding: 6px 8px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Room for the copy button floating over the first line. */
+.codeCopy + .codePre {
+  padding-right: 30px;
+}
+
+.code .showAll {
+  margin: 0 8px 8px;
+}
+
+.args {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+
+.arg {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.arg dt {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.arg dd {
+  min-width: 0;
+  margin: 0;
+}
+
+/* System prompt, tools, params */
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sysBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sysBlock .readableText {
+  max-height: 320px;
+  overflow: auto;
+}
+
+/* Readable / JSON, newest / oldest */
+
+.segmented {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--layer-1);
+}
+
+.segmented button {
+  padding: 2px 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.segmented button[aria-checked="true"] {
+  background: var(--layer-3);
+  color: var(--text);
+  font-weight: 600;
+}
+
+@container (max-width: 760px) {
+  .columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

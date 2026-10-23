@@ -59,6 +59,13 @@
   color: var(--muted);
 }
 
+.cellHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .status {
   display: flex;
   align-items: flex-start;
@@ -91,6 +98,11 @@
   margin: 0;
   padding: 0 0 0 14px;
   color: var(--muted);
+}
+
+.statusTools {
+  flex: none;
+  margin-left: auto;
 }
 
 .message,

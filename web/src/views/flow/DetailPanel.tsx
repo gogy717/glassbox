@@ -13,6 +13,10 @@ import { agentName, encryptsThinking } from '../../lib/agent-names';
 import { formatClock, formatDuration, formatNumber } from '../../lib/format';
 import type { CardKey } from './cards';
 import css from './DetailPanel.module.css';
+import { ArgsView } from './detail/ArgsView';
+import { useDetailPrefs } from './detail/prefs';
+import { RequestReadable } from './detail/RequestReadable';
+import { ViewToggle } from './detail/ViewToggle';
 import { toolStatus } from './flow-model';
 
 interface Props {
@@ -56,10 +60,25 @@ export function DetailPanel({ sessionId, req, tools, card, onClose }: Props) {
   );
 }
 
-function Cell({ title, children }: { title: string; children: ReactNode }) {
+function Cell({
+  title,
+  tools,
+  children,
+}: {
+  title: string;
+  tools?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <div className={css.cell}>
-      <h4>{title}</h4>
+      {tools ? (
+        <div className={css.cellHead}>
+          <h4>{title}</h4>
+          {tools}
+        </div>
+      ) : (
+        <h4>{title}</h4>
+      )}
       {children}
     </div>
   );
@@ -91,6 +110,7 @@ function Loading<T>({
 function RequestBody({ sessionId, req }: { sessionId: string; req: ModelRequest }) {
   const { t } = useI18n();
   const agent = useSessionAgent();
+  const [prefs] = useDetailPrefs();
   // Keyed on the status too: what was sent is only final once the request has completed.
   const key = req.hasDetail ? `${sessionId}\n${req.id}\n${req.status}` : null;
   const [state, retry] = useFetch(key, (signal) => fetchRequestDetail(sessionId, req.id, signal));
@@ -126,21 +146,28 @@ function RequestBody({ sessionId, req }: { sessionId: string; req: ModelRequest 
                 ))}
               </ul>
             )}
+            <span className={css.statusTools}>
+              <ViewToggle />
+            </span>
           </div>
-          <div className={css.grid}>
-            <Cell title={t('detail.system')}>
-              <JsonInspector label="system" data={trees?.system} />
-            </Cell>
-            <Cell title={t('detail.messages')}>
-              <JsonInspector label="messages" data={trees?.messages} />
-            </Cell>
-            <Cell title={t('detail.tools')}>
-              <JsonInspector label="tools" data={trees?.tools} />
-            </Cell>
-            <Cell title={t('detail.params')}>
-              <JsonInspector label="params" data={trees?.params} />
-            </Cell>
-          </div>
+          {prefs.view === 'readable' ? (
+            <RequestReadable detail={d} />
+          ) : (
+            <div className={css.grid}>
+              <Cell title={t('detail.system')}>
+                <JsonInspector label="system" data={trees?.system} />
+              </Cell>
+              <Cell title={t('detail.messages')}>
+                <JsonInspector label="messages" data={trees?.messages} />
+              </Cell>
+              <Cell title={t('detail.tools')}>
+                <JsonInspector label="tools" data={trees?.tools} />
+              </Cell>
+              <Cell title={t('detail.params')}>
+                <JsonInspector label="params" data={trees?.params} />
+              </Cell>
+            </div>
+          )}
         </>
       )}
     </Loading>
@@ -210,6 +237,7 @@ function ResponseBody({ req }: { req: ModelRequest }) {
 function ToolBody({ sessionId, tool }: { sessionId: string; tool: ToolCall }) {
   const { t } = useI18n();
   const approvals = useApprovalsContext();
+  const [prefs] = useDetailPrefs();
   const [wantFull, setWantFull] = useState(false);
   const [state, retry] = useFetch(wantFull ? `${sessionId}\n${tool.id}` : null, (signal) =>
     fetchToolResult(sessionId, tool.id, signal),
@@ -222,8 +250,12 @@ function ToolBody({ sessionId, tool }: { sessionId: string; tool: ToolCall }) {
   );
   return (
     <div className={css.grid}>
-      <Cell title={t('detail.args')}>
-        <JsonInspector label={tool.name} data={args} />
+      <Cell title={t('detail.args')} tools={<ViewToggle />}>
+        {prefs.view === 'readable' ? (
+          <ArgsView input={tool.input} label={tool.name} />
+        ) : (
+          <JsonInspector label={tool.name} data={args} />
+        )}
       </Cell>
       <Cell title={t('detail.result')}>
         {state.status === 'idle' ? (
