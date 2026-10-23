@@ -18,7 +18,9 @@ function item(n: number): TurnItem {
   } as Turn;
   return {
     turn,
-    title: `Conversation ${n}: prompt ${n}`,
+    label: `Conversation ${n}`,
+    title: `prompt ${n}`,
+    prompt: `prompt ${n}`,
     heading: `Conversation ${n}: prompt ${n}`,
     calls: 1,
     tools: 0,
@@ -73,11 +75,20 @@ describe('TurnList', () => {
       'button',
     );
     expect(cards.map((c) => c.querySelector('[data-title]')?.textContent)).toEqual([
-      'Conversation 5: prompt 5',
-      'Conversation 4: prompt 4',
-      'Conversation 3: prompt 3',
-      'Conversation 2: prompt 2',
-      'Conversation 1: prompt 1',
+      'prompt 5',
+      'prompt 4',
+      'prompt 3',
+      'prompt 2',
+      'prompt 1',
+    ]);
+    // The number column is what the eye reads; the row's name says the words.
+    expect(cards[0]).toHaveAccessibleName(/^Conversation 5\s*prompt 5/);
+    expect(cards.map((c) => c.querySelector('[aria-hidden="true"]')?.textContent)).toEqual([
+      '5',
+      '4',
+      '3',
+      '2',
+      '1',
     ]);
     expect(cards[0]).toHaveAttribute('aria-current', 'true');
     expect(screen.getByRole('navigation', { name: 'Conversations' })).toHaveTextContent('5');
@@ -151,7 +162,7 @@ describe('TurnList', () => {
     const command: TurnItem = {
       ...item(6),
       turn: { ...item(6).turn, prompt: '/effort' },
-      title: 'Conversation 6: /effort',
+      title: '/effort',
       calls: 0,
       command: true,
     };
@@ -170,7 +181,7 @@ describe('TurnList', () => {
     expect(within(card).queryByText('Complete')).toBeNull();
     // Ordinary turns keep their counts and status.
     const other = screen.getByRole('button', { name: /Conversation 5/ });
-    expect(within(other).getByText('1 model call · 0 tools')).toBeInTheDocument();
+    expect(other).toHaveTextContent('1 call · 0 tools');
     fireEvent.click(card);
     expect(onSelect).toHaveBeenCalledWith('turn_6');
   });

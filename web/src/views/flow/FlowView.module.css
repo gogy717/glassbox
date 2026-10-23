@@ -1,6 +1,7 @@
 .flow {
   display: grid;
-  grid-template-columns: minmax(220px, 264px) minmax(0, 1fr);
+  /* The board's proportions: the list reads as a list, the calls keep the larger share. */
+  grid-template-columns: minmax(240px, 3fr) minmax(0, 5fr);
   height: 100%;
   min-height: 0;
 }
@@ -11,39 +12,6 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-}
-
-.turnHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 4px 16px;
-  flex: none;
-  min-height: 52px;
-  padding: 8px 20px;
-  border-bottom: 1px solid var(--border);
-}
-
-/* A title too long for the row pushes the meta onto the next line instead of squeezing it. */
-.turnTitle {
-  flex: 1 1 auto;
-}
-
-.turnMeta {
-  display: flex;
-  margin-left: auto;
-  align-items: center;
-  gap: 12px;
-  font-size: 10px;
-  color: var(--muted);
-  white-space: nowrap;
-}
-
-.turnMeta > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
 }
 
 .calls {
@@ -79,11 +47,6 @@
   .flow {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr);
-  }
-
-  .turnHeader {
-    min-height: 40px;
-    padding: 6px 12px;
   }
 
   .calls {

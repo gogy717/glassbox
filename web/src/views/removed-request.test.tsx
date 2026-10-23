@@ -71,7 +71,12 @@ describe('a request removed by a patch', () => {
       'Model call #1',
     ]);
     // Turn card and turn header both count one call, never the ghost.
-    expect(screen.getAllByText('1 model call · 0 tools')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: /Conversation 3/ })).toHaveTextContent(
+      '1 call · 0 tools',
+    );
+    expect(screen.getByRole('group', { name: 'Conversation 3' })).toHaveTextContent(
+      '1 model call · 0 tools',
+    );
     expect(screen.queryByText('2 model calls · 0 tools')).toBeNull();
   });
 

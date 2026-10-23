@@ -1,24 +1,20 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Clock3 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ModelRequest, Turn } from '../../../../src/core/model.js';
 import type { LivePartial } from '../../../../src/shared/runs.js';
-import { StatusMark } from '../../components/Status';
 import type { OpenSession } from '../../data/store';
-import { useNow } from '../../data/useNow';
 import { useI18n } from '../../i18n';
 import { mayStillRun } from '../../lib/agents';
-import { formatClock, formatDuration } from '../../lib/format';
 import type { Navigate, Route } from '../../router';
 import { useUi } from '../../ui';
 import { LiveOverlay } from '../composer/LiveOverlay';
-import { BackToLatest } from './BackToLatest';
 import { CallRow } from './CallRow';
 import type { CardKey } from './cards';
 import css from './FlowView.module.css';
+import { FollowPausedBar } from './FollowPausedBar';
 import { requestsOf, toolsOf } from './flow-model';
-import { type TurnItem, TurnList, useSelectedTurn, useTurnItems } from './TurnList';
-import { TurnTitle } from './TurnTitle';
+import { TurnHeader } from './TurnHeader';
+import { TurnList, useSelectedTurn, useTurnItems } from './TurnList';
 import { useFollowScroll } from './useFollowScroll';
 
 interface Props {
@@ -65,7 +61,8 @@ export function FlowView({ open, agentId, route, navigate, live = null }: Props)
       <section className={css.main}>
         {current ? (
           <>
-            <TurnHeader item={current} onBack={follow ? null : backToLatest} />
+            <TurnHeader item={current} />
+            {!follow && <FollowPausedBar newest={items.at(-1)} onBack={backToLatest} />}
             <CallList
               key={current.turn.id}
               open={open}
@@ -81,30 +78,6 @@ export function FlowView({ open, agentId, route, navigate, live = null }: Props)
           <p className={css.empty}>{t(running ? 'flow.noTurns' : 'flow.noTurnsDone')}</p>
         )}
       </section>
-    </div>
-  );
-}
-
-function TurnHeader({ item, onBack }: { item: TurnItem; onBack: (() => void) | null }) {
-  const { t } = useI18n();
-  const now = useNow();
-  const { turn } = item;
-  const end = turn.endedAt ? Date.parse(turn.endedAt) : item.status === 'running' ? now : null;
-  return (
-    <div className={css.turnHeader}>
-      <TurnTitle key={turn.id} text={item.heading} className={css.turnTitle} />
-      <span className={css.turnMeta}>
-        <span>
-          <Clock3 size={11} aria-hidden="true" />{' '}
-          <span className="num">{formatClock(turn.startedAt)}</span>
-        </span>
-        <span className="num">
-          {formatDuration(end === null ? null : end - Date.parse(turn.startedAt))}
-        </span>
-        <span>{t('flow.callsTools', { calls: item.calls, tools: item.tools })}</span>
-        <StatusMark status={item.status} />
-        {onBack && <BackToLatest onClick={onBack} />}
-      </span>
     </div>
   );
 }

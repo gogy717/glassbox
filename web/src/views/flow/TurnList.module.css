@@ -12,112 +12,152 @@
   justify-content: space-between;
   flex: none;
   height: 44px;
-  padding: 0 14px;
+  padding: 0 16px;
   border-bottom: 1px solid var(--border);
-  font-size: 12px;
+  font-size: var(--fs-body);
   font-weight: 600;
 }
 
 .head > span {
   color: var(--muted);
-  font-weight: 500;
+  font-size: var(--fs-small);
+  font-weight: 400;
 }
 
+/* Rows, not cards: a hairline between them, an ink bar on the open one. */
 .list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
   flex: 1;
   min-height: 0;
   margin: 0;
-  padding: 10px;
+  padding: 0;
   list-style: none;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
 }
 
-.card {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.list > li {
+  border-bottom: 1px solid var(--border);
+}
+
+/* Number · title · clock, then the counts and the status mark under the title. */
+.row {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 10px;
+  row-gap: 3px;
   width: 100%;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: var(--layer-1);
+  padding: 10px 14px 10px 12px;
+  border: 0;
+  border-left: 2px solid transparent;
+  background: transparent;
   text-align: left;
   cursor: pointer;
+  transition: background-color var(--motion);
 }
 
-.card:hover {
-  border-color: var(--border-strong);
+.row:hover {
+  background: var(--layer-3);
 }
 
-.card[aria-current="true"] {
-  border-color: var(--accent);
-  background: var(--accent-tint);
+.row[aria-current="true"] {
+  border-left-color: var(--ink);
+  background: var(--layer-1);
 }
 
-.line {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  /* A button's flex column doesn't stretch rows by itself: without this a long title pushes the
-     row (and the clock) out of the card instead of ellipsizing. */
-  width: 100%;
-  min-width: 0;
+.num {
+  grid-column: 1;
+  grid-row: 1;
+  color: var(--muted);
+  font-size: var(--fs-small);
 }
 
 .title {
+  grid-column: 2;
+  grid-row: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: var(--fs-body);
+  font-weight: 600;
 }
 
-.time,
+.clock {
+  grid-column: 3;
+  grid-row: 1;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+
+.markTop {
+  display: none;
+  grid-column: 3;
+  grid-row: 1;
+  align-self: center;
+}
+
+.sender {
+  grid-column: 2 / -1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--accent);
+  font-size: var(--fs-meta);
+}
+
+.sub {
+  display: flex;
+  align-items: center;
+  grid-column: 2 / -1;
+  gap: 8px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--fs-small);
+}
+
+.subClock {
+  display: none;
+}
+
 .counts {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.markSub {
+  display: inline-flex;
   flex: none;
-  font-size: 10px;
+}
+
+/* A local slash command (/effort): one slim line in the mono face, not a conversation. */
+.row[data-command] {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.row[data-command] .title {
   color: var(--muted);
-}
-
-.counts {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* A local slash command (/effort): one slim line, not a full conversation card. */
-.card[data-command] {
-  gap: 0;
-  padding: 6px 12px;
-  border-style: dashed;
-  background: transparent;
-}
-
-.card[data-command] .title {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  font-weight: 400;
 }
 
 .command {
-  flex: none;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: var(--layer-3);
-  color: var(--muted);
-  font-size: 10px;
+  grid-column: 2 / -1;
+  justify-self: start;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
 }
 
-/* Read out with the card; seen only when the card is hovered or focused. */
+/* Read out with the row; seen only when the row is hovered or focused. */
 .hint {
   position: absolute;
   width: 1px;
@@ -127,17 +167,39 @@
   white-space: nowrap;
 }
 
-.card[data-command]:hover .hint,
-.card[data-command]:focus-visible .hint {
+.row[data-command]:hover .hint,
+.row[data-command]:focus-visible .hint {
   position: static;
+  grid-column: 2 / -1;
   width: auto;
   height: auto;
   overflow: visible;
   clip-path: none;
   white-space: normal;
-  margin-top: 4px;
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: var(--fs-meta);
+}
+
+/* Short of room (a narrow turn column): the clock joins the counts, the mark moves up. */
+@container session-panel (max-width: 1000px) {
+  .clock,
+  .markSub {
+    display: none;
+  }
+
+  .markTop,
+  .subClock {
+    display: inline-flex;
+  }
+
+  .subClock::after {
+    content: "·";
+    margin-left: 8px;
+  }
+
+  .row[data-command] .clock {
+    display: inline;
+  }
 }
 
 @media (max-width: 900px) {
@@ -159,21 +221,12 @@
   .list > li {
     flex: 0 0 210px;
     min-width: 0;
+    border-right: 1px solid var(--border);
+    border-bottom: 0;
   }
-}
 
-.sender {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 10.5px;
-  color: var(--accent);
-}
-
-/* Short of room (a narrow turn column or the strip): the number and prompt matter more than the
-   clock, which the open turn's header still shows. */
-@container session-panel (max-width: 1000px) {
-  .time {
-    display: none;
+  .row[aria-current="true"] {
+    border-left-color: transparent;
+    box-shadow: inset 0 -2px 0 var(--ink);
   }
 }

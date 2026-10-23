@@ -5,6 +5,8 @@ import css from './TurnTitle.module.css';
 
 interface Props {
   text: string;
+  /** Names the turn for screen readers inside the heading, where a visible label sits above it. */
+  label?: string;
   className?: string;
 }
 
@@ -13,7 +15,7 @@ interface Props {
  * when it does not fit, a toggle to read all of it with its line breaks. Callers key it by turn,
  * so opening another turn starts folded.
  */
-export function TurnTitle({ text, className }: Props) {
+export function TurnTitle({ text, label, className }: Props) {
   const { t } = useI18n();
   const ref = useRef<HTMLHeadingElement>(null);
   const id = useId();
@@ -36,6 +38,11 @@ export function TurnTitle({ text, className }: Props) {
   return (
     <div className={`${css.title} ${className ?? ''}`}>
       <h2 ref={ref} id={id} className={css.text} data-expanded={expanded}>
+        {label && label !== text && (
+          <>
+            <span className="visually-hidden">{`${label}:`}</span>{' '}
+          </>
+        )}
         {text}
       </h2>
       {(clamped || expanded) && (
