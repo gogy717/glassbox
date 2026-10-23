@@ -1,6 +1,7 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ArrowDown } from 'lucide-react';
 import { useCallback, useLayoutEffect, useMemo, useRef } from 'react';
+import { CategoryIcon } from '../../components/CategoryIcon';
 import { useApprovalsContext } from '../../data/approvals';
 import type { OpenSession } from '../../data/store';
 import { useNow } from '../../data/useNow';
@@ -13,7 +14,6 @@ import { useUi } from '../../ui';
 import { TurnList, useSelectedTurn, useTurnItems } from '../flow/TurnList';
 import { TurnTitle } from '../flow/TurnTitle';
 import { useFollowScroll } from '../flow/useFollowScroll';
-import { CategoryIcon } from './CategoryIcon';
 import { StepItem } from './StepItem';
 import css from './StepsView.module.css';
 

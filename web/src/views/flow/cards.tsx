@@ -3,23 +3,26 @@ import {
   ArrowRight,
   Bot,
   CheckCircle2,
+  ChevronDown,
   Clock3,
   LoaderCircle,
   MessageSquareText,
   Send,
   ShieldQuestion,
   Workflow,
-  Wrench,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { AgentNode, ModelRequest, ToolCall, WorkflowRun } from '../../../../src/core/model.js';
 import { contextSize, totalTokens } from '../../../../src/core/usage.js';
+import { CategoryIcon } from '../../components/CategoryIcon';
 import { LiveDot, Ticking } from '../../components/Status';
 import { useApprovalsContext } from '../../data/approvals';
 import type { OpenSession } from '../../data/store';
 import { useI18n } from '../../i18n';
 import { subtreeIds } from '../../lib/agents';
 import { formatCompact, formatDuration } from '../../lib/format';
+import { plainText, resultLine } from '../../lib/preview';
+import { mcpTool, summarizeInput, toolCategory } from '../../lib/tool-category';
 import css from './cards.module.css';
 import { toolStatus } from './flow-model';
 
@@ -60,19 +63,48 @@ function Card({ kind, icon, title, selected, onSelect, children, footer, label }
   );
 }
 
-const oneLine = (s: string) => s.replace(/\s+/g, ' ').trim();
-
 export function Arrow() {
   return <ArrowRight size={18} className={css.arrow} aria-hidden="true" />;
 }
 
-export function FinalReply() {
+const hasReplyText = (req: ModelRequest) =>
+  req.blocks.some((b) => b.kind === 'text' && b.text.trim() !== '');
+
+interface FinalReplyProps {
+  req: ModelRequest;
+  /** Whether the call's Response panel is open. */
+  expanded: boolean;
+  /** That panel, present while expanded. */
+  panelId: string;
+  onToggle(): void;
+}
+
+/**
+ * Ends a row that calls no tools. With reply text it toggles the call's Response panel, where
+ * the text is; without, it stays a label.
+ */
+export function FinalReply({ req, expanded, panelId, onToggle }: FinalReplyProps) {
   const { t } = useI18n();
+  if (!hasReplyText(req))
+    return (
+      <span className={css.final} title={t('flow.finalReplyEmpty')}>
+        <MessageSquareText size={14} aria-hidden="true" />
+        {t('flow.finalReply')}
+      </span>
+    );
   return (
-    <span className={css.final}>
+    <button
+      type="button"
+      className={css.final}
+      aria-expanded={expanded}
+      aria-controls={expanded ? panelId : undefined}
+      title={t(expanded ? 'flow.hideFinalReply' : 'flow.showFinalReply')}
+      onClick={onToggle}
+    >
       <MessageSquareText size={14} aria-hidden="true" />
       {t('flow.finalReply')}
-    </span>
+      <ChevronDown size={14} aria-hidden="true" className={css.chevron} />
+    </button>
   );
 }
 
@@ -119,8 +151,8 @@ export function ResponseCard({ req, selected, onSelect }: CardProps) {
   if (inFlight && req.startedAt)
     preview = <Ticking since={req.startedAt} labelKey="flow.thinkingNow" />;
   else if (req.error) preview = <span className={css.errorText}>{req.error.message}</span>;
-  else if (text) preview = oneLine(text);
-  else if (thinking?.kind === 'thinking' && thinking.text) preview = oneLine(thinking.text);
+  else if (text) preview = plainText(text);
+  else if (thinking?.kind === 'thinking' && thinking.text) preview = plainText(thinking.text);
   else preview = req.toolCallIds.length ? t('flow.toolsOnly') : t('flow.noResponse');
 
   return (
@@ -162,16 +194,6 @@ export function ResponseCard({ req, selected, onSelect }: CardProps) {
   );
 }
 
-function inputPreview(input: unknown): string | null {
-  if (input === null || input === undefined) return null;
-  try {
-    const json = JSON.stringify(input);
-    return json.length > 240 ? `${json.slice(0, 240)}…` : json;
-  } catch {
-    return null;
-  }
-}
-
 function ResultStrip({ tool }: { tool: ToolCall }) {
   const { t } = useI18n();
   const status = toolStatus(tool, useApprovalsContext());
@@ -194,7 +216,12 @@ function ResultStrip({ tool }: { tool: ToolCall }) {
   } else if (status === 'complete') {
     icon = <CheckCircle2 size={12} aria-hidden="true" />;
     label =
-      (tool.resultPreview && oneLine(tool.resultPreview.split('\n')[0] ?? '')) ||
+      (tool.resultPreview &&
+        resultLine(tool.resultPreview, (s) =>
+          s.size === null
+            ? t('flow.json')
+            : t(s.kind === 'object' ? 'flow.jsonKeys' : 'flow.jsonItems', { n: s.size }),
+        )) ||
       t('status.complete');
   } else {
     icon = <Clock3 size={12} aria-hidden="true" />;
@@ -234,18 +261,20 @@ export function ToolCard({ tool, open, selected, onSelect, onEnterAgent }: ToolC
     const run = open.workflows.get(spawned.runId);
     if (run) footer = <WorkflowBlock run={run} open={open} onEnter={onEnterAgent} />;
   }
+  const category = toolCategory(tool.name, tool.input);
+  const mcp = mcpTool(tool.name);
   return (
     <Card
       kind="tool"
-      icon={<Wrench size={13} aria-hidden="true" />}
-      title={tool.name}
+      icon={<CategoryIcon category={category} size={13} label={t(`steps.cat.${category}`)} />}
+      title={mcp ? `${mcp.server} · ${mcp.tool}` : tool.name}
       selected={selected}
       onSelect={onSelect}
       footer={footer}
       label={tool.name}
     >
       <span className={`${css.preview} ${css.mono}`}>
-        {inputPreview(tool.input) ?? t('flow.runTool')}
+        {summarizeInput(tool) || t('flow.runTool')}
       </span>
       <ResultStrip tool={tool} />
     </Card>

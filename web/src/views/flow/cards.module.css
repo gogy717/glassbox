@@ -5,8 +5,9 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  flex: 0 0 206px;
-  min-width: 0;
+  /* A width, not a flex-basis: the strip's wrapping goes by it, not by the preview's length. */
+  flex: none;
+  width: 206px;
   border: 1px solid var(--border-c);
   border-radius: var(--radius-m);
   background: var(--layer-1);
@@ -170,6 +171,41 @@
   font-size: 11px;
 }
 
+/* With reply text it is a toggle: a chevron, and the hover / pressed look of the cards. */
+button.final {
+  padding-right: 9px;
+  color: var(--text);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+button.final:hover {
+  border-color: var(--border-strong);
+  background: var(--layer-3);
+}
+
+button.final[aria-expanded="true"] {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+.chevron {
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+
+button.final[aria-expanded="true"] .chevron {
+  color: inherit;
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
+}
+
 .spawned,
 .workflow {
   display: flex;
@@ -236,12 +272,12 @@
 
 @media (max-width: 560px) {
   .card {
-    flex-basis: 178px;
+    width: 178px;
   }
 }
 
 /* Cards that list spawned agents need room for label, status and tokens. */
 .card:has(> .spawned),
 .card:has(> .workflow) {
-  flex-basis: 252px;
+  width: 252px;
 }

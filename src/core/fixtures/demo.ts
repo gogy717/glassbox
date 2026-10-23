@@ -499,7 +499,10 @@ export function createDemoSnapshot(now: Date = new Date()): SessionSnapshot {
   };
 }
 
-/** A small session list: the demo session plus two idle/closed ones without parsed usage. */
+/**
+ * A small session list: the demo session plus two idle/closed ones listed without parsed usage,
+ * as unopened sessions are; `createDemoSideSnapshots` has what they show once opened.
+ */
 export function createDemoSessions(now: Date = new Date()): SessionSummary[] {
   const demo = createDemoSnapshot(now).session;
   const ago = (min: number) => new Date(now.getTime() - min * 60_000).toISOString();
@@ -533,6 +536,215 @@ export function createDemoSessions(now: Date = new Date()): SessionSummary[] {
       counts: null,
     },
   ];
+}
+
+interface SideStep {
+  durSec: number;
+  text?: string;
+  tools?: { name: string; input: unknown; result: string; durSec: number }[];
+}
+
+/** What the two other listed sessions did, so they open like any other (one finished turn). */
+const SIDE_SESSIONS: Record<string, { prompt: string; steps: SideStep[] }> = {
+  'claude-code:demo-0000-4000-8000-000000000002': {
+    prompt: 'The login test fails about one run in five. Find out why and fix it',
+    steps: [
+      {
+        durSec: 6,
+        tools: [
+          {
+            name: 'Grep',
+            input: { pattern: 'login', path: 'tests' },
+            result: 'tests/login.spec.ts:12',
+            durSec: 0.2,
+          },
+          {
+            name: 'Read',
+            input: { file_path: '/Users/demo/Dev/shopfront/tests/login.spec.ts' },
+            result: "12\tawait page.click('#submit');",
+            durSec: 0.1,
+          },
+        ],
+      },
+      {
+        durSec: 9,
+        tools: [
+          {
+            name: 'Edit',
+            input: {
+              file_path: '/Users/demo/Dev/shopfront/tests/login.spec.ts',
+              old_string: "await page.click('#submit');",
+              new_string: "await page.getByRole('button', { name: 'Sign in' }).click();",
+            },
+            result: 'The file tests/login.spec.ts has been updated.',
+            durSec: 0.1,
+          },
+          {
+            name: 'Bash',
+            input: {
+              command: 'npm test -- login --repeat-each=20',
+              description: 'Repeat the test',
+            },
+            result: '20 passed (41s)',
+            durSec: 41,
+          },
+        ],
+      },
+      {
+        durSec: 5,
+        text: 'The test clicked **Sign in** before the form had loaded. It now waits for the button; 20 runs in a row pass.',
+      },
+    ],
+  },
+  'claude-code:demo-0000-4000-8000-000000000003': {
+    prompt: 'Add an RSS feed to the blog',
+    steps: [
+      {
+        durSec: 8,
+        tools: [
+          {
+            name: 'Write',
+            input: { file_path: '/Users/demo/Dev/blog/src/feed.ts', content: '…' },
+            result: 'File created successfully at: /Users/demo/Dev/blog/src/feed.ts',
+            durSec: 0.1,
+          },
+          {
+            name: 'Bash',
+            input: { command: 'npm run build', description: 'Build the site' },
+            result: 'Built 42 pages and feed.xml',
+            durSec: 12,
+          },
+        ],
+      },
+      { durSec: 4, text: 'Added `/feed.xml` with the 20 newest posts; the build writes it.' },
+    ],
+  },
+};
+
+/** A finished one-turn session behind a listed `summary` from `t0`, made of `steps` (one per request). */
+function sideSnapshot(
+  summary: SessionSummary,
+  t0: number,
+  prompt: string,
+  steps: SideStep[],
+): SessionSnapshot {
+  const at = (sec: number): IsoTime => new Date(t0 + sec * 1000).toISOString();
+  const n = summary.nativeId.slice(-1);
+  const turnId = `turn_${n}1`;
+  const requests: ModelRequest[] = [];
+  const toolCalls: ToolCall[] = [];
+  let sec = 1;
+  steps.forEach((step, i) => {
+    const id = `req_${n}${i + 1}`;
+    const thinkEnd = sec + step.durSec * 0.6;
+    const end = sec + step.durSec;
+    const blocks: ResponseBlock[] = [
+      { kind: 'thinking', text: null, durationMs: Math.round(step.durSec * 600), at: at(thinkEnd) },
+    ];
+    if (step.text) blocks.push({ kind: 'text', text: step.text, at: at(thinkEnd + 0.5) });
+    let toolStart = end;
+    const toolIds = (step.tools ?? []).map((tool, j) => {
+      const toolId = `tu_${n}${i + 1}${String.fromCharCode(97 + j)}`;
+      blocks.push({ kind: 'tool-use', toolCallId: toolId, at: at(toolStart) });
+      toolCalls.push({
+        id: toolId,
+        agentId: MAIN_AGENT_ID,
+        requestId: id,
+        name: tool.name,
+        input: tool.input,
+        status: 'complete',
+        startedAt: at(toolStart),
+        endedAt: at(toolStart + tool.durSec),
+        durationMs: Math.round(tool.durSec * 1000),
+        resultPreview: tool.result,
+        hasFullResult: true,
+        spawned: null,
+      });
+      toolStart += tool.durSec;
+      return toolId;
+    });
+    const ctx = 14_000 + i * 2_600;
+    requests.push({
+      id,
+      agentId: MAIN_AGENT_ID,
+      turnId,
+      index: i + 1,
+      model: 'claude-opus-5-5',
+      effort: 'high',
+      startedAt: at(sec),
+      firstBlockAt: at(thinkEnd),
+      endedAt: at(end),
+      status: 'complete',
+      stopReason: toolIds.length ? 'tool_use' : 'end_turn',
+      usage: {
+        ...emptyUsage(),
+        input: 6,
+        cacheRead: ctx - 1_400 - 6,
+        cacheWrite: 1_400,
+        cacheWrite1h: 1_400,
+        output: 260,
+        thinking: 90,
+      },
+      blocks,
+      toolCallIds: toolIds,
+      hasDetail: true,
+      error: null,
+    });
+    sec = toolStart + 1;
+  });
+  const usage = sumUsage(requests.map((r) => r.usage));
+  const counts = { turns: 1, requests: requests.length, toolCalls: toolCalls.length };
+  const startedAt = requests[0]?.startedAt ?? at(0);
+  const endedAt = requests.at(-1)?.endedAt ?? null;
+  return {
+    session: { ...summary, usage, counts: { ...counts, agents: 1 } },
+    agents: [
+      {
+        id: MAIN_AGENT_ID,
+        kind: 'main',
+        parentId: null,
+        spawnedByToolCallId: null,
+        agentType: null,
+        label: 'Main',
+        workflowRunId: null,
+        phase: null,
+        model: 'claude-opus-5-5',
+        status: 'complete',
+        startedAt,
+        endedAt,
+        usage,
+        counts,
+      },
+    ],
+    turns: [
+      {
+        id: turnId,
+        agentId: MAIN_AGENT_ID,
+        index: 1,
+        origin: 'human',
+        prompt,
+        startedAt,
+        endedAt,
+        status: 'complete',
+        requestIds: requests.map((r) => r.id),
+      },
+    ],
+    requests,
+    toolCalls,
+    workflows: [],
+    diagnostics: { unknownRecordTypes: {}, parseErrors: 0, unavailable: [] },
+  };
+}
+
+/** Snapshots of the sessions `createDemoSessions` lists after the demo session. */
+export function createDemoSideSnapshots(now: Date = new Date()): SessionSnapshot[] {
+  return createDemoSessions(now)
+    .slice(1)
+    .map((s) => {
+      const side = SIDE_SESSIONS[s.id];
+      if (!side) throw new Error(`no demo content for ${s.id}`);
+      return sideSnapshot(s, Date.parse(s.startedAt ?? now.toISOString()), side.prompt, side.steps);
+    });
 }
 
 /** A plan quota as Claude Code caches it: 5-hour, weekly and a per-model weekly window. */

@@ -26,6 +26,20 @@ describe('DemoStore', () => {
     expect(list).toHaveLength(3);
   });
 
+  // The sidebar offers every listed session; each must open (audit #25).
+  it('opens every session it lists, with its details and results', async () => {
+    for (const { id } of store.listSessions()) {
+      const snap = (await store.getSnapshot(id)) as SessionSnapshot;
+      expect(snap?.session.id).toBe(id);
+      expect(checkSnapshot(snap)).toEqual([]);
+      const req = snap.requests[0];
+      if (!req) throw new Error(`no requests in ${id}`);
+      expect((await store.getRequestDetail(id, req.id))?.requestId).toBe(req.id);
+      const tool = snap.toolCalls.find((t) => t.hasFullResult);
+      if (tool) expect((await store.getToolResult(id, tool.id)).found).toBe(true);
+    }
+  });
+
   it('serves the snapshot, details and results of the demo session only', async () => {
     const snap = (await store.getSnapshot(DEMO_SESSION_ID)) as SessionSnapshot;
     expect(checkSnapshot(snap)).toEqual([]);

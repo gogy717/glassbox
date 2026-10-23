@@ -56,6 +56,15 @@ describe('TimeView', () => {
   });
   afterEach(() => vi.useRealTimers());
 
+  it('shows the timeline first, above the breakdown and the slowest steps', () => {
+    renderTime();
+    expect(screen.getAllByRole('region').map((r) => r.getAttribute('aria-labelledby'))).toEqual([
+      'time-lanes',
+      'time-breakdown',
+      'time-slowest',
+    ]);
+  });
+
   it('breaks the selected agent’s time into model, tools and idle', () => {
     renderTime();
     const card = screen.getByRole('region', { name: 'Where the time went · Main' });

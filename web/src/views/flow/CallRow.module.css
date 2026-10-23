@@ -43,12 +43,24 @@
   border-left: 1px solid var(--border-strong);
 }
 
+/* Every card stays in view: the strip wraps, reading left to right, then down. */
 .strip {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
+  row-gap: 12px;
   padding: 14px;
+  /* Only for a card wider than a phone-width strip. */
   overflow-x: auto;
   overscroll-behavior-x: contain;
+}
+
+/* An arrow and the card it leads to, so a wrapped line starts with an arrow. */
+.step {
+  display: flex;
+  align-items: flex-start;
+  flex: none;
+  min-width: 0;
 }
 
 @media (max-width: 560px) {

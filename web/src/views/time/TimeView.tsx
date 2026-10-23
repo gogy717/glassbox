@@ -34,7 +34,9 @@ const TOOL_ORDER: ToolCategory[] = [
   'delegate',
   'ask',
   'plan',
+  'git',
   'web',
+  'mcp',
   'other',
 ];
 const SLOWEST_N = 10;
@@ -110,6 +112,16 @@ export function TimeView({ open, agentId, navigate }: Props) {
 
   return (
     <div className={css.view}>
+      {/* The view's namesake first; the summaries below it vary in height. */}
+      <Swimlanes
+        open={open}
+        lanes={lanes}
+        now={now}
+        selectedAgentId={agentId}
+        agentName={name}
+        onPick={openRequest}
+      />
+
       <div className={css.columns}>
         <section className={css.card} aria-labelledby="time-breakdown">
           <h3 id="time-breakdown">{t('time.breakdown', { agent: name(agentId) })}</h3>
@@ -173,15 +185,6 @@ export function TimeView({ open, agentId, navigate }: Props) {
           </ol>
         </section>
       </div>
-
-      <Swimlanes
-        open={open}
-        lanes={lanes}
-        now={now}
-        selectedAgentId={agentId}
-        agentName={name}
-        onPick={openRequest}
-      />
     </div>
   );
 }
