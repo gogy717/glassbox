@@ -1,6 +1,7 @@
 import {
   createDemoQuotas,
   createDemoSessions,
+  createDemoSideSnapshots,
   createDemoSnapshot,
   DEMO_SESSION_ID,
 } from '../core/fixtures/demo.js';
@@ -57,6 +58,8 @@ interface Changed {
 export class DemoStore implements AppStore {
   private readonly snap: SessionSnapshot;
   private readonly others: SessionSummary[];
+  /** The other listed sessions, finished: they open but never change. */
+  private readonly sides: SessionSnapshot[];
   private readonly quotas: QuotaSnapshot[];
   private readonly sessionCbs = new Set<(s: SessionSummary[]) => void>();
   private readonly patchCbs = new Set<(p: SessionPatch) => void>();
@@ -69,6 +72,7 @@ export class DemoStore implements AppStore {
     const now = new Date();
     this.snap = createDemoSnapshot(now);
     this.others = createDemoSessions(now).filter((s) => s.id !== DEMO_SESSION_ID);
+    this.sides = createDemoSideSnapshots(now);
     this.quotas = createDemoQuotas(now);
     const inFlight = this.snap.requests.find(
       (r) => r.agentId === MAIN_AGENT_ID && r.status === 'in-flight',
@@ -94,7 +98,8 @@ export class DemoStore implements AppStore {
   }
 
   async getSnapshot(sessionId: string): Promise<SessionSnapshot | null> {
-    return sessionId === DEMO_SESSION_ID ? structuredClone(this.snap) : null;
+    const snap = this.snapshotOf(sessionId);
+    return snap ? structuredClone(snap) : null;
   }
 
   async getRequestDetail(sessionId: string, requestId: string): Promise<RequestDetail | null> {
@@ -121,10 +126,9 @@ export class DemoStore implements AppStore {
     sessionId: string,
     toolCallId: string,
   ): Promise<{ found: boolean; result: unknown }> {
-    const tool =
-      sessionId === DEMO_SESSION_ID
-        ? this.snap.toolCalls.find((t) => t.id === toolCallId && t.hasFullResult)
-        : undefined;
+    const tool = this.snapshotOf(sessionId)?.toolCalls.find(
+      (t) => t.id === toolCallId && t.hasFullResult,
+    );
     return tool ? { found: true, result: tool.resultPreview } : { found: false, result: undefined };
   }
 
@@ -411,9 +415,14 @@ export class DemoStore implements AppStore {
     };
   }
 
+  private snapshotOf(sessionId: string): SessionSnapshot | undefined {
+    return sessionId === DEMO_SESSION_ID
+      ? this.snap
+      : this.sides.find((s) => s.session.id === sessionId);
+  }
+
   private findRequest(sessionId: string, requestId: string): ModelRequest | undefined {
-    if (sessionId !== DEMO_SESSION_ID) return undefined;
-    return this.snap.requests.find((r) => r.id === requestId);
+    return this.snapshotOf(sessionId)?.requests.find((r) => r.id === requestId);
   }
 
   private request(id: string): ModelRequest {
