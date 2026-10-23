@@ -48,7 +48,7 @@
   width: min(360px, calc(100vw - 24px));
   padding: 12px 14px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-l);
+  border-radius: var(--radius-xl);
   background: var(--layer-1);
   box-shadow: var(--shadow);
   font-size: 12px;

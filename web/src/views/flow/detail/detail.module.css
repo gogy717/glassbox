@@ -209,7 +209,7 @@
   gap: 8px;
   padding: 6px 10px;
   border: 1px dashed var(--border-strong);
-  border-radius: var(--radius-m);
+  border-radius: var(--radius-l);
   font-size: 11px;
   color: var(--muted);
 }
@@ -223,7 +223,7 @@
   padding: 8px 10px 10px;
   border: 1px solid var(--border);
   border-left: 3px solid var(--role-border);
-  border-radius: var(--radius-m);
+  border-radius: var(--radius-l);
   background: var(--layer-1);
 }
 

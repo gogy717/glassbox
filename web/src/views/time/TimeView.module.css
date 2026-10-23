@@ -28,7 +28,7 @@
   min-width: 0;
   padding: 14px 16px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-l);
+  border-radius: var(--radius-xl);
   background: var(--layer-1);
 }
 

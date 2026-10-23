@@ -1,18 +1,29 @@
-/* Design tokens. Light by default; dark follows the system unless the user picked a theme. */
+/* Design tokens (D1 foundations). Light by default; dark follows the system unless the user
+   picked a theme. */
 :root {
   color-scheme: light;
-  --bg: #ffffff;
+  /* Surfaces: the app canvas sits one step below the panels and content (layer-1); the sidebar,
+     lists and code blocks sit on layer-2; layer-3 is for hover and chips only. */
+  --bg: #f3f4f6;
   --layer-1: #ffffff;
-  --layer-2: #f6f7f9;
-  --layer-3: #eceff3;
-  --border: #e2e5e9;
-  --border-strong: #cdd2d8;
-  --text: #1c2026;
-  /* Text tokens clear 4.5:1 (WCAG AA) on every surface and tint they sit on, faint included. */
+  --layer-2: #f7f8fa;
+  --layer-3: #eaecef;
+  /* Hairlines are alpha, so one token sits right on every surface. The strong one is for inputs,
+     cards and the detail panel only. */
+  --border: rgba(20, 24, 32, 0.1);
+  --border-strong: rgba(20, 24, 32, 0.2);
+  --text: #1b1f26;
+  /* Text tokens clear 4.5:1 (WCAG AA) on every surface and tint they sit on, faint included.
+     Faint is for glyphs, rules and placeholders, never running text under 24px. (D1's #666c74 is
+     4.48:1 on its own layer-3; one step darker keeps the floor.) */
   --muted: #525a63;
-  --faint: #666c74;
-  --accent: #1c5cc2;
-  --accent-tint: #eaf1fc;
+  --faint: #656b73;
+  /* The chrome accent is a steel ink, so blue stays a data colour (cache reads, Explore,
+     requests): actions, links and the running state. --ink (the text colour) marks selection,
+     pressed toggles, the selected card, the tab underline and focus. */
+  --accent: #335e9a;
+  --accent-tint: #ebeff5;
+  --ink: var(--text);
   --success: #016c36;
   --success-tint: rgba(42, 154, 87, 0.1);
   --error: #b21e25;
@@ -126,26 +137,52 @@
   --font-ui:
     -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
     "Microsoft YaHei", system-ui, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
-  --radius-s: 4px;
-  --radius-m: 8px;
-  --radius-l: 10px;
+  /* IBM Plex Mono is self-hosted (global.css); CJK is never set in it. */
+  --font-mono:
+    "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, "Cascadia Mono", Consolas, "DejaVu Sans Mono",
+    monospace;
+
+  /* Type scale, nothing else. Section labels (.section-label) are the only uppercase. */
+  --fs-label: 10px; /* 600, uppercase, 0.06em */
+  --fs-meta: 11px; /* meta, legends, chips */
+  --fs-small: 12px; /* secondary: card previews, step lines, detail rows */
+  --fs-body: 13px;
+  --fs-title: 14px; /* 600: conversation and dialog titles */
+  --fs-readout: 15px; /* 500: readout values, the tokens lede */
+  --fs-total: 22px; /* 500: a section total */
+  --lh: 1.45;
+
+  /* Radii: nothing is rounder than 8px except status dots. */
+  --radius-xs: 2px; /* tapes */
+  --radius-s: 3px; /* tags, chips */
+  --radius-m: 4px; /* code blocks, list rows */
+  --radius-l: 6px; /* controls, cards, panels, dialogs */
+  --radius-xl: 8px; /* popovers */
+
+  /* Motion: hover and selection change in 120ms ease-out. The only loops are the running and
+     waiting dot pulse and the live caret; reduced motion stops all three (global.css). */
+  --motion: 120ms ease-out;
+  --pulse-period: 1.6s;
+  --caret-period: 1s;
+
+  /* Focus: a 2px ink ring, offset 1px; it stays visible on accent fills. */
+  --focus-ring: 2px solid var(--ink);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg: #15171b;
-    --layer-1: #1a1d22;
-    --layer-2: #20242a;
-    --layer-3: #2a2f36;
-    --border: #2e333a;
-    --border-strong: #3d434b;
-    --text: #e3e6ea;
+    --bg: #141518;
+    --layer-1: #1a1b1f;
+    --layer-2: #1f2126;
+    --layer-3: #2a2d33;
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.16);
+    --text: #e6e8eb;
     --muted: #a6aeb7;
     --faint: #8f97a1;
-    --accent: #6ea4ff;
-    --accent-tint: #1d2a3d;
+    --accent: #8fb3e8;
+    --accent-tint: #282d37;
     --success: #4cc27b;
     --success-tint: rgba(76, 194, 123, 0.13);
     --error: #fe8c88;
@@ -186,8 +223,8 @@
     --agent-tint: 24%;
     --agent-edge: 45%;
     --agent-claude-code-hue: #b3541a;
-    --agent-claude-code-fg: #fff0e7;
-    --agent-codex-hue: #438da3;
+    --agent-claude-code-fg: #fef0e7;
+    --agent-codex-hue: #2d86ac;
     --agent-codex-fg: #9ef0f5;
     --agent-grok-hue: #394c94;
     --agent-grok-fg: #c7c5d4;
@@ -202,17 +239,17 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #15171b;
-  --layer-1: #1a1d22;
-  --layer-2: #20242a;
-  --layer-3: #2a2f36;
-  --border: #2e333a;
-  --border-strong: #3d434b;
-  --text: #e3e6ea;
+  --bg: #141518;
+  --layer-1: #1a1b1f;
+  --layer-2: #1f2126;
+  --layer-3: #2a2d33;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --text: #e6e8eb;
   --muted: #a6aeb7;
   --faint: #8f97a1;
-  --accent: #6ea4ff;
-  --accent-tint: #1d2a3d;
+  --accent: #8fb3e8;
+  --accent-tint: #282d37;
   --success: #4cc27b;
   --success-tint: rgba(76, 194, 123, 0.13);
   --error: #fe8c88;
@@ -253,8 +290,8 @@
   --agent-tint: 24%;
   --agent-edge: 45%;
   --agent-claude-code-hue: #b3541a;
-  --agent-claude-code-fg: #fff0e7;
-  --agent-codex-hue: #438da3;
+  --agent-claude-code-fg: #fef0e7;
+  --agent-codex-hue: #2d86ac;
   --agent-codex-fg: #9ef0f5;
   --agent-grok-hue: #394c94;
   --agent-grok-fg: #c7c5d4;

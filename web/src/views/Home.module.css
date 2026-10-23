@@ -34,7 +34,7 @@
   height: 34px;
   padding: 0 16px;
   border: 1px solid var(--accent);
-  border-radius: var(--radius-m);
+  border-radius: var(--radius-l);
   background: var(--accent);
   color: var(--on-accent);
   font-weight: 600;
@@ -69,7 +69,7 @@
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-m);
+  border-radius: var(--radius-l);
   background: var(--layer-1);
   text-align: left;
   cursor: pointer;

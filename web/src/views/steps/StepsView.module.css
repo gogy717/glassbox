@@ -149,7 +149,7 @@
   margin: 0 0 8px 7px;
   padding: 10px 12px 10px 16px;
   border-left: 2px solid var(--border);
-  border-radius: 0 var(--radius-m) var(--radius-m) 0;
+  border-radius: 0 var(--radius-l) var(--radius-l) 0;
   background: var(--layer-1);
 }
 

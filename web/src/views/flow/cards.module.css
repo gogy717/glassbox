@@ -9,7 +9,7 @@
   flex: none;
   width: 206px;
   border: 1px solid var(--border-c);
-  border-radius: var(--radius-m);
+  border-radius: var(--radius-l);
   background: var(--layer-1);
   overflow: hidden;
 }

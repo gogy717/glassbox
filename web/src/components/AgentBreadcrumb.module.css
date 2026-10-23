@@ -74,7 +74,7 @@
   overflow-y: auto;
   padding: 6px 0;
   border: 1px solid var(--border);
-  border-radius: var(--radius-l);
+  border-radius: var(--radius-xl);
   background: var(--layer-1);
   box-shadow: var(--shadow);
 }

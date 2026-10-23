@@ -14,7 +14,7 @@
   padding: 0 9px;
   height: 32px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-m);
+  border-radius: var(--radius-l);
   background: var(--layer-1);
   color: var(--muted);
 }
@@ -76,7 +76,7 @@
   overflow: hidden;
   padding: 8px 9px;
   border: 1px solid transparent;
-  border-radius: var(--radius-m);
+  border-radius: var(--radius-l);
   background: transparent;
   text-align: left;
   cursor: pointer;

@@ -21,7 +21,7 @@
   display: flex;
   gap: 2px;
   padding: 2px;
-  border-radius: var(--radius-m);
+  border-radius: var(--radius-l);
   background: var(--layer-2);
   overflow-x: auto;
   scrollbar-width: none;

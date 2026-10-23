@@ -21,7 +21,7 @@
   max-height: 200px;
   padding: 9px 11px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-m);
+  border-radius: var(--radius-l);
   background: var(--bg);
   color: var(--text);
   font: inherit;
@@ -123,7 +123,7 @@
   gap: 5px;
   height: 32px;
   padding: 0 14px;
-  border-radius: var(--radius-m);
+  border-radius: var(--radius-l);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -188,7 +188,7 @@
   margin: 0 14px 10px;
   padding: 12px 14px;
   border: 1px solid color-mix(in srgb, var(--warning) 55%, var(--border));
-  border-radius: var(--radius-l);
+  border-radius: var(--radius-xl);
   background: color-mix(in srgb, var(--warning) 7%, var(--layer-1));
   box-shadow: var(--shadow);
 }
@@ -252,7 +252,7 @@
   margin: 0;
   padding: 8px 10px 10px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-m);
+  border-radius: var(--radius-l);
 }
 
 .question legend {
@@ -356,7 +356,7 @@
   margin: 0 0 12px;
   padding: 10px 12px;
   border: 1px dashed var(--accent);
-  border-radius: var(--radius-l);
+  border-radius: var(--radius-xl);
   background: var(--accent-tint);
 }
 

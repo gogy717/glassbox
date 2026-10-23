@@ -1,6 +1,6 @@
 .row {
   border: 1px solid var(--border);
-  border-radius: var(--radius-l);
+  border-radius: var(--radius-xl);
   background: var(--layer-1);
   overflow: hidden;
 }

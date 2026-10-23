@@ -18,7 +18,7 @@
   gap: 10px;
   padding: 12px 14px;
   border: 1px solid color-mix(in srgb, var(--warning) 40%, var(--border));
-  border-radius: var(--radius-l);
+  border-radius: var(--radius-xl);
   background: color-mix(in srgb, var(--warning) 8%, var(--layer-1));
   color: var(--text);
 }
@@ -46,7 +46,7 @@
   min-width: 0;
   padding: 14px 16px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-l);
+  border-radius: var(--radius-xl);
   background: var(--layer-1);
 }
 

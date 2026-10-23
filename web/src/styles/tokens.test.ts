@@ -107,7 +107,8 @@ function over(colour: string, alpha: number, surface: string): string {
 describe('tokens.css', () => {
   it('has the light scope and both dark scopes, with the same dark values', () => {
     expect(scopes).toHaveLength(3);
-    const values = (scope: string) => scope.match(/--[a-z0-9-]+: (#[0-9a-f]{6}|\d+%);/g);
+    // Every declaration, hex, rgba (the hairlines), % or var() alike.
+    const values = (scope: string) => scope.match(/--[a-z0-9-]+: [^;]+;/g);
     expect(values(scopes[1] as string)).toEqual(values(scopes[2] as string));
   });
 
@@ -146,10 +147,60 @@ describe('tokens.css', () => {
     },
   );
 
+  // D1's text pairs (Foundations board): the request / response / tool card inks read on every
+  // panel surface a card sits on.
+  it.each(NAMES.map((name, i) => [name, i] as const))(
+    'card inks reach 4.5:1 on the panel surfaces (%s)',
+    (_, i) => {
+      const t = tokens(i);
+      for (const fg of ['--card-req-text', '--card-res-text', '--card-tool-text'])
+        for (const bg of ['--bg', '--layer-1', '--layer-2']) {
+          const ratio = contrast(t.get(fg) as string, t.get(bg) as string);
+          expect(ratio, `${fg} on ${bg}`).toBeGreaterThanOrEqual(4.5);
+        }
+    },
+  );
+
+  it('keeps D1’s radius scale, nothing rounder than 8px, and ink for selection and focus', () => {
+    const radii = [...(scopes[0] as string).matchAll(/--radius-([a-z]+): (\d+)px;/g)].map(
+      (m) => [m[1], Number(m[2])] as const,
+    );
+    expect(radii).toEqual([
+      ['xs', 2],
+      ['s', 3],
+      ['m', 4],
+      ['l', 6],
+      ['xl', 8],
+    ]);
+    // --ink is the text colour in every theme (dark overrides --text on this same :root).
+    expect(css.match(/--ink: [^;]+;/g)).toEqual(['--ink: var(--text);']);
+    expect(css).toMatch(/--focus-ring: 2px solid var\(--ink\);/);
+  });
+
   // ΔE floors (×100, OKLab; colour-blind = Machado 2009 protan / deutan). Status, accent and
   // tool cards must never pass for an agent: RESERVED is the chart standard (15 / 8).
   const RESERVED = { normal: 15, protan: 8, deutan: 8 };
   const tones = [...AGENT_TONES];
+
+  // D1 A5: the steel chrome accent must not pass for the data blues next to it (cache reads in
+  // every token tape, Explore steps). It clears the colour-blind floors (8) everywhere, but not
+  // the chart standard's 15 on normal vision: light accent vs Explore 10.9, dark accent vs cache
+  // reads 13.1. That is what the steel hues ruled for v2 reach (today's #1c5cc2 / #6ea4ff: 8.0
+  // and 10.1), so A5 holds at 10 / 8 / 8; the accent is text and rules, the blues are marks.
+  const A5 = { normal: 10, protan: 8, deutan: 8 };
+
+  it.each(NAMES.map((name, i) => [name, i] as const))(
+    'the chrome accent stays apart from the data blues (A5) (%s)',
+    (_, i) => {
+      const t = tokens(i);
+      for (const data of ['--tok-cache-read', '--cat-explore'])
+        for (const v of VISIONS)
+          expect(
+            deltaE(t.get('--accent') as string, t.get(data) as string, v),
+            `--accent vs ${data} (${v})`,
+          ).toBeGreaterThanOrEqual(A5[v]);
+    },
+  );
 
   // Agent tags are a quiet tint of the agent's hue (--agent-tint of it over the surface) inside an
   // edge of the same hue (--agent-edge), with text in a deep (light) or pale (dark) shade of it.
@@ -220,38 +271,33 @@ describe('tokens.css', () => {
     },
   );
 
+  // A tag must not pass for a status, by any of its colours; nor for the accent, by its tint or
+  // edge (PM ruling, W1). Old → new: U3c held text, tint and edge to status and accent; W1 holds
+  // the text to status only. The accent is now a quiet steel ink for links and the running
+  // state, close to the deep petrol / indigo / magenta tag texts (light Codex
+  // 12.6, dark Grok 9.9). Holding the text to it too left no calm palette that keeps the pair
+  // floors above (best 0.97 light, 0.91 dark of them). U3 judged the accent on the fill alone;
+  // the tint and edge keep that, and the tag's form and name do the rest.
   it.each(NAMES.map((name, i) => [name, i] as const))(
-    'agent tags do not read as a status or the accent: text, tint and edge (%s)',
+    'agent tags do not read as a status, nor by tint or edge as the accent (%s)',
     (_, i) => {
       const t = tokens(i);
       for (const tone of tones) {
         const tag = agentTag(t, i, tone);
-        for (const status of ['--success', '--error', '--warning', '--accent'])
+        for (const reserved of ['--success', '--error', '--warning', '--accent'])
           for (const v of VISIONS)
             for (const [part, colour] of [
               ['text', tag.ink],
               ['tint', tag.tint()],
               ['edge', tag.edge],
-            ] as const)
+            ] as const) {
+              if (part === 'text' && reserved === '--accent') continue;
               expect(
-                deltaE(colour, t.get(status) as string, v),
-                `${tone} ${part} vs ${status} (${v})`,
+                deltaE(colour, t.get(reserved) as string, v),
+                `${tone} ${part} vs ${reserved} (${v})`,
               ).toBeGreaterThanOrEqual(RESERVED[v]);
+            }
       }
-    },
-  );
-
-  it.each(NAMES.map((name, i) => [name, i] as const))(
-    'the git and MCP tool categories do not read as a status (%s)',
-    (_, i) => {
-      const t = tokens(i);
-      for (const cat of ['--cat-git', '--cat-mcp'])
-        for (const status of ['--success', '--error', '--warning'])
-          for (const v of VISIONS)
-            expect(
-              deltaE(t.get(cat) as string, t.get(status) as string, v),
-              `${cat} vs ${status} (${v})`,
-            ).toBeGreaterThanOrEqual(RESERVED[v]);
     },
   );
 
