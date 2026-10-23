@@ -8,8 +8,10 @@ import { createClaudeCodeAdapter } from '../adapters/claude-code/index.js';
 import { createQuotaFetcher } from '../adapters/claude-code/quota-fetch.js';
 import { createCodexAdapter } from '../adapters/codex/index.js';
 import { createGrokAdapter } from '../adapters/grok/index.js';
+import { createOmpUsageCacheSource } from '../adapters/omp/usage-cache.js';
 import type { AgentAdapter } from '../core/adapter.js';
 import type { SessionSummary } from '../core/model.js';
+import type { QuotaSource } from '../core/quota-source.js';
 import { createApp } from './app.js';
 import {
   bindWarning,
@@ -75,6 +77,9 @@ async function main(): Promise<void> {
   let claudeBin: string | null = null;
   let grokDir: string | null = null;
   let codexDir: string | null = null;
+  // oh-my-pi's home, until its sessions get their own --omp-dir / --no-omp.
+  const ompDir = join(homedir(), '.omp');
+  let ompUsage = false;
   if (!opts.demo) {
     try {
       claudeBin = await findClaudeBin({
@@ -84,6 +89,7 @@ async function main(): Promise<void> {
       });
       grokDir = await grokDirToUse(opts, isDirectory);
       codexDir = await codexDirToUse(opts, isDirectory);
+      ompUsage = await isDirectory(join(ompDir, 'agent'));
     } catch (err) {
       console.error(err instanceof Error ? err.message : err);
       process.exit(2);
@@ -106,7 +112,13 @@ async function main(): Promise<void> {
     adapters.push(createCodexAdapter({ codexDir }));
     log(`showing Codex sessions from ${codexDir} (--no-codex to hide them)`);
   }
-  const store = opts.demo ? new DemoStore() : new SessionStore({ adapters, log });
+  // Local caches first: on a fetchedAt tie the earlier source wins.
+  const quotaSources: QuotaSource[] = [];
+  if (ompUsage) {
+    quotaSources.push(createOmpUsageCacheSource({ ompDir }));
+    log(`showing plan usage cached by oh-my-pi in ${ompDir}`);
+  }
+  const store = opts.demo ? new DemoStore() : new SessionStore({ adapters, quotaSources, log });
   await store.start();
 
   const staticDir = findStaticDir();
