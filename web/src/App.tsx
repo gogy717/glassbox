@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import type { RunState } from '../../src/shared/runs.js';
 import css from './App.module.css';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -29,6 +37,8 @@ export interface AppProps {
 
 const NARROW = '(max-width: 900px)';
 const TWO_COLUMNS = '(max-width: 1199px)';
+/** The session list's element, for the menu button that shows and hides it. */
+const SIDEBAR_ID = 'session-list';
 
 export type SidebarMode = 'column' | 'overlay' | 'drawer';
 
@@ -114,14 +124,20 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
     setFloatOpen(false);
   }
   const floating = mode !== 'column';
-  const closeFloat = () => {
+  // Open over the page, the list is a modal dialog: the page behind it is inert.
+  const modal = floating && floatOpen;
+  const closeFloat = useCallback(() => {
     setFloatOpen(false);
     menuRef.current?.focus();
-  };
+  }, []);
   useEffect(() => {
+    if (!modal) return;
     // Opened from the menu button: start in the search field, not behind the scrim.
-    if (floating && floatOpen) asideRef.current?.querySelector<HTMLElement>('input')?.focus();
-  }, [floating, floatOpen]);
+    asideRef.current?.querySelector<HTMLElement>('input')?.focus();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && closeFloat();
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [modal, closeFloat]);
   const ui = useMemo(() => ({ follow, setFollow }), [follow]);
 
   useEffect(() => {
@@ -158,6 +174,11 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
   const open = state.open;
   const summary = open?.session ?? state.sessions.find((s) => s.id === route.sessionId) ?? null;
   const sidebarShown = floating ? floatOpen : !sidebarCollapsed;
+  // The list went away with focus inside (a resize past a breakpoint): keep focus on the page.
+  useLayoutEffect(() => {
+    if (!sidebarShown && asideRef.current?.contains(document.activeElement))
+      menuRef.current?.focus();
+  }, [sidebarShown]);
 
   return (
     <UiContext.Provider value={ui}>
@@ -170,13 +191,9 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
           </button>
           <TopBar
             menuRef={menuRef}
+            sidebarId={SIDEBAR_ID}
             title={route.sessionId ? (summary?.title ?? t('sidebar.untitled')) : null}
-            // The sidebar row tags the open session; with the list away, the top bar does.
-            agent={
-              route.sessionId && !(mode === 'column' && sidebarShown)
-                ? (summary?.agent ?? null)
-                : null
-            }
+            agent={route.sessionId ? (summary?.agent ?? null) : null}
             sidebarOpen={sidebarShown}
             live={summary?.live ?? null}
             connection={state.connection}
@@ -194,28 +211,30 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
             data-sidebar={sidebarShown ? 'shown' : 'hidden'}
             data-sidebar-mode={mode}
           >
-            {floating && floatOpen && (
-              <div className={css.scrim} aria-hidden="true" onClick={() => setFloatOpen(false)} />
-            )}
+            {modal && <div className={css.scrim} aria-hidden="true" onClick={closeFloat} />}
             <aside
               ref={asideRef}
+              id={SIDEBAR_ID}
               className={css.sidebar}
               hidden={!sidebarShown}
-              onKeyDown={(e) => {
-                if (floating && e.key === 'Escape') closeFloat();
-              }}
+              {...(modal
+                ? { role: 'dialog', 'aria-modal': true, 'aria-label': t('sidebar.title') }
+                : {})}
             >
               <SidebarContainer
                 sessions={state.sessions}
                 selectedId={route.sessionId}
                 showProbes={prefs.showProbes}
                 onSelect={(id) => {
-                  setFloatOpen(false);
                   navigate({ sessionId: id, agentId: 'main', turnId: null, requestId: null });
+                  if (!floating) return;
+                  // The list goes away: carry on in the session just opened.
+                  setFloatOpen(false);
+                  mainRef.current?.focus();
                 }}
               />
             </aside>
-            <main ref={mainRef} tabIndex={-1} className={css.main}>
+            <main ref={mainRef} tabIndex={-1} className={css.main} inert={modal}>
               {open ? (
                 <ErrorBoundary key={open.id}>
                   <ApprovalsContext.Provider value={approvals}>
@@ -250,7 +269,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
               )}
             </main>
           </div>
-          <div className={css.footer} id="composer-slot">
+          <div className={css.footer} id="composer-slot" inert={modal}>
             {run && pending && showPrompt && (
               <PermissionDialog
                 key={pending.id}

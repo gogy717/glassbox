@@ -207,6 +207,8 @@ describe('App', () => {
     expect(within(banner).getByText('Live viewer research (demo)')).toBeInTheDocument();
     expect(within(banner).getByText('Running')).toBeInTheDocument();
     expect(within(banner).getByText('Connected')).toBeInTheDocument();
+    // The open session's agent, in its colours, at every width.
+    expect(within(banner).getByText('Claude Code')).toHaveAttribute('data-tone', 'claude-code');
 
     const summary = screen.getByRole('region', { name: 'Summary' });
     const value = (label: string) =>
@@ -230,11 +232,6 @@ describe('App', () => {
     expect(screen.getByRole('tabpanel')).toContainElement(
       screen.getByRole('list', { name: 'Conversations' }),
     );
-
-    // The session list's row tags the open session's agent; with the list away, the top bar does.
-    expect(within(banner).queryByText('Claude Code')).toBeNull();
-    fireEvent.click(within(banner).getByRole('button', { name: 'Sessions' }));
-    expect(within(banner).getByText('Claude Code')).toHaveAttribute('data-tone', 'claude-code');
   });
 
   it('scopes the summary and breadcrumb to the agent in the route', () => {
@@ -613,20 +610,42 @@ describe('sidebarMode', () => {
 
 describe('App below three columns', () => {
   const realMatchMedia = window.matchMedia;
-  /** A screen `width` px wide: answers the app's max-width queries. */
-  const screenWidth = (width: number) => {
+  let width = 1440;
+  const listeners = new Set<() => void>();
+  /** A screen `w` px wide that can be resized: answers the app's max-width queries. */
+  const screenWidth = (w: number) => {
+    width = w;
     window.matchMedia = ((query: string) => ({
-      matches: width <= Number(/max-width:\s*(\d+)px/.exec(query)?.[1] ?? Number.POSITIVE_INFINITY),
+      get matches() {
+        const max = Number(/max-width:\s*(\d+)px/.exec(query)?.[1] ?? Number.POSITIVE_INFINITY);
+        return width <= max;
+      },
       media: query,
-      addEventListener() {},
-      removeEventListener() {},
+      addEventListener: (_: string, fn: () => void) => listeners.add(fn),
+      removeEventListener: (_: string, fn: () => void) => listeners.delete(fn),
     })) as unknown as typeof window.matchMedia;
   };
+  const resize = (w: number) =>
+    act(() => {
+      width = w;
+      for (const fn of [...listeners]) fn();
+    });
   afterEach(() => {
     window.matchMedia = realMatchMedia;
+    listeners.clear();
   });
+  const openOverlay = (sessions = false) => {
+    screenWidth(1024);
+    window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}`;
+    const store = demoStore();
+    if (sessions) store.applyEvent({ type: 'sessions', sessions: createDemoSessions(DEMO_NOW) });
+    render(<App store={store} connect={noConnect} />);
+    const menu = within(screen.getByRole('banner')).getByRole('button', { name: 'Sessions' });
+    fireEvent.click(menu);
+    return menu;
+  };
 
-  it('floats the session list over an open session, closed until the menu opens it', () => {
+  it('floats the session list over an open session as a modal, closed until the menu opens it', () => {
     screenWidth(1024);
     window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}`;
     render(<App store={demoStore()} connect={noConnect} />);
@@ -634,29 +653,58 @@ describe('App below three columns', () => {
     const menu = within(banner).getByRole('button', { name: 'Sessions' });
     expect(screen.queryByRole('navigation', { name: 'Sessions' })).toBeNull();
     expect(menu).toHaveAttribute('aria-expanded', 'false');
-    // The list is away, so the top bar tags the agent.
+    expect(menu).toHaveAttribute('aria-controls', 'session-list');
     expect(within(banner).getByText('Claude Code')).toBeInTheDocument();
 
     fireEvent.click(menu);
-    const list = screen.getByRole('navigation', { name: 'Sessions' });
+    const dialog = screen.getByRole('dialog', { name: 'Sessions' });
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(dialog).toHaveAttribute('id', 'session-list');
+    expect(dialog.closest('[data-sidebar-mode]')).toHaveAttribute('data-sidebar-mode', 'overlay');
     expect(menu).toHaveAttribute('aria-expanded', 'true');
-    expect(list.closest('[data-sidebar-mode]')).toHaveAttribute('data-sidebar-mode', 'overlay');
-    expect(document.activeElement).toBe(within(list).getByRole('searchbox'));
+    expect(document.activeElement).toBe(within(dialog).getByRole('searchbox'));
+    // Nothing behind the scrim takes focus while it is open.
+    expect(screen.getByRole('main', { hidden: true })).toHaveAttribute('inert');
+    expect(document.getElementById('composer-slot')).toHaveAttribute('inert');
+  });
 
-    fireEvent.keyDown(within(list).getByRole('searchbox'), { key: 'Escape' });
-    expect(screen.queryByRole('navigation', { name: 'Sessions' })).toBeNull();
+  it('closes on Escape wherever focus is, and gives focus back to the menu', () => {
+    const menu = openOverlay();
+    act(() => (document.activeElement as HTMLElement).blur());
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Sessions' })).toBeNull();
+    expect(document.activeElement).toBe(menu);
+    expect(screen.getByRole('main')).not.toHaveAttribute('inert');
+  });
+
+  it('closes from the scrim, giving focus back to the menu', () => {
+    const menu = openOverlay();
+    const scrim = document.querySelector(
+      '[data-sidebar-mode] > [aria-hidden="true"]',
+    ) as HTMLElement;
+    fireEvent.click(scrim);
+    expect(screen.queryByRole('dialog', { name: 'Sessions' })).toBeNull();
     expect(document.activeElement).toBe(menu);
   });
 
-  it('closes the overlay once a session is picked from it', () => {
-    screenWidth(1024);
-    window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}`;
-    const store = demoStore();
-    store.applyEvent({ type: 'sessions', sessions: createDemoSessions(DEMO_NOW) });
-    render(<App store={store} connect={noConnect} />);
-    fireEvent.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Sessions' }));
+  it('closes once a session is picked, and carries on in the session just opened', () => {
+    openOverlay(true);
     fireEvent.click(screen.getByRole('button', { name: /Fix flaky login test/ }));
-    expect(screen.queryByRole('navigation', { name: 'Sessions' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Sessions' })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('main'));
+  });
+
+  it('closes when the screen crosses a breakpoint, keeping focus on the page', () => {
+    const menu = openOverlay();
+    resize(800);
+    expect(screen.queryByRole('dialog', { name: 'Sessions' })).toBeNull();
+    expect(document.activeElement).toBe(menu);
+    // Wide again: a column, not a dialog, and nothing inert.
+    resize(1300);
+    expect(
+      screen.getByRole('navigation', { name: 'Sessions' }).closest('aside'),
+    ).not.toHaveAttribute('role');
+    expect(screen.getByRole('main')).not.toHaveAttribute('inert');
   });
 
   it('keeps the list as a column on Home, which has no third column to protect', () => {

@@ -14,8 +14,10 @@ interface Props {
   /** The menu button, for focus to return to when the floating session list closes. */
   menuRef?: Ref<HTMLButtonElement>;
   title: string | null;
-  /** The coding agent of the open session, tagged here when the sidebar row is not on screen. */
+  /** The coding agent of the open session. */
   agent: AgentKind | null;
+  /** The session list's id, for the menu button's aria-controls. */
+  sidebarId: string;
   /** Whether the session list is open, for the menu button's pressed state. */
   sidebarOpen: boolean;
   live: LiveState | null;
@@ -38,6 +40,7 @@ export function TopBar(p: Props) {
         className={css.iconButton}
         aria-label={t('sidebar.toggle')}
         aria-expanded={p.sidebarOpen}
+        aria-controls={p.sidebarId}
         onClick={p.onToggleSidebar}
       >
         <Menu size={16} aria-hidden="true" />
@@ -48,7 +51,7 @@ export function TopBar(p: Props) {
       </span>
       {p.title !== null && (
         <span className={css.session}>
-          {p.agent && <AgentTag kind={p.agent} size="medium" />}
+          {p.agent && <AgentTag kind={p.agent} />}
           <span className={css.title} title={p.title}>
             {p.title}
           </span>

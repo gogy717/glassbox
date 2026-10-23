@@ -191,11 +191,20 @@
   color: var(--text);
 }
 
-/* Two columns or fewer: Follow keeps its eye, and the connection speaks only when it drops. */
+/* Two columns or fewer: Follow keeps its eye, and the connection shows only when it drops. It
+   stays in the page while hidden, so its status region still announces the drop. */
 @media (max-width: 1199px) {
-  .toggleLabel,
-  .conn[data-state="open"] {
+  .toggleLabel {
     display: none;
+  }
+
+  .conn[data-state="open"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .toggle {
