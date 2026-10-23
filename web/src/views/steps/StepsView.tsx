@@ -10,9 +10,9 @@ import { formatDuration, formatNumber } from '../../lib/format';
 import { buildSteps, type Phase, type PhaseCategory, type Step } from '../../lib/steps';
 import type { Navigate, Route } from '../../router';
 import { useUi } from '../../ui';
-import { BackToLatest } from '../flow/BackToLatest';
+import { FollowPausedBar } from '../flow/FollowPausedBar';
+import { TurnHeader } from '../flow/TurnHeader';
 import { TurnList, useSelectedTurn, useTurnItems } from '../flow/TurnList';
-import { TurnTitle } from '../flow/TurnTitle';
 import { useFollowScroll } from '../flow/useFollowScroll';
 import { StepItem } from './StepItem';
 import css from './StepsView.module.css';
@@ -57,26 +57,21 @@ export function StepsView({ open, agentId, route, navigate }: Props) {
     [navigate, setFollow, agentId, current],
   );
 
+  const backToLatest = () => {
+    setFollow(true);
+    navigate({ turnId: null, requestId: null });
+  };
+
   return (
     <div className={css.layout}>
       <TurnList items={items} selectedId={current?.turn.id ?? null} onSelect={pickTurn} />
       <section className={css.main}>
         {current ? (
           <>
-            <div className={css.turnHead}>
-              <div className={css.headRow}>
-                <TurnTitle key={current.turn.id} text={current.heading} className={css.title} />
-                {!follow && (
-                  <BackToLatest
-                    onClick={() => {
-                      setFollow(true);
-                      navigate({ turnId: null, requestId: null });
-                    }}
-                  />
-                )}
-              </div>
+            <TurnHeader item={current}>
               <PhaseShares phases={phases} />
-            </div>
+            </TurnHeader>
+            {!follow && <FollowPausedBar newest={items.at(-1)} onBack={backToLatest} />}
             <StepList
               key={current.turn.id}
               phases={phases}

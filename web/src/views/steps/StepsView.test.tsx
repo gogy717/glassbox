@@ -23,7 +23,7 @@ function renderSteps(
     requestId: null,
     ...opts.route,
   };
-  render(
+  const { container } = render(
     <I18nContext.Provider value={makeI18n('en')}>
       <UiContext.Provider value={{ follow: opts.follow ?? true, setFollow }}>
         <SessionAgentContext.Provider value={opts.agent ?? 'claude-code'}>
@@ -32,7 +32,7 @@ function renderSteps(
       </UiContext.Provider>
     </I18nContext.Provider>,
   );
-  return { navigate, setFollow };
+  return { navigate, setFollow, container };
 }
 
 const step = (n: number) => screen.getByRole('article', { name: `Step ${n}` });
@@ -83,12 +83,17 @@ describe('StepsView', () => {
     expect(items[0]).toHaveAttribute('aria-current', 'true');
   });
 
-  it('offers “Back to latest” in the turn header while follow is paused', () => {
-    const { navigate, setFollow } = renderSteps({ route: { turnId: 'turn_m1' }, follow: false });
-    const back = screen.getByRole('button', { name: 'Back to latest' });
-    expect(screen.getByRole('heading', { level: 2 }).parentElement?.parentElement).toContainElement(
-      back,
-    );
+  it('says following is paused, in a bar between the turn header and the steps', () => {
+    const { navigate, setFollow, container } = renderSteps({
+      route: { turnId: 'turn_m1' },
+      follow: false,
+    });
+    // In the layout, as in the execution chain: nothing floats over the steps.
+    const bar = screen.getByRole('group', { name: 'Conversation 1' }).nextElementSibling;
+    if (!(bar instanceof HTMLElement)) throw new Error('no bar after the header');
+    expect(bar.nextElementSibling).toBe(container.querySelector('[data-steps-scroll]'));
+    expect(within(bar).getByRole('status')).toHaveTextContent(/^Following paused/);
+    const back = within(bar).getByRole('button', { name: 'Back to latest' });
     fireEvent.click(back);
     expect(setFollow).toHaveBeenLastCalledWith(true);
     expect(navigate).toHaveBeenLastCalledWith({ turnId: null, requestId: null });

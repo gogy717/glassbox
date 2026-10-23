@@ -13,26 +13,6 @@
   min-height: 0;
 }
 
-.turnHead {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  flex: none;
-  padding: 10px 20px 12px;
-  border-bottom: 1px solid var(--border);
-}
-
-.headRow {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.title {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
 /* One colour per category, for the tape, the swatches and the rail's nodes. "Other" is grey
    with a hatch, so it never reads as the neutral "answer". */
 .main [data-cat="explore"] {
@@ -66,11 +46,13 @@
   --cat: repeating-linear-gradient(45deg, var(--cat-other) 0 3px, transparent 3px 6px);
 }
 
-/* Phase shares: a 5px tape and a legend with mono percentages. */
+/* Phase shares, under the prompt in the turn's head: a 5px tape and a legend with mono
+   percentages. */
 .shares {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  margin-top: 8px;
 }
 
 .shareBar {
@@ -352,10 +334,6 @@
   .layout {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr);
-  }
-
-  .turnHead {
-    padding: 8px 12px;
   }
 
   .list {
