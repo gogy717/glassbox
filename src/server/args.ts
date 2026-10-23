@@ -34,6 +34,11 @@ export interface CliOptions {
   /** Its agent dir (sessions, agent.db): `<ompDir>/agent`, or $PI_CODING_AGENT_DIR. */
   ompAgentDir: string;
   ompDirFromFlag: boolean;
+  /** Show OpenCode sessions when its data dir holds a database (`--no-opencode` turns it off). */
+  opencode: boolean;
+  /** `--opencode-dir`, else $XDG_DATA_HOME/opencode, else ~/.local/share/opencode. */
+  opencodeDir: string;
+  opencodeDirFromFlag: boolean;
   /** Providers to ask for plan usage over the network (`--fetch-quota`); [] asks none. */
   fetchQuota: FetchQuotaProvider[];
 }
@@ -64,6 +69,11 @@ Options:
                       are shown whenever <dir>/agent/sessions exists ($PI_CODING_AGENT_DIR
                       stands in for <dir>/agent when this flag is not given)
   --no-omp            don't show oh-my-pi sessions or the plan usage oh-my-pi caches
+  --opencode-dir <dir>
+                      OpenCode data dir (default $XDG_DATA_HOME/opencode, else
+                      ~/.local/share/opencode); OpenCode sessions are shown whenever it
+                      holds opencode.db
+  --no-opencode       don't show OpenCode sessions
   --fetch-quota[=<list>]
                       keep plan usage fresh by asking the providers every 5 minutes:
                       anthropic (Claude Code's sign-in), xai (SuperGrok, Grok CLI's sign-in
@@ -125,6 +135,8 @@ export function parseCliArgs(
       'no-codex': { type: 'boolean' },
       'omp-dir': { type: 'string' },
       'no-omp': { type: 'boolean' },
+      'opencode-dir': { type: 'string' },
+      'no-opencode': { type: 'boolean' },
       'fetch-quota': { type: 'string', multiple: true },
     },
   });
@@ -154,6 +166,12 @@ export function parseCliArgs(
     ompDir,
     ompAgentDir: ompAgentEnv ? resolve(ompAgentEnv) : join(ompDir, 'agent'),
     ompDirFromFlag: values['omp-dir'] !== undefined,
+    opencode: !values['no-opencode'],
+    opencodeDir: resolve(
+      values['opencode-dir'] ??
+        join(ctx.env.XDG_DATA_HOME || join(ctx.homedir, '.local', 'share'), 'opencode'),
+    ),
+    opencodeDirFromFlag: values['opencode-dir'] !== undefined,
     fetchQuota: fetchQuotaProviders(values['fetch-quota']),
   };
 }
@@ -210,6 +228,21 @@ export async function ompUsageDirToUse(
   isDirectory: (p: string) => Promise<boolean>,
 ): Promise<string | null> {
   return opts.omp && (await isDirectory(opts.ompAgentDir)) ? opts.ompAgentDir : null;
+}
+
+/**
+ * OpenCode's data dir when it holds `opencode.db`, else null. Like `optionalAgentDir`, but the
+ * database must be there: OpenCode keeps its sessions in it, not in files of their own.
+ */
+export async function opencodeDirToUse(
+  opts: CliOptions,
+  isFile: (path: string) => Promise<boolean>,
+): Promise<string | null> {
+  if (!opts.opencode) return null;
+  if (await isFile(join(opts.opencodeDir, 'opencode.db'))) return opts.opencodeDir;
+  if (opts.opencodeDirFromFlag)
+    throw new Error(`--opencode-dir ${opts.opencodeDir}: no opencode.db there`);
+  return null;
 }
 
 /** A startup warning for binding `host`, or null when it is a loopback address. */

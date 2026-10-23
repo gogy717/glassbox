@@ -6,6 +6,7 @@ const NAMES: Record<string, string> = {
   grok: 'Grok',
   codex: 'Codex',
   'oh-my-pi': 'oh-my-pi',
+  opencode: 'OpenCode',
 };
 
 /** "Claude Code" for 'claude-code'; an agent without a known name shows its kind as is. */

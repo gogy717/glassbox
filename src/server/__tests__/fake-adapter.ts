@@ -328,6 +328,85 @@ export function createFakeAdapter(
   return adapter;
 }
 
+// ── An agent whose sessions live in a database ────────────────────────────────────────────
+
+export const FAKE_DB_AGENT = 'fakedb';
+
+/**
+ * Sessions live in one "database" file, as OpenCode's do, and reach the server only through
+ * `readJson`:
+ *
+ *   <root>/fake.db       {"<nativeId>": {"version": "v1", "records": [<toy record>, …]}}
+ *   <root>/fake.db-wal   its journal: a write here stands for a write to the database
+ */
+export interface FakeDbAdapter extends AgentAdapter {
+  readonly parsers: FakeParser[];
+  readonly dbPath: string;
+  /** Calls to `readJson` so far. */
+  reads: number;
+  /** While set, `readJson` rejects with it. */
+  failWith: Error | null;
+}
+
+export function createFakeDbAdapter(root: string): FakeDbAdapter {
+  const dbPath = join(root, 'fake.db');
+  const load = async (): Promise<Record<string, { version: string; records: Rec[] }>> =>
+    tryParse(await readFile(dbPath, 'utf8').catch(() => '{}')) ?? {};
+  const sessionFile = (): SourceFile => ({
+    path: dbPath,
+    format: 'json',
+    role: 'db-session',
+    agentId: null,
+    workflowRunId: null,
+  });
+  const adapter: FakeDbAdapter = {
+    kind: FAKE_DB_AGENT,
+    parsers: [],
+    dbPath,
+    reads: 0,
+    failWith: null,
+    async discover() {
+      return Object.keys(await load()).map((nativeId) => ({
+        agent: FAKE_DB_AGENT,
+        nativeId,
+        location: dbPath,
+        summary: {
+          id: `${FAKE_DB_AGENT}:${nativeId}`,
+          agent: FAKE_DB_AGENT,
+          nativeId,
+          title: null,
+          cwd: null,
+          project: 'db',
+          startedAt: null,
+          updatedAt: new Date(0).toISOString(),
+          live: 'unknown',
+          version: null,
+          model: null,
+          usage: null,
+          counts: null,
+        },
+      }));
+    },
+    listFiles: async () => [sessionFile()],
+    watchDirs: () => [root],
+    classify: (_source, path) =>
+      path === dbPath || path === `${dbPath}-wal` ? sessionFile() : null,
+    liveStatus: async () => new Map(),
+    createParser(source) {
+      const p = new FakeParser(source);
+      adapter.parsers.push(p);
+      return p;
+    },
+    async readJson(source) {
+      adapter.reads++;
+      if (adapter.failWith) throw adapter.failWith;
+      const row = (await load())[source.nativeId];
+      return row && { version: row.version, value: row.records };
+    },
+  };
+  return adapter;
+}
+
 // ── Parser ────────────────────────────────────────────────────────────────────────────────
 
 // biome-ignore lint/suspicious/noExplicitAny: toy records are untyped JSON
@@ -398,6 +477,10 @@ export class FakeParser implements SessionParser {
       const w = this.ensureWorkflow(file.workflowRunId, c);
       w.status = 'complete';
       c.workflows.push(w.id);
+    } else if (file.role === 'db-session' && Array.isArray(v)) {
+      // A whole session, re-sent on every change: toy title and req records are idempotent.
+      const main: SourceFile = { ...file, role: 'main' };
+      return mergeChanges(c, ...v.map((r) => this.ingestRecord(main, r)));
     }
     return mergeChanges(c);
   }
