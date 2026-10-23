@@ -4,7 +4,7 @@
 
 **Turn Claude Code into a glass box.** While it works, see exactly what it is doing, which tools it calls, and where the tokens and the time go, including max effort and ultracode (Workflow multi-agent) runs. You can also message it straight from glassbox.
 
-> A local, live viewer for Claude Code sessions: the execution chain, a step-by-step breakdown of how the agent worked, where the tokens and the time went, plan quota, and multi-agent workflow runs.
+> A local, live viewer for Claude Code, Codex, Grok, oh-my-pi and OpenCode sessions: the execution chain, a step-by-step breakdown of how the agent worked, where the tokens and the time went, plan quota, and multi-agent workflow runs.
 
 ![Execution chain: each model call's request, response and tools; Agent / Workflow cards show their sub-agents' status and tokens](docs/images/flow.png)
 
