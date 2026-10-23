@@ -3,6 +3,7 @@ import type { Turn } from '../../../../src/core/model.js';
 import { StatusPill, type UiStatus } from '../../components/Status';
 import { useApprovalsContext } from '../../data/approvals';
 import type { OpenSession } from '../../data/store';
+import { useRovingFocus } from '../../data/useRovingFocus';
 import { useI18n } from '../../i18n';
 import { formatClock } from '../../lib/format';
 import type { Route } from '../../router';
@@ -131,6 +132,9 @@ export const TurnList = memo(function TurnList({ items, selectedId, onSelect }: 
   const { t } = useI18n();
   const listRef = useRef<HTMLUListElement>(null);
   const newestFirst = useMemo(() => [...items].reverse(), [items]);
+  const ids = useMemo(() => newestFirst.map((it) => it.turn.id), [newestFirst]);
+  // One tab stop for the whole list; the arrow keys move between turns.
+  const roving = useRovingFocus(listRef, ids, selectedId);
 
   // Follow moves the selection to each new turn and a link may select an old one: keep it in view.
   useEffect(() => {
@@ -152,6 +156,7 @@ export const TurnList = memo(function TurnList({ items, selectedId, onSelect }: 
             <button
               type="button"
               className={css.card}
+              {...roving(it.turn.id)}
               aria-current={it.turn.id === selectedId ? 'true' : undefined}
               title={it.turn.prompt}
               onClick={() => onSelect(it.turn.id)}

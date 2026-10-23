@@ -132,6 +132,17 @@ describe('App', () => {
     expect(connect).toHaveBeenLastCalledWith(store, DEMO_SESSION_ID);
   });
 
+  it('offers a skip link as the first stop, which moves focus to the content', () => {
+    window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}`;
+    render(<App store={demoStore()} connect={noConnect} />);
+    const skip = screen.getByRole('button', { name: 'Skip to main content' });
+    const focusable = document.querySelectorAll('button, [href], input, [tabindex="0"]');
+    expect(focusable[0]).toBe(skip);
+    fireEvent.click(skip);
+    expect(document.activeElement).toBe(screen.getByRole('main'));
+    expect(window.location.hash).toBe(`#/s/${encodeURIComponent(DEMO_SESSION_ID)}`);
+  });
+
   it('starts follow afresh when another session opens', async () => {
     window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}`;
     const store = createStore();

@@ -109,4 +109,39 @@ describe('TurnList', () => {
     select('turn_4');
     expect(scrolled).toEqual({ top: 0, left: 0 });
   });
+
+  it('is one tab stop, at the selected turn, and the arrow keys move through the rest', () => {
+    renderList('turn_3');
+    const cards = within(screen.getByRole('list', { name: 'Conversations' })).getAllByRole(
+      'button',
+    );
+    expect(cards.map((c) => c.tabIndex)).toEqual([-1, -1, 0, -1, -1]);
+
+    const third = cards[2] as HTMLElement;
+    third.focus();
+    fireEvent.keyDown(third, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(cards[3]);
+    // The tab stop follows focus, so Tab out and back returns here.
+    expect(cards.map((c) => c.tabIndex)).toEqual([-1, -1, -1, 0, -1]);
+
+    fireEvent.keyDown(cards[3] as HTMLElement, { key: 'End' });
+    expect(document.activeElement).toBe(cards[4]);
+    fireEvent.keyDown(cards[4] as HTMLElement, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(cards[4]);
+    fireEvent.keyDown(cards[4] as HTMLElement, { key: 'Home' });
+    expect(document.activeElement).toBe(cards[0]);
+    fireEvent.keyDown(cards[0] as HTMLElement, { key: 'ArrowLeft' });
+    expect(document.activeElement).toBe(cards[0]);
+    fireEvent.keyDown(cards[0] as HTMLElement, { key: 'ArrowRight' });
+    expect(document.activeElement).toBe(cards[1]);
+  });
+
+  it('puts the tab stop on the newest turn when nothing is selected', () => {
+    renderList(null);
+    const cards = within(screen.getByRole('list', { name: 'Conversations' })).getAllByRole(
+      'button',
+    );
+    expect(cards[0]).toHaveAttribute('tabindex', '0');
+    expect(cards.filter((c) => c.tabIndex === 0)).toHaveLength(1);
+  });
 });

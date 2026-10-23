@@ -1,7 +1,8 @@
 import { Search } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { SessionSummary } from '../../../src/core/model.js';
 import { totalTokens } from '../../../src/core/usage.js';
+import { useRovingFocus } from '../data/useRovingFocus';
 import { useI18n } from '../i18n';
 import { agentName } from '../lib/agent-names';
 import { formatCompact, formatRelative } from '../lib/format';
@@ -26,6 +27,10 @@ export function SessionSidebar({ sessions, selectedId, now, showProbes, onSelect
   );
   // Which agent a session belongs to only matters once there is more than one on this machine.
   const multiAgent = useMemo(() => new Set(sessions.map((s) => s.agent)).size > 1, [sessions]);
+  // One tab stop for the whole list; the arrow keys move between sessions, across projects.
+  const listRef = useRef<HTMLDivElement>(null);
+  const ids = useMemo(() => groups.flatMap((g) => g.sessions.map((s) => s.id)), [groups]);
+  const roving = useRovingFocus(listRef, ids, selectedId);
 
   return (
     <nav className={css.sidebar} aria-label={t('sidebar.title')}>
@@ -39,7 +44,7 @@ export function SessionSidebar({ sessions, selectedId, now, showProbes, onSelect
           onChange={(e) => setQuery(e.target.value)}
         />
       </label>
-      <div className={css.list}>
+      <div ref={listRef} className={css.list}>
         {groups.length === 0 && (
           <p className={css.empty}>{t(sessions.length ? 'sidebar.noMatch' : 'sidebar.empty')}</p>
         )}
@@ -53,6 +58,7 @@ export function SessionSidebar({ sessions, selectedId, now, showProbes, onSelect
                 <button
                   type="button"
                   className={css.item}
+                  {...roving(s.id)}
                   aria-current={s.id === selectedId ? 'true' : undefined}
                   title={s.cwd ?? undefined}
                   onClick={() => onSelect(s.id)}

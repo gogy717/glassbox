@@ -100,6 +100,22 @@ describe('SessionSidebar', () => {
     );
   });
 
+  it('is one tab stop, at the selected session, with arrow keys across projects', () => {
+    renderSidebar();
+    const items = screen.getAllByRole('button').filter((b) => b.closest('li'));
+    expect(items.filter((b) => b.tabIndex === 0)).toEqual([
+      screen.getByRole('button', { name: /Live viewer research/ }),
+    ]);
+    const first = items[0] as HTMLElement;
+    first.focus();
+    fireEvent.keyDown(first, { key: 'ArrowDown' });
+    // The next session sits in another project's group.
+    expect(document.activeElement).toBe(items[1]);
+    expect(items[1]?.closest('ul')).not.toBe(first.closest('ul'));
+    fireEvent.keyDown(items[1] as HTMLElement, { key: 'End' });
+    expect(document.activeElement).toBe(items.at(-1));
+  });
+
   it('filters by the search box and says when nothing matches', () => {
     renderSidebar();
     const search = screen.getByRole('searchbox');
