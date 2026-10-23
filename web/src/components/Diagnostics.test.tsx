@@ -42,6 +42,9 @@ describe('Diagnostics', () => {
           'compaction-markers',
           'subagents',
           'archived-sessions',
+          'live-state',
+          'other-branches',
+          'broken-tree',
         ],
         parseErrors: 0,
         unknownRecordTypes: {},
@@ -50,10 +53,13 @@ describe('Diagnostics', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: '数据诊断' }));
     const items = within(screen.getByRole('dialog')).getAllByRole('listitem');
-    expect(items).toHaveLength(7);
+    expect(items).toHaveLength(10);
     expect(items[3]).toHaveTextContent('最近 30 秒内有写入');
     expect(items[5]).toHaveTextContent('此 agent 的子代理数据未接入');
     expect(items[6]).toHaveTextContent('需要 Node 的 zstd 支持');
+    expect(items[7]).toHaveTextContent('总是显示为已关闭');
+    expect(items[8]).toHaveTextContent('编辑后重发的提示');
+    expect(items[9]).toHaveTextContent('指向缺失的父条目');
     for (const li of items) expect(li.textContent).toMatch(/[一-鿿]/);
   });
 
@@ -87,5 +93,30 @@ describe('Diagnostics', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Data diagnostics' }));
     expect(screen.getByRole('dialog')).toHaveTextContent('not recorded by this Grok version');
+  });
+
+  it('explains what an oh-my-pi session cannot show', () => {
+    render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <SessionAgentContext.Provider value="oh-my-pi">
+          <Diagnostics
+            diagnostics={{
+              unavailable: ['live-state', 'other-branches', 'broken-tree'],
+              parseErrors: 0,
+              unknownRecordTypes: {},
+            }}
+          />
+        </SessionAgentContext.Provider>
+      </I18nContext.Provider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Data diagnostics' }));
+    const items = within(screen.getByRole('dialog')).getAllByRole('listitem');
+    expect(items.map((li) => li.textContent)).toEqual([
+      expect.stringContaining('cannot see whether oh-my-pi has the session open'),
+      expect.stringContaining('only the branch oh-my-pi would resume'),
+      expect.stringContaining('points at a missing parent'),
+    ]);
+    // Translated, not shown as raw keys.
+    expect(within(screen.getByRole('dialog')).queryByText('broken-tree')).toBeNull();
   });
 });

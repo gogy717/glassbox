@@ -14,6 +14,9 @@ const GAPS: Record<string, MessageKey> = {
   'compaction-markers': 'diag.u.compactionMarkers',
   subagents: 'diag.u.subagents',
   'archived-sessions': 'diag.u.archivedSessions',
+  'live-state': 'diag.u.liveState',
+  'other-branches': 'diag.u.otherBranches',
+  'broken-tree': 'diag.u.brokenTree',
 };
 
 /** Requests the adapter dropped on purpose (Claude Code re-sent them); informational only. */

@@ -266,6 +266,12 @@ export const zh = {
   'diag.u.liveStateHeuristic': '这个 agent 没有进程登记，“运行中”是按最近 30 秒内有写入推断的',
   'diag.u.archivedSessions': '部分已归档的会话无法解压读取（需要 Node 的 zstd 支持）',
   'diag.u.compactionMarkers': '压缩点是根据上下文骤降推测的',
+  'diag.u.liveState':
+    '运行状态：在这个系统上 glassbox 看不到 {agent} 是否打开了这个会话，所以总是显示为已关闭',
+  'diag.u.otherBranches':
+    '其他分支（编辑后重发的提示、在会话树中跳回）不显示，只显示 {agent} 会继续的那条分支',
+  'diag.u.brokenTree':
+    '历史记录损坏：有条目指向缺失的父条目、成环或重复了 id，会话可能有一部分没有显示',
   'diag.parseErrors': '无法解析的行：{n}',
   'diag.unknownHead': '未识别的记录类型',
   'diag.superseded': '已过滤的静默重发请求 {n}',
