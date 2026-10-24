@@ -1,27 +1,21 @@
 /** Where the time went: swimlane segments per agent, totals, and the slowest steps. */
-import type { ModelRequest, ToolCall } from '../../../src/core/model.js';
+import type { ToolCall } from '../../../src/core/model.js';
+import {
+  ms,
+  requestSegments,
+  type Segment,
+  type SegmentKind,
+  toolSpan,
+} from '../../../src/shared/segments.js';
 import type { Approvals } from '../data/approvals';
 import type { OpenSession } from '../data/store';
 import { agentTree } from './agents';
 import { type ToolCategory, toolCategory } from './tool-category';
 
-/** 'approval': a tool blocked on the person answering a permission prompt. */
-export type SegmentKind = 'waiting' | 'thinking' | 'generating' | 'tool' | 'approval';
+export type { Segment, SegmentKind } from '../../../src/shared/segments.js';
 
 /** Segments that stand for a tool call rather than part of a model request. */
 const isToolSeg = (s: Segment) => s.kind === 'tool' || s.kind === 'approval';
-
-export interface Segment {
-  kind: SegmentKind;
-  start: number;
-  end: number;
-  /** The request id, or the tool call id for tool segments. */
-  refId: string;
-  requestId: string;
-  category?: ToolCategory;
-  /** Still running: `end` is the current time. */
-  live?: boolean;
-}
 
 export interface Lane {
   agentId: string;
@@ -29,37 +23,6 @@ export interface Lane {
   /** "workflow · phase" for workflow agents. */
   group: string | null;
   segments: Segment[];
-}
-
-/** Epoch ms, or null for a missing or malformed time (never NaN, which would poison the chart). */
-const ms = (iso: string | null | undefined) => {
-  const t = iso ? Date.parse(iso) : Number.NaN;
-  return Number.isFinite(t) ? t : null;
-};
-
-function requestSegments(r: ModelRequest, now: number): Segment[] {
-  const start = ms(r.startedAt);
-  if (start === null) return [];
-  const base = { refId: r.id, requestId: r.id };
-  if (r.status === 'in-flight') {
-    // Nothing is on disk until the first block completes, so we cannot tell queueing from
-    // thinking; at max effort it is almost always thinking.
-    return [{ kind: 'thinking', start, end: Math.max(start, now), live: true, ...base }];
-  }
-  const first = ms(r.firstBlockAt);
-  const end = ms(r.endedAt) ?? first ?? start;
-  if (first === null) return end > start ? [{ kind: 'generating', start, end, ...base }] : [];
-  const thinkingMs = r.blocks.reduce(
-    (sum, b) => sum + (b.kind === 'thinking' ? (b.durationMs ?? 0) : 0),
-    0,
-  );
-  const thinkStart = Math.max(start, first - thinkingMs);
-  const out: Segment[] = [
-    { kind: 'waiting', start, end: thinkStart, ...base },
-    { kind: 'thinking', start: thinkStart, end: first, ...base },
-    { kind: 'generating', start: first, end: Math.max(first, end), ...base },
-  ];
-  return out.filter((s) => s.end > s.start);
 }
 
 /**
@@ -74,14 +37,10 @@ function toolSegments(
   approvals?: Approvals,
   preferDuration = false,
 ): Segment[] {
-  const start = ms(t.startedAt);
-  if (start === null) return [];
+  const span = toolSpan(t, now, preferDuration);
+  if (!span) return [];
+  const [start, end] = span;
   const live = t.status === 'running';
-  const recorded = t.durationMs !== null ? start + t.durationMs : null;
-  const end = Math.max(
-    start,
-    live ? now : ((preferDuration ? recorded : null) ?? ms(t.endedAt) ?? recorded ?? start),
-  );
   const base = { refId: t.id, requestId: t.requestId, category: toolCategory(t.name, t.input) };
   const tool = (from: number, to: number, isLive: boolean): Segment => ({
     kind: 'tool',

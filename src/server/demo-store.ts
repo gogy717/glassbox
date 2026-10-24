@@ -31,6 +31,8 @@ import {
 import type { AppStore } from './app.js';
 import { RateTracker } from './rate.js';
 import { compareSessions, isActive, listedSummary } from './store.js';
+import type { WeekRead, WeekStore } from './week.js';
+import { createDemoWeek } from './week-demo.js';
 
 const TICK_MS = 2000;
 
@@ -98,12 +100,14 @@ interface Changed {
  * completes, calls a tool, starts the next request or turn; early ticks also finish the
  * fixture's running workflow.
  */
-export class DemoStore implements AppStore {
+export class DemoStore implements AppStore, WeekStore {
   private readonly snap: SessionSnapshot;
   private readonly others: SessionSummary[];
   /** The other listed sessions, finished: they open but never change. */
   private readonly sides: SessionSnapshot[];
   private readonly quotas: QuotaSnapshot[];
+  /** The rest of the week behind the weekly receipt: read by the week only, never listed. */
+  private readonly week: SessionSnapshot[];
   private readonly sessionCbs = new Set<(s: SessionSummary[]) => void>();
   private readonly patchCbs = new Set<(p: SessionPatch) => void>();
   private timer: NodeJS.Timeout | null = null;
@@ -124,6 +128,7 @@ export class DemoStore implements AppStore {
     this.others = createDemoSessions(now).filter((s) => s.id !== DEMO_SESSION_ID);
     this.sides = createDemoSideSnapshots(now);
     this.quotas = createDemoQuotas(now);
+    this.week = createDemoWeek(now.getTime());
     const inFlight = this.snap.requests.find(
       (r) => r.agentId === MAIN_AGENT_ID && r.status === 'in-flight',
     );
@@ -181,6 +186,15 @@ export class DemoStore implements AppStore {
     return [structuredClone(this.snap.session), ...this.others]
       .map((s) => listedSummary(s))
       .sort(compareSessions);
+  }
+
+  weekSessions(): SessionSummary[] {
+    return [...this.listSessions(), ...this.week.map((s) => s.session)];
+  }
+
+  async readSession(sessionId: string): Promise<WeekRead | null> {
+    const snap = this.snapshotOf(sessionId) ?? this.week.find((s) => s.session.id === sessionId);
+    return snap ? { snapshot: structuredClone(snap), bytes: 0 } : null;
   }
 
   async getSnapshot(sessionId: string): Promise<SessionSnapshot | null> {

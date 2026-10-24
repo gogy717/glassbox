@@ -1,3 +1,4 @@
+import { stat } from 'node:fs/promises';
 import { idleActivity } from '../core/activity.js';
 import type { AgentAdapter, SessionSource } from '../core/adapter.js';
 import type {
@@ -14,6 +15,7 @@ import { Coalescer } from './coalescer.js';
 import { errorText, OpenSession } from './open-session.js';
 import { adapterQuotaSources, QuotaWatcher } from './quota.js';
 import { RateTracker } from './rate.js';
+import type { WeekRead, WeekStore } from './week.js';
 
 export interface SessionStoreOptions {
   adapters: AgentAdapter[];
@@ -117,7 +119,7 @@ export function compareSessions(a: SessionSummary, b: SessionSummary): number {
  * Discovery and live status are polled; open sessions are kept current by their watchers
  * and pushed to subscribers as batched patches.
  */
-export class SessionStore {
+export class SessionStore implements WeekStore {
   private readonly opts: Required<SessionStoreOptions>;
   private readonly entries = new Map<string, Entry>();
   private readonly sessionListeners = new Set<(s: SessionSummary[]) => void>();
@@ -232,6 +234,38 @@ export class SessionStore {
     return [...this.entries.values()]
       .map((e) => listedSummary(e.summary, e.live))
       .sort(compareSessions);
+  }
+
+  weekSessions(): SessionSummary[] {
+    return this.listSessions();
+  }
+
+  /**
+   * The session as it is now, for the weekly receipt: an open session's snapshot, else one parse
+   * of its files that nothing keeps (it is not opened, watched or counted against `maxOpen`).
+   */
+  async readSession(sessionId: string): Promise<WeekRead | null> {
+    const entry = this.entries.get(sessionId);
+    if (!entry || this.stopped) return null;
+    if (entry.open) return { snapshot: entry.open.parser.snapshot(), bytes: 0 };
+    const once = new OpenSession(entry.adapter, entry.source, {
+      patchMs: this.opts.patchMs,
+      pollMs: this.opts.pollMs,
+      chunkBytes: this.opts.chunkBytes,
+      live: entry.live,
+      log: this.opts.log,
+      onSummary: () => {},
+      onPatch: () => {},
+      onReset: () => {},
+    });
+    const { snapshot, files } = await once.readOnce();
+    let bytes = 0;
+    for (const f of files) {
+      // A database row source is not its file: the file holds every session.
+      if (f.format === 'json' && entry.adapter.readJson) continue;
+      bytes += (await stat(f.path).catch(() => null))?.size ?? 0;
+    }
+    return { snapshot, bytes };
   }
 
   async getSnapshot(sessionId: string): Promise<SessionSnapshot | null> {

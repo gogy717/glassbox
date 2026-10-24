@@ -134,6 +134,20 @@ export class OpenSession {
     });
   }
 
+  /**
+   * One full parse, nothing watched or kept: the session as it is on disk now, for a one-off
+   * aggregate (the weekly receipt). The instance is done with afterwards.
+   */
+  async readOnce(): Promise<{ snapshot: SessionSnapshot; files: SourceFile[]; lines: number }> {
+    const { parser, files, stats } = await this.parseFromScratch();
+    this.closed = true;
+    return {
+      snapshot: parser.snapshot(),
+      files: [...files.values()].map((t) => t.file),
+      lines: stats.lines,
+    };
+  }
+
   setLive(live: LiveState): void {
     if (this.closed || live === this.live) return;
     this.live = live;

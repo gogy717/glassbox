@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { type Context, Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
-import { streamSSE } from 'hono/streaming';
+import { stream, streamSSE } from 'hono/streaming';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type {
   ApiErrorResponse,
@@ -14,12 +14,14 @@ import type {
   TokenResponse,
   ToolResultResponse,
 } from '../shared/protocol.js';
+import type { WeekLine } from '../shared/week.js';
 import { jsonResponse, toJson } from './json.js';
 import type { ClientCounter } from './run-reaper.js';
 import type { RunService } from './run-service.js';
 import { registerRunRoutes, runEventPacer } from './runs-routes.js';
 import { createSecurity, type Security, securityHeaders } from './security.js';
 import type { SessionStore } from './store.js';
+import { WeekService, type WeekStore } from './week.js';
 
 /** Prompts and permission answers are small; nothing the UI sends comes near this. */
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -37,7 +39,8 @@ export type AppStore = Pick<
   | 'getRate'
   | 'onRate'
   | 'expectSession'
->;
+> &
+  Partial<WeekStore>;
 
 export interface AppDeps {
   store: AppStore;
@@ -52,6 +55,8 @@ export interface AppDeps {
   heartbeatMs?: number;
   /** How long a stream waits for an unknown `?session=` before sending `session-missing`. */
   sessionWaitMs?: number;
+  /** The weekly receipt's data; by default read from `store` when it can list and read sessions. */
+  week?: WeekService | null;
   log?: (msg: string) => void;
 }
 
@@ -62,8 +67,18 @@ export function createApp(deps: AppDeps): Hono {
   const sessionWaitMs = deps.sessionWaitMs ?? 30_000;
   const log = deps.log ?? ((msg: string) => console.error(`[glassbox] ${msg}`));
   const app = new Hono();
-  const fail = (c: Context, status: 404 | 500, error: string) =>
+  const fail = (c: Context, status: 400 | 404 | 500, error: string) =>
     jsonResponse<ApiErrorResponse>(c, { error }, status);
+  const { weekSessions, readSession } = store;
+  const week =
+    deps.week !== undefined
+      ? deps.week
+      : weekSessions && readSession
+        ? new WeekService(
+            { weekSessions: weekSessions.bind(store), readSession: readSession.bind(store) },
+            { log },
+          )
+        : null;
 
   // Outermost, so early answers (403s, 404s, errors) carry the headers too.
   app.use('*', securityHeaders);
@@ -100,6 +115,34 @@ export function createApp(deps: AppDeps): Hono {
     return found
       ? jsonResponse<ToolResultResponse>(c, { toolCallId, result })
       : fail(c, 404, 'tool call not found');
+  });
+
+  // NDJSON: progress lines, then the result (see src/shared/week.ts). The reading goes on if the
+  // client leaves: the next open is served from it.
+  app.get('/api/week', (c) => {
+    if (!week) return fail(c, 404, 'not found');
+    const kind = c.req.query('window') ?? 'week';
+    if (kind !== 'week' && kind !== '7d') return fail(c, 400, 'window must be week or 7d');
+    const refresh = c.req.query('refresh') === '1';
+    c.header('Content-Type', 'application/x-ndjson; charset=utf-8');
+    c.header('Cache-Control', 'no-store');
+    return stream(c, async (out) => {
+      let queue = Promise.resolve();
+      const write = (line: WeekLine) => {
+        queue = queue
+          .then(() => (out.aborted ? undefined : out.write(`${toJson(line)}\n`)))
+          .then(() => {})
+          .catch(() => {});
+      };
+      try {
+        const result = await week.compute(kind, { refresh }, write);
+        write({ type: 'result', result });
+      } catch (err) {
+        log(`week (${kind}) failed: ${errorText(err)}`);
+        write({ type: 'error', error: errorText(err) });
+      }
+      await queue;
+    });
   });
 
   app.get('/api/events', (c) => {
