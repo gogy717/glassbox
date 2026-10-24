@@ -14,6 +14,7 @@
  * lists `live-state-unfinished-reply`; OpenCode stores no request bodies, hence `request-detail`.
  */
 import { basename } from 'node:path';
+import { activityField, latestTurn } from '../../core/activity.js';
 import type { ChangeSet, SessionParser, SessionSource, SourceFile } from '../../core/adapter.js';
 import { emptyChanges } from '../../core/changes.js';
 import type {
@@ -691,6 +692,13 @@ export class OpenCodeSessionParser implements SessionParser {
         requests.findLast((r) => r.agentId === MAIN_AGENT_ID && r.model)?.model ??
         root?.model ??
         base.model,
+      ...activityField({
+        live: this.live,
+        toolCalls: tools,
+        requests,
+        lastTurn: latestTurn(turns),
+        updatedAt: toIso(this.state.updatedMs) ?? base.updatedAt,
+      }),
       usage: sumUsage(requests.map((r) => r.usage)),
       counts: {
         turns: turns.length,

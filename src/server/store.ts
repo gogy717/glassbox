@@ -1,3 +1,4 @@
+import { idleActivity } from '../core/activity.js';
 import type { AgentAdapter, SessionSource } from '../core/adapter.js';
 import type {
   LiveState,
@@ -60,6 +61,22 @@ const MISSES_BEFORE_DROP = 2;
 /** busy and waiting both mean someone is mid-task in that session right now. */
 export function isActive(live: LiveState): boolean {
   return live === 'busy' || live === 'waiting';
+}
+
+/**
+ * The summary under the latest polled live state. An open session's parser hears of a change
+ * at once but may send its next summary up to a patch gap later: its activity was worked out
+ * for the old state, so it goes until then. Idle sessions are not opened in the background;
+ * their activity needs nothing a parser knows: idle since the last write.
+ */
+export function listedSummary(summary: SessionSummary, live = summary.live): SessionSummary {
+  let next = summary;
+  if (summary.live !== live) {
+    const { activity: _stale, ...rest } = summary;
+    next = { ...rest, live };
+  }
+  if (live !== 'idle' || next.activity) return next;
+  return { ...next, activity: idleActivity(next.updatedAt) };
 }
 
 export function compareSessions(a: SessionSummary, b: SessionSummary): number {
@@ -145,7 +162,7 @@ export class SessionStore {
 
   listSessions(): SessionSummary[] {
     return [...this.entries.values()]
-      .map((e) => (e.summary.live === e.live ? e.summary : { ...e.summary, live: e.live }))
+      .map((e) => listedSummary(e.summary, e.live))
       .sort(compareSessions);
   }
 
@@ -281,6 +298,8 @@ export class SessionStore {
       return session;
     }
     entry.open = session;
+    // The live poll may have moved on while it loaded, with no open session to tell.
+    session.setLive(entry.live);
     this.evict(entry);
     return session;
   }

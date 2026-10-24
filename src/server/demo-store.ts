@@ -1,3 +1,4 @@
+import { activityField, latestTurn } from '../core/activity.js';
 import {
   createDemoQuotas,
   createDemoSessions,
@@ -20,7 +21,7 @@ import type {
 import { MAIN_AGENT_ID } from '../core/model.js';
 import { emptyUsage, sumUsage } from '../core/usage.js';
 import type { AppStore } from './app.js';
-import { compareSessions } from './store.js';
+import { compareSessions, listedSummary } from './store.js';
 
 const TICK_MS = 2000;
 /** Ticks a main-agent request stays in flight, and a tool stays running. */
@@ -80,6 +81,7 @@ export class DemoStore implements AppStore {
     this.lane = inFlight
       ? { phase: 'thinking', ticksLeft: THINK_TICKS, requestId: inFlight.id }
       : { phase: 'idle', ticksLeft: IDLE_TICKS };
+    this.refreshActivity();
   }
 
   async start(): Promise<void> {
@@ -94,7 +96,10 @@ export class DemoStore implements AppStore {
   }
 
   listSessions(): SessionSummary[] {
-    return [structuredClone(this.snap.session), ...this.others].sort(compareSessions);
+    // Listed as the real store lists them: idle sessions say since when.
+    return [structuredClone(this.snap.session), ...this.others]
+      .map((s) => listedSummary(s))
+      .sort(compareSessions);
   }
 
   async getSnapshot(sessionId: string): Promise<SessionSnapshot | null> {
@@ -412,6 +417,23 @@ export class DemoStore implements AppStore {
       requests: s.requests.length,
       toolCalls: s.toolCalls.length,
       agents: s.agents.length,
+    };
+    this.refreshActivity();
+  }
+
+  /** What the demo session is doing, worked out as a parser would. */
+  private refreshActivity(): void {
+    const s = this.snap;
+    const { activity: _old, ...session } = s.session;
+    s.session = {
+      ...session,
+      ...activityField({
+        live: s.session.live,
+        toolCalls: s.toolCalls,
+        requests: s.requests,
+        lastTurn: latestTurn(s.turns),
+        updatedAt: s.session.updatedAt,
+      }),
     };
   }
 

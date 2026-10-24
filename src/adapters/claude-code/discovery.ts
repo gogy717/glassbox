@@ -224,6 +224,8 @@ function scan(lines: string[]): Scan {
     const origin = promptOrigin(r, true);
     if (origin === null) continue;
     const early = commands.onPrompt(s, r.ts);
+    // A turn, so it decides earlier commands as the parser does; never a title.
+    if (origin === 'auto-continuation') continue;
     const title = cleanPrompt(turnInput(r, origin).prompt);
     if (!title) continue;
     const command = origin === 'human' && isSlashCommand(r.text);

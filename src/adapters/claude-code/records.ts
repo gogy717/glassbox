@@ -223,9 +223,15 @@ function envelope(r: Obj): Envelope {
   };
 }
 
+/** `turnOrigin` spells kinds with underscores ("task_notification", "auto_continuation"). */
+const TURN_ORIGIN_KINDS: Record<string, string> = {
+  task_notification: 'task-notification',
+  auto_continuation: 'auto-continuation',
+};
+
 function normaliseOrigin(r: Obj): string | null {
   const kind = str(obj(r.origin).kind) ?? str(r.turnOrigin);
-  return kind === 'task_notification' ? 'task-notification' : kind;
+  return kind === null ? null : (TURN_ORIGIN_KINDS[kind] ?? kind);
 }
 
 function parseUser(r: Obj): UserRecord {
@@ -401,6 +407,8 @@ export function promptOrigin(rec: UserRecord, mainAgent: boolean): TurnOrigin | 
     case 'human':
     case 'task-notification':
     case 'peer':
+    // Written as meta once a usage limit resets: the work after it is a new turn.
+    case 'auto-continuation':
       return rec.origin;
     case 'sdk':
       // stream-json input, e.g. a glassbox run: what a person typed into another client.

@@ -68,6 +68,42 @@ export interface SessionSummary {
    * (e.g. ClaudeBar's "ClaudeBar Probe"), hidden by default in the UI.
    */
   tags?: string[];
+  /**
+   * What a live session is doing right now, from the parser of an open session. The server
+   * opens running sessions in the background, so they usually carry it. Absent when nothing is
+   * known: a closed session, one not opened, or an older server. The UI then shows `live`.
+   */
+  activity?: SessionActivity;
+}
+
+/**
+ * - 'tool': a tool call is running.
+ * - 'thinking': the model has the floor. A call is in flight with no reply text yet, or the
+ *   agent is busy mid-turn with no tool running and no call on record yet.
+ * - 'writing': a call in flight has started its reply text.
+ * - 'waiting': the agent is blocked on the person (`live === 'waiting'`), e.g. a permission
+ *   prompt for `tool`.
+ * - 'idle': the process is up, between turns.
+ */
+export type ActivityKind = 'tool' | 'thinking' | 'writing' | 'waiting' | 'idle';
+
+/**
+ * Structured so the UI words and localises it ("Reading tokens.css", "Thinking · 1:12"). The
+ * server sends no sentences.
+ */
+export interface SessionActivity {
+  kind: ActivityKind;
+  /** The tool as the agent names it ("Read", "shell", "read"), for 'tool' and 'waiting'. */
+  tool: string | null;
+  /**
+   * What the tool works on, short: a file name, a pattern, a host, or a command's summary
+   * (`git commit`, `npm test +1`), never its command line. Null if unknown.
+   */
+  target: string | null;
+  /** Who is doing it: `MAIN_AGENT_ID`, or the sub-agent whose work started last. */
+  agentId: string;
+  /** When it started: the tool call, the model call, the turn's last step, or the idle spell. */
+  since: IsoTime | null;
 }
 
 /** Whose plan the numbers belong to: the model vendor, not the agent tool. */
@@ -150,9 +186,16 @@ export interface AgentNode {
 
 /**
  * Where a turn's input came from: a person, a background-task notification, a sub-agent's
- * initial prompt, a message from another agent session, or anything else.
+ * initial prompt, a message from another agent session, the agent resuming on its own once a
+ * usage limit reset ('auto-continuation', never a title), or anything else.
  */
-export type TurnOrigin = 'human' | 'task-notification' | 'agent-prompt' | 'peer' | 'other';
+export type TurnOrigin =
+  | 'human'
+  | 'task-notification'
+  | 'agent-prompt'
+  | 'peer'
+  | 'auto-continuation'
+  | 'other';
 
 /** One input to an agent (a human prompt, a task notification, a sub-agent's initial prompt). */
 export interface Turn {

@@ -66,6 +66,7 @@ const TURN_ORIGIN: Record<string, string> = {
   human: 'human',
   'task-notification': 'task_notification',
   peer: 'peer',
+  'auto-continuation': 'auto_continuation',
 };
 
 export function userPrompt(o: UserPromptOpts = {}): string {
@@ -83,6 +84,16 @@ export function userPrompt(o: UserPromptOpts = {}): string {
       : origin
         ? { origin: { kind: origin }, turnOrigin: TURN_ORIGIN[origin] ?? origin }
         : {}),
+  });
+}
+
+/** What Claude Code writes, as meta, to resume on its own once a usage limit resets. */
+export function autoContinuation(o: BaseOpts = {}): string {
+  return userPrompt({
+    ...o,
+    isMeta: true,
+    origin: 'auto-continuation',
+    text: 'Your claude.ai usage limit has reset. Continue the task you were working on when the limit was reached; do not repeat work that is already complete.',
   });
 }
 

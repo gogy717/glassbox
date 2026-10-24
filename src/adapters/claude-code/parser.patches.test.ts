@@ -9,6 +9,7 @@ import {
   apiRequest,
   assistantBlocks,
   at,
+  autoContinuation,
   interrupt,
   journalLine,
   taskNotification,
@@ -102,6 +103,33 @@ describe('patches keep a live client in step with the snapshot', () => {
       ['first', ['api-1']],
       ['second', ['api-2']],
       ['third', ['api-3']],
+    ]);
+  });
+
+  it('work resumed after a usage limit becomes a new turn, and ends the one before', () => {
+    const { parser, problems } = replayChecked([
+      { live: 'busy' },
+      main(
+        userPrompt({ text: 'one', ts: at(0) }),
+        apiRequest({ id: 'api-1', ts: at(1) }),
+        assistantBlocks({ requestRef: 'api-1', blocks: ['text'], blockTs: [at(2)] }),
+        turnDuration({ ts: at(3) }),
+        // Written before the prompt, as 2.1.309 sometimes does: it still belongs to the new turn.
+        apiRequest({ id: 'api-2', ts: at(101) }),
+        autoContinuation({ ts: at(100) }),
+        assistantBlocks({
+          requestRef: 'api-2',
+          blocks: [{ type: 'tool_use', id: 'toolu_1' }],
+          blockTs: [at(102)],
+        }),
+        toolResult({ toolUseId: 'toolu_1', ts: at(103) }),
+      ),
+      { live: 'idle' },
+    ]);
+    expect(problems).toEqual([]);
+    expect(parser.snapshot().turns.map((t) => [t.origin, t.requestIds])).toEqual([
+      ['human', ['api-1']],
+      ['auto-continuation', ['api-2']],
     ]);
   });
 

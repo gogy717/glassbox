@@ -82,6 +82,8 @@ function turnLabel(turn: Turn, t: Translate): string {
 function turnPrompt(turn: Turn, t: Translate): string {
   if (isOutsideTurn(turn)) return '';
   if (turn.origin === 'task-notification') return t('flow.taskNotification');
+  // Claude Code's own "usage limit has reset, continue" message: said as what it is (W6a).
+  if (turn.origin === 'auto-continuation') return t('flow.autoContinuation');
   return turn.prompt.trim();
 }
 

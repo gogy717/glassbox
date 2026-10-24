@@ -77,6 +77,7 @@ export const en: Record<MessageKey, string> = {
   'flow.promptMore': 'Show full prompt',
   'flow.promptLess': 'Show less',
   'flow.taskNotification': 'Background task finished',
+  'flow.autoContinuation': 'Continued after usage limit',
   'flow.callsTools': '{calls} {calls|model call|model calls} · {tools} {tools|tool|tools}',
   'flow.callsToolsShort': '{calls} {calls|call|calls} · {tools} {tools|tool|tools}',
   'flow.callTitle': 'Model call #{n}',

@@ -116,6 +116,23 @@ describe('DemoStore', () => {
     expect(store.listSessions()[0]?.updatedAt).toBe('2026-10-23T02:00:02.000Z');
   });
 
+  it('lists what the demo session is doing as it moves on', async () => {
+    const seen = new Map<string, string | null>();
+    store.onSessions((l) => {
+      const a = l.find((x) => x.id === DEMO_SESSION_ID)?.activity;
+      if (a) seen.set(a.kind, a.target ?? seen.get(a.kind) ?? null);
+    });
+    await vi.advanceTimersByTimeAsync(80_000);
+    expect([...seen.keys()].sort()).toEqual(['idle', 'thinking', 'tool']);
+    expect(seen.get('tool')).toBeTruthy();
+    // The others are listed as the real store lists unopened sessions: idle since the last write.
+    for (const other of store.listSessions().filter((x) => x.id !== DEMO_SESSION_ID)) {
+      if (other.live === 'idle')
+        expect(other.activity).toMatchObject({ kind: 'idle', since: other.updatedAt });
+      else expect(other).not.toHaveProperty('activity');
+    }
+  });
+
   it('stops notifying after unsubscribe and after stop', async () => {
     const patches: SessionPatch[] = [];
     const lists: SessionSummary[][] = [];

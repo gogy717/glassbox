@@ -75,7 +75,7 @@ describe('CodexSessionParser', () => {
       expect.objectContaining({
         id: 'call_exec',
         name: 'exec',
-        input: 'ls beds',
+        input: 'const r = await tools.exec_command({ cmd: "ls beds" });',
         status: 'complete',
         requestId: 'resp_1',
         durationMs: 40,
