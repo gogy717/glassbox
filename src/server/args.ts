@@ -39,11 +39,14 @@ export interface CliOptions {
   /** `--opencode-dir`, else $XDG_DATA_HOME/opencode, else ~/.local/share/opencode. */
   opencodeDir: string;
   opencodeDirFromFlag: boolean;
-  /** Providers to ask for plan usage over the network (`--fetch-quota`); [] asks none. */
+  /**
+   * Providers to ask for plan usage over the network: all by default, those listed with
+   * `--fetch-quota=<list>`, none ([]) with `--no-fetch-quota` or `--demo`.
+   */
   fetchQuota: FetchQuotaProvider[];
 }
 
-/** Providers `--fetch-quota` can refresh, in the order the quota bar shows them. */
+/** Providers glassbox can ask for plan usage, in the order the quota bar shows them. */
 export const FETCH_QUOTA_PROVIDERS = ['anthropic', 'xai', 'deepseek'] as const;
 export type FetchQuotaProvider = (typeof FETCH_QUOTA_PROVIDERS)[number];
 
@@ -56,7 +59,7 @@ Options:
   --host <addr>       address to bind (default ${DEFAULT_HOST})
   --no-open           don't open a browser
   --claude-dir <dir>  Claude Code data dir (default $CLAUDE_CONFIG_DIR, else ~/.claude)
-  --demo              serve built-in demo data instead of real sessions
+  --demo              serve built-in demo data instead of real sessions (no network requests)
   --claude-bin <path> claude binary for messages sent from glassbox (default: claude on PATH)
   --use-api-key       let those claude processes use ANTHROPIC_API_KEY (default: your login)
   --grok-dir <dir>    Grok data dir (default $GROK_HOME, else ~/.grok); Grok sessions are
@@ -74,25 +77,28 @@ Options:
                       ~/.local/share/opencode); OpenCode sessions are shown whenever it
                       holds opencode.db
   --no-opencode       don't show OpenCode sessions
-  --fetch-quota[=<list>]
-                      keep plan usage fresh by asking the providers every 5 minutes:
-                      anthropic (Claude Code's sign-in), xai (SuperGrok, Grok CLI's sign-in
-                      in the Grok data dir), deepseek (balance, $DEEPSEEK_API_KEY). Alone it
-                      asks all of them; a list asks only those, e.g.
-                      --fetch-quota=anthropic,deepseek. Off by default: glassbox otherwise
-                      reads no credentials and makes no network requests
+  --fetch-quota=<list>
+                      ask only these providers for plan usage, e.g.
+                      --fetch-quota=anthropic,deepseek (default: all of them, see below)
+  --no-fetch-quota    ask no provider: no network requests and no credentials read; plan
+                      usage then comes only from what the agents cache themselves
   --help              show this help
+
+Plan usage is kept fresh by asking each provider every 5 minutes: anthropic (with Claude
+Code's sign-in), xai (SuperGrok, with Grok CLI's sign-in in the Grok data dir) and deepseek
+(the balance, with $DEEPSEEK_API_KEY). Each credential is sent only to its own provider, never
+stored or renewed; a provider with no credential, or an expired sign-in, is skipped.
 
 glassbox only answers connections from this machine: transcripts are private and the API
 can start Claude Code. Binding another --host does not open it to the network; requests from
 other machines are refused.`;
 
-/** `--fetch-quota` takes an optional value; alone, it means every provider. */
+/** `--fetch-quota` takes an optional value; alone, it means every provider, as by default. */
 const ALL_PROVIDERS_ARG = `--fetch-quota=${FETCH_QUOTA_PROVIDERS.join(',')}`;
 
-/** The providers named by every `--fetch-quota=<list>`, in display order. */
+/** The providers named by every `--fetch-quota=<list>`, in display order; all without one. */
 function fetchQuotaProviders(lists: string[] | undefined): FetchQuotaProvider[] {
-  if (!lists) return [];
+  if (!lists) return [...FETCH_QUOTA_PROVIDERS];
   const known: readonly string[] = FETCH_QUOTA_PROVIDERS;
   const choices = FETCH_QUOTA_PROVIDERS.join(', ');
   const names = new Set<string>();
@@ -138,8 +144,14 @@ export function parseCliArgs(
       'opencode-dir': { type: 'string' },
       'no-opencode': { type: 'boolean' },
       'fetch-quota': { type: 'string', multiple: true },
+      'no-fetch-quota': { type: 'boolean' },
     },
   });
+  if (values['no-fetch-quota'] && values['fetch-quota']) {
+    throw new Error('--no-fetch-quota and --fetch-quota contradict each other: pick one');
+  }
+  // Checked even when unused, so a typo in the list is never silently ignored.
+  const fetchQuota = fetchQuotaProviders(values['fetch-quota']);
   const portText = values.port ?? String(DEFAULT_PORT);
   const port = Number(portText);
   if (!/^\d+$/.test(portText) || port > 65_535) throw new Error(`invalid --port: ${portText}`);
@@ -172,7 +184,8 @@ export function parseCliArgs(
         join(ctx.env.XDG_DATA_HOME || join(ctx.homedir, '.local', 'share'), 'opencode'),
     ),
     opencodeDirFromFlag: values['opencode-dir'] !== undefined,
-    fetchQuota: fetchQuotaProviders(values['fetch-quota']),
+    // Demo data never asks the network.
+    fetchQuota: values.demo || values['no-fetch-quota'] ? [] : fetchQuota,
   };
 }
 

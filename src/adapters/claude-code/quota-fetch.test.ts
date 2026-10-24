@@ -103,6 +103,7 @@ describe('createQuotaFetcher', () => {
     expect(await fetcher.latest()).toBeNull();
     expect(fetch).not.toHaveBeenCalled();
     expect(logs).toEqual([expect.stringContaining('expired')]);
+    expect(fetcher.problem()).toBe('sign-in-expired');
   });
 
   it('is quiet about a missing sign-in after saying so once', async () => {
@@ -112,6 +113,7 @@ describe('createQuotaFetcher', () => {
     await fetcher.latest();
     expect(fetch).not.toHaveBeenCalled();
     expect(logs).toEqual(['quota fetch (Anthropic): no Claude Code sign-in found']);
+    expect(fetcher.problem()).toBe('no-credentials');
   });
 
   it('reads the macOS Keychain when there is no credentials file', async () => {

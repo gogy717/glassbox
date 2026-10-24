@@ -20,7 +20,7 @@ export interface ClaudeCodeAdapterOptions {
   claudeDir: string;
   /** Claude Code's global config file; default `~/.claude.json`, or inside a custom config dir. */
   globalConfigPath?: string;
-  /** Set with `--fetch-quota`: also ask the usage endpoint, and show whichever quota is newer. */
+  /** Set unless `--no-fetch-quota`: also ask the usage endpoint, and show whichever is newer. */
   quotaFetcher?: QuotaFetcher;
 }
 

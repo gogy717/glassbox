@@ -3,6 +3,7 @@ import type { AgentAdapter, SessionSource } from '../core/adapter.js';
 import type {
   LiveState,
   QuotaSnapshot,
+  QuotaStaleReason,
   RequestDetail,
   SessionPatch,
   SessionSnapshot,
@@ -19,6 +20,8 @@ export interface SessionStoreOptions {
   adapters: AgentAdapter[];
   /** Plan quota sources besides the adapters' own `quota()`; merged with them per provider. */
   quotaSources?: QuotaSource[];
+  /** Why a stale quota is stale, when the caller can tell (see `QuotaWatcherOptions`). */
+  quotaStaleReason?: (q: QuotaSnapshot) => QuotaStaleReason | undefined;
   /** Parsed sessions kept in memory; busy/waiting and subscribed ones don't count against it. */
   maxOpen?: number;
   /** How often to look for new or updated sessions on disk. */
@@ -159,6 +162,7 @@ export class SessionStore {
       rateTickMs: RATE_STEP_MS,
       now: Date.now,
       quotaSources: [],
+      quotaStaleReason: () => undefined,
       log: () => {},
       ...opts,
     };
@@ -168,6 +172,7 @@ export class SessionStore {
     this.quota = new QuotaWatcher({
       sources: [...adapterQuotaSources(this.opts.adapters), ...this.opts.quotaSources],
       pollMs: this.opts.quotaPollMs,
+      staleReason: this.opts.quotaStaleReason,
       log: this.opts.log,
     });
   }

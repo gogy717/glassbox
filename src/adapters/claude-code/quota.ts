@@ -124,8 +124,8 @@ export function quotaFromConfig(config: unknown, now: number = Date.now()): Quot
 }
 
 /**
- * Quota from a usage endpoint body (cached by Claude Code, or fetched with `--fetch-quota`), or
- * null when it is malformed.
+ * Quota from a usage endpoint body (cached by Claude Code, or fetched by glassbox), or null when
+ * it is malformed.
  */
 export function quotaFromUtilization(
   utilization: unknown,

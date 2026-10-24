@@ -1,11 +1,11 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { createDemoQuota, createDemoQuotas } from '../../../src/core/fixtures/demo.js';
-import type { QuotaSnapshot } from '../../../src/core/model.js';
+import type { QuotaSnapshot, QuotaStaleReason } from '../../../src/core/model.js';
 import { I18nContext, type Locale, makeI18n } from '../i18n';
 import { cjkInMono } from '../test/cjk';
 import { DEMO_NOW } from '../test/demo';
-import { formatBalance, QuotaBar } from './QuotaBar';
+import { formatBalance, QuotaBar, staleReasonText } from './QuotaBar';
 import css from './QuotaBar.module.css';
 
 const NOW = DEMO_NOW.getTime();
@@ -94,9 +94,7 @@ describe('QuotaBar', () => {
     expect(screen.queryByRole('meter')).toBeNull();
     const details = openDetails();
     expect(within(details).getByText('Balance ¥12.30')).toBeInTheDocument();
-    expect(
-      within(details).getByText("Source: DeepSeek's balance API (--fetch-quota)"),
-    ).toBeVisible();
+    expect(within(details).getByText("Source: DeepSeek's balance API")).toBeVisible();
   });
 
   it('formats balances with the currency symbol, or the code when Intl does not know it', () => {
@@ -147,6 +145,78 @@ describe('QuotaBar', () => {
     const section = within(details).getByRole('region', { name: 'xAI · SuperGrok' });
     expect(section).toHaveAttribute('data-stale');
     expect(within(section).getByText('Data from 3 h ago')).toBeInTheDocument();
+  });
+
+  it('says on a line of its own why each stale provider is stale, and how it will refresh', () => {
+    const stale = (q: QuotaSnapshot, staleReason: QuotaStaleReason): QuotaSnapshot => ({
+      ...q,
+      stale: true,
+      staleReason,
+    });
+    renderBar([
+      stale(demo('anthropic'), 'not-fetching'),
+      stale(demo('openai'), 'cache-only'),
+      stale(demo('xai'), 'sign-in-expired'),
+      // Not stale: a reason the server would not send is not shown either.
+      { ...demo('github-copilot'), staleReason: 'cache-only' },
+      stale(demo('deepseek'), 'no-credentials'),
+    ]);
+    const details = openDetails();
+    const why = [...details.querySelectorAll(`.${css.why}`)].map((p) => p.textContent);
+    expect(why).toEqual([
+      'Not fetched: glassbox was started with --no-fetch-quota (or a --fetch-quota list without it).',
+      'Updates only while Codex runs: glassbox has no way to fetch it.',
+      'Grok sign-in has expired; this refreshes after you run Grok CLI once.',
+      'Not fetched: DEEPSEEK_API_KEY is not set.',
+    ]);
+    // Under the age, above the source.
+    const xai = within(details).getByRole('region', { name: 'xAI · SuperGrok' });
+    const lines = [...xai.querySelectorAll('p')].map((p) => p.textContent);
+    expect(lines.slice(-3)).toEqual([
+      expect.stringMatching(/^Data from /),
+      'Grok sign-in has expired; this refreshes after you run Grok CLI once.',
+      "Source: oh-my-pi's cache",
+    ]);
+    // In the meter's tooltip too.
+    const grok = screen.getAllByRole('meter')[2];
+    expect(grok).toHaveAttribute('title', expect.stringContaining('Grok sign-in has expired'));
+  });
+
+  it('names the missing sign-in, a failed request, and the cache an agent keeps', () => {
+    const text = (q: Partial<QuotaSnapshot>) =>
+      staleReasonText({ ...createDemoQuota(DEMO_NOW), stale: true, ...q }, makeI18n('en').t);
+    expect(text({ staleReason: 'no-credentials' })).toBe(
+      'Not fetched: Claude Code is not signed in on this machine.',
+    );
+    expect(text({ provider: 'xai', staleReason: 'no-credentials' })).toBe(
+      'Not fetched: Grok CLI is not signed in on this machine.',
+    );
+    expect(text({ staleReason: 'sign-in-expired' })).toBe(
+      'Claude sign-in has expired; this refreshes after you run Claude Code once.',
+    );
+    expect(text({ staleReason: 'fetch-failed' })).toBe(
+      'Fetching it failed; glassbox tries again every 5 minutes (its log says why).',
+    );
+    expect(text({ provider: 'github-copilot', agent: 'oh-my-pi', staleReason: 'cache-only' })).toBe(
+      'Updates only while oh-my-pi runs: glassbox has no way to fetch it.',
+    );
+    expect(text({ provider: 'moonshot', agent: null, staleReason: 'cache-only' })).toBe(
+      'Updates only while the agent that caches it runs: glassbox has no way to fetch it.',
+    );
+    // No reason, or one this build does not know: nothing rather than a guess.
+    expect(text({})).toBeNull();
+    expect(text({ staleReason: 'some-new-reason' as QuotaStaleReason })).toBeNull();
+    expect(text({ stale: false, staleReason: 'fetch-failed' })).toBeNull();
+  });
+
+  it('says why in Chinese, in the UI face', () => {
+    renderBar([{ ...demo('xai'), stale: true, staleReason: 'sign-in-expired' }], 'zh');
+    fireEvent.click(screen.getByRole('button', { name: /额度/ }));
+    const details = screen.getByRole('dialog', { name: '额度' });
+    expect(
+      within(details).getByText('Grok 登录已过期，运行一次 Grok CLI 后会刷新。'),
+    ).toBeInTheDocument();
+    expect(cjkInMono(details)).toEqual([]);
   });
 
   it('groups the details by provider: plan, windows, resets, extra usage, age and source', () => {
@@ -266,9 +336,7 @@ describe('QuotaBar', () => {
     expect(within(details).getAllByText('每月')).toHaveLength(3);
     expect(within(details).getByText('余额 ¥12.30')).toBeInTheDocument();
     expect(within(details).getByText('来源：oh-my-pi 的缓存')).toBeInTheDocument();
-    expect(
-      within(details).getByText('来源：DeepSeek 余额接口（--fetch-quota）'),
-    ).toBeInTheDocument();
+    expect(within(details).getByText('来源：DeepSeek 余额接口')).toBeInTheDocument();
   });
 
   it('marks a stale meter by its track, and says its age in words only where it stands alone', () => {

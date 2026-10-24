@@ -15,7 +15,7 @@ import { browserCommand } from './open-browser.js';
 const ctx = { env: {}, homedir: '/home/u' };
 
 describe('parseCliArgs', () => {
-  it('defaults to loopback, port 7788, opening the browser, real data from ~/.claude', () => {
+  it('defaults to loopback, port 7788, opening the browser, real data, every quota fetched', () => {
     expect(parseCliArgs([], ctx)).toEqual({
       port: 7788,
       host: '127.0.0.1',
@@ -38,7 +38,7 @@ describe('parseCliArgs', () => {
       opencode: true,
       opencodeDir: '/home/u/.local/share/opencode',
       opencodeDirFromFlag: false,
-      fetchQuota: [],
+      fetchQuota: ['anthropic', 'xai', 'deepseek'],
     });
   });
 
@@ -69,7 +69,7 @@ describe('parseCliArgs', () => {
           '--opencode-dir',
           '/data/oc',
           '--no-opencode',
-          '--fetch-quota',
+          '--fetch-quota=xai',
         ],
         ctx,
       ),
@@ -95,7 +95,8 @@ describe('parseCliArgs', () => {
       opencode: false,
       opencodeDir: '/data/oc',
       opencodeDirFromFlag: true,
-      fetchQuota: ['anthropic', 'xai', 'deepseek'],
+      // Demo data never asks the network, whatever --fetch-quota says.
+      fetchQuota: [],
     });
   });
 
@@ -111,6 +112,21 @@ describe('parseCliArgs', () => {
     expect(fetchQuota('--fetch-quota', '--no-open')).toEqual(['anthropic', 'xai', 'deepseek']);
   });
 
+  it('asks no provider with --no-fetch-quota or --demo', () => {
+    expect(parseCliArgs(['--no-fetch-quota'], ctx).fetchQuota).toEqual([]);
+    expect(parseCliArgs(['--demo'], ctx).fetchQuota).toEqual([]);
+    expect(parseCliArgs(['--demo', '--fetch-quota'], ctx).fetchQuota).toEqual([]);
+  });
+
+  it('rejects --no-fetch-quota with --fetch-quota', () => {
+    const contradiction = /--no-fetch-quota and --fetch-quota contradict each other/;
+    expect(() => parseCliArgs(['--no-fetch-quota', '--fetch-quota'], ctx)).toThrow(contradiction);
+    expect(() => parseCliArgs(['--fetch-quota=xai', '--no-fetch-quota'], ctx)).toThrow(
+      contradiction,
+    );
+    expect(() => parseCliArgs(['--no-fetch-quota=xai'], ctx)).toThrow();
+  });
+
   it('rejects an unknown or empty --fetch-quota list', () => {
     expect(() => parseCliArgs(['--fetch-quota=anthropic,openai'], ctx)).toThrow(
       '--fetch-quota: unknown provider "openai" (choose from anthropic, xai, deepseek)',
@@ -118,6 +134,8 @@ describe('parseCliArgs', () => {
     expect(() => parseCliArgs(['--fetch-quota='], ctx)).toThrow(/name a provider/);
     // The list is attached with "=": a separate word is a stray argument.
     expect(() => parseCliArgs(['--fetch-quota', 'deepseek'], ctx)).toThrow();
+    // Checked even when demo data makes the list moot.
+    expect(() => parseCliArgs(['--demo', '--fetch-quota=openai'], ctx)).toThrow(/unknown/);
   });
 
   it('takes the claude dir from --claude-dir, then CLAUDE_CONFIG_DIR, then ~/.claude', () => {

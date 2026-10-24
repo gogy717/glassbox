@@ -227,6 +227,7 @@ describe('adapter quota()', () => {
         balance: null,
         source: 'anthropic-usage-api',
       }),
+      problem: () => null,
     });
     // The fixture's cache was fetched 4 minutes before NOW.
     const newer = createClaudeCodeAdapter({

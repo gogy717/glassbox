@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentAdapter } from '../core/adapter.js';
 import { createDemoQuota } from '../core/fixtures/demo.js';
-import type { QuotaSnapshot } from '../core/model.js';
+import type { QuotaSnapshot, QuotaStaleReason } from '../core/model.js';
 import type { QuotaSource } from '../core/quota-source.js';
 import { createFakeAdapter } from './__tests__/fake-adapter.js';
 import { adapterQuotaSources, mergeQuotas, QuotaWatcher } from './quota.js';
@@ -415,6 +415,25 @@ describe('QuotaWatcher with several sources', () => {
     w.onChange((q) => seen.push(q));
 
     await vi.waitFor(() => expect(seen).toEqual([[snap('openai', T1)]]), { timeout: 2000 });
+  });
+
+  it('says why each stale quota is stale, as of the latest read', async () => {
+    const stale = (provider: string) => ({ ...snap(provider, T1), stale: true });
+    let xaiReason: QuotaStaleReason | undefined = 'sign-in-expired';
+    const w = new QuotaWatcher({
+      sources: [scriptedSource('cache', [[snap('anthropic', T2), stale('xai'), stale('openai')]])],
+      pollMs: 30,
+      staleReason: (q) => (q.provider === 'xai' ? xaiReason : 'cache-only'),
+    });
+    watcher = w;
+    await w.start();
+    expect(w.current()).toEqual([
+      snap('anthropic', T2),
+      { ...stale('openai'), staleReason: 'cache-only' },
+      { ...stale('xai'), staleReason: 'sign-in-expired' },
+    ]);
+    xaiReason = undefined;
+    await vi.waitFor(() => expect(w.current()[2]).toEqual(stale('xai')), { timeout: 2000 });
   });
 
   it('shows the older snapshot of a provider when the newer source loses it', async () => {

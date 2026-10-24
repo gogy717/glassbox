@@ -150,7 +150,24 @@ export interface QuotaSnapshot {
   balance: { amount: number; currency: string } | null;
   /** Where the numbers came from: a source id below, or a new one the UI shows as is. */
   source: string;
+  /** Why the numbers are stale, set by the server on a stale snapshot when it knows. */
+  staleReason?: QuotaStaleReason;
 }
+
+/**
+ * Why a stale quota is stale, so the UI can say how it will refresh:
+ * - 'not-fetching': glassbox could ask the provider, but was started not to.
+ * - 'sign-in-expired': it asks, but the agent's sign-in has expired; glassbox never renews it.
+ * - 'no-credentials': it asks, but has no sign-in or key to ask with.
+ * - 'fetch-failed': it asks with a credential, but gets no usable answer.
+ * - 'cache-only': glassbox has no way to ask: only an agent's own cache or log has the numbers.
+ */
+export type QuotaStaleReason =
+  | 'not-fetching'
+  | 'sign-in-expired'
+  | 'no-credentials'
+  | 'fetch-failed'
+  | 'cache-only';
 
 /** Lifecycle of turns, agents and workflow runs. */
 export type RunStatus = 'running' | 'complete' | 'error' | 'interrupted' | 'unknown';

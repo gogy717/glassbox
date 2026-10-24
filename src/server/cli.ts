@@ -6,24 +6,20 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serve } from '@hono/node-server';
 import { createClaudeCodeAdapter } from '../adapters/claude-code/index.js';
-import { createQuotaFetcher } from '../adapters/claude-code/quota-fetch.js';
 import { createCodexAdapter } from '../adapters/codex/index.js';
 import { createGrokAdapter } from '../adapters/grok/index.js';
-import { createXaiQuotaSource } from '../adapters/grok/quota-fetch.js';
 import { createOmpAdapter } from '../adapters/omp/index.js';
 import { createOmpUsageCacheSource } from '../adapters/omp/usage-cache.js';
 import { createOpenCodeAdapter } from '../adapters/opencode/index.js';
 import type { AgentAdapter } from '../core/adapter.js';
 import type { SessionSummary } from '../core/model.js';
 import type { QuotaSource } from '../core/quota-source.js';
-import { createDeepSeekBalanceSource } from '../quota/deepseek-balance.js';
 import { createApp } from './app.js';
 import {
   bindWarning,
   browserUrl,
   type CliOptions,
   codexDirToUse,
-  type FetchQuotaProvider,
   grokDirToUse,
   ompAgentDirToUse,
   ompUsageDirToUse,
@@ -34,6 +30,7 @@ import {
 import { childEnv, findClaudeBin } from './claude-bin.js';
 import { DemoRuns } from './demo-runs.js';
 import { DemoStore } from './demo-store.js';
+import { createFetchQuota } from './fetch-quota.js';
 import { openBrowser } from './open-browser.js';
 import { ClientCounter, startRunReaper } from './run-reaper.js';
 import { isDirectory, linkRunSessions, type RunService, sessionResolver } from './run-service.js';
@@ -42,13 +39,6 @@ import { RunManager } from './runners/run-manager.js';
 import { SessionStore } from './store.js';
 
 const log = (msg: string) => console.error(`[glassbox] ${msg}`);
-
-/** Whom `--fetch-quota` asks, and with which credential, for the startup log. */
-const FETCH_QUOTA_WITH: Record<FetchQuotaProvider, string> = {
-  anthropic: 'Anthropic (your Claude Code sign-in)',
-  xai: 'xAI (your Grok CLI sign-in)',
-  deepseek: 'DeepSeek ($DEEPSEEK_API_KEY)',
-};
 
 /** The built web UI sits next to the built server (dist/web beside dist/server). */
 /** The run manager for messages sent from glassbox, or null (runs API answers 503). */
@@ -128,22 +118,17 @@ async function main(): Promise<void> {
     quotaSources.push(createOmpUsageCacheSource({ agentDir: ompUsageDir }));
     log(`showing plan usage cached by oh-my-pi in ${join(ompUsageDir, 'agent.db')}`);
   }
-  // Network and credentials only for the providers named by --fetch-quota.
-  const fetching = opts.demo ? [] : opts.fetchQuota;
-  const quotaFetcher = fetching.includes('anthropic')
-    ? createQuotaFetcher({ claudeDir: opts.claudeDir, log })
-    : undefined;
-  // Grok CLI's sign-in is used even with --no-grok, which only hides Grok sessions.
-  if (fetching.includes('xai')) {
-    quotaSources.push(createXaiQuotaSource({ grokDir: opts.grokDir, log }));
-  }
-  if (fetching.includes('deepseek')) quotaSources.push(createDeepSeekBalanceSource({ log }));
-  if (fetching.length > 0) {
-    const whom = fetching.map((p) => FETCH_QUOTA_WITH[p]).join(', ');
-    log(`asking for plan usage every 5 minutes: ${whom}`);
-  }
+  // Network and credentials only for the providers asked: none with --no-fetch-quota or --demo
+  // (whose data never needs saying so).
+  const fetchQuota = createFetchQuota({
+    providers: opts.fetchQuota,
+    claudeDir: opts.claudeDir,
+    grokDir: opts.grokDir,
+    log: opts.demo ? () => {} : log,
+  });
+  quotaSources.push(...fetchQuota.sources);
   const adapters: AgentAdapter[] = [
-    createClaudeCodeAdapter({ claudeDir: opts.claudeDir, quotaFetcher }),
+    createClaudeCodeAdapter({ claudeDir: opts.claudeDir, quotaFetcher: fetchQuota.anthropic }),
   ];
   if (grokDir) {
     adapters.push(createGrokAdapter({ grokDir }));
@@ -161,7 +146,14 @@ async function main(): Promise<void> {
     adapters.push(createOpenCodeAdapter({ opencodeDir, log }));
     log(`showing OpenCode sessions from ${opencodeDir} (--no-opencode to hide them)`);
   }
-  const store = opts.demo ? new DemoStore() : new SessionStore({ adapters, quotaSources, log });
+  const store = opts.demo
+    ? new DemoStore()
+    : new SessionStore({
+        adapters,
+        quotaSources,
+        quotaStaleReason: fetchQuota.staleReason,
+        log,
+      });
   await store.start();
 
   const staticDir = findStaticDir();
