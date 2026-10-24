@@ -146,6 +146,22 @@ describe('Home', () => {
     expect(onOpen).toHaveBeenCalledWith(sessions[0]?.id);
   });
 
+  it('offers this week’s receipt before the latest session, with nothing running too (W1)', () => {
+    renderHome([session('a', 'idle', 3)]);
+    const running = screen.getByRole('region', { name: 'Running' });
+    const buttons = within(running)
+      .getAllByRole('button')
+      .map((b) => b.getAttribute('aria-label') ?? b.textContent);
+    expect(buttons.slice(0, 2)).toEqual([
+      "This week's receipt",
+      'Open the most recently active session',
+    ]);
+    expect(within(running).getByRole('button', { name: "This week's receipt" })).toHaveAttribute(
+      'aria-haspopup',
+      'dialog',
+    );
+  });
+
   it('is one tab stop: the arrows move between rows, across groups and sections', () => {
     const sessions = [
       session('a', 'busy', 0),

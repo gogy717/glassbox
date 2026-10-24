@@ -125,3 +125,31 @@
     border-top: 1px solid var(--border);
   }
 }
+
+/* Refresh, inside the note: a link in the text's own size. */
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Off while the week is read, or when there is nothing to print: still focusable for its reason. */
+.button[aria-disabled="true"],
+.primary[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.button[aria-disabled="true"]:hover {
+  background: none;
+}
+
+/* The stub printed while the week is read: at a slip's size, not blown up to the pane's height. */
+.image[data-stub] {
+  width: min(100%, 300px);
+  height: auto;
+}

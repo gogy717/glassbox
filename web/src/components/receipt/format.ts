@@ -92,3 +92,59 @@ export function stamp(t: number): string {
   const d = new Date(t);
   return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${clock(t).replace(':', '')}`;
 }
+
+/** "Mon 19 Oct", or "10-19 周一": a day of this week, without its year. */
+export function shortDay(t: number, locale: Locale): string {
+  const d = new Date(t);
+  if (locale === 'zh') return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${DAYS_ZH[d.getDay()]}`;
+  return `${DAYS_EN[d.getDay()]} ${d.getDate()} ${MONTHS_EN[d.getMonth()]}`;
+}
+
+/** The weekday as the grid labels its rows: "Mo"…"Su", or 一…日. */
+export function weekdayMark(t: number, locale: Locale): string {
+  const i = new Date(t).getDay();
+  return locale === 'zh'
+    ? (['日', '一', '二', '三', '四', '五', '六'][i] as string)
+    : (['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'][i] as string);
+}
+
+/** "Thu 23:00", or "周四 23 时": the hour an hour bucket starts. */
+export function hourOf(t: number, locale: Locale): string {
+  const d = new Date(t);
+  return locale === 'zh'
+    ? `${DAYS_ZH[d.getDay()]} ${d.getHours()} 时`
+    : `${DAYS_EN[d.getDay()]} ${pad(d.getHours())}:00`;
+}
+
+/** A count as a receipt prints it: "1,204" in English, "1204" in Chinese. */
+export const count = (n: number, locale: Locale) =>
+  locale === 'zh' ? String(n) : n.toLocaleString('en-US');
+
+/** The ISO 8601 week of `t` (local date): its year and number, e.g. [2026, 43]. */
+export function isoWeek(t: number): [number, number] {
+  const d = new Date(t);
+  const day = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dow = day.getUTCDay() || 7;
+  day.setUTCDate(day.getUTCDate() + 4 - dow);
+  const year = day.getUTCFullYear();
+  const jan1 = Date.UTC(year, 0, 1);
+  return [year, Math.ceil(((day.getTime() - jan1) / 86_400_000 + 1) / 7)];
+}
+
+/** "1019" for 19 October. */
+const monthDay = (t: number) => {
+  const d = new Date(t);
+  return `${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+};
+
+/**
+ * The weekly receipt's serial: "W43 · 2026 1019 → 1024 2041" (ISO week, from, to and the time
+ * printed), or "7D · 2026 1017 2100 → 1024 2041" for the last 7 days, which start on an hour.
+ */
+export function weekSerial(kind: 'week' | '7d', start: number, now: number): string {
+  const hm = (t: number) => clock(t).replace(':', '');
+  const from = `${new Date(start).getFullYear()} ${monthDay(start)}`;
+  return kind === 'week'
+    ? `W${isoWeek(start)[1]} · ${from} → ${monthDay(now)} ${hm(now)}`
+    : `7D · ${from} ${hm(start)} → ${monthDay(now)} ${hm(now)}`;
+}

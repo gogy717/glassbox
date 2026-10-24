@@ -58,13 +58,14 @@ export function categoryLine(
   categories: ReceiptData['work']['categories'],
   locale: Locale,
   fits: (line: string) => boolean,
+  figure: (n: number) => string = String,
 ): string {
   const name = (category: string) => {
     const word = translate(locale, `steps.cat.${category}` as MessageKey);
     return locale === 'en' ? word.toLowerCase() : word;
   };
   const render = (list: typeof categories) =>
-    list.map(({ category, count }) => `${name(category)} ${count}`).join(' · ');
+    list.map(({ category, count }) => `${name(category)} ${figure(count)}`).join(' · ');
   let list = [...categories];
   while (!fits(render(list))) {
     const named = list.filter((c) => c.category !== 'other');

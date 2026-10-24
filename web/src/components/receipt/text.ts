@@ -5,14 +5,15 @@
  * CJK character's width in a code font varies (about 1.7 columns on GitHub) and nothing after
  * one can be aligned.
  */
+import type { Locale } from '../../i18n';
 import { agentName } from '../../lib/agent-names';
 import { formatCompact, formatPercent } from '../../lib/format';
 import type { ReceiptData } from './data';
 import { clock, day, durationParts, modelName, partsText } from './format';
 import { clean } from './printed';
 import { categoryLine, clip, timed, timeRows } from './rows';
+import type { ReceiptOptions, TokenFigures } from './slip';
 import { type ReceiptKey, rt } from './strings';
-import type { ReceiptOptions } from './svg';
 
 /** Columns of the block. */
 export const COLUMNS = 44;
@@ -22,18 +23,18 @@ const TOKENS = /[⺀-鿿豈-﫿＀-￯　-〿]|[^\s⺀-鿿豈-﫿＀-￯　-〿]
 /** Display width, counting a CJK character as two columns (the widest a code font gives it). */
 export const cols = (s: string) => [...s].reduce((n, ch) => n + (CJK.test(ch) ? 2 : 1), 0);
 
-const spread = (left: string, right: string, fill = ' ') =>
+export const spread = (left: string, right: string, fill = ' ') =>
   `${left}${fill.repeat(Math.max(1, COLUMNS - cols(left) - cols(right)))}${right}`;
 
 /** `left`, a run of dots, then `right`, ending at column `width`. */
-const dots = (left: string, right: string, width = COLUMNS) =>
+export const dots = (left: string, right: string, width = COLUMNS) =>
   `${left}${'.'.repeat(Math.max(1, width - cols(left) - cols(right)))}${right}`;
 
 /**
  * `s` in lines of at most COLUMNS, broken between words or CJK characters (a word longer than a
  * line is broken inside it, never dropped), `max` lines, the last ending in "…" when cut.
  */
-function wrapCols(s: string, max: number): string[] {
+export function wrapCols(s: string, max: number): string[] {
   const lines: string[] = [];
   let line = '';
   for (const tok of s.match(TOKENS) ?? []) {
@@ -60,6 +61,41 @@ function wrapCols(s: string, max: number): string[] {
   return [...lines.slice(0, max - 1), clip(`${lines[max - 1]}…`, COLUMNS, cols)];
 }
 
+/** Chinese: the figure in a 7-column field, then the words (R9: nothing CJK before a figure). */
+export const lead = (figure: string, words: string, gap = '  ') =>
+  `${figure.padStart(7)}${gap}${words}`;
+
+/** A line centred in the block. */
+export const centred = (line: string) =>
+  `${' '.repeat(Math.max(0, Math.floor((COLUMNS - cols(line)) / 2)))}${line}`;
+
+/** TOKENS as text lines, `note` under the rows; "Tokens not reported" when no call reported. */
+export function tokenLines(t: TokenFigures, L: Locale, note?: string): string[] {
+  const zh = L === 'zh';
+  const w = (key: ReceiptKey) => rt(L, key);
+  const head = (key: ReceiptKey) => (zh ? w(key) : w(key).toUpperCase());
+  const count = (n: number) => formatCompact(n, 'en');
+  const out = [head('tokens')];
+  if (!t.measured) return [...out, w('notReported')];
+  const row = (key: ReceiptKey, figure: string, indent = '') =>
+    out.push(zh ? lead(figure, `${indent}${w(key)}`) : dots(`${indent}${w(key)} `, ` ${figure}`));
+  if (t.cacheRead > 0) row('cacheRead', count(t.cacheRead));
+  if (t.cacheWrite > 0) row('cacheWrite', count(t.cacheWrite));
+  if (t.uncached > 0) row('uncached', count(t.uncached));
+  if (t.output > 0) row('output', count(t.output));
+  if (t.thinking > 0) row('ofThinking', count(t.thinking), '  ');
+  if (t.cacheHit !== null) row('cacheHit', formatPercent(t.cacheHit, 'en'));
+  if (note) out.push(...wrapCols(note, 2));
+  out.push(zh ? lead(count(t.total), w('total')) : spread(head('total'), count(t.total)));
+  return out;
+}
+
+/** The foot as text: "Every token accounted for" only when the tokens were. */
+export const footLines = (L: Locale, measured: boolean) =>
+  [rt(L, 'printedBy'), 'npx github:gogy717/glassbox', ...(measured ? [rt(L, 'motto')] : [])].map(
+    centred,
+  );
+
 export function receiptText(d: ReceiptData, o: ReceiptOptions): string {
   const L = o.locale;
   const zh = L === 'zh';
@@ -67,10 +103,7 @@ export function receiptText(d: ReceiptData, o: ReceiptOptions): string {
   const head = (key: ReceiptKey) => (zh ? w(key) : w(key).toUpperCase());
   // Figures in ASCII whatever the language: they are what has to line up.
   const dur = (ms: number) => partsText(durationParts(ms, 'en'));
-  const count = (n: number) => formatCompact(n, 'en');
   const rule = '-'.repeat(COLUMNS);
-  /** Chinese: the figure in a 7-column field, then the words. */
-  const lead = (figure: string, words: string, gap = '  ') => `${figure.padStart(7)}${gap}${words}`;
   const out: string[] = ['```'];
 
   out.push(zh ? `glassbox · ${w('heading')}` : spread('glassbox', head('heading')));
@@ -131,25 +164,8 @@ export function receiptText(d: ReceiptData, o: ReceiptOptions): string {
     out.push(rule);
   }
 
-  out.push(head('tokens'));
-  const t = d.tokens;
-  if (!t.measured) out.push(w('notReported'));
-  else {
-    const row = (key: ReceiptKey, figure: string, indent = '') =>
-      out.push(zh ? lead(figure, `${indent}${w(key)}`) : dots(`${indent}${w(key)} `, ` ${figure}`));
-    if (t.cacheRead > 0) row('cacheRead', count(t.cacheRead));
-    if (t.cacheWrite > 0) row('cacheWrite', count(t.cacheWrite));
-    if (t.uncached > 0) row('uncached', count(t.uncached));
-    if (t.output > 0) row('output', count(t.output));
-    if (t.thinking > 0) row('ofThinking', count(t.thinking), '  ');
-    if (t.cacheHit !== null) row('cacheHit', formatPercent(t.cacheHit, 'en'));
-    out.push(zh ? lead(count(t.total), w('total')) : spread(head('total'), count(t.total)));
-  }
-
-  // "Every token accounted for" only when the tokens were.
-  const foot = [w('printedBy'), 'npx github:gogy717/glassbox', ...(t.measured ? [w('motto')] : [])];
-  for (const line of foot)
-    out.push(`${' '.repeat(Math.max(0, Math.floor((COLUMNS - cols(line)) / 2)))}${line}`);
+  out.push(...tokenLines(d.tokens, L));
+  out.push(...footLines(L, d.tokens.measured));
   out.push('```');
   // Well formed whatever the session holds: a lone surrogate would not survive the clipboard.
   return clean(out.join('\n'));

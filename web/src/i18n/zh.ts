@@ -53,6 +53,7 @@ export const zh = {
   'receipt.open': '小票',
   'receipt.loading': '正在加载…',
   'receipt.nothing': '还没有可打印的内容',
+  'receipt.week': '本周小票',
   'summary.fewer': '收起',
   'crumb.main': '主会话',
   'crumb.pick': '切换子代理',

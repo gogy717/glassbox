@@ -43,11 +43,18 @@
   border-bottom: 0;
 }
 
+/* The weekly receipt, then the way into the latest session, at the header's right. */
+.actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  margin-left: auto;
+}
+
 .openLatest {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin-left: auto;
   padding: 0;
   border: 0;
   background: none;

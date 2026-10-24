@@ -3,8 +3,9 @@
  * the image a canvas at 3×, the canvas a PNG. No request is made on the way.
  */
 import type { ReceiptData } from './data';
-import { stamp } from './format';
+import { isoWeek, stamp } from './format';
 import { SCALE } from './svg';
+import type { WeekReceipt } from './week';
 
 /** The SVG as a data: URL, the one image source the page's CSP allows besides its own files. */
 export const svgUrl = (svg: string) =>
@@ -72,4 +73,11 @@ export function fileName(d: ReceiptData, hideNames: boolean): string {
       ? ''
       : d.project.replace(/[^\p{L}\p{N}._-]+/gu, '-').replace(/^-+|-+$/g, '');
   return `glassbox-receipt-${project ? `${project}-` : ''}${stamp(d.start ?? d.end)}.png`;
+}
+
+/** glassbox-week-2026-W43.png for this week, glassbox-7days-20261024.png for the last 7 days. */
+export function weekFileName(d: WeekReceipt): string {
+  if (d.kind === '7d') return `glassbox-7days-${stamp(d.now).slice(0, 8)}.png`;
+  const [year, week] = isoWeek(d.start);
+  return `glassbox-week-${year}-W${String(week).padStart(2, '0')}.png`;
 }

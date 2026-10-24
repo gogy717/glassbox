@@ -1,0 +1,30 @@
+/* As the Summary bar's Receipt button: quiet until hovered; the icon alone on a narrow screen. */
+.button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-l);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--fs-small);
+  cursor: pointer;
+  transition:
+    background var(--motion),
+    color var(--motion);
+}
+
+.button:hover {
+  background: var(--layer-3);
+  color: var(--text);
+}
+
+@media (max-width: 900px) {
+  .label {
+    display: none;
+  }
+}

@@ -5,6 +5,7 @@ import { AgentTag } from '../components/AgentTag';
 import { Delayed } from '../components/Delayed';
 import { FigureText } from '../components/FigureText';
 import { SessionRow } from '../components/SessionRow';
+import { WeeklyReceiptButton } from '../components/WeeklyReceiptButton';
 import { useRovingFocus } from '../data/useRovingFocus';
 import { useI18n } from '../i18n';
 import { isListed, liveFilterOf } from '../lib/sessions';
@@ -147,12 +148,15 @@ export function Home({
               figures={['n', 'm']}
             />
           </span>
-          {latest && (
-            <button type="button" className={css.openLatest} onClick={() => onOpen(latest.id)}>
-              {t('home.openLatest')}
-              <ArrowRight size={14} aria-hidden="true" />
-            </button>
-          )}
+          <span className={css.actions}>
+            <WeeklyReceiptButton />
+            {latest && (
+              <button type="button" className={css.openLatest} onClick={() => onOpen(latest.id)}>
+                {t('home.openLatest')}
+                <ArrowRight size={14} aria-hidden="true" />
+              </button>
+            )}
+          </span>
         </div>
         {running.length > 0 ? (
           list(running)

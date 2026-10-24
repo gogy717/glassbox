@@ -133,23 +133,6 @@
   color: var(--muted);
 }
 
-/* Loading, or why the receipt did not open: one quiet line beside the button. */
-.receiptNote {
-  align-self: center;
-  margin-right: 10px;
-  font-size: var(--fs-small);
-  color: var(--muted);
-}
-
-.receiptRetry {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--accent);
-  font: inherit;
-  cursor: pointer;
-}
-
 @media (max-width: 900px) {
   .receiptLabel {
     display: none;

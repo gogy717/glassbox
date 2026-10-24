@@ -1,15 +1,16 @@
 import { Receipt } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Component, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useMemo, useRef, useState } from 'react';
 import type { TokenRate } from '../../../src/shared/rate.js';
 import { type OpenSession, useRate } from '../data/store';
 import { useNow } from '../data/useNow';
-import { I18nContext, useI18n } from '../i18n';
+import { useI18n } from '../i18n';
 import { summarize } from '../lib/agents';
 import { DASH, formatDuration, formatNumber, formatPercent } from '../lib/format';
-import { ChunkLoadError, lazyView } from '../lib/lazy-view';
+import { lazyView } from '../lib/lazy-view';
 import { UiCjk } from './CompactFigure';
 import { Diagnostics } from './Diagnostics';
+import { ReceiptBoundary, ReceiptLoading } from './ReceiptEntry';
 import css from './SummaryBar.module.css';
 import { rateText } from './TokenRate';
 
@@ -28,55 +29,6 @@ interface Figure {
 const ReceiptDialog = lazyView(() =>
   import('./receipt/ReceiptDialog').then((m) => m.ReceiptDialog),
 );
-
-/**
- * The receipt's own boundary: when its code does not load (a stale chunk after an upgrade) or it
- * cannot draw, a line in the bar says so; the session view around it stays.
- */
-class ReceiptBoundary extends Component<
-  { children: ReactNode; onReset(): void },
-  { error: Error | null }
-> {
-  static override contextType = I18nContext;
-  declare context: React.ContextType<typeof I18nContext>;
-  override state = { error: null as Error | null };
-  static getDerivedStateFromError(error: Error) {
-    return { error };
-  }
-  override render() {
-    const { error } = this.state;
-    if (!error) return this.props.children;
-    const { t } = this.context;
-    const chunk = error instanceof ChunkLoadError;
-    return (
-      <span role="alert" className={css.receiptNote}>
-        {chunk ? t('error.chunk') : t('error.view', { msg: error.message })}{' '}
-        <button
-          type="button"
-          className={css.receiptRetry}
-          onClick={() => (chunk ? location.reload() : this.props.onReset())}
-        >
-          {t(chunk ? 'error.reload' : 'error.retry')}
-        </button>
-      </span>
-    );
-  }
-}
-
-/** Says it is loading only when loading takes long enough to notice. */
-function Loading() {
-  const { t } = useI18n();
-  const [shown, setShown] = useState(false);
-  useEffect(() => {
-    const id = setTimeout(() => setShown(true), 300);
-    return () => clearTimeout(id);
-  }, []);
-  return shown ? (
-    <span role="status" className={css.receiptNote}>
-      {t('receipt.loading')}
-    </span>
-  ) : null;
-}
 
 /** Prints the session as a receipt image: the button, and the dialog once it is pressed. */
 function ReceiptButton({ open }: { open: OpenSession }) {
@@ -102,7 +54,7 @@ function ReceiptButton({ open }: { open: OpenSession }) {
       </button>
       {shown && (
         <ReceiptBoundary onReset={() => setShown(false)}>
-          <Suspense fallback={<Loading />}>
+          <Suspense fallback={<ReceiptLoading />}>
             <ReceiptDialog open={open} returnFocusTo={ref} onClose={() => setShown(false)} />
           </Suspense>
         </ReceiptBoundary>

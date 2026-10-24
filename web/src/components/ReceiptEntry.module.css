@@ -1,0 +1,16 @@
+/* Loading, or why a receipt did not open: one quiet line beside its button. */
+.note {
+  align-self: center;
+  margin-right: 10px;
+  font-size: var(--fs-small);
+  color: var(--muted);
+}
+
+.retry {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
