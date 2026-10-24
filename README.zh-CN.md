@@ -97,7 +97,7 @@ glassbox 是独立项目，与 Anthropic 没有关联，也未获其认可。
 ## 数据与隐私
 
 - 只读：
-  - `~/.claude`（会话转录）和 `~/.claude.json` 里的 `cachedUsageUtilization` 一项；
+  - `~/.claude`（会话转录）；`~/.claude.json` 里只读 `cachedUsageUtilization` 一项，以及 `oauthAccount` 里的账号 id（用来判断这份缓存属于谁）和套餐（组织类型与速率档位）；
   - `~/.grok`；
   - `~/.codex` 里的会话记录（`sessions/`、`archived_sessions/`、`session_index.jsonl`，不碰 `auth.json` 之类的凭据文件）；
   - oh-my-pi 在 `~/.omp/agent/sessions` 里的会话以及 omp 存在旁边的完整工具输出（`$PI_CODING_AGENT_DIR` 可另指 `~/.omp/agent`），和 `~/.omp/agent/agent.db` 里的用量缓存：只读 `cache` 表里的用量报告，不碰凭据表。在 Linux 上，通过 `/proc/net/unix` 判断 oh-my-pi 是否开着某个会话；

@@ -123,6 +123,8 @@ export class QuotaWatcher {
   async start(): Promise<void> {
     if (this.sources.length === 0) return;
     await this.refresh();
+    // Stopped while the first reads were in flight: watch nothing.
+    if (this.stopped) return;
     const files = new Set(this.sources.flatMap((s) => s.watchFiles?.() ?? []));
     if (files.size > 0) {
       const dirs = [...new Set([...files].map((f) => dirname(f)))];

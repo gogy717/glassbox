@@ -266,6 +266,8 @@ describe('QuotaBar', () => {
     );
     for (const text of resets) expect(text).not.toMatch(/\d\d:\d\d:\d\d/);
     expect(details).toHaveTextContent('shared by all your devices');
+    // Only the providers glassbox can ask are said to be asked.
+    expect(details).toHaveTextContent('asks Anthropic, xAI and DeepSeek every 5 minutes');
   });
 
   it('greys out a stale balance in the details too', () => {

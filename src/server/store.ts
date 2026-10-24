@@ -180,7 +180,9 @@ export class SessionStore {
   async start(): Promise<void> {
     await this.discoverNow();
     await this.refreshLive();
-    await this.quota.start();
+    // Not awaited: a provider's usage may take a network request (up to its timeout), and the
+    // server must listen without it. Each source's quota is published when it lands.
+    this.quota.start().catch((err) => this.opts.log(`quota: ${errorText(err)}`));
     this.lastSessionsJson = JSON.stringify(this.listSessions());
     this.loop('discoverTimer', this.opts.discoverMs, () => this.discoverNow());
     this.loop('liveTimer', this.opts.liveMs, () => this.refreshLive());

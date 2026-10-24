@@ -274,7 +274,7 @@ export const en: Record<MessageKey, string> = {
   'quota.sourceDeepseekApi': "DeepSeek's balance API",
   'quota.sourceXaiApi': "xAI's usage API",
   'quota.note':
-    'Quotas come from each provider every 5 minutes (unless glassbox runs with --no-fetch-quota) and from what your agents cache locally, and are shared by all your devices on that account.',
+    'glassbox asks Anthropic, xAI and DeepSeek every 5 minutes (unless it runs with --no-fetch-quota); everything else comes from what your agents cache locally. Quotas are shared by all your devices on that account.',
   'quota.whyNotFetching':
     'Not fetched: glassbox was started with --no-fetch-quota (or a --fetch-quota list without it).',
   'quota.whySignInExpired': '{name} sign-in has expired; this refreshes after you run {app} once.',

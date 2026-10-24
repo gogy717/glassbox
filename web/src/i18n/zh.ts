@@ -271,7 +271,7 @@ export const zh = {
   'quota.sourceDeepseekApi': 'DeepSeek 余额接口',
   'quota.sourceXaiApi': 'xAI 用量接口',
   'quota.note':
-    '额度每 5 分钟向各服务商查询一次（glassbox 用了 --no-fetch-quota 时除外），也来自本机各智能体的缓存；同一账号的所有设备共享。',
+    'glassbox 每 5 分钟向 Anthropic、xAI 和 DeepSeek 查询一次（用了 --no-fetch-quota 时除外），其余都来自本机各智能体的缓存。额度由同一账号的所有设备共享。',
   'quota.whyNotFetching':
     '未联网刷新：glassbox 启动时用了 --no-fetch-quota（或 --fetch-quota 的列表里没有它）。',
   'quota.whySignInExpired': '{name} 登录已过期，运行一次 {app} 后会刷新。',

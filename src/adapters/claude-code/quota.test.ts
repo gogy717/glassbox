@@ -287,6 +287,9 @@ describe('adapter quota()', () => {
       ),
     );
     expect(await fresh.quota?.()).toMatchObject({ source: 'anthropic-usage-api', plan: 'Max 20x' });
+    // Caught mid-write, the config keeps naming the plan it named last.
+    await writeFile(path, '{"oauthAccount": {"organizationType": "claude_m');
+    expect(await fresh.quota?.()).toMatchObject({ source: 'anthropic-usage-api', plan: 'Max 20x' });
 
     // Only a config whose account record names no plan leaves the sign-in's.
     await writeFile(path, JSON.stringify(config(account({ organizationType: undefined }))));

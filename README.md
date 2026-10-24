@@ -97,7 +97,7 @@ glassbox is an independent project, not affiliated with or endorsed by Anthropic
 ## Data and privacy
 
 - Reads only:
-  - `~/.claude` (session transcripts) and the `cachedUsageUtilization` entry of `~/.claude.json`;
+  - `~/.claude` (session transcripts), and from `~/.claude.json` only the `cachedUsageUtilization` entry and, in `oauthAccount`, the account id (to tell whose that cache is) and the plan (organization type and rate-limit tier);
   - `~/.grok`;
   - the session records in `~/.codex` (`sessions/`, `archived_sessions/`, `session_index.jsonl`; never credential files such as `auth.json`);
   - oh-my-pi's sessions in `~/.omp/agent/sessions` with the full tool output omp saves beside them (`$PI_CODING_AGENT_DIR` moves `~/.omp/agent`), and its usage cache in `~/.omp/agent/agent.db`: only the usage reports in its `cache` table, never the credential tables. On Linux, `/proc/net/unix` tells whether oh-my-pi has a session open;

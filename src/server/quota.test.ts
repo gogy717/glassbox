@@ -156,6 +156,28 @@ describe('QuotaWatcher', () => {
     expect(logs.some((m) => m.includes('bad cache'))).toBe(true);
   });
 
+  it('sets up no polling when stopped while its first reads are in flight', async () => {
+    let release: () => void = () => {};
+    let reads = 0;
+    const slow: QuotaSource = {
+      id: 'slow',
+      read: () => {
+        reads++;
+        return new Promise((resolve) => {
+          release = () => resolve([]);
+        });
+      },
+    };
+    const w = new QuotaWatcher({ sources: [slow], pollMs: 20, log: () => {} });
+    watcher = w;
+    const starting = w.start();
+    w.stop();
+    release();
+    await starting;
+    await sleep(100);
+    expect(reads).toBe(1);
+  });
+
   it('stops watching and notifying after stop', async () => {
     await writeQuota(quotaAt(1));
     const w = await startWatcher([createFakeAdapter(root, { quota: true })], { pollMs: 30 });
