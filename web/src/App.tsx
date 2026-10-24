@@ -1,4 +1,5 @@
 import {
+  Suspense,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -10,6 +11,7 @@ import {
 import type { SessionSummary } from '../../src/core/model.js';
 import type { RunState } from '../../src/shared/runs.js';
 import css from './App.module.css';
+import { Delayed } from './components/Delayed';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { SessionSidebar } from './components/SessionSidebar';
 import { TopBar } from './components/TopBar';
@@ -28,6 +30,7 @@ import { SessionAgentContext } from './data/session-agent';
 import { createStore, type Store, StoreContext } from './data/store';
 import { useNow } from './data/useNow';
 import { I18nContext, makeI18n, useI18n } from './i18n';
+import { lazyView } from './lib/lazy-view';
 import { isListed } from './lib/sessions';
 import { applyTheme, loadPrefs, type Prefs, savePrefs } from './prefs';
 import { formatRoute, pageOf, parseRoute, sessionLink, useRoute } from './router';
@@ -37,7 +40,10 @@ import { NewSessionDialog } from './views/composer/NewSessionDialog';
 import { PermissionDialog } from './views/composer/PermissionDialog';
 import { Home } from './views/Home';
 import { SessionView } from './views/SessionView';
-import { StatsPage } from './views/stats/StatsPage';
+import type { StatsPageProps } from './views/stats/StatsPage';
+
+// Its own chunk, with the receipt's counting it shares: the first load stays as it was.
+const StatsPage = lazyView(() => import('./views/stats/StatsPage').then((m) => m.StatsPage));
 
 export interface AppProps {
   /** Injected in tests; the real app creates its own. */
@@ -304,10 +310,23 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
             </aside>
             <main ref={mainRef} tabIndex={-1} className={css.main} inert={modal}>
               {route.stats ? (
-                <StatsPage
-                  window={route.stats}
-                  onWindow={(stats) => navigate({ stats }, { replace: true })}
-                />
+                <ErrorBoundary key="stats">
+                  <Suspense
+                    fallback={
+                      <Delayed>
+                        <p className={css.placeholder}>{t('app.loadingView')}</p>
+                      </Delayed>
+                    }
+                  >
+                    <StatsContainer
+                      window={route.stats}
+                      onWindow={(stats) => navigate({ stats }, { replace: true })}
+                      showProbes={prefs.showProbes}
+                      sessions={state.sessions}
+                      quotas={state.quotas}
+                    />
+                  </Suspense>
+                </ErrorBoundary>
               ) : open ? (
                 <ErrorBoundary key={open.id}>
                   <ApprovalsContext.Provider value={approvals}>
@@ -386,6 +405,12 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
 function HomeContainer(props: Omit<Parameters<typeof Home>[0], 'now'>) {
   const now = useNow(30_000);
   return <Home {...props} now={now} />;
+}
+
+function StatsContainer(props: Omit<StatsPageProps, 'now'>) {
+  // Reset times and the head's span move by the minute at most.
+  const now = useNow(30_000);
+  return <StatsPage {...props} now={now} />;
 }
 
 function SidebarContainer(props: Omit<Parameters<typeof SessionSidebar>[0], 'now'>) {

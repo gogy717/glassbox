@@ -11,6 +11,7 @@ import type { ToolCategory } from '../../../../src/shared/tool-category.js';
 import type { WeekResult, WeekWindowKind } from '../../../../src/shared/week.js';
 import type { Locale } from '../../i18n';
 import { agentName } from '../../lib/agent-names';
+import { isListed } from '../../lib/sessions';
 import { printedProject, printedTitle } from './printed';
 import { apportion, shares } from './rows';
 import type { TokenFigures } from './slip';
@@ -23,6 +24,11 @@ export interface GridCell {
   ms: number;
   /** 'future': after the receipt's end, outlined; 'out': not in the window, not drawn. */
   state: 'past' | 'future' | 'out';
+  /**
+   * The window's hours it holds, as indices into `hourStarts`: one, two where a change of the
+   * clocks repeats an hour, none out of the window. The Stats page's hour card reads them.
+   */
+  hours: number[];
 }
 
 export interface WeekReceipt {
@@ -89,7 +95,7 @@ const daysBetween = (a: number, b: number) => {
 function layGrid(r: WeekResult, totals: number[], end: number) {
   const { hourStarts } = r.window;
   const grid: GridCell[][] = Array.from({ length: 7 }, () =>
-    Array.from({ length: 24 }, (): GridCell => ({ ms: 0, state: 'out' })),
+    Array.from({ length: 24 }, (): GridCell => ({ ms: 0, state: 'out', hours: [] })),
   );
   const start = hourStarts[0] ?? end;
   const endHour = hourStarts.findLastIndex((h) => h <= end);
@@ -117,6 +123,7 @@ function layGrid(r: WeekResult, totals: number[], end: number) {
     const cell = grid[at.row]?.[at.col];
     if (!cell) return;
     cell.ms += totals[i] ?? 0;
+    cell.hours.push(i);
     // Only an empty hour after the end is outlined: an hour with ink is never (DR9), nor a cell
     // that also holds an hour before the end (the hour a change of the clocks repeats).
     if (h <= end || cell.ms > 0) cell.state = 'past';
@@ -125,6 +132,15 @@ function layGrid(r: WeekResult, totals: number[], end: number) {
   const cursor = place(Math.max(0, endHour), hourStarts[Math.max(0, endHour)] ?? end);
   return { grid, rows, cursor };
 }
+
+/**
+ * The result without the sessions the sidebar hides: probes, unless it shows them (A1). The
+ * receipt and the Stats page both count from it, so they print the same numbers (N6).
+ */
+export const listedOnly = (r: WeekResult, showProbes: boolean): WeekResult => ({
+  ...r,
+  sessions: r.sessions.filter((s) => isListed(s, showProbes)),
+});
 
 export function weekReceipt(r: WeekResult): WeekReceipt {
   const { hourStarts } = r.window;

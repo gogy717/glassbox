@@ -1,0 +1,132 @@
+/* Its inks (--ink-low, --ink-mid, --ink-high) are the page's, shared with the legend. */
+.wrap {
+  position: relative;
+}
+
+/* 24 square hours of at most 26px, 2px apart (D4), narrower where the card is: the day column
+   keeps 26px, the hours share the rest. */
+.grid {
+  width: 100%;
+  max-width: calc(26px + 24 * 28px + 2px);
+  border-spacing: 2px;
+  table-layout: fixed;
+}
+
+.grid th,
+.grid td {
+  padding: 0;
+}
+
+.day {
+  width: 26px;
+  font-size: var(--fs-meta);
+  font-weight: 400;
+  color: var(--muted);
+  text-align: left;
+}
+
+.cell {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-s);
+  background: none;
+  cursor: pointer;
+}
+
+.cell[data-ink="none"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 4px;
+  height: 4px;
+  margin: auto;
+  border-radius: 50%;
+  background: var(--faint);
+}
+
+.cell[data-ink="low"] {
+  background: var(--ink-low);
+}
+
+.cell[data-ink="mid"] {
+  background: var(--ink-mid);
+}
+
+.cell[data-ink="high"] {
+  background: var(--ink-high);
+}
+
+/* Hours still to come: outlined, never inked (DR9). */
+.cell[data-ink="future"] {
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+.cell[data-ink="out"] {
+  visibility: hidden;
+}
+
+/* The hour the card shows: a 2px ink ring, clear of the cell by the card's own colour, so it reads
+   around the darkest ink too. */
+.cell[aria-current="true"] {
+  z-index: 1;
+  box-shadow:
+    0 0 0 1px var(--layer-1),
+    0 0 0 3px var(--ink);
+}
+
+.cell:focus-visible {
+  z-index: 2;
+  outline-offset: 2px;
+}
+
+/* Now: a 1px line in the gap after the hour the data runs to. */
+.cell[data-cursor]::after {
+  content: "";
+  position: absolute;
+  top: -1px;
+  right: -2px;
+  bottom: -1px;
+  width: 1px;
+  background: var(--ink);
+}
+
+.grid .tick {
+  padding-top: 4px;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+
+.grid .tick[data-end] {
+  text-align: right;
+}
+
+/* A cell's hour and minutes, above it; from the right half, leftwards. */
+.tip {
+  position: absolute;
+  z-index: 10;
+  display: grid;
+  gap: 2px;
+  min-width: max-content;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-l);
+  background: var(--layer-1);
+  box-shadow: var(--shadow);
+  font-size: var(--fs-small);
+  color: var(--muted);
+  transform: translateY(calc(-100% - 6px));
+  pointer-events: none;
+}
+
+.tip[data-right] {
+  transform: translate(-100%, calc(-100% - 6px));
+}
+
+.tip strong {
+  font-weight: 600;
+  color: var(--text);
+}

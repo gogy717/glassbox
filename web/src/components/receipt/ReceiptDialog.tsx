@@ -1,10 +1,9 @@
 import { AlignLeft, Copy, Download } from 'lucide-react';
 import { type ReactNode, type RefObject, useEffect, useMemo, useState } from 'react';
-import { type WeekResult, type WeekWindowKind, weekWindow } from '../../../../src/shared/week.js';
+import { type WeekWindowKind, weekWindow } from '../../../../src/shared/week.js';
 import { useApprovalsContext } from '../../data/approvals';
 import type { OpenSession } from '../../data/store';
 import { type Locale, useI18n } from '../../i18n';
-import { isListed } from '../../lib/sessions';
 import { loadPrefs } from '../../prefs';
 import { Modal } from '../Modal';
 import { Switch } from '../Switch';
@@ -16,7 +15,7 @@ import { useWeeks } from './readWeek';
 import { type ReceiptKey, rt } from './strings';
 import { type Paper, type ReceiptOptions, type ReceiptSize, receiptSvg, SCALE } from './svg';
 import { receiptText } from './text';
-import { HINT_MS, isQuiet, weekAge, weekReceipt } from './week';
+import { HINT_MS, isQuiet, listedOnly, weekAge, weekReceipt } from './week';
 import { elapsedWords, stubSvg, type WeekElsewhere, weekSvg, windowLine } from './weekSvg';
 import { weekText } from './weekText';
 
@@ -276,16 +275,10 @@ export function ReceiptDialog(props: Props & { open: OpenSession }) {
   return <ReceiptSheet {...props} showProbes={showProbes} start="session" />;
 }
 
-/** The weekly receipt, from Home: on This week, or the last 7 days. */
-export function WeeklyReceiptDialog(props: Props) {
-  return <ReceiptSheet {...props} start="week" />;
+/** The weekly receipt, from the Stats page: on the window it shows, the other one switch away. */
+export function WeeklyReceiptDialog(props: Props & { start?: WeekWindowKind }) {
+  return <ReceiptSheet {...props} start={props.start ?? 'week'} />;
 }
-
-/** The result without the sessions the sidebar hides: probes, unless it shows them (A1). */
-const listedOnly = (r: WeekResult, showProbes: boolean): WeekResult => ({
-  ...r,
-  sessions: r.sessions.filter((s) => isListed(s, showProbes)),
-});
 
 /** What the sheet shows for a scope. */
 type Shown = Pick<
@@ -370,6 +363,7 @@ function useWeekSheet(
   if (!kind || !image) return null;
 
   const refreshing = weeks.refreshing[kind];
+  const updating = weeks.updating[kind];
   const refreshFailed = weeks.refreshFailed[kind];
   // Chinese runs its sentences on without a space.
   const gap = appLocale === 'zh' ? '' : ' ';
@@ -409,6 +403,13 @@ function useWeekSheet(
     ) : refreshing ? (
       <>
         {ui('reading', refreshing)}
+        {gap}
+        {ui('localWeek')}
+      </>
+    ) : updating ? (
+      // Read before, read again on opening (R30): the slip as of then, its actions on.
+      <>
+        {ui('asOf', { time: clock(week.now) })} · {ui('updating')}
         {gap}
         {ui('localWeek')}
       </>

@@ -57,7 +57,9 @@ const PITCH = 12;
 const GRID_X = LEFT + 24;
 
 /** Agent minutes in an hour as ink: none, under 10, under 40, 40 and up (parallel agents pass 60). */
-export function inkOf(cell: GridCell): 'future' | 'none' | 'low' | 'mid' | 'high' | 'out' {
+export function inkOf(
+  cell: Pick<GridCell, 'ms' | 'state'>,
+): 'future' | 'none' | 'low' | 'mid' | 'high' | 'out' {
   if (cell.state !== 'past') return cell.state;
   const min = cell.ms / 60_000;
   return cell.ms <= 0 ? 'none' : min < 10 ? 'low' : min < 40 ? 'mid' : 'high';

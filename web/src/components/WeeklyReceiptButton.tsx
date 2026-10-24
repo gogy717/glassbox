@@ -1,5 +1,6 @@
 import { Receipt } from 'lucide-react';
 import { Suspense, useRef, useState } from 'react';
+import type { WeekWindowKind } from '../../../src/shared/week.js';
 import { useI18n } from '../i18n';
 import { lazyView } from '../lib/lazy-view';
 import { ReceiptBoundary, ReceiptLoading } from './ReceiptEntry';
@@ -11,30 +12,32 @@ const WeeklyReceiptDialog = lazyView(() =>
 );
 
 /**
- * Prints this machine's week as a receipt: the Now board's button, and the dialog once pressed,
- * on This week. It works with no session at all: the week then says it had none. Probe sessions
- * count only when the sidebar shows them.
+ * Prints this machine's week as a receipt: the Stats page's main action (D4), and the shared
+ * dialog once pressed, on the window the page shows. It works with no session at all: the week
+ * then says it had none. Probe sessions count only when the sidebar shows them.
  */
-export function WeeklyReceiptButton({ showProbes = false }: { showProbes?: boolean }) {
+export function WeeklyReceiptButton({
+  showProbes = false,
+  start = 'week',
+}: {
+  showProbes?: boolean;
+  /** The window the dialog opens on. */
+  start?: WeekWindowKind;
+}) {
   const { t } = useI18n();
   const [shown, setShown] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
   return (
     <>
-      {/* Named by its word, which narrow screens hide: the icon alone still says it. */}
       <button
         ref={ref}
         type="button"
         className={css.button}
-        aria-label={t('receipt.week')}
-        title={t('receipt.week')}
         aria-haspopup="dialog"
         onClick={() => setShown(true)}
       >
         <Receipt size={14} aria-hidden="true" />
-        <span className={css.label} aria-hidden="true">
-          {t('receipt.week')}
-        </span>
+        {t('stats.print')}
       </button>
       {shown && (
         <ReceiptBoundary onReset={() => setShown(false)}>
@@ -43,6 +46,7 @@ export function WeeklyReceiptButton({ showProbes = false }: { showProbes?: boole
               returnFocusTo={ref}
               onClose={() => setShown(false)}
               showProbes={showProbes}
+              start={start}
             />
           </Suspense>
         </ReceiptBoundary>

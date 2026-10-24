@@ -246,16 +246,16 @@
   }
 }
 
-/* In a session the same things give way in the same order, sooner, so the title keeps at least
-   240px (D4): measured with the quota folded (below 1600), the three words take 283px of it below
-   1400, the wordmark's word and the rate's line 145px below 1200. */
+/* In a session the title keeps at least 240px (D4 DR1), paid for by the others, sooner: Connected
+   and Follow latest's word below 1400, the rate's line below 1300, the wordmark's word below 1200,
+   the quota's full form below 1600. The page nav's words go at 1200 on every page alike: the nav
+   is what all three pages share, and it must not change as you move between them. */
 @media (max-width: 1399px) {
   .bar[data-session] .toggleLabel {
     display: none;
   }
 
-  .bar[data-session] .conn[data-state="open"],
-  .bar[data-session] .pageLabel {
+  .bar[data-session] .conn[data-state="open"] {
     position: absolute;
     width: 1px;
     height: 1px;

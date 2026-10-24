@@ -1,11 +1,17 @@
-/* The page scrolls on its own: the week runs longer than the screen. */
+/* The page scrolls on its own: the week runs longer than the screen. The grid's inks are set here,
+   for its legend as well: the text colour at three strengths over the card (the receipt's four
+   steps with the dot for none), so each theme has its own. */
 .stats {
+  --ink-low: color-mix(in srgb, var(--text) 24%, var(--layer-1));
+  --ink-mid: color-mix(in srgb, var(--text) 56%, var(--layer-1));
+  --ink-high: var(--text);
   height: 100%;
   min-width: 0;
   padding: 20px 24px 40px;
   overflow-y: auto;
 }
 
+/* The head: the window, its span and sessions; when the data is from, and Print. */
 .head {
   display: flex;
   flex-wrap: wrap;
@@ -14,7 +20,55 @@
   margin-bottom: 16px;
 }
 
-/* Thirds: the overview across, then two and one, one each, two and one (D4). */
+.range {
+  min-width: 0;
+  font-size: var(--fs-body);
+  color: var(--muted);
+}
+
+.status {
+  margin-left: auto;
+  font-size: var(--fs-small);
+  color: var(--muted);
+}
+
+.failed {
+  color: var(--error);
+  font-weight: 600;
+}
+
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.card > .link {
+  align-self: flex-start;
+}
+
+/* A first read: one line of progress under the head. */
+.progress {
+  height: 2px;
+  margin: -8px 0 14px;
+  background: var(--border);
+}
+
+.progress > span {
+  display: block;
+  height: 100%;
+  background: var(--ink);
+  transition: width var(--motion);
+}
+
+/* Thirds: the overview across; two and one; one, one, one; two and one (D4). */
 .cards {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -22,43 +76,478 @@
 }
 
 .card {
-  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 18px 20px;
   border: 1px solid var(--border);
   border-radius: var(--radius-l);
   background: var(--layer-1);
 }
 
-.card[data-span="all"] {
-  grid-column: 1 / -1;
-  min-height: 64px;
-}
-
-.card[data-span="2"] {
+.card[data-area="grid"],
+.card[data-area="tokens"] {
   grid-column: span 2;
 }
 
-/* Two columns: the wide cards take the row. */
+.cards[data-skeleton] > .card {
+  min-height: 220px;
+}
+
+.cardTop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 16px;
+}
+
+.cardHead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.cardHead > :global(.section-label) {
+  color: var(--muted);
+}
+
+.note {
+  font-size: var(--fs-small);
+  color: var(--muted);
+}
+
+.hint {
+  margin: 0;
+  font-size: var(--fs-small);
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.aside {
+  font-size: var(--fs-small);
+  font-weight: 400;
+  color: var(--muted);
+}
+
+/* The overview: the Summary bar's readout, its figures a size up, a hairline between them. */
+.overview {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
+  min-height: 64px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  background: var(--layer-1);
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 12px 24px;
+  border-left: 1px solid var(--border);
+}
+
+.metric:first-child {
+  border-left: 0;
+}
+
+.metricValue {
+  font-size: var(--fs-total);
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.metric > :global(.section-label) {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.metric[data-alarm] .metricValue {
+  color: var(--error);
+}
+
+/* The grid's key: a dot for none, then the three inks. */
+.legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+
+.legend > [data-ink] {
+  width: 10px;
+  height: 10px;
+  margin-left: 4px;
+  border-radius: 2px;
+}
+
+.legend > [data-ink="none"] {
+  width: 4px;
+  height: 4px;
+  margin-left: 0;
+  border-radius: 50%;
+  background: var(--faint);
+}
+
+.legend > [data-ink="low"] {
+  background: var(--ink-low);
+}
+
+.legend > [data-ink="mid"] {
+  background: var(--ink-mid);
+}
+
+.legend > [data-ink="high"] {
+  background: var(--ink-high);
+}
+
+.gridFoot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 28px;
+  font-size: var(--fs-small);
+  color: var(--muted);
+}
+
+.gridFoot strong {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.caption {
+  margin-left: auto;
+}
+
+/* The hour: when, what it held, its sessions. */
+.hourTitle {
+  margin: 0;
+  font-size: var(--fs-readout);
+  font-weight: 600;
+}
+
+.hourLine {
+  margin: -6px 0 0;
+  font-size: var(--fs-body);
+  color: var(--muted);
+}
+
+.sessions {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.session {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sessionMain {
+  display: grid;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.sessionTitle {
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--fs-body);
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+a.sessionTitle:hover {
+  text-decoration: underline;
+}
+
+.sessionMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--fs-small);
+  color: var(--muted);
+}
+
+.sessionTime {
+  flex: none;
+  font-size: var(--fs-body);
+}
+
+/* By CLI and Top projects: a name, its time, and its share as a bar under it. */
+.bars {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.barRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 6px 12px;
+  width: 100%;
+  padding: 4px 6px;
+  margin: -4px -6px;
+  box-sizing: content-box;
+  border: 0;
+  border-radius: var(--radius-m);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-body);
+  text-align: left;
+  cursor: pointer;
+}
+
+.barRow:hover {
+  background: var(--layer-2);
+}
+
+.barName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Pinned: the dot before its name, as the board marks it. */
+.barRow[aria-pressed="true"] .barName::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--ink);
+  vertical-align: middle;
+}
+
+.barValue {
+  display: inline-flex;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.track {
+  display: block;
+  grid-column: 1 / -1;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--layer-3);
+  overflow: hidden;
+}
+
+.track > span {
+  display: block;
+  height: 100%;
+  background: var(--ink);
+}
+
+/* Tokens: the four kinds as one tape, then as figures. */
+.tape {
+  display: flex;
+  gap: 2px;
+  height: 10px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.figures {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 0;
+}
+
+.figure {
+  display: grid;
+  gap: 4px;
+  padding: 0 14px;
+  border-left: 1px solid var(--border);
+}
+
+.figure:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.figure > :global(.section-label) {
+  color: var(--muted);
+}
+
+.value {
+  font-size: 20px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.figure[data-total] {
+  margin-left: auto;
+}
+
+.figure[data-total] .value {
+  font-size: 24px;
+}
+
+/* Right now: the machine's rate, large, and the plan windows. */
+.live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-small);
+  color: var(--accent);
+}
+
+.live::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.rate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.rateFigure {
+  font-size: 32px;
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+.spark {
+  align-self: center;
+  margin-left: 8px;
+  color: var(--text);
+}
+
+/* The plans: a row a provider, its name, its use as a bar and a figure, and when it resets. */
+.quota {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.quotaRow {
+  display: grid;
+  grid-template-columns: minmax(0, 88px) minmax(40px, 1fr) 40px minmax(0, 96px);
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-body);
+}
+
+.quotaName,
+.quotaReset {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quotaRow > .track {
+  grid-column: auto;
+}
+
+.quotaRow > .track > span {
+  background: var(--text);
+}
+
+.quotaPct {
+  text-align: right;
+}
+
+.quotaReset {
+  font-size: var(--fs-small);
+  color: var(--muted);
+  text-align: right;
+}
+
+/* Amber from 80%, red from 95%, as the top bar's meters. */
+.quotaRow[data-level="warn"] .quotaPct {
+  color: var(--warning);
+}
+
+.quotaRow[data-level="warn"] > .track > span {
+  background: var(--warning);
+}
+
+.quotaRow[data-level="danger"] .quotaPct {
+  color: var(--error);
+}
+
+.quotaRow[data-level="danger"] > .track > span {
+  background: var(--error);
+}
+
+/* Old figures: a hatched track and a muted fill, as the top bar's. */
+.quotaRow[data-stale] > .track {
+  background: repeating-linear-gradient(-45deg, var(--layer-3) 0 2px, transparent 2px 4px);
+}
+
+.quotaRow[data-stale] > .track > span {
+  background: var(--faint);
+}
+
+/* Two columns beside the session list: the wide cards and the hour take the row, the three
+   cards two and one (D4). */
 @media (max-width: 1199px) {
   .cards {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .card[data-span="2"] {
+  .card[data-area="grid"],
+  .card[data-area="hour"],
+  .card[data-area="longest"],
+  .card[data-area="tokens"],
+  .card[data-area="now"] {
     grid-column: 1 / -1;
   }
 }
 
-/* One column, every card across. */
+/* One column: the head keeps the switch and Print on its first line; every card across. */
 @media (max-width: 900px) {
   .stats {
     padding: 16px 16px 32px;
+  }
+
+  .range {
+    order: 3;
+    flex-basis: 100%;
+  }
+
+  .status {
+    order: 4;
+    flex-basis: 100%;
+    margin-left: 0;
   }
 
   .cards {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .card[data-span="2"] {
-    grid-column: auto;
+  .metric {
+    padding: 10px 16px;
   }
 }

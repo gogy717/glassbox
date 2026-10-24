@@ -968,9 +968,15 @@ describe('App pages: Home · Session · Stats', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(DEMO_NOW);
     window.location.hash = '';
+    // Stats reads the week: here it never answers.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise<Response>(() => {})),
+    );
   });
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
     window.location.hash = '';
   });
 
@@ -1006,7 +1012,8 @@ describe('App pages: Home · Session · Stats', () => {
     expect(page('Session')).toHaveAttribute('aria-current', 'page');
     fireEvent.click(page('Stats'));
     await waitFor(() => expect(page('Stats')).toHaveAttribute('aria-current', 'page'));
-    expect(screen.getByRole('heading', { name: 'Stats' })).toBeInTheDocument();
+    // Its own chunk, loaded on the first visit.
+    expect(await screen.findByRole('heading', { name: 'Stats' })).toBeInTheDocument();
     fireEvent.click(page('Home'));
     await waitFor(() => expect(page('Home')).toHaveAttribute('aria-current', 'page'));
     act(() => history.back());
@@ -1022,7 +1029,7 @@ describe('App pages: Home · Session · Stats', () => {
     window.location.hash = '#/';
     window.location.hash = '#/stats';
     render(<App store={listed()} connect={noConnect} runs={fakeRuns()} />);
-    const windows = screen.getByRole('radiogroup', { name: 'Window' });
+    const windows = await screen.findByRole('radiogroup', { name: 'Window' });
     expect(within(windows).getByRole('radio', { name: 'This week' })).toHaveAttribute(
       'aria-checked',
       'true',
@@ -1128,7 +1135,7 @@ describe('App pages: Home · Session · Stats', () => {
     expect(screen.getByRole('textbox', { name: 'Message' })).toBeInTheDocument();
   });
 
-  it('speaks Chinese: 首页 · 会话 · 统计', () => {
+  it('speaks Chinese: 首页 · 会话 · 统计', async () => {
     localStorage.setItem('glassbox.prefs', JSON.stringify({ locale: 'zh' }));
     onTestFinished(() => localStorage.clear());
     window.location.hash = '#/stats';
@@ -1140,7 +1147,7 @@ describe('App pages: Home · Session · Stats', () => {
         .map((a) => a.textContent),
     ).toEqual(['首页', '会话', '统计']);
     expect(within(nav).getByRole('link', { name: '会话' })).toHaveAttribute('title', '还没有会话');
-    const windows = screen.getByRole('radiogroup', { name: '时间范围' });
+    const windows = await screen.findByRole('radiogroup', { name: '时间范围' });
     expect(
       within(windows)
         .getAllByRole('radio')

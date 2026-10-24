@@ -1,9 +1,8 @@
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { SessionActivity, SessionSummary } from '../../../src/core/model.js';
 import { WAIT_MS } from '../components/Delayed';
 import { I18nContext, makeI18n } from '../i18n';
-import { demoWeek } from '../test/week';
 import { Home } from './Home';
 
 // Every row render words its age once: counting the calls counts the rows' renders.
@@ -147,47 +146,15 @@ describe('Home', () => {
     expect(onOpen).toHaveBeenCalledWith(sessions[0]?.id);
   });
 
-  it('offers the weekly receipt before the latest session, with nothing running too (W1, G10a)', () => {
+  // R31: the Stats page is the weekly receipt's home now; the header keeps the latest session.
+  it('offers no weekly receipt, only the way into the latest session', () => {
     renderHome([session('a', 'idle', 3)]);
     const running = screen.getByRole('region', { name: 'Running' });
-    const buttons = within(running)
-      .getAllByRole('button')
-      .map((b) => b.getAttribute('aria-label') ?? b.textContent);
-    expect(buttons.slice(0, 2)).toEqual([
-      'Weekly receipt',
-      'Open the most recently active session',
-    ]);
-    const weekly = within(running).getByRole('button', { name: 'Weekly receipt' });
-    expect(weekly).toHaveAttribute('aria-haspopup', 'dialog');
-    // Named when its word is hidden on a narrow screen, by the title on hover too.
-    expect(weekly).toHaveAttribute('title', 'Weekly receipt');
-  });
-
-  it('opens the weekly receipt on This week, counting probes as Home lists them (G9)', async () => {
-    vi.useRealTimers();
-    const r = demoWeek('week');
-    const result = { ...r, sessions: r.sessions.map((s) => ({ ...s, tags: ['probe'] })) };
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => new Response(`${JSON.stringify({ type: 'result', result })}\n`)),
-    );
-    onTestFinished(() => {
-      vi.unstubAllGlobals();
-    });
-    for (const [showProbes, n] of [
-      [false, 0],
-      [true, r.sessions.length],
-    ] as const) {
-      renderHome([session('a', 'idle', 3)], { showProbes });
-      fireEvent.click(screen.getByRole('button', { name: 'Weekly receipt' }));
-      const dialog = await screen.findByRole('dialog', { name: 'Weekly receipt' });
-      expect(within(dialog).getByRole('radio', { name: 'This week' })).toHaveAttribute(
-        'aria-checked',
-        'true',
-      );
-      await waitFor(() => expect(dialog).toHaveTextContent(`20:41 · ${n} sessions`));
-      cleanup();
-    }
+    expect(
+      within(running)
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['Open the most recently active session']);
   });
 
   it('is one tab stop: the arrows move between rows, across groups and sections', () => {

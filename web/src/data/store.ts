@@ -1,4 +1,4 @@
-import { createContext, useContext, useSyncExternalStore } from 'react';
+import { createContext, useContext, useState, useSyncExternalStore } from 'react';
 import type {
   AgentNode,
   Diagnostics,
@@ -13,6 +13,7 @@ import type {
 import type { ServerEvent } from '../../../src/shared/protocol.js';
 import type { TokenRate } from '../../../src/shared/rate.js';
 import type { RunState } from '../../../src/shared/runs.js';
+import { createWeekCache, type WeekCache } from './weeks';
 
 export type ConnectionState = 'connecting' | 'open' | 'reconnecting';
 
@@ -54,6 +55,8 @@ export interface Store {
    */
   getRate(): TokenRate | null;
   subscribeRate(fn: () => void): () => void;
+  /** The week, per window, for the Stats page and the weekly receipt alike (R30). */
+  weeks: WeekCache;
   openSession(id: string | null): void;
   setConnection(c: ConnectionState): void;
 }
@@ -170,6 +173,7 @@ export function createStore(): Store {
       rateListeners.add(fn);
       return () => rateListeners.delete(fn);
     },
+    weeks: createWeekCache(),
     openSession(id) {
       if (id === state.openId) return;
       set({ ...state, openId: id, open: null, missingId: null });
@@ -197,6 +201,16 @@ export function useRate(): TokenRate | null {
     store ? store.getRate() : null,
   );
 }
+
+/** The page's week cache: the store's, or outside a store (a lone dialog's test) one of its own. */
+export function useWeekCache(): WeekCache {
+  const store = useContext(StoreContext);
+  const [own] = useState(() => (store ? null : createWeekCache()));
+  return store?.weeks ?? (own as WeekCache);
+}
+
+/** Every window's entry in the week cache, re-rendering the caller when one changes. */
+export const useWeeksOf = (weeks: WeekCache) => useSyncExternalStore(weeks.subscribe, weeks.get);
 
 /**
  * Subscribes to a slice of the view state. The selector must return an existing value

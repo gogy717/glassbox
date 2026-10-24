@@ -1,36 +1,24 @@
-/* A bordered button, as Follow latest and the receipt dialog's actions: it reads as something to
-   press, not as a note beside the count. The icon alone on a narrow screen, still bordered. */
+/* The page's one main action, in the accent as the receipt dialog's own (D4), the height of the
+   window switch beside it. Its word stays at every width. */
 .button {
   display: inline-flex;
   flex: none;
   align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 10px;
-  border: 1px solid var(--border-strong);
+  gap: 8px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--accent);
   border-radius: var(--radius-l);
-  background: var(--layer-1);
-  color: var(--text);
+  background: var(--accent);
+  color: var(--on-accent);
   font: inherit;
-  font-size: var(--fs-small);
+  font-size: var(--fs-body);
+  font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
-  transition:
-    background var(--motion),
-    border-color var(--motion);
+  transition: filter var(--motion);
 }
 
 .button:hover {
-  background: var(--layer-3);
-}
-
-@media (max-width: 900px) {
-  .label {
-    display: none;
-  }
-
-  .button {
-    width: 34px;
-    padding: 0;
-    justify-content: center;
-  }
+  filter: brightness(1.08);
 }

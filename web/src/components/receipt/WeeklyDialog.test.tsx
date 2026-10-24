@@ -63,9 +63,11 @@ async function openWeekly(showProbes = false, locale: 'en' | 'zh' = 'en') {
       <WeeklyReceiptButton showProbes={showProbes} />
     </I18nContext.Provider>,
   );
-  const name = locale === 'en' ? 'Weekly receipt' : '本周小票';
-  fireEvent.click(screen.getByRole('button', { name }));
-  return screen.findByRole('dialog', { name });
+  // The Stats page's button (D4), on its default window; the dialog keeps its own title.
+  fireEvent.click(
+    screen.getByRole('button', { name: locale === 'en' ? 'Print weekly receipt' : '打印本周小票' }),
+  );
+  return screen.findByRole('dialog', { name: locale === 'en' ? 'Weekly receipt' : '本周小票' });
 }
 
 /** The session's receipt, opened from its Summary bar's button. */
@@ -212,7 +214,7 @@ describe('the weekly receipt dialog', () => {
     // The scope is not remembered, the other choices are: Home's button starts on This week.
     fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    fireEvent.click(screen.getByRole('button', { name: 'Weekly receipt' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Print weekly receipt' }));
     dialog = await screen.findByRole('dialog', { name: 'Weekly receipt' });
     expect(scopes(dialog)).toEqual(['This week ✓', 'Last 7 days']);
     const saved = JSON.parse(localStorage.getItem('glassbox.receipt') ?? '{}');

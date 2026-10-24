@@ -1,46 +1,14 @@
 /**
- * Reading `/api/week` for the weekly receipt's dialog: the NDJSON stream to its result, and the
- * windows read so far, each once until asked again, every request aborted when the dialog closes.
+ * The weekly receipt's dialog over the page's week cache (R30, `data/weeks.ts`): a window it
+ * shows is read again the first time it shows it, once while it stays open, and the reads it
+ * holds stop when it closes, unless something else on the page still shows that window. A window
+ * read before, by the dialog or the Stats page, shows at once while it is read again.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  type WeekLine,
-  type WeekResult,
-  type WeekWindowKind,
-  weekPath,
-} from '../../../../src/shared/week.js';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import type { WeekResult, WeekWindowKind } from '../../../../src/shared/week.js';
+import { useWeekCache, useWeeksOf } from '../../data/store';
 
-/** `/api/week` read to its result, `onProgress` told how far it got on the way. */
-export async function readWeek(
-  kind: WeekWindowKind,
-  refresh: boolean,
-  onProgress: (done: number, total: number) => void,
-  signal?: AbortSignal,
-): Promise<WeekResult> {
-  const res = await fetch(weekPath(kind, refresh), { signal });
-  if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let result: WeekResult | null = null;
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (value) buffer += decoder.decode(value, { stream: !done });
-    for (let i = buffer.indexOf('\n'); i >= 0; i = buffer.indexOf('\n')) {
-      const text = buffer.slice(0, i).trim();
-      buffer = buffer.slice(i + 1);
-      // A blank line (a keep-alive, or a proxy's) says nothing.
-      if (!text) continue;
-      const line = JSON.parse(text) as WeekLine;
-      if (line.type === 'progress') onProgress(line.done, line.total);
-      else if (line.type === 'result') result = line.result;
-      else throw new Error(line.error);
-    }
-    if (done) break;
-  }
-  if (!result) throw new Error('no result');
-  return result;
-}
+export { readWeek } from '../../data/weeks';
 
 /** One window's data: being read (how far), read, or not readable. */
 export type WeekState =
@@ -48,65 +16,62 @@ export type WeekState =
   | { phase: 'ready'; result: WeekResult }
   | { phase: 'failed'; msg: string };
 
-/** The windows the dialog has asked for, as they are read. */
+type PerWindow<T> = Partial<Record<WeekWindowKind, T>>;
+
+const WINDOWS: WeekWindowKind[] = ['week', '7d'];
+
+/** The windows the dialog shows, as they are read. */
 export function useWeeks() {
-  const [states, setStates] = useState<Partial<Record<WeekWindowKind, WeekState>>>({});
-  // A refresh of one window says nothing about the other's.
-  const [refreshing, setRefreshing] = useState<
-    Partial<Record<WeekWindowKind, { done: number; total: number }>>
-  >({});
-  const [refreshFailed, setRefreshFailed] = useState<Partial<Record<WeekWindowKind, string>>>({});
-  const aborts = useRef(new Set<AbortController>());
-  const asked = useRef(new Set<WeekWindowKind>());
+  const cache = useWeekCache();
+  const weeks = useWeeksOf(cache);
+  const held = useRef(new Map<WeekWindowKind, () => void>());
   useEffect(() => {
-    const live = aborts.current;
-    const wanted = asked.current;
+    const mine = held.current;
     return () => {
-      for (const abort of live) abort.abort();
+      for (const release of mine.values()) release();
       // Mounted again (StrictMode does), every window is read again.
-      wanted.clear();
+      mine.clear();
     };
   }, []);
 
-  const read = useCallback((kind: WeekWindowKind, refresh: boolean) => {
-    const abort = new AbortController();
-    aborts.current.add(abort);
-    const set = (s: WeekState) => setStates((all) => ({ ...all, [kind]: s }));
-    const progress = (p: { done: number; total: number } | undefined) =>
-      setRefreshing((all) => ({ ...all, [kind]: p }));
-    if (refresh) {
-      setRefreshFailed((all) => ({ ...all, [kind]: undefined }));
-      progress({ done: 0, total: 0 });
-    } else set({ phase: 'reading', done: 0, total: 0 });
-    readWeek(
-      kind,
-      refresh,
-      (done, total) =>
-        refresh ? progress({ done, total }) : set({ phase: 'reading', done, total }),
-      abort.signal,
-    )
-      .then((result) => set({ phase: 'ready', result }))
-      .catch((err: unknown) => {
-        if (abort.signal.aborted) return;
-        const msg = err instanceof Error ? err.message : String(err);
-        if (refresh) setRefreshFailed((all) => ({ ...all, [kind]: msg }));
-        else set({ phase: 'failed', msg });
-      })
-      .finally(() => {
-        aborts.current.delete(abort);
-        if (refresh) progress(undefined);
-      });
-  }, []);
-
-  /** Reads `kind` unless it was asked for already. */
-  const ensure = useCallback(
-    (kind: WeekWindowKind) => {
-      if (asked.current.has(kind)) return;
-      asked.current.add(kind);
-      read(kind, false);
-    },
-    [read],
+  const read = useCallback(
+    (kind: WeekWindowKind, refresh: boolean) => cache.request(kind, { refresh }),
+    [cache],
   );
 
-  return { states, refreshing, refreshFailed, ensure, read };
+  /** Shows `kind`: read again the first time, and held while the dialog is open. */
+  const ensure = useCallback(
+    (kind: WeekWindowKind) => {
+      if (held.current.has(kind)) return;
+      held.current.set(kind, cache.retain(kind));
+      cache.request(kind);
+    },
+    [cache],
+  );
+
+  // A window with a result is ready while it is read again: a refresh says how far it got, any
+  // other read only that it is updating; a failure then is the refresh's, the result stays.
+  const derived = useMemo(() => {
+    const states: PerWindow<WeekState> = {};
+    const refreshing: PerWindow<{ done: number; total: number }> = {};
+    const updating: PerWindow<boolean> = {};
+    const refreshFailed: PerWindow<string> = {};
+    for (const kind of WINDOWS) {
+      const e = weeks[kind];
+      if (!e) continue;
+      if (e.result) {
+        states[kind] = { phase: 'ready', result: e.result };
+        if (e.reading?.refresh) refreshing[kind] = { done: e.reading.done, total: e.reading.total };
+        else if (e.reading) updating[kind] = true;
+        if (e.failed !== null) refreshFailed[kind] = e.failed;
+      } else if (e.reading) {
+        states[kind] = { phase: 'reading', done: e.reading.done, total: e.reading.total };
+      } else if (e.failed !== null) {
+        states[kind] = { phase: 'failed', msg: e.failed };
+      }
+    }
+    return { states, refreshing, updating, refreshFailed };
+  }, [weeks]);
+
+  return { ...derived, ensure, read };
 }
