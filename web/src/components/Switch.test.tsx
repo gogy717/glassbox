@@ -1,6 +1,8 @@
 /// <reference types="node" />
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fireEvent, render, screen } from '@testing-library/react';
+import postcss from 'postcss';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { moduleCssValue } from '../test/module-css';
@@ -29,8 +31,20 @@ function Controlled({ onChange, initial = 'copy' }: { onChange(v: Mode): void; i
   );
 }
 
-const cssValue = (el: Element, prop: string) =>
-  moduleCssValue(join(import.meta.dirname, 'Switch.module.css'), classes, el, prop);
+const CSS_FILE = join(import.meta.dirname, 'Switch.module.css');
+const cssValue = (el: Element, prop: string) => moduleCssValue(CSS_FILE, classes, el, prop);
+
+/** The drawn strike of an unavailable word (a ::after line; jsdom matches no pseudo-elements). */
+function strike(): Record<string, string> {
+  const out: Record<string, string> = {};
+  postcss.parse(readFileSync(CSS_FILE, 'utf8')).walkRules((rule) => {
+    if (rule.selector !== '.word[aria-disabled="true"]::after') return;
+    rule.walkDecls((d) => {
+      out[d.prop] = d.value;
+    });
+  });
+  return out;
+}
 
 describe('Switch', () => {
   it('is a named radio group with one tab stop, on the chosen word', () => {
@@ -98,7 +112,15 @@ describe('Switch', () => {
     expect(unavailable).toHaveAttribute('title', 'Open in a terminal right now');
     expect(unavailable).toHaveAccessibleDescription('Open in a terminal right now');
     expect(unavailable.tabIndex).toBe(-1);
-    expect(cssValue(unavailable, 'text-decoration-line')).toBe('line-through');
+    // Struck through by a drawn line, past both ends: a line-through vanishes into CJK strokes.
+    expect(cssValue(unavailable, 'position')).toBe('relative');
+    expect(strike()).toMatchObject({
+      content: '""',
+      height: '1px',
+      left: '-2px',
+      right: '-2px',
+      background: 'currentColor',
+    });
     expect(cssValue(unavailable, 'color')).toBe('var(--faint)');
   });
 
@@ -131,7 +153,9 @@ describe('Switch', () => {
     const unavailable = screen.getByRole('radio', { name: 'Continue' });
     expect(unavailable).toHaveAttribute('aria-checked', 'true');
     expect(unavailable.tabIndex).toBe(0);
-    expect(cssValue(unavailable, 'text-decoration-line')).toBe('underline line-through');
+    // The ink underline stays, under the drawn strike.
+    expect(cssValue(unavailable, 'text-decoration')).toBe('underline');
+    expect(cssValue(unavailable, 'position')).toBe('relative');
     expect(cssValue(unavailable, 'text-decoration-color')).toBe('var(--ink)');
     expect(cssValue(unavailable, 'font-weight')).toBe('500');
     // From it, ArrowLeft wraps to the last word and chooses it.
