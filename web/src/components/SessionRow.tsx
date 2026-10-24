@@ -6,6 +6,7 @@ import { useI18n } from '../i18n';
 import { agentName } from '../lib/agent-names';
 import { formatCompact, formatRelative } from '../lib/format';
 import { AgentTag } from './AgentTag';
+import { CompactFigure } from './CompactFigure';
 import css from './SessionRow.module.css';
 import { LiveDot } from './Status';
 
@@ -77,8 +78,8 @@ export function SessionRow({
             <>
               {' '}
               <span className={css.sep}>·</span>{' '}
-              <span className="figure" aria-hidden="true">
-                {figure}
+              <span aria-hidden="true">
+                <CompactFigure value={figure} />
               </span>
               <span className="visually-hidden">{tokens}</span>
             </>

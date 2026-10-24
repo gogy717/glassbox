@@ -71,13 +71,16 @@ export const CallRow = memo(function CallRow(p: Props) {
             #{req.index}
           </h3>
           <span className={`${css.meta} figure`}>{formatClock(req.startedAt)}</span>
-          <span className={`${css.meta} figure`}>
+          {/* Ticking sets its own clock as a figure; its words ("已") stay in the UI face. */}
+          <span className={css.meta}>
             {req.status === 'in-flight' && req.startedAt ? (
               <Ticking since={req.startedAt} labelKey="flow.elapsed" />
             ) : startUnknown(req) ? (
-              <span title={t('flow.startUnknown', { agent })}>{DASH}</span>
+              <span className="figure" title={t('flow.startUnknown', { agent })}>
+                {DASH}
+              </span>
             ) : (
-              formatDuration(requestDurationMs(req, Date.now()))
+              <span className="figure">{formatDuration(requestDurationMs(req, Date.now()))}</span>
             )}
           </span>
           {tok && (

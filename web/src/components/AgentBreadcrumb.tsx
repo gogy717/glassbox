@@ -8,6 +8,7 @@ import { useI18n } from '../i18n';
 import { agentPath, agentTree, subtreeIds } from '../lib/agents';
 import { formatCompact } from '../lib/format';
 import css from './AgentBreadcrumb.module.css';
+import { CompactFigure } from './CompactFigure';
 import { LiveDot } from './Status';
 
 interface Props {
@@ -128,8 +129,8 @@ function AgentMenu({ open, agentId, onSelect, name }: Props & { name(a: AgentNod
                   label={t(`status.${r.agent.status}`)}
                 />
                 <span className={css.menuLabel}>{name(r.agent)}</span>
-                <span className={`${css.menuTokens} num`}>
-                  {formatCompact(cumulative(r.agent.id), intl)}
+                <span className={css.menuTokens}>
+                  <CompactFigure value={formatCompact(cumulative(r.agent.id), intl)} />
                 </span>
               </button>
             );

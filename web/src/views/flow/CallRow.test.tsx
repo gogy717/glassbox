@@ -12,6 +12,7 @@ function renderRow(
   requestId: string,
   blocks?: ModelRequest['blocks'],
   change: { req?: Partial<ModelRequest>; tool?: Partial<ToolCall> } = {},
+  locale: 'en' | 'zh' = 'en',
 ) {
   const open = demoOpen();
   const found = open.requests.get(requestId);
@@ -22,7 +23,7 @@ function renderRow(
     .filter((t): t is ToolCall => t !== undefined)
     .map((t) => ({ ...t, ...change.tool }));
   render(
-    <I18nContext.Provider value={makeI18n('en')}>
+    <I18nContext.Provider value={makeI18n(locale)}>
       <CallRow
         req={req}
         tools={tools}
@@ -96,6 +97,19 @@ describe('CallRow why line', () => {
     const row = inFlight({ status: 'running' });
     expect(why(row)).toBeNull();
     expect(within(row).getByRole('group', { name: 'Response' })).not.toHaveTextContent('Thinking');
+  });
+
+  // I3: zh says "已 0:12"; the 已 stays in the UI face, only the clock is a figure.
+  it('keeps the in-flight clock’s Chinese words out of the mono face', () => {
+    const row = renderRow(
+      'req_m2',
+      [],
+      { req: { status: 'in-flight', endedAt: null }, tool: { status: 'running', endedAt: null } },
+      'zh',
+    );
+    const figures = [...row.querySelectorAll('.figure')].map((f) => f.textContent ?? '');
+    for (const f of figures) expect(f, f).not.toMatch(/[\u3000-\u9fff]/);
+    expect(row).toHaveTextContent(/已 ?\d+:\d\d/);
   });
 
   it('falls back to what the call thought', () => {

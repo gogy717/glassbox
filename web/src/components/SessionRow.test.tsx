@@ -28,6 +28,15 @@ function renderRow(
 }
 
 describe('SessionRow', () => {
+  // I3: zh compact counts end in 万 or 亿; only the digits are a figure (CJK never in mono).
+  it('sets only the digits of a Chinese token count in the mono face', () => {
+    const row = renderRow(running, false, vi.fn(), 'zh');
+    const figures = [...row.querySelectorAll('.figure')].map((f) => f.textContent ?? '');
+    expect(figures.length).toBeGreaterThan(0);
+    for (const f of figures) expect(f).not.toMatch(/[\u3000-\u9fff]/);
+    expect(row).toHaveTextContent(/[\d.]+万/);
+  });
+
   it('reads title, then state · short age · tokens, with the agent tag last', () => {
     const row = renderRow(running);
     expect(row).toHaveAttribute('data-density', 'compact');
@@ -38,7 +47,7 @@ describe('SessionRow', () => {
     expect(parts[1]).toMatch(/^· (now|\d+\s?s(econds?)? ago) · 1\.9M1\.9M tokens$/);
     expect(parts.at(-1)).toBe('Claude Code');
     // The figure is mono and silent; the spoken text says what it counts.
-    expect(meta.querySelector('.figure')).toHaveAttribute('aria-hidden', 'true');
+    expect(meta.querySelector('.figure')?.closest('[aria-hidden="true"]')).not.toBeNull();
     expect(meta.querySelector('.visually-hidden')).toHaveTextContent('1.9M tokens');
   });
 

@@ -3,6 +3,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import type { AgentNode, ModelRequest, ToolCall, WorkflowRun } from '../../../../src/core/model.js';
 import { contextSize, totalTokens } from '../../../../src/core/usage.js';
 import { CategoryIcon } from '../../components/CategoryIcon';
+import { CompactFigure } from '../../components/CompactFigure';
 import { FigureText } from '../../components/FigureText';
 import { LiveDot, StatusMark, Ticking } from '../../components/Status';
 import { useApprovalsContext } from '../../data/approvals';
@@ -371,8 +372,8 @@ function SpawnedAgents({
           <LiveDot kind="status" state={a.status} />
           <span className={css.agentLabel}>{a.label}</span>
           <span className={css.agentMeta}>{t(`status.${a.status}`)}</span>
-          <span className={`${css.agentMeta} figure`}>
-            {formatCompact(cumulativeTokens(open, a.id), intl)}
+          <span className={css.agentMeta}>
+            <CompactFigure value={formatCompact(cumulativeTokens(open, a.id), intl)} />
           </span>
         </button>
       ))}
