@@ -9,6 +9,7 @@ import { agentName } from '../../lib/agent-names';
 import { formatCompact, formatPercent } from '../../lib/format';
 import type { ReceiptData } from './data';
 import { clock, day, durationParts, modelName, partsText } from './format';
+import { clean } from './printed';
 import { categoryLine, clip, timed, timeRows } from './rows';
 import { type ReceiptKey, rt } from './strings';
 import type { ReceiptOptions } from './svg';
@@ -150,5 +151,6 @@ export function receiptText(d: ReceiptData, o: ReceiptOptions): string {
   for (const line of foot)
     out.push(`${' '.repeat(Math.max(0, Math.floor((COLUMNS - cols(line)) / 2)))}${line}`);
   out.push('```');
-  return out.join('\n');
+  // Well formed whatever the session holds: a lone surrogate would not survive the clipboard.
+  return clean(out.join('\n'));
 }

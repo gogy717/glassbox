@@ -1,6 +1,6 @@
 /**
  * How a receipt words the app's figures. The numbers are the app's own; only their dress differs
- * ("4h 12m" for the Summary bar's "4h12m", whole percents), as a printed slip reads.
+ * ("4h 12m" for the Summary bar's "4h12m"), as a printed slip reads.
  */
 import type { Locale } from '../../i18n';
 
@@ -34,9 +34,6 @@ export function durationParts(ms: number, locale: Locale): Parts {
 }
 
 export const partsText = (p: Parts) => p.map((x) => x.digits + x.unit).join('');
-
-/** A share as a whole percent: "25%". */
-export const percent = (share: number) => `${Math.round(share * 100)}%`;
 
 const DAYS_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS_EN = [

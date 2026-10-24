@@ -4,7 +4,6 @@
  * `rollupByAgent`. Nothing here counts anything new, so the receipt always agrees with the app.
  */
 import { type AgentKind, MAIN_AGENT_ID } from '../../../../src/core/model.js';
-import { redact } from '../../../../src/core/redact.js';
 import { totalTokens } from '../../../../src/core/usage.js';
 import type { Approvals } from '../../data/approvals';
 import type { OpenSession } from '../../data/store';
@@ -12,6 +11,7 @@ import { mayStillRun, summarize } from '../../lib/agents';
 import { type Segment, timeBreakdown, timeSegments } from '../../lib/time-stats';
 import { rollupByAgent } from '../../lib/token-stats';
 import { type ToolCategory, toolCategory } from '../../lib/tool-category';
+import { clean, printedProject, printedTitle } from './printed';
 
 export interface ReceiptData {
   agent: AgentKind;
@@ -65,36 +65,11 @@ export interface ReceiptData {
     cacheHit: number | null;
     total: number;
   };
-  /** The main agent's timeline, and each sub-agent's span: the barcode. */
+  /** The main agent's timeline, each sub-agent's span and each one's timeline: the barcode. */
   segments: Segment[];
   subAgents: [number, number][];
+  subSegments: Segment[][];
   failedTools: ReadonlySet<string>;
-}
-
-/** Control characters (a terminal's colour codes) break an SVG and mean nothing on paper. */
-// biome-ignore lint/suspicious/noControlCharactersInRegex: these are what it removes
-const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g;
-const clean = (s: string) => s.replace(CONTROL, '');
-
-/** An absolute path of two segments or more (/a/b, ~/a/b, C:\a\b): kept as its last segment. */
-const ABSOLUTE = /(^|[\s"'(=])(?:~|[A-Za-z]:)?[\\/](?:[^\s\\/"'()]+[\\/])+([^\s\\/"'()]+)/g;
-
-/** The title as printed: masked, control characters out, absolute paths cut to their ends. */
-export const printedTitle = (title: string) =>
-  clean(redact(title)).replace(ABSOLUTE, (_m, before: string, last: string) => before + last);
-
-/** The project as printed: see `ReceiptData.project`. */
-export function printedProject(cwd: string | null, project: string): string | null {
-  if (cwd)
-    return (
-      clean(
-        cwd
-          .split(/[\\/]+/)
-          .filter(Boolean)
-          .at(-1) ?? '',
-      ) || null
-    );
-  return project && !/[\\/]/.test(project) && !project.startsWith('-') ? clean(project) : null;
 }
 
 const ms = (iso: string | null | undefined) => {
@@ -106,8 +81,8 @@ export function receiptData(open: OpenSession, now: number, approvals?: Approval
   const s = summarize(open, MAIN_AGENT_ID, now);
   const running = mayStillRun(open, MAIN_AGENT_ID);
   const breakdown = timeBreakdown(open, MAIN_AGENT_ID, now, approvals);
-  const segments =
-    timeSegments(open, now, approvals).find((l) => l.agentId === MAIN_AGENT_ID)?.segments ?? [];
+  const lanes = timeSegments(open, now, approvals);
+  const segments = lanes.find((l) => l.agentId === MAIN_AGENT_ID)?.segments ?? [];
 
   const byCategory = new Map<ToolCategory, number>();
   const failedTools = new Set<string>();
@@ -187,6 +162,7 @@ export function receiptData(open: OpenSession, now: number, approvals?: Approval
     },
     segments,
     subAgents,
+    subSegments: lanes.filter((l) => l.agentId !== MAIN_AGENT_ID).map((l) => l.segments),
     failedTools,
   };
 }

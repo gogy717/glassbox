@@ -113,6 +113,28 @@ describe('the receipt dialog', () => {
     expect(within(screen.getByRole('dialog')).getByRole('img').getAttribute('src')).toBe(before);
   });
 
+  it('names no home directory in its heading (P2)', async () => {
+    const base = demoOpen();
+    const open = {
+      ...base,
+      session: {
+        ...base.session,
+        cwd: '/home/someone',
+        project: 'someone',
+        title: 'fix /home/someone/acme/a.ts',
+      },
+    };
+    render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <SummaryBar open={open} agentId="main" rate={null} />
+      </I18nContext.Provider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Receipt' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Receipt' });
+    expect(dialog.textContent).not.toContain('someone');
+    expect(dialog.textContent).toContain('a.ts');
+  });
+
   it('has nothing to print before the first model call, and says so', () => {
     const open = { ...demoOpen(), requests: new Map() };
     render(

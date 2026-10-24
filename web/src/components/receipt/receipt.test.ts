@@ -7,9 +7,10 @@ import { type Segment, timeBreakdown } from '../../lib/time-stats';
 import { rollupByAgent } from '../../lib/token-stats';
 import { DEMO_NOW, demoOpen } from '../../test/demo';
 import { BAR_HEIGHT, barcode } from './barcode';
-import { printedProject, printedTitle, type ReceiptData, receiptData } from './data';
+import { type ReceiptData, receiptData } from './data';
 import { fileName } from './exportImage';
 import { durationParts, modelName, partsText, serial } from './format';
+import { clean, printedProject, printedTitle, wellFormed } from './printed';
 import { categoryLine, shares, timeRows } from './rows';
 import { RECEIPT_STRINGS } from './strings';
 import { receiptSvg, SCALE, SIZES, textWidth, WIDTH, wrap } from './svg';
@@ -159,6 +160,7 @@ describe('the receipt', () => {
       ...data,
       segments: [],
       subAgents: [],
+      subSegments: [],
       time: { thinking: 0, generating: 0, tools: 0, approval: 0, queued: 0, longestThink: 0 },
     };
     expect(svgText(receiptSvg(untimed, EN, 'tall').svg)).not.toMatch(/\bTIME\b/);
@@ -492,5 +494,164 @@ describe('fix round 1', () => {
     const label =
       /<text x="([\d.]+)"[^>]*font-size="9"[^>]*text-anchor="end"><tspan[^>]*>\+4</.exec(svg);
     expect(label).not.toBeNull();
+  });
+});
+
+describe('fix round 2', () => {
+  const DAY = 86_400_000;
+  const seg = (kind: Segment['kind'], start: number, end: number): Segment => ({
+    kind,
+    start,
+    end,
+    refId: 'x',
+    requestId: 'r',
+  });
+  /** No lone surrogate, no U+FFFE / U+FFFF: what an SVG (XML) can hold. */
+  const wellFormedXml = (s: string) =>
+    !/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]|[\ufffe\uffff]/.test(
+      s,
+    );
+
+  it('cuts a path wherever it starts: after a backtick, a bracket, a colon, a comma or CJK (P1)', () => {
+    const cases: [string, string][] = [
+      ['see `/home/someone/acme/a.ts`', 'see `a.ts`'],
+      ['(/home/someone/acme/b.ts)', '(b.ts)'],
+      ['fix:/home/someone/acme/c.ts', 'fix:c.ts'],
+      ['路径：/home/someone/acme/d.ts', '路径：d.ts'],
+      ['a,/home/someone/acme/e.ts', 'a,e.ts'],
+      ['看看/home/someone/acme/f.ts里的错', '看看f.ts里的错'],
+      ['修复`/home/someone/acme/g.ts`的bug，再说', '修复`g.ts`的bug，再说'],
+      ['open C:\\Users\\John Smith\\proj\\h.ts now', 'open h.ts now'],
+      ['in /mnt/c/Users/John Smith/acme/i.ts', 'in i.ts'],
+      ['~someone/dev/j.md and ~someone/k.md', 'j.md and k.md'],
+      ['\\\\fileserver\\share\\someone\\l.docx', 'l.docx'],
+      ['file:///home/someone/acme/m.ts', 'm.ts'],
+      ['file://C:/Users/someone/n.ts', 'n.ts'],
+      // A home directory itself prints as "~": its last segment is a name.
+      ['cd /home/someone', 'cd ~'],
+      ['in /Users/someone', 'in ~'],
+      ['C:\\Users\\someone', '~'],
+      // Not absolute paths, or not a person's: kept as typed.
+      ['see https://github.com/o/r/pull/1', 'see https://github.com/o/r/pull/1'],
+      ['and/or', 'and/or'],
+      ['edit src/app.ts and ./a/b', 'edit src/app.ts and ./a/b'],
+      ['clear /tmp', 'clear /tmp'],
+      ['on 2026/10/24', 'on 2026/10/24'],
+      ['look at ~/x', 'look at ~/x'],
+    ];
+    for (const [title, printed] of cases) expect(printedTitle(title), title).toBe(printed);
+  });
+
+  it('never prints a home directory as the project, in the image, the text or the file name (P2)', () => {
+    for (const cwd of [
+      '/home/someone',
+      '/home/someone/',
+      '/Users/someone',
+      '/var/home/someone',
+      'C:\\Users\\someone',
+      'c:/Users/someone',
+      '/mnt/c/Users/someone',
+      'C:\\',
+      'D:',
+    ])
+      expect(printedProject(cwd, 'someone'), cwd).toBeNull();
+    expect(printedProject(null, 'C--Users-someone-acme')).toBeNull();
+    expect(printedProject('/home/someone/acme', 'x')).toBe('acme');
+    expect(printedProject('C:\\Users\\someone\\acme', 'x')).toBe('acme');
+    const { data } = demo((o) =>
+      withSession(o, {
+        cwd: '/home/someone',
+        project: 'someone',
+        title: 'fix `/home/someone/acme/a.ts`',
+      }),
+    );
+    expect(data.project).toBeNull();
+    for (const out of [
+      svgText(receiptSvg(data, EN, 'tall').svg),
+      receiptText(data, EN),
+      fileName(data, false),
+    ])
+      expect(out).not.toContain('someone');
+  });
+
+  it('keeps a gap of 300 days squeezed: the barcode stays drawn (P3)', () => {
+    const t0 = Date.UTC(2026, 0, 1);
+    for (const days of [199, 300]) {
+      const gap = days * DAY;
+      const code = barcode(
+        [seg('thinking', t0, t0 + 60_000), seg('thinking', t0 + gap, t0 + gap + 60_000)],
+        [],
+        new Set(),
+        316,
+      );
+      expect(code.breaks, `${days} days`).toHaveLength(1);
+      expect(
+        code.bars.reduce((n, b) => n + b.w, 0),
+        `${days} days`,
+      ).toBeGreaterThan(300);
+    }
+  });
+
+  it('draws a delegated column as the busiest sub-agent’s work, not a flat band (P4)', () => {
+    // The main agent thinks, then waits 10–90 on two sub-agents; one works in rhythm, the other
+    // barely (a sliver of output at 21).
+    const busy = [
+      seg('thinking', 10, 40),
+      seg('generating', 40, 60),
+      seg('waiting', 60, 70),
+      seg('tool', 70, 80),
+      seg('generating', 80, 90),
+    ];
+    const idle = [seg('generating', 21, 21.5)];
+    const code = barcode(
+      [seg('thinking', 0, 10), seg('thinking', 90, 100)],
+      [
+        [10, 90],
+        [10, 90],
+      ],
+      new Set(),
+      100,
+      [busy, idle],
+    );
+    expect(code.bars).toEqual([
+      { x: 0, w: 40, kind: 'thinking' },
+      { x: 40, w: 20, kind: 'generating' },
+      // Waiting on the API, still alive: delegation stays a low bar, never a blank.
+      { x: 60, w: 20, kind: 'tool' },
+      { x: 80, w: 10, kind: 'generating' },
+      { x: 90, w: 10, kind: 'thinking' },
+    ]);
+    // TIME is still the main agent's alone, and the data carries each sub-agent's timeline.
+    const { data } = demo();
+    expect(data.subSegments).toHaveLength(data.work.subAgents);
+    expect(data.subSegments.flat().length).toBeGreaterThan(0);
+    expect(data.time.thinking).toBe(timeBreakdown(demoOpen(), MAIN_AGENT_ID, NOW).model.thinking);
+  });
+
+  it('prints only well-formed text, and keeps +N on the paper (P5)', () => {
+    expect(wellFormed('a\ud800b')).toBe('a\ufffdb');
+    expect(wellFormed('ok 😀')).toBe('ok 😀');
+    expect(clean('x\ufffey\uffff')).toBe('xy');
+    expect(printedTitle('half \ud83d of a smile\uffff')).toBe('half \ufffd of a smile');
+    const { data } = demo((o) =>
+      withSession(o, { title: 'half \ud83d smile', model: 'm\udc00\ufffe' }),
+    );
+    expect(wellFormedXml(receiptSvg(data, EN, 'tall').svg)).toBe(true);
+    expect(wellFormedXml(receiptText(data, EN))).toBe(true);
+    // Fifteen sub-agents, the last ten across the whole width: "+10" fits neither before the
+    // merged track nor after it, so it goes under its start, inside the paper.
+    const subs = Array.from({ length: 15 }, () => [0, 1000] as [number, number]);
+    const svg = receiptSvg(
+      { ...data, segments: [seg('thinking', 0, 1000)], subAgents: subs, subSegments: [] },
+      EN,
+      'tall',
+    ).svg;
+    const m = /<text x="([\d.]+)"[^>]*font-size="9"([^>]*)><tspan[^>]*>\+10</.exec(svg);
+    expect(m).not.toBeNull();
+    const x = Number(m?.[1]);
+    const w = textWidth('+10', 9);
+    const [from, to] = m?.[2]?.includes('text-anchor="end"') ? [x - w, x] : [x, x + w];
+    expect(from).toBeGreaterThanOrEqual(4);
+    expect(to).toBeLessThanOrEqual(WIDTH - 4);
   });
 });

@@ -18,19 +18,14 @@
   background: var(--layer-1);
 }
 
-/* The whole image, as large as the pane allows: a tall receipt scrolls instead of shrinking
-   past reading. */
+/* The whole image fitted into the pane by its height, Tall included: the slip in view as it
+   will be posted. */
 .image {
   width: auto;
   height: 100%;
   max-width: 100%;
   object-fit: contain;
   box-shadow: 0 0 0 1px var(--border);
-}
-
-.image[data-size="tall"] {
-  /* A tall receipt is fitted by its height too: the whole slip in view, as it will be posted. */
-  width: auto;
 }
 
 .dims {

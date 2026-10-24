@@ -11,6 +11,7 @@ import { BAR_HEIGHT, type BarKind, barcode } from './barcode';
 import type { ReceiptData } from './data';
 import { FONTS } from './fonts';
 import { clock, day, durationParts, modelName, type Parts, serial } from './format';
+import { clean } from './printed';
 import { categoryLine, clip, timed, timeRows } from './rows';
 import { type ReceiptKey, rt } from './strings';
 
@@ -27,6 +28,8 @@ export const WIDTH = 360;
 const LEFT = 22;
 const RIGHT = WIDTH - LEFT;
 const INNER = RIGHT - LEFT;
+/** Nothing is drawn nearer the paper's edge than this. */
+const EDGE = 4;
 const TOOTH = 6;
 const TEETH = 5;
 
@@ -67,12 +70,12 @@ const UI =
 const CJK = /[⺀-鿿豈-﫿＀-￯　-〿]/;
 const CJK_RUNS = /([⺀-鿿豈-﫿＀-￯　-〿]+)/;
 
-/** Text as XML: its markup characters escaped, and the control characters XML forbids dropped. */
+/** Text as XML: well formed, the characters XML forbids dropped, its markup escaped. */
 const esc = (s: string) =>
-  s
-    // biome-ignore lint/suspicious/noControlCharactersInRegex: these are what it removes
-    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '')
-    .replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c);
+  clean(s).replace(
+    /[&<>"]/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c,
+  );
 const num = (n: number) => String(Math.round(n * 100) / 100);
 
 /** Width of `s` at `size`: Plex Mono advances 0.6 em, a CJK character in the UI face about 1 em. */
@@ -321,7 +324,7 @@ export function drawReceipt(d: ReceiptData, o: ReceiptOptions): { body: string; 
 
   // TIME: where it went, each line's share of what is printed, then the barcode; left out when
   // nothing was timed (a session read without its timings).
-  const code = barcode(d.segments, d.subAgents, d.failedTools, INNER);
+  const code = barcode(d.segments, d.subAgents, d.failedTools, INNER, d.subSegments);
   const drawn = code.bars.length > 0 || code.tracks.length > 0;
   const hasTime = timed(d) || drawn;
   if (hasTime) {
@@ -360,16 +363,21 @@ export function drawReceipt(d: ReceiptData, o: ReceiptOptions): { body: string; 
       out.push(
         `<rect x="${num(LEFT + t.x)}" y="${num(ty)}" width="${num(t.w)}" height="2" fill="${c.soft}"/>`,
       );
-      // "+N" just before the merged track's start (in the margin if need be); after its end only
-      // when even the margin has no room.
+      // "+N" just before the merged track's start (in the margin if need be), else after its
+      // end, else under its start: never past the paper's edge.
       if (i === code.tracks.length - 1 && code.more > 0) {
         const label = `+${code.more}`;
+        const lw = textWidth(label, 9);
         const before = LEFT + t.x - 4;
-        out.push(
-          before - textWidth(label, 9) >= 4
-            ? text(before, ty + 3, runs(label), { size: 9, fill: c.soft, anchor: 'end' })
-            : text(LEFT + t.x + t.w + 4, ty + 3, runs(label), { size: 9, fill: c.soft }),
-        );
+        const after = LEFT + t.x + t.w + 4;
+        const style = { size: 9, fill: c.soft };
+        if (before - lw >= EDGE)
+          out.push(text(before, ty + 3, runs(label), { ...style, anchor: 'end' }));
+        else if (after + lw <= WIDTH - EDGE) out.push(text(after, ty + 3, runs(label), style));
+        else {
+          ty += 10;
+          out.push(text(Math.min(LEFT + t.x, WIDTH - EDGE - lw), ty + 3, runs(label), style));
+        }
       }
       ty += 4;
     });
