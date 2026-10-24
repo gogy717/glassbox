@@ -112,6 +112,16 @@
   cursor: not-allowed;
 }
 
+/* A primary that cannot act is drawn as a secondary: the only filled accent on screen is one
+   that works (an empty field's Send, a prompt's Allow while it arms). */
+.button[data-kind="primary"]:disabled {
+  border-color: var(--border-strong);
+  background: var(--layer-1);
+  color: var(--muted);
+  font-weight: 500;
+  opacity: 1;
+}
+
 /* The 28px button stays on the field's last line as the message grows. */
 .field > .button {
   margin-bottom: 5px;
@@ -298,18 +308,33 @@
   font: inherit;
 }
 
+/* Questions are groups in the panel, not boxes in it: a hairline between them, the legend as
+   the group's title (floated, so it does not sit in the hairline). */
 .question {
   display: grid;
   gap: 6px;
   margin: 0;
-  padding: 8px 10px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-l);
+  padding: 0;
+  border: 0;
+}
+
+.question + .question {
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
 }
 
 .question legend {
-  padding: 0 4px;
+  float: left;
+  width: 100%;
+  margin-bottom: 2px;
+  padding: 0;
   font-weight: 600;
+}
+
+/* Checked native inputs in the steel accent, not the browser's data-blue. */
+.prompt input[type="radio"],
+.prompt input[type="checkbox"] {
+  accent-color: var(--accent);
 }
 
 .question small {

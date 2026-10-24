@@ -1,16 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dirPlaceholder, recentDirChoices, shortPath } from './dirs';
-
-describe('shortPath', () => {
-  it.each([
-    ['/Users/demo/Dev/glassbox', 'Dev/glassbox'],
-    ['/Users/demo/Dev/glassbox/', 'Dev/glassbox'],
-    ['/repo', '/repo'],
-    ['C:\\Users\\demo\\proj', 'demo/proj'],
-  ])('%s → %s', (p, want) => {
-    expect(shortPath(p)).toBe(want);
-  });
-});
+import { dirPlaceholder, recentDirChoices } from './dirs';
 
 describe('recentDirChoices', () => {
   it('puts temporary and scratch folders aside and keeps at most 8, in order', () => {

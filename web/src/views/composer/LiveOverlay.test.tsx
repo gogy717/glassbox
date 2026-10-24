@@ -30,6 +30,11 @@ describe('LiveOverlay', () => {
     const live = screen.getByRole('status', { name: 'Replying live' });
     expect(live).toHaveTextContent('Thinking · 0:05 · ~1,234 tokens');
     expect(live.querySelectorAll('p')).toHaveLength(0);
+    // The figures are set as figures (mono, tabular); the words stay in the UI face.
+    expect([...live.querySelectorAll('.figure')].map((f) => f.textContent)).toEqual([
+      '0:05',
+      '1,234',
+    ]);
   });
 
   it('streams thinking, text and tool input as they arrive', () => {

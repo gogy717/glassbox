@@ -108,11 +108,12 @@ const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
   ['second', 1000],
 ];
 
-const THIN_SPACE = '\u2009';
+// Narrow no-break: thin like D1's spacing, and "4 m ago" never breaks across lines.
+const NARROW_NBSP = '\u202f';
 
 /**
- * "7 s ago", "3 m ago", "2 h ago", "yesterday", in the UI language: narrow units, with a thin
- * space between the figure and a Latin unit glued to it (zh "3分钟前" stays as it is).
+ * "7 s ago", "3 m ago", "2 h ago", "yesterday", in the UI language: narrow units, with a narrow
+ * no-break space between the figure and a Latin unit glued to it (zh "3分钟前" stays as it is).
  */
 export function formatRelative(iso: string | null | undefined, now: number, locale: string) {
   if (!iso) return DASH;
@@ -127,7 +128,7 @@ export function formatRelative(iso: string | null | undefined, now: number, loca
         .formatToParts(Math.round(diff / size), unit)
         .map((p, i, all) =>
           p.type === 'literal' && all[i - 1]?.type === 'integer' && /^[A-Za-z]/.test(p.value)
-            ? THIN_SPACE + p.value
+            ? NARROW_NBSP + p.value
             : p.value,
         )
         .join('');

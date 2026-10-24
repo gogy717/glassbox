@@ -141,7 +141,7 @@ describe('QuotaBar', () => {
     const [claude, grok] = screen.getAllByRole('meter');
     expect(claude).not.toHaveAttribute('data-stale');
     expect(grok).toHaveAttribute('data-stale');
-    expect(grok).toHaveAttribute('title', expect.stringContaining('Data from 3\u2009h ago'));
+    expect(grok).toHaveAttribute('title', expect.stringContaining('Data from 3\u202fh ago'));
     const details = openDetails();
     const section = within(details).getByRole('region', { name: 'xAI · SuperGrok' });
     expect(section).toHaveAttribute('data-stale');

@@ -156,10 +156,79 @@ describe('Composer', () => {
       'true',
     );
     expect(screen.getByText(/Open in a terminal right now/)).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Continue' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
     rerender(view({ ...idle, live: 'closed' }));
-    expect(screen.getByRole('radio', { name: 'Continue' })).toBeEnabled();
-    expect(screen.getByRole('radio', { name: 'Continue' })).toHaveAttribute('aria-checked', 'true');
+    const resume = screen.getByRole('radio', { name: 'Continue' });
+    expect(resume).not.toHaveAttribute('aria-disabled');
+    expect(resume).toHaveAttribute('aria-checked', 'true');
     expect(screen.queryByText(/Open in a terminal right now/)).toBeNull();
+    // And it is a real choice again: the copy can be picked and Continue picked back.
+    fireEvent.click(screen.getByRole('radio', { name: 'Continue in a copy' }));
+    fireEvent.click(resume);
+    expect(resume).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('keeps a draft’s mode when the terminal lets the session go, until sent or changed', async () => {
+    const client = fakeClient();
+    const view = (session: SessionSummary) => (
+      <I18nContext.Provider value={makeI18n('en')}>
+        <Composer
+          session={session}
+          run={null}
+          client={client}
+          onNewSession={vi.fn()}
+          onRunStarted={vi.fn()}
+        />
+      </I18nContext.Provider>
+    );
+    const { rerender } = render(view(idle));
+    const box = screen.getByRole('textbox', { name: 'Message' });
+    type(box, 'half a thought');
+    rerender(view({ ...idle, live: 'closed' }));
+    // Typed under "Continue in a copy": it stays the destination, now with Continue offered.
+    expect(screen.getByRole('radio', { name: 'Continue in a copy' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    expect(screen.getByRole('radio', { name: 'Continue' })).not.toHaveAttribute('aria-disabled');
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await waitFor(() =>
+      expect(client.start).toHaveBeenCalledWith(expect.objectContaining({ mode: 'fork' })),
+    );
+    // Sent: with no draft, the closed session goes back to Continue.
+    await waitFor(() => expect(box).toHaveValue(''));
+    expect(screen.getByRole('radio', { name: 'Continue' })).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('takes a click on the chosen word as a confirmation that outlives the draft', async () => {
+    const client = fakeClient();
+    const view = (session: SessionSummary) => (
+      <I18nContext.Provider value={makeI18n('en')}>
+        <Composer
+          session={session}
+          run={null}
+          client={client}
+          onNewSession={vi.fn()}
+          onRunStarted={vi.fn()}
+        />
+      </I18nContext.Provider>
+    );
+    const { rerender } = render(view(idle));
+    const box = screen.getByRole('textbox', { name: 'Message' });
+    type(box, 'go on');
+    // Confirm the copy, then the terminal lets go and the message is sent.
+    fireEvent.click(screen.getByRole('radio', { name: 'Continue in a copy' }));
+    rerender(view({ ...idle, live: 'closed' }));
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await waitFor(() => expect(box).toHaveValue(''));
+    // The person's confirmed pick stays.
+    expect(screen.getByRole('radio', { name: 'Continue in a copy' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
   });
 
   it('keeps the person’s own pick for a closed session', () => {

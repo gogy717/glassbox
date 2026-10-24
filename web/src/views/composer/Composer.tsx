@@ -34,6 +34,9 @@ export function Composer({ session, run, client, onNewSession, onRunStarted }: P
   const [text, setText] = useState('');
   // The person's pick, if they made one; otherwise the mode follows the session.
   const [choice, setChoice] = useState<StartMode | null>(null);
+  // The mode a draft was started under, kept until it is sent or the person picks again: a
+  // terminal letting the session go must not change where a message already typed will go.
+  const [draftMode, setDraftMode] = useState<StartMode | null>(null);
   const [permissionMode, setPermissionMode] = useState<RunPermissionMode>('default');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +49,16 @@ export function Composer({ session, run, client, onNewSession, onRunStarted }: P
   // Two processes writing one session interleave its transcript: only a closed session resumes,
   // so while a terminal holds it, a copy is the way on.
   const terminalOwns = !!session && !viewOnly && !activeRun && session.live !== 'closed';
-  const mode: StartMode = terminalOwns ? 'fork' : (choice ?? 'resume');
+  const mode: StartMode = terminalOwns ? 'fork' : (draftMode ?? choice ?? 'resume');
+  const edit = (value: string) => {
+    if (!value.trim()) setDraftMode(null);
+    else if (!text.trim()) setDraftMode(mode);
+    setText(value);
+  };
+  const pick = (m: StartMode) => {
+    setChoice(m);
+    if (text.trim()) setDraftMode(m);
+  };
 
   let blocked: string | null = null;
   if (!session) blocked = t('composer.noSession');
@@ -61,6 +73,7 @@ export function Composer({ session, run, client, onNewSession, onRunStarted }: P
     try {
       await fn();
       setText('');
+      setDraftMode(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -114,7 +127,7 @@ export function Composer({ session, run, client, onNewSession, onRunStarted }: P
           rows={1}
           value={text}
           disabled={!!blocked}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => edit(e.target.value)}
           onKeyDown={onKeyDown}
         />
         {replying && activeRun ? (
@@ -155,7 +168,8 @@ export function Composer({ session, run, client, onNewSession, onRunStarted }: P
               },
               { value: 'fork', label: t('composer.fork') },
             ]}
-            onChange={setChoice}
+            onChange={pick}
+            onChoose={pick}
           />
         )}
         {!activeRun && !viewOnly && (

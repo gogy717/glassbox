@@ -12,13 +12,6 @@ const TEMPORARY = [
 
 const isTemporary = (dir: string) => TEMPORARY.some((re) => re.test(dir));
 
-/** The last two folders, e.g. "Dev/glassbox"; enough to recognise a project. */
-export function shortPath(dir: string): string {
-  const parts = dir.split(/[\\/]+/).filter(Boolean);
-  if (parts.length <= 1) return dir;
-  return parts.slice(-2).join('/');
-}
-
 /**
  * An example folder for the new-session dialog, in the shape of the folders this machine's
  * sessions use (the server's, which on WSL is not the browser's platform): the parent of the

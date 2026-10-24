@@ -291,7 +291,7 @@ export const en: Record<MessageKey, string> = {
   'perm.multi': 'Pick any',
   'perm.label': 'Permission',
   'perm.questionLabel': 'Question',
-  'perm.keys': 'Esc hides this; it stays pending',
+  'perm.keys': 'Esc hides this prompt; it stays pending',
   'newSession.title': 'New session',
   'newSession.dir': 'Working directory',
   'newSession.recent': 'Recent directories',

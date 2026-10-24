@@ -348,7 +348,10 @@ describe('App', () => {
       }),
     });
     render(<App store={store} connect={noConnect} runs={runs} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Allow' }));
+    // A prompt's buttons arm a moment after it appears (a double-click must not answer the next).
+    const allow = screen.getByRole('button', { name: 'Allow' });
+    await waitFor(() => expect(allow).toBeEnabled());
+    fireEvent.click(allow);
     await waitFor(() =>
       expect(runs.decide).toHaveBeenCalledWith('run_1', 'tu_9', { decision: 'allow' }),
     );

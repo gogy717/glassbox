@@ -20,8 +20,8 @@ export const TOOLTIP_DELAY_MS = 400;
  *
  * - `label`: the text.
  * - `placement`: above the anchor ('top', the default) or below it ('bottom').
- * - `children`: one element that takes `aria-describedby`. A disabled control fires no pointer
- *   events, so give that one a native `title` instead.
+ * - `children`: one element that takes `aria-describedby` (the tip is added to any it already
+ *   has). A disabled control fires no pointer events, so give that one a native `title` instead.
  */
 export function Tooltip({
   label,
@@ -68,7 +68,10 @@ export function Tooltip({
         }
       }}
     >
-      {cloneElement(children, { 'aria-describedby': id })}
+      {cloneElement(children, {
+        // Added to the child's own description, if it has one.
+        'aria-describedby': [children.props['aria-describedby'], id].filter(Boolean).join(' '),
+      })}
       <span
         id={id}
         role="tooltip"

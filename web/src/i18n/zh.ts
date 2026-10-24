@@ -288,7 +288,7 @@ export const zh = {
   'perm.multi': '可多选',
   'perm.label': '权限',
   'perm.questionLabel': '提问',
-  'perm.keys': 'Esc 先收起，请求会保留',
+  'perm.keys': 'Esc 先收起提示，请求会保留',
   'newSession.title': '新会话',
   'newSession.dir': '工作目录',
   'newSession.recent': '最近用过的目录',

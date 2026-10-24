@@ -163,4 +163,30 @@ describe('Switch', () => {
     fireEvent.keyDown(unavailable, { key: 'ArrowLeft' });
     expect(onChange).toHaveBeenLastCalledWith('fresh');
   });
+
+  it('reports every explicit pick of an enabled word to onChoose, the current one too', () => {
+    const onChange = vi.fn();
+    const onChoose = vi.fn();
+    render(
+      <Switch
+        label="View"
+        value="json"
+        options={[
+          { value: 'readable', label: 'Readable' },
+          { value: 'json', label: 'JSON' },
+          { value: 'raw', label: 'Raw', disabled: true },
+        ]}
+        onChange={onChange}
+        onChoose={onChoose}
+      />,
+    );
+    fireEvent.click(screen.getByRole('radio', { name: 'JSON' }));
+    expect(onChoose).toHaveBeenLastCalledWith('json');
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('radio', { name: 'Raw' }));
+    expect(onChoose).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('radio', { name: 'Readable' }));
+    expect(onChoose).toHaveBeenLastCalledWith('readable');
+    expect(onChange).toHaveBeenCalledWith('readable');
+  });
 });

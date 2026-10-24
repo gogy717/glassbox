@@ -1,10 +1,11 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type { PermissionRequest } from '../../../../src/shared/runs.js';
 import { StoreContext } from '../../data/store';
 import { I18nContext, makeI18n } from '../../i18n';
 import { demoStore } from '../../test/demo';
-import { PermissionDialog } from './PermissionDialog';
+import { PermissionDialog, PROMPT_ARM_MS } from './PermissionDialog';
 
 const bash: PermissionRequest = {
   id: 'tu_1',
@@ -50,10 +51,33 @@ function renderDialog(
   render(
     <I18nContext.Provider value={makeI18n('en')}>
       <button type="button">page behind</button>
-      <PermissionDialog request={request} onDecide={onDecide} onDismiss={onDismiss} />
+      <PermissionDialog request={request} onDecide={onDecide} onDismiss={onDismiss} armMs={0} />
     </I18nContext.Provider>,
   );
   return onDecide;
+}
+
+/** As in App: answering drops the prompt at once, and the next queued one mounts in place. */
+function Queue({
+  requests,
+  onDecided,
+}: {
+  requests: PermissionRequest[];
+  onDecided(id: string, decision: string): void;
+}) {
+  const [queue, setQueue] = useState(requests);
+  const head = queue[0];
+  if (!head) return null;
+  return (
+    <PermissionDialog
+      key={head.id}
+      request={head}
+      onDecide={(d) => {
+        onDecided(head.id, d.decision);
+        setQueue((q) => q.slice(1));
+      }}
+    />
+  );
 }
 
 describe('PermissionDialog', () => {
@@ -151,18 +175,61 @@ describe('PermissionDialog', () => {
     render(
       <StoreContext.Provider value={store}>
         <I18nContext.Provider value={makeI18n('en')}>
-          <PermissionDialog request={{ ...bash, id: 'tu_m2a' }} onDecide={vi.fn()} />
+          <PermissionDialog request={{ ...bash, id: 'tu_m2a' }} onDecide={vi.fn()} armMs={0} />
         </I18nContext.Provider>
       </StoreContext.Provider>,
     );
     const dialog = screen.getByRole('dialog', { name: 'Claude Code wants to use Bash' });
     expect(dialog).toHaveTextContent(`Conversation ${turn?.index} · call #${request?.index}`);
     expect(dialog).toHaveTextContent('Permission');
-    expect(dialog).toHaveTextContent('Esc hides this; it stays pending');
+    expect(dialog).toHaveTextContent('Esc hides this prompt; it stays pending');
   });
 
   it('leaves the reference out when the call is not in the records yet', () => {
     renderDialog(bash);
     expect(screen.getByRole('dialog')).not.toHaveTextContent(/Conversation \d/);
+  });
+
+  it('starts with focus on the panel itself, where Enter answers nothing', () => {
+    const onDecide = renderDialog(bash);
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveFocus();
+    fireEvent.keyDown(dialog, { key: 'Enter' });
+    fireEvent.keyPress(dialog, { key: 'Enter', charCode: 13 });
+    expect(onDecide).not.toHaveBeenCalled();
+  });
+
+  it('ignores its buttons for a moment after it appears, so a double-click answers one prompt', () => {
+    vi.useFakeTimers();
+    try {
+      const second: PermissionRequest = { ...bash, id: 'tu_9', input: { command: 'rm -rf /' } };
+      const decided: string[] = [];
+      render(
+        <I18nContext.Provider value={makeI18n('en')}>
+          <Queue requests={[bash, second]} onDecided={(id, d) => decided.push(`${id}:${d}`)} />
+        </I18nContext.Provider>,
+      );
+      // Inert, and drawn so, until it has been there PROMPT_ARM_MS.
+      expect(screen.getByRole('button', { name: 'Allow' })).toBeDisabled();
+      act(() => vi.advanceTimersByTime(PROMPT_ARM_MS));
+      const allow = screen.getByRole('button', { name: 'Allow' });
+      expect(allow).toBeEnabled();
+      // A double-click: the second click lands on the next prompt's Allow, in the same place.
+      act(() => {
+        fireEvent.click(allow);
+      });
+      act(() => {
+        fireEvent.click(screen.getByRole('button', { name: 'Allow' }));
+      });
+      expect(decided).toEqual(['tu_1:allow']);
+      expect(screen.getByText('rm -rf /')).toBeInTheDocument();
+      act(() => vi.advanceTimersByTime(PROMPT_ARM_MS));
+      act(() => {
+        fireEvent.click(screen.getByRole('button', { name: 'Allow' }));
+      });
+      expect(decided).toEqual(['tu_1:allow', 'tu_9:allow']);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -13,6 +13,8 @@ interface Props {
   onDecide(d: PermissionDecision): Promise<void> | void;
   /** Escape collapses the prompt without answering; it stays pending. */
   onDismiss?(): void;
+  /** How long the buttons stay inert after the prompt appears; PROMPT_ARM_MS unless a test says. */
+  armMs?: number;
 }
 
 const field = (input: unknown, key: string) =>
@@ -21,6 +23,13 @@ const field = (input: unknown, key: string) =>
     : null;
 
 const noSubscribe = () => () => {};
+
+/**
+ * How long a prompt that has just appeared ignores its buttons. Answering one prompt mounts the
+ * next queued one in the same place at once, so the second click of a double-click on Allow
+ * would land on the next Allow: browsers guard their own permission prompts the same way.
+ */
+export const PROMPT_ARM_MS = 500;
 
 /**
  * "Conversation 6 · call #1": where the tool call a prompt is about sits in the open session,
@@ -44,7 +53,7 @@ function useCallRef(toolUseId: string): string | null {
  * above the composer: an amber hairline, no fill, no shadow. No timeout. Enter answers nothing
  * (focus starts on the panel itself); Escape only hides it, and it stays pending.
  */
-export function PermissionDialog({ request, onDecide, onDismiss }: Props) {
+export function PermissionDialog({ request, onDecide, onDismiss, armMs = PROMPT_ARM_MS }: Props) {
   const { t } = useI18n();
   const agent = useSessionAgent();
   const titleId = useId();
@@ -55,6 +64,13 @@ export function PermissionDialog({ request, onDecide, onDismiss }: Props) {
   }, []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Inert (disabled, and drawn so) until it has been on screen for PROMPT_ARM_MS.
+  const [armed, setArmed] = useState(armMs <= 0);
+  useEffect(() => {
+    if (armMs <= 0) return;
+    const id = setTimeout(() => setArmed(true), armMs);
+    return () => clearTimeout(id);
+  }, [armMs]);
 
   const decide = async (d: PermissionDecision) => {
     setBusy(true);
@@ -97,9 +113,9 @@ export function PermissionDialog({ request, onDecide, onDismiss }: Props) {
         </span>
       </div>
       {isAsk ? (
-        <Questions request={request} busy={busy} onDecide={decide} />
+        <Questions request={request} busy={busy || !armed} onDecide={decide} />
       ) : (
-        <ToolPrompt request={request} busy={busy} onDecide={decide} />
+        <ToolPrompt request={request} busy={busy || !armed} onDecide={decide} />
       )}
       {error && <p className={css.error}>{t('perm.error', { msg: error })}</p>}
     </section>

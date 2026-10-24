@@ -1,7 +1,8 @@
 import { Hourglass } from 'lucide-react';
 import type { LivePartial } from '../../../../src/shared/runs.js';
+import { FigureText } from '../../components/FigureText';
 import { useNow } from '../../data/useNow';
-import { useI18n } from '../../i18n';
+import { type MessageKey, useI18n } from '../../i18n';
 import { formatElapsed } from '../../lib/format';
 import css from './Composer.module.css';
 
@@ -47,19 +48,23 @@ export function LiveOverlay({ partial }: { partial: LivePartial | null }) {
  * record of how long this reply has taken and how much thinking went into it.
  */
 function ThinkingLine({ partial }: { partial: LivePartial }) {
-  const { t, intl } = useI18n();
+  const { intl } = useI18n();
   const now = useNow();
   const thinking = !partial.text && partial.toolUses.length === 0;
   const elapsed = formatElapsed(now - Date.parse(partial.startedAt));
   const tokens = partial.thinkingTokens?.toLocaleString(intl);
-  let label: string | null;
-  if (thinking)
-    label =
-      tokens === undefined
-        ? t('live.thinkingNoTokens', { t: elapsed })
-        : t('live.thinking', { t: elapsed, n: tokens });
-  else label = tokens === undefined ? null : t('live.answering', { t: elapsed, n: tokens });
-  if (!label) return null;
-  // Tabular figures in the UI face: the label is words too (and CJK in zh).
-  return <span className={`${css.liveMeta} num`}>{label}</span>;
+  const key: MessageKey | null = thinking
+    ? tokens === undefined
+      ? 'live.thinkingNoTokens'
+      : 'live.thinking'
+    : tokens === undefined
+      ? null
+      : 'live.answering';
+  if (!key) return null;
+  // The figures (time, tokens) mono and tabular; the words, and CJK in zh, in the UI face.
+  return (
+    <span className={css.liveMeta}>
+      <FigureText k={key} params={{ t: elapsed, n: tokens ?? '' }} figures={['t', 'n']} />
+    </span>
+  );
 }

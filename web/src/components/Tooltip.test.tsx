@@ -49,4 +49,20 @@ describe('Tooltip', () => {
     fireEvent.keyDown(button, { key: 'Escape' });
     expect(onKeyDown).toHaveBeenCalledTimes(1);
   });
+
+  it('adds itself to a description the anchor already has', () => {
+    render(
+      <>
+        <span id="own">Unavailable right now</span>
+        <Tooltip label="/home/user/dev">
+          <button type="button" aria-describedby="own">
+            dev
+          </button>
+        </Tooltip>
+      </>,
+    );
+    expect(screen.getByRole('button', { name: 'dev' })).toHaveAccessibleDescription(
+      'Unavailable right now /home/user/dev',
+    );
+  });
 });
