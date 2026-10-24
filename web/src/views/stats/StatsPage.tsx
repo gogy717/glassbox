@@ -168,9 +168,12 @@ function Status({
           : ''}
       </span>
     );
+  // Read before, not again this time: in the figures as they were, older than the time beside it.
+  const stale = entry.result.stats.failed;
   return (
     <span role="status">
       {rt(locale, 'asOf', { time: clock(entry.result.asOf) })} ·{' '}
+      {stale > 0 && <>{rt(locale, 'notRefreshed', { n: stale })} · </>}
       {updating ? rt(locale, 'updating') : again}
     </span>
   );
