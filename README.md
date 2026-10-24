@@ -23,9 +23,12 @@
 |                                                          **Now board**                                                           |                                                   **Token rate**                                                    |
 |                                                ![Now board](docs/images/home.png)                                                |                                         ![Token rate](docs/images/rate.png)                                         |
 |                  What runs now, each session saying what it is doing this second; then the recently active ones                  |         Tokens a minute across this machine's CLIs, the last hour as a line; split by CLI and by token kind         |
-|                                                           **Receipt**                                                            |                                                                                                                     |
-|                  <img src="docs/images/receipt.png" alt="Receipt: a session printed as a receipt" width="360">                   |                                                                                                                     |
-| A session printed as a receipt: its work, time and tokens, with the timeline as its barcode; made in your browser, ready to post |                                                                                                                     |
+|                                                            **Stats**                                                             |                                                                                                                     |
+|                                                 ![Stats](docs/images/stats.png)                                                  |                                                                                                                     |
+|  When the agents worked this week, hour by hour; time by CLI and by project; the longest sessions, the tokens and the rate now   |                                                                                                                     |
+|                                                           **Receipt**                                                            |                                                 **Weekly receipt**                                                  |
+|                  <img src="docs/images/receipt.png" alt="Receipt: a session printed as a receipt" width="360">                   |      <img src="docs/images/weekly-receipt.png" alt="Weekly receipt: a week printed as a receipt" width="360">       |
+| A session printed as a receipt: its work, time and tokens, with the timeline as its barcode; made in your browser, ready to post |  The week as a receipt, from Stats or a session's Receipt: agent time, the hours as a grid, time by CLI and tokens  |
 
 ## Run it
 
@@ -65,7 +68,9 @@ To install it for good: `npm install -g github:gogy717/glassbox`, then run `glas
 
 ## What you can see
 
-- **Now board**: the home page lists the running sessions first, each saying what it is doing right now ("Reading tokens.css · 0:04", "Thinking · 1:12", "Waiting for you"), then the recently active ones. The sidebar's rows say the same.
+- **Three pages**: Home, Session and Stats, in the top bar; the glassbox wordmark goes Home too. Session takes you back to the session you last had open, or else to the most recently active one.
+- **Now board**: Home lists the running sessions first, each saying what it is doing right now ("Reading tokens.css · 0:04", "Thinking · 1:12", "Waiting for you"), then the recently active ones. The sidebar's rows say the same.
+- **Stats**: this week (from Monday) or the last 7 days, across every session glassbox lists: agent time, session time, sessions, model and tool calls, sub-agents and failures; a 7 × 24 grid of when the agents worked, with a card for the hour you pick (the busiest, to begin with); time by CLI and by project (hover one to see it alone in the grid, click to pin it); the longest sessions; the tokens; and right now, the token rate and plan usage. It reads the week each time you open it and every minute while it is in view; "Data as of" says when, and Refresh reads it again at once.
 - **Execution chain**: organised by user turn, one row per model call: request → response → tools, failures in red. While the model thinks it shows "Thinking · m:ss", and running tools count up live.
 - **How it worked**: each turn told step by step as "thought → said → did → outcome", grouped into phases such as explore / edit / run / delegate.
 - **Where tokens went**: cache reads, cache writes, uncached input and output (including thinking); totals per agent and per Workflow phase; the context growth curve (with compaction points); the most expensive requests.
@@ -82,6 +87,7 @@ To install it for good: `npm install -g github:gogy717/glassbox`, then run `glas
 - **Grok, Codex, oh-my-pi and OpenCode sessions**: when Grok Build, the Codex CLI, oh-my-pi or OpenCode is installed, their sessions appear in the sidebar too (view only), with sub-agents, tokens and time broken down the same way. An OpenCode session's child sessions show as its sub-agents.
 - **Diagnostics**: at the right of the summary bar, "No gaps" or how many there are; click it for what data this session lacks, and why.
 - **Receipt**: press Receipt in the summary bar, then Copy image or Download PNG: the session as a receipt of its work, time and tokens, with its timeline as the barcode. Three sizes (Tall, Post 4:5, Story 9:16), on a paper or a night background, in English or Chinese; Copy as text gives the same receipt as plain text, for a PR or a chat. It is drawn in your browser from the data already on the page, without a single request, and it never prints a path: a path in the title keeps only its last part, and Hide names leaves out the title and the project as well.
+- **Weekly receipt**: press Print weekly receipt on Stats, or set Scope to This week or Last 7 days in a session's Receipt: the week as a receipt of agent time, the hours as a grid, the busiest hour, the work, time by CLI, the longest session and the tokens. It has to read every session of the week, not just the open ones: the first open shows how far it has got, and later opens are instant. Sizes, backgrounds, languages, Copy as text and the privacy rules are the session receipt's: it is drawn in your browser, nothing leaves this machine, it never prints a path, and Hide names leaves out titles and project names.
 
 ## Sending messages from glassbox
 
@@ -140,6 +146,8 @@ glassbox is an independent project, not affiliated with or endorsed by Anthropic
 - Grok CLI's sign-in lasts about 6 hours, and only Grok CLI renews it; when it has expired, glassbox skips xAI until Grok CLI runs again, and the popover says so.
 - DeepSeek's balance shows one currency: the first with money on it.
 - The token rate counts what it sees being written: right after glassbox starts or opens a session, the first few seconds and anything already in a transcript are not counted.
+- The week starts at Monday 00:00 in the time zone of the machine glassbox runs on, while the Stats grid and the weekly receipt place each hour in your browser's time zone. Keep the two the same: when they differ (glassbox in a container set to UTC, say), the grid's days and hours come out shifted.
+- glassbox holds the 8 most recently active running sessions in memory. On a machine running more than 8 at once, each new read of the week (the weekly receipt opened again, or Stats each minute) parses the others from disk again, so it takes longer.
 
 ## Local development
 
