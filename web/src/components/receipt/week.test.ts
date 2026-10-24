@@ -317,6 +317,47 @@ describe('the weekly receipt’s figures', () => {
     expect(short.cliUnit).toBe('s');
     expect(short.byCli.reduce((n, r) => n + r.units, 0)).toBe(301);
     expect(cliRows(weekText(short, EN)).map((r) => r.time)).toEqual(['1m 41s', '1m 40s', '1m 40s']);
+    // 62m 50s in all: the hero prints its whole minutes, 1h 02m, not 63 rounded, nor the rows.
+    const odd = weekReceipt(
+      made(
+        'week',
+        WEEK_NOW,
+        agents.slice(0, 2).map((agent) => ({ agent, ms: 31 * MIN + 25_000, requests: 30 })),
+      ),
+    );
+    expect(odd.byCli.map((r) => r.units)).toEqual([31, 31]);
+    const oddText = weekText(odd, EN);
+    expect(oddText).toMatch(/^AGENT TIME +1h 02m$/m);
+    expect(cliRows(oddText).map((r) => r.time)).toEqual(['31m', '31m']);
+  });
+
+  it('prints a CLI that worked under the rows’ unit as "<1m" or "<1s", the unit left to the others (DR12)', () => {
+    const w = weekReceipt(
+      made('week', WEEK_NOW, [
+        { agent: 'claude-code', ms: 3 * HOUR, requests: 300 },
+        { agent: 'codex', ms: 20_000, requests: 4 },
+      ]),
+    );
+    expect(w.byCli.map((r) => [r.agent, r.units, r.share])).toEqual([
+      ['claude-code', 180, 100],
+      ['codex', 0, '<1'],
+    ]);
+    expect(cliRows(weekText(w, EN))).toEqual([
+      { name: 'Claude Code', time: '3h 00m', share: '100%' },
+      { name: 'Codex', time: '<1m', share: '<1%' },
+    ]);
+    expect(svgTexts(weekSvg(w, EN, 'tall').svg)).toContain('<1m');
+    expect(svgTexts(weekSvg(w, ZH, 'tall').svg)).toContain('<1 分');
+    // A week under ten minutes prints seconds: under one, "<1s".
+    const short = weekReceipt(
+      made('week', WEEK_NOW, [
+        { agent: 'claude-code', ms: 4 * MIN, requests: 30 },
+        { agent: 'codex', ms: 400, requests: 1 },
+      ]),
+    );
+    expect(short.cliUnit).toBe('s');
+    expect(cliRows(weekText(short, EN)).map((r) => r.time)).toEqual(['4m 00s', '<1s']);
+    expect(svgTexts(weekSvg(short, ZH, 'tall').svg)).toContain('<1 秒');
   });
 
   it('keeps a CLI with no agent time on the slip: last, "—", no share, its sessions counted (DR8)', () => {
@@ -409,6 +450,17 @@ describe('the last 7 days across a change of the clocks (C3)', () => {
       stats: { considered: 1, read: 1, cached: 0, failed: 0, bytes: 0, ms: 0 },
     };
   };
+
+  it('keeps the cell of an hour the clocks repeat as past when the week ends in its first run', () => {
+    process.env.TZ = 'Europe/Berlin';
+    // Sun 25 Oct 2026, 03:00 CEST goes back to 02:00 CET; this week ends at the first 02:30.
+    const end = Date.parse('2026-10-25T02:30:00+02:00');
+    const w = weekReceipt(made('week', end, []));
+    expect(w.cursor).toEqual({ row: 6, col: 2 });
+    // Its first 02:00 is before the end, its second after: one cell, drawn as past.
+    expect(w.grid[6]?.[2]?.state).toBe('past');
+    expect(w.grid[6]?.[3]?.state).toBe('future');
+  });
 
   for (const [what, at] of [
     ['clocks back (Sun 25 Oct, 03:00 → 02:00)', [2026, 9, 28, 12, 30]],

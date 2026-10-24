@@ -362,6 +362,50 @@ describe('the receipt dialog’s scope (G10b)', () => {
     expect(clicked[1]?.download).toBe('glassbox-week-2026-W47.png');
   });
 
+  it('clears what the last action said when the scope changes', async () => {
+    serve({ week: demoWeek('week') });
+    catchDownloads();
+    const dialog = await openSession();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Download PNG' }));
+    await within(dialog).findByText('Downloaded');
+    choose(dialog, 'This week');
+    expect(within(dialog).queryByText('Downloaded')).toBeNull();
+  });
+
+  it('counts probes in a session’s weeks as the sidebar’s saved choice says', async () => {
+    const r = demoWeek('week');
+    const probed = {
+      ...r,
+      sessions: r.sessions.map((s, i) => (i < 2 ? { ...s, tags: ['probe'] } : s)),
+    };
+    for (const [showProbes, n] of [
+      [false, r.sessions.length - 2],
+      [true, r.sessions.length],
+    ] as const) {
+      localStorage.setItem('glassbox.prefs', JSON.stringify({ showProbes }));
+      serve({ week: probed });
+      const dialog = await openSession();
+      choose(dialog, 'This week');
+      await waitFor(() => expect(dialog).toHaveTextContent(`20:41 · ${n} sessions`));
+      cleanup();
+    }
+  });
+
+  it('says how many sessions could not be refreshed, beside the time its data is from', async () => {
+    const r = demoWeek('week');
+    serve({ week: { ...r, stats: { ...r.stats, failed: 1 } } });
+    const dialog = await openWeekly();
+    await within(dialog).findByText(/Data as of 20:41/);
+    expect(dialog).toHaveTextContent(
+      "Data as of 20:41 · 1 session couldn't be refreshed · Refresh. Made in your browser",
+    );
+    cleanup();
+    serve({ week: { ...r, stats: { ...r.stats, failed: 2 } } });
+    const zh = await openWeekly(false, 'zh');
+    await within(zh).findByText(/数据截至 20:41/);
+    expect(zh).toHaveTextContent('数据截至 20:41 · 2 个会话没能刷新 · 刷新。在你的浏览器里');
+  });
+
   it('keeps a refresh, and its failure, to the window it was asked for (G8)', async () => {
     serve({ week: demoWeek('week'), d7: demoWeek('7d') }, { refresh: 'hold' });
     const dialog = await openWeekly();

@@ -35,6 +35,12 @@ export function durationParts(ms: number, locale: Locale): Parts {
 
 export const partsText = (p: Parts) => p.map((x) => x.digits + x.unit).join('');
 
+/** Less than one minute, or one second: "<1m", "<1s"; in Chinese "<1 分", "<1 秒". */
+export function underOne(unit: 'min' | 's', locale: Locale): Parts {
+  const zh = locale === 'zh';
+  return [{ digits: '<1', unit: unit === 'min' ? (zh ? ' 分' : 'm') : zh ? ' 秒' : 's' }];
+}
+
 /** Whole minutes as the receipt prints a duration of ten minutes or more: "4h 12m", "38m". */
 export function minuteParts(minutes: number, locale: Locale): Parts {
   const u = locale === 'zh' ? { h: ' 小时 ', m: ' 分' } : { h: 'h ', m: 'm' };
