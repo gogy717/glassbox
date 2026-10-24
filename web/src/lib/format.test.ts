@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  fitSummary,
   formatClock,
   formatCountdown,
   formatDuration,
@@ -209,5 +210,27 @@ describe('middleEllipsis', () => {
     expect(middleEllipsis(unc, 28)).toBe('\\\\fileserver\\…\\src\\store.ts');
     expect(middleEllipsis(unc, 23)).toBe('\\\\fileserver\\…\\store.ts');
     expect(middleEllipsis('//host/share/dir/file.ts', 18)).toBe('//host/…/file.ts');
+  });
+});
+
+describe('fitSummary', () => {
+  it('cuts a path in the middle, keeping its root and its file name', () => {
+    const glob = 'web/src/views/flow/detail/components/deeply/nested/**/*.module.css';
+    const fitted = fitSummary(glob, 32);
+    expect(fitted.length).toBeLessThanOrEqual(32);
+    expect(fitted).toMatch(/^web\/….*\*\.module\.css$/);
+    expect(fitSummary('C:\\Users\\dev\\project\\src\\server\\store.ts', 24)).toMatch(
+      /^C:\\….*store\.ts$/,
+    );
+  });
+
+  it('leaves what is not a path to the line’s own end-ellipsis', () => {
+    const command = 'rg -n "sortSessions" src/server and/also/this/long/path';
+    expect(fitSummary(command, 20)).toBe(command);
+    expect(fitSummary('store.ts', 4)).toBe('store.ts');
+  });
+
+  it('leaves a short path whole', () => {
+    expect(fitSummary('src/server/store.ts', 48)).toBe('src/server/store.ts');
   });
 });

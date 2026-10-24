@@ -87,7 +87,9 @@ describe('buildSteps', () => {
   it('shows an in-flight step as running and times it up to now', () => {
     const [phase] = buildSteps(demoOpen(), 'main', 'turn_m3', NOW);
     expect(phase?.category).toBe('answer');
-    expect(phase?.steps[0]).toMatchObject({ outcome: 'running', durationMs: 83_000, tokens: 0 });
+    // No usage yet: unknown (null), not 0.
+    expect(phase?.steps[0]).toMatchObject({ outcome: 'running', durationMs: 83_000, tokens: null });
+    expect(phase?.tokens).toBeNull();
     expect(phase?.steps[0]?.thought).toEqual({
       text: null,
       durationMs: null,

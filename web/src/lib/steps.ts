@@ -7,17 +7,7 @@ import { totalTokens } from '../../../src/core/usage.js';
 import type { Approvals } from '../data/approvals';
 import type { OpenSession } from '../data/store';
 import { findTurn, requestsOf, startUnknown, toolStatus, toolsOf } from '../views/flow/flow-model';
-import { middleEllipsis } from './format';
 import { summarizeInput, type ToolCategory, toolCategory } from './tool-category';
-
-/**
- * A tool's summary fitted to `n` characters: a path is cut in the middle, so its root and its
- * file name stay readable ("src/…/server/store.ts"); anything else (a command, a pattern) is
- * left for the line's own end-ellipsis.
- */
-export function fitSummary(summary: string, n: number): string {
-  return /^[^\s]*[/\\][^\s]*$/.test(summary) ? middleEllipsis(summary, n) : summary;
-}
 
 /**
  * Web lookups count as exploring: like reading files, they gather context without changing
@@ -51,7 +41,8 @@ export interface Step {
   startedAt: string | null;
   /** From the request's start to its last tool's end (to `now` while running). */
   durationMs: number | null;
-  tokens: number;
+  /** Null when the request has no usage (still in flight, or the agent did not report it). */
+  tokens: number | null;
   /** `hidden`: the model thought (there are thinking blocks) but none of them has text. */
   thought: { text: string | null; durationMs: number | null; tokens: number; hidden: boolean };
   said: string | null;
@@ -67,7 +58,8 @@ export interface Phase {
   startedAt: string | null;
   /** Sum of the steps' known durations; null when none of them is known. */
   durationMs: number | null;
-  tokens: number;
+  /** Sum of the steps' known token counts; null when none of them is known. */
+  tokens: number | null;
 }
 
 /** When a step mixes kinds equally, the more consequential kind names it. */
@@ -150,7 +142,7 @@ function stepOf(req: ModelRequest, tools: ToolCall[], now: number, approvals?: A
     category: dominant(did),
     startedAt: req.startedAt,
     durationMs,
-    tokens: req.usage ? totalTokens(req.usage) : 0,
+    tokens: req.usage ? totalTokens(req.usage) : null,
     thought: {
       text: texts.length ? texts.join('\n\n') : null,
       durationMs: durations.length ? durations.reduce((a, b) => a + b, 0) : null,
@@ -186,13 +178,13 @@ export function buildSteps(
               steps: [],
               startedAt: step.startedAt,
               durationMs: null,
-              tokens: 0,
+              tokens: null,
             }) - 1
           ];
     if (!phase) continue;
     phase.steps.push(step);
     if (step.durationMs !== null) phase.durationMs = (phase.durationMs ?? 0) + step.durationMs;
-    phase.tokens += step.tokens;
+    if (step.tokens !== null) phase.tokens = (phase.tokens ?? 0) + step.tokens;
   }
   return phases;
 }

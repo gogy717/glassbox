@@ -85,7 +85,7 @@
   gap: 6px;
 }
 
-.legend .figure {
+.legend :global(.figure) {
   color: var(--text);
 }
 

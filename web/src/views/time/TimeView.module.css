@@ -113,7 +113,7 @@
   color: var(--muted);
 }
 
-.active .figure {
+.active :global(.figure) {
   color: var(--text);
 }
 
@@ -279,7 +279,7 @@
 }
 
 .laneLabel button:hover {
-  color: var(--accent);
+  color: var(--text);
 }
 
 .laneLabel button[aria-current="true"] {
@@ -326,9 +326,10 @@
   user-select: none;
 }
 
-/* The selected agent's lane. */
+/* The selected agent's lane, across the whole chart: a step above the panel in both themes. */
 .selBand {
-  fill: var(--layer-2);
+  fill: var(--layer-3);
+  fill-opacity: 0.6;
 }
 
 .tick {
@@ -345,8 +346,9 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* CJK never goes into the mono face ("空闲 4m12s"). */
-.breakLabel:lang(zh) {
+/* CJK never goes into the mono face ("空闲 4m12s", "现在"). Tick labels are clocks only. */
+.breakLabel:lang(zh),
+.nowLabel:lang(zh) {
   font-family: var(--font-ui);
 }
 

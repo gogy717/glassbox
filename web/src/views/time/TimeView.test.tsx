@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OpenSession } from '../../data/store';
 import { I18nContext, makeI18n } from '../../i18n';
@@ -99,7 +99,61 @@ describe('TimeView', () => {
       agentId: 'af00000000000003',
       turnId: 'turn_w3',
       requestId: 'req_w3_3',
+      card: 'request',
     });
+  });
+
+  it('adds up the agent’s active time, the same as its lane total, and a dash when nothing was timed', () => {
+    renderTime();
+    const card = screen.getByRole('region', { name: 'Where the time went · Main' });
+    const totals = screen.getByRole('list', { name: 'Active time' });
+    const mainTotal = within(totals).getAllByRole('listitem')[0]?.textContent;
+    expect(card).toHaveTextContent(`Active time${mainTotal}`);
+    cleanup();
+    renderTime('no-such-agent');
+    expect(screen.getByRole('region', { name: /^Where the time went/ })).toHaveTextContent(
+      'Active time—',
+    );
+  });
+
+  it('names collapsed idle in the legend while idle is collapsed', () => {
+    renderTime();
+    const legend = () => screen.getByRole('list', { name: 'Legend' });
+    expect(legend()).toHaveTextContent('Idle (collapsed)');
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse idle' }));
+    expect(legend()).not.toHaveTextContent('Idle (collapsed)');
+  });
+
+  it('cuts a long path in the slowest list in the middle, keeping it whole in the tooltip', () => {
+    const open = demoOpen();
+    const slowTool = [...open.toolCalls.values()].find(
+      (t) => t.name === 'Bash' && t.status === 'running',
+    );
+    if (!slowTool) throw new Error('fixture');
+    const pattern = 'web/src/views/flow/detail/components/deeply/nested/folder/**/*.module.css';
+    open.toolCalls = new Map(open.toolCalls).set(slowTool.id, {
+      ...slowTool,
+      name: 'Glob',
+      input: { pattern },
+    });
+    renderTime('main', open);
+    const card = screen.getByRole('region', { name: 'Slowest 10 steps' });
+    const code = within(card).getByTitle(pattern);
+    expect(code.textContent).toMatch(/^web\/…\/.*\*\.module\.css$/);
+    expect(code.textContent?.length).toBeLessThanOrEqual(48);
+  });
+
+  it('marks what is still running: “in progress” and a live duration', () => {
+    renderTime();
+    const card = screen.getByRole('region', { name: 'Slowest 10 steps' });
+    const [first] = within(card).getAllByRole('button');
+    expect(first).toHaveTextContent('in progress');
+    // The live duration takes the accent (TimeView.module.css: .slowRow[data-live] .slowDur).
+    expect(first).toHaveAttribute('data-live');
+    const done = within(card)
+      .getAllByRole('button')
+      .find((b) => !b.textContent?.includes('in progress'));
+    expect(done).not.toHaveAttribute('data-live');
   });
 
   it('draws one lane per agent, grouped by workflow phase, with idle gaps collapsed', () => {
@@ -139,6 +193,7 @@ describe('TimeView', () => {
       agentId: 'main',
       turnId: 'turn_m1',
       requestId: 'req_m1',
+      card: 'request',
     });
   });
 

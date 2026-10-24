@@ -9,6 +9,8 @@ const H = 200;
 const PAD = { l: 48, r: 14, t: 12, b: 26 };
 /** Room for one x-axis label ("#156") and the space after it. */
 export const LABEL_GAP = 48;
+/** Closer than this, a dot per request merges into a rope: the line alone shows the points. */
+export const DOT_GAP = 8;
 
 /** Where point `i` of `count` sits across a chart `width` wide. */
 export function labelX(i: number, count: number, width: number): number {
@@ -149,16 +151,19 @@ export function ContextChart({ agent, points, onPick }: Props) {
               y2={H - PAD.b}
             />
           )}
-          {points.map((p, i) => (
-            <circle
-              key={p.requestId}
-              className={css.dot}
-              data-active={hover === i || undefined}
-              cx={geo.x(i)}
-              cy={geo.y(p.context)}
-              r={hover === i ? 4 : 2.6}
-            />
-          ))}
+          {points.map((p, i) =>
+            // Dense points keep only the last one (how far the session got) and the hovered one.
+            geo.slot >= DOT_GAP || i === points.length - 1 || hover === i ? (
+              <circle
+                key={p.requestId}
+                className={css.dot}
+                data-active={hover === i || undefined}
+                cx={geo.x(i)}
+                cy={geo.y(p.context)}
+                r={hover === i ? 4 : 2.6}
+              />
+            ) : null,
+          )}
           {points.map((p, i) => (
             // Hit targets are full-height columns, much bigger than the dots.
             // biome-ignore lint/a11y/noStaticElementInteractions: the data table below is the accessible path

@@ -29,7 +29,7 @@ interface Props {
 const TOP_N = 5;
 
 export function TokensView({ open, agentId, navigate }: Props) {
-  const { t, intl, locale } = useI18n();
+  const { t, intl } = useI18n();
   const { setFollow } = useUi();
 
   const rows = useMemo(() => rollupByAgent(open), [open]);
@@ -43,13 +43,20 @@ export function TokensView({ open, agentId, navigate }: Props) {
   // The plan this session's agent draws on, placed beside its tokens, never subtracted from them.
   const kind = useSessionAgentKind();
   const quotas = useViewState((s) => s.quotas);
-  const now = useNow(60_000);
-  const quota = useMemo(() => sessionQuota(kind, quotas, now), [kind, quotas, now]);
+  // Picked when the quotas change, not on a clock: QuotaLine ticks its own age.
+  const quota = useMemo(() => sessionQuota(kind, quotas, Date.now()), [kind, quotas]);
 
   const openInFlow = useCallback(
     (req: ModelRequest) => {
       setFollow(false);
-      navigate({ tab: 'flow', agentId: req.agentId, turnId: req.turnId, requestId: req.id });
+      // Lands on the request's card, open, as a link to it does.
+      navigate({
+        tab: 'flow',
+        agentId: req.agentId,
+        turnId: req.turnId,
+        requestId: req.id,
+        card: 'request',
+      });
     },
     [navigate, setFollow],
   );
@@ -61,28 +68,23 @@ export function TokensView({ open, agentId, navigate }: Props) {
       {(found.length > 0 || quota) && (
         // The takeaway is a lede, not an alert: amber stays for what needs the person.
         <div className={css.lede} role="note">
-          {found.length > 0 && (
-            <p className={css.ledeText}>
-              {found.map((i, n) => (
-                <span key={i.key}>
-                  {/* Chinese sentences follow one another without a space. */}
-                  {n > 0 && locale !== 'zh' && ' '}
-                  {i.key === 'tokens.insightCacheRead' ? (
-                    <FigureText k={i.key} params={{ pct: formatPercent(i.share, intl) }} />
-                  ) : (
-                    <FigureText
-                      k={i.key}
-                      params={{
-                        agent: i.agentId === MAIN_AGENT_ID ? t('crumb.main') : i.label,
-                        pct: formatPercent(i.share, intl),
-                      }}
-                      figures={['pct']}
-                    />
-                  )}
-                </span>
-              ))}
+          {/* One sentence leads; a second takeaway sits under it, quiet like the plan line. */}
+          {found.map((i, n) => (
+            <p key={i.key} className={n === 0 ? css.ledeText : css.ledeMore}>
+              {i.key === 'tokens.insightCacheRead' ? (
+                <FigureText k={i.key} params={{ pct: formatPercent(i.share, intl) }} />
+              ) : (
+                <FigureText
+                  k={i.key}
+                  params={{
+                    agent: i.agentId === MAIN_AGENT_ID ? t('crumb.main') : i.label,
+                    pct: formatPercent(i.share, intl),
+                  }}
+                  figures={['pct']}
+                />
+              )}
             </p>
-          )}
+          ))}
           {quota && <QuotaLine {...quota} />}
         </div>
       )}

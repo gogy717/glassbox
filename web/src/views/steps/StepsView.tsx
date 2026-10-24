@@ -1,5 +1,5 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useCallback, useLayoutEffect, useMemo, useRef } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { FigureText } from '../../components/FigureText';
 import { useApprovalsContext } from '../../data/approvals';
 import type { OpenSession } from '../../data/store';
@@ -12,7 +12,7 @@ import type { Navigate, Route } from '../../router';
 import { useUi } from '../../ui';
 import { FollowPausedBar } from '../flow/FollowPausedBar';
 import { TurnHeader } from '../flow/TurnHeader';
-import { TurnList, useSelectedTurn, useTurnItems } from '../flow/TurnList';
+import { filterTurns, TurnList, useSelectedTurn, useTurnItems } from '../flow/TurnList';
 import { useFollowScroll } from '../flow/useFollowScroll';
 import { StepItem } from './StepItem';
 import css from './StepsView.module.css';
@@ -30,7 +30,10 @@ export function StepsView({ open, agentId, route, navigate }: Props) {
   const { t } = useI18n();
   const { follow, setFollow } = useUi();
   const items = useTurnItems(open, agentId);
-  const current = useSelectedTurn(items, open, agentId, route, follow);
+  // The conversation filter, as in the execution chain: follow picks the newest match.
+  const [query, setQuery] = useState('');
+  const latest = filterTurns(items, query).at(-1) ?? items.at(-1);
+  const current = useSelectedTurn(items, open, agentId, route, follow, latest);
   // An empty view says "yet" only while the agent may still add to it.
   const running = mayStillRun(open, agentId);
   // Durations of a running step grow with the clock; finished turns need no ticking.
@@ -52,7 +55,13 @@ export function StepsView({ open, agentId, route, navigate }: Props) {
   const openStep = useCallback(
     (requestId: string) => {
       setFollow(false);
-      navigate({ tab: 'flow', agentId, turnId: current?.turn.id ?? null, requestId });
+      navigate({
+        tab: 'flow',
+        agentId,
+        turnId: current?.turn.id ?? null,
+        requestId,
+        card: 'request',
+      });
     },
     [navigate, setFollow, agentId, current],
   );
@@ -64,7 +73,13 @@ export function StepsView({ open, agentId, route, navigate }: Props) {
 
   return (
     <div className={css.layout}>
-      <TurnList items={items} selectedId={current?.turn.id ?? null} onSelect={pickTurn} />
+      <TurnList
+        items={items}
+        selectedId={current?.turn.id ?? null}
+        onSelect={pickTurn}
+        query={query}
+        onQuery={setQuery}
+      />
       <section className={css.main}>
         {current ? (
           <>

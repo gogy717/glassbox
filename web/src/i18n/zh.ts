@@ -109,6 +109,7 @@ export const zh = {
   'tokens.noData': '还没有 token 数据',
   'tokens.total': '总量',
   'tokens.byAgent': '按子代理',
+  'tokens.order': '排序',
   'tokens.sortTree': '按结构',
   'tokens.sortSpend': '按用量',
   'tokens.inclSub': '含子代理 {n}',

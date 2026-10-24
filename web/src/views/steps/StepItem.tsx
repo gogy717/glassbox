@@ -6,8 +6,8 @@ import { StatusMark, Ticking } from '../../components/Status';
 import { useSessionAgent, useSessionAgentKind } from '../../data/session-agent';
 import { useI18n } from '../../i18n';
 import { encryptsThinking } from '../../lib/agent-names';
-import { formatClock, formatDuration, formatNumber } from '../../lib/format';
-import { fitSummary, type Step } from '../../lib/steps';
+import { fitSummary, formatClock, formatDuration, formatNumber } from '../../lib/format';
+import type { Step } from '../../lib/steps';
 import css from './StepsView.module.css';
 
 interface Props {
@@ -38,6 +38,7 @@ export const StepItem = memo(function StepItem({ step, onOpen }: Props) {
       t: formatDuration(step.thought.durationMs),
     });
   else thought = t(encrypted ? 'steps.noThoughtEncrypted' : 'steps.noThought');
+  const failed = step.did.filter((a) => a.error);
   // Only what asks for attention is marked; a finished step says nothing.
   const mark =
     step.outcome === 'error' || step.outcome === 'interrupted' || step.outcome === 'approval'
@@ -62,7 +63,8 @@ export const StepItem = memo(function StepItem({ step, onOpen }: Props) {
           {formatDuration(step.durationMs)}
         </span>
         {mark && <StatusMark status={mark} />}
-        {step.tokens > 0 && (
+        {/* Unknown (in flight, or not reported) says nothing; a real 0 is a 0. */}
+        {step.tokens !== null && (
           <span>
             <FigureText k="common.tokens" params={{ n: formatNumber(step.tokens, intl) }} />
           </span>
@@ -116,13 +118,13 @@ export const StepItem = memo(function StepItem({ step, onOpen }: Props) {
           </ul>
         </div>
       )}
-      {step.did.map((a) =>
-        a.error ? (
-          <p key={a.toolCallId} className={css.stepError} title={a.error}>
-            {a.error}
-          </p>
-        ) : null,
-      )}
+      {failed.map((a) => (
+        <p key={a.toolCallId} className={css.stepError} title={a.error ?? undefined}>
+          {/* With two or more, each message says which tool it came from. */}
+          {failed.length > 1 && <b>{a.name}: </b>}
+          {a.error}
+        </p>
+      ))}
       {step.error && <p className={css.stepError}>{step.error}</p>}
     </article>
   );

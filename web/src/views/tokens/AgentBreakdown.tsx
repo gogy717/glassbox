@@ -13,13 +13,19 @@ import css from './TokensView.module.css';
 
 type Sort = 'tree' | 'spend';
 
+/**
+ * Every tape is at least this wide, so a sub-agent's cache / write / output mix reads even under
+ * a Main many times its size. All rows keep one scale; the figure beside each carries the size.
+ */
+const TAPE_MIN = 24;
+
 interface Props {
   rows: RollupRow[];
   selectedId: string;
   onSelect(agentId: string): void;
 }
 
-/** A sub-agent's run status as a mark: one never seen to end is "started", not a colour. */
+/** A sub-agent's run status as a mark: one never seen to end is the quiet hollow dot. */
 const markOf = (s: RunStatus): UiStatus => (s === 'unknown' ? 'waiting' : s);
 
 export function AgentBreakdown({ rows, selectedId, onSelect }: Props) {
@@ -40,7 +46,7 @@ export function AgentBreakdown({ rows, selectedId, onSelect }: Props) {
       <div className={css.sectionHead}>
         <h3 id="tok-by-agent">{t('tokens.byAgent')}</h3>
         <Switch<Sort>
-          label={t('tokens.byAgent')}
+          label={t('tokens.order')}
           value={sort}
           size="small"
           options={[
@@ -68,13 +74,16 @@ export function AgentBreakdown({ rows, selectedId, onSelect }: Props) {
                     <span className={css.groupKind}>{t('tokens.workflow')}</span>
                   )}
                 </span>
-                <TokenBar usage={usage} scale={scale} height={6} />
+                <TokenBar usage={usage} scale={scale} height={6} minWidth={TAPE_MIN} />
                 <span className={`${css.rowValue} figure`}>{n}</span>
               </div>
             );
           const hasKids = totalTokens(r.total) !== totalTokens(r.own);
           const label = r.agent.id === 'main' ? t('crumb.main') : r.label;
           const status = markOf(r.agent.status);
+          // Never seen to end: "Ended (unknown)", as on the tool cards, not "Waiting".
+          const word =
+            r.agent.status === 'unknown' ? t('status.unknownEnd') : t(`status.${status}`);
           return (
             <button
               key={r.id}
@@ -82,14 +91,14 @@ export function AgentBreakdown({ rows, selectedId, onSelect }: Props) {
               className={css.agentRow}
               aria-current={r.id === selectedId ? 'true' : undefined}
               // The row's name replaces its contents, so it names the agent's state too.
-              aria-label={t('tokens.rowLabel', { label, status: t(`status.${status}`), n })}
+              aria-label={t('tokens.rowLabel', { label, status: word, n })}
               onClick={() => onSelect(r.id)}
             >
               <span className={css.rowLabel} style={indent}>
-                <StatusMark status={status} compact />
+                <StatusMark status={status} label={word} compact />
                 <span data-label>{label}</span>
               </span>
-              <TokenBar usage={usage} scale={scale} height={6} />
+              <TokenBar usage={usage} scale={scale} height={6} minWidth={TAPE_MIN} />
               <span className={css.rowValue}>
                 <span className="figure">{n}</span>
                 {hasKids && sort === 'tree' && (

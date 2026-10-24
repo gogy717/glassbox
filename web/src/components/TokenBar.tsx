@@ -31,10 +31,13 @@ export function TokenBar({
   usage,
   scale,
   height = 10,
+  minWidth,
 }: {
   usage: TokenUsage;
   scale?: number;
   height?: number;
+  /** A floor in px, so a small share still shows its mix; its figure carries the size. */
+  minWidth?: number;
 }) {
   const { t, intl } = useI18n();
   const total = totalTokens(usage);
@@ -46,7 +49,7 @@ export function TokenBar({
       <span
         className={css.bar}
         data-compact={share < 0.15 || undefined}
-        style={{ width: `${share * 100}%` }}
+        style={{ width: `${share * 100}%`, minWidth: total > 0 ? minWidth : undefined }}
       >
         {segments(usage).map(([bucket, n]) =>
           n > 0 ? (

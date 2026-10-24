@@ -9,8 +9,7 @@ import { useNow } from '../../data/useNow';
 import { useThrottled } from '../../data/useThrottled';
 import { type MessageKey, useI18n } from '../../i18n';
 import { subtreeIds } from '../../lib/agents';
-import { formatDuration } from '../../lib/format';
-import { fitSummary } from '../../lib/steps';
+import { DASH, fitSummary, formatDuration } from '../../lib/format';
 import { activeMs, slowest, timeBreakdown, timeSegments } from '../../lib/time-stats';
 import { summarizeInput, type ToolCategory, toolCategory } from '../../lib/tool-category';
 import type { Navigate } from '../../router';
@@ -72,7 +71,14 @@ export function TimeView({ open, agentId, navigate }: Props) {
       const req = open.requests.get(requestId);
       if (!req) return;
       setFollow(false);
-      navigate({ tab: 'flow', agentId: req.agentId, turnId: req.turnId, requestId: req.id });
+      // Lands on the request's card, open, as a link to it does.
+      navigate({
+        tab: 'flow',
+        agentId: req.agentId,
+        turnId: req.turnId,
+        requestId: req.id,
+        card: 'request',
+      });
     },
     [open, navigate, setFollow],
   );
@@ -111,8 +117,10 @@ export function TimeView({ open, agentId, navigate }: Props) {
     },
   ].filter((p) => p.ms > 0);
   const total = parts.reduce((s, p) => s + p.ms, 0);
-  // The same figure as the agent's lane total, so the two never disagree.
-  const active = activeMs(lanes.find((l) => l.agentId === agentId)?.segments ?? []);
+  // The same figure as the agent's lane total, so the two never disagree; a dash, not 0ms, for
+  // an agent with nothing timed.
+  const segments = lanes.find((l) => l.agentId === agentId)?.segments ?? [];
+  const active = segments.length > 0 ? formatDuration(activeMs(segments)) : DASH;
 
   if (lanes.every((l) => l.segments.length === 0))
     return <p className={css.empty}>{t('time.empty')}</p>;
@@ -156,7 +164,7 @@ export function TimeView({ open, agentId, navigate }: Props) {
           </ul>
           <p className={css.active}>
             <span>{t('time.activeTime')}</span>
-            <span className="figure">{formatDuration(active)}</span>
+            <span className="figure">{active}</span>
           </p>
         </section>
 

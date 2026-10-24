@@ -192,3 +192,12 @@ function cutPath(path: string, max: number): string {
   const tailLen = Math.ceil(keep / 2);
   return `${name.slice(0, keep - tailLen).join('')}${ELLIPSIS}${name.slice(-tailLen).join('')}`;
 }
+
+/**
+ * A tool's summary fitted to `n` characters: a path is cut in the middle, so its root and its
+ * file name stay readable ("src/…/server/store.ts"); anything else (a command, a pattern) is
+ * left for the line's own end-ellipsis.
+ */
+export function fitSummary(summary: string, n: number): string {
+  return /^[^\s]*[/\\][^\s]*$/.test(summary) ? middleEllipsis(summary, n) : summary;
+}

@@ -111,6 +111,7 @@ export const en: Record<MessageKey, string> = {
   'tokens.noData': 'No token data yet',
   'tokens.total': 'Total',
   'tokens.byAgent': 'By sub-agent',
+  'tokens.order': 'Order',
   'tokens.sortTree': 'As tree',
   'tokens.sortSpend': 'By spend',
   'tokens.inclSub': 'incl. sub-agents {n}',

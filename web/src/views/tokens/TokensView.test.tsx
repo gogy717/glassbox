@@ -4,8 +4,10 @@ import type { AgentKind, QuotaSnapshot } from '../../../../src/core/model.js';
 import { SessionAgentContext } from '../../data/session-agent';
 import { createStore, StoreContext } from '../../data/store';
 import { I18nContext, makeI18n } from '../../i18n';
+import type { ContextPoint } from '../../lib/token-stats';
 import { demoOpen } from '../../test/demo';
 import { UiContext } from '../../ui';
+import { ContextChart } from './ContextChart';
 import { TokensView } from './TokensView';
 
 function renderTokens(
@@ -56,6 +58,33 @@ const anthropic = (over: Partial<QuotaSnapshot> = {}): QuotaSnapshot => ({
 });
 
 describe('TokensView', () => {
+  it('says a sub-agent never seen to end ended unknown, not that it waits', () => {
+    const open = demoOpen();
+    const agent = open.agents.get('a1b2c3d4e5f60718');
+    if (!agent) throw new Error('fixture');
+    open.agents = new Map(open.agents).set(agent.id, { ...agent, status: 'unknown' });
+    renderTokens('main', open);
+    const row = screen.getByRole('button', { name: /^Explore transcript format · / });
+    expect(row).toHaveAccessibleName(/^Explore transcript format · Ended \(unknown\) · /);
+    expect(row).toHaveTextContent('Ended (unknown)');
+    expect(row).not.toHaveTextContent('Waiting');
+  });
+
+  it('keeps every sub-agent’s tape wide enough to show its mix', () => {
+    renderTokens();
+    const rows = screen.getByRole('region', { name: 'By sub-agent' });
+    const bars = [...rows.querySelectorAll<HTMLElement>('[style*="width"]')].filter((b) =>
+      b.style.width.endsWith('%'),
+    );
+    expect(bars.length).toBeGreaterThan(3);
+    for (const bar of bars) expect(bar.style.minWidth).toBe('24px');
+  });
+
+  it('labels the tree / spend switch as the rows’ order', () => {
+    renderTokens();
+    expect(screen.getByRole('radiogroup', { name: 'Order' })).toBeInTheDocument();
+  });
+
   it('leads with the conclusions', () => {
     renderTokens();
     const note = screen.getByRole('note');
@@ -68,6 +97,36 @@ describe('TokensView', () => {
       '84.1%',
       '52.6%',
     ]);
+    // One sentence leads; the second takeaway is a line of its own under it.
+    expect([...note.querySelectorAll('p')].map((p) => p.textContent)).toEqual([
+      '84.1% of all tokens were cache reads: every request re-read a growing context.',
+      'recon:prior-art spent 52.6% of all tokens.',
+    ]);
+  });
+
+  it('places Grok’s sessions beside the xAI plan', () => {
+    const xai: QuotaSnapshot = {
+      ...anthropic(),
+      provider: 'xai',
+      agent: 'grok',
+      plan: 'SuperGrok',
+      windows: [
+        {
+          id: 'weekly',
+          kind: 'weekly',
+          label: 'SuperGrok Weekly Credits',
+          model: null,
+          usedPercent: 25,
+          resetsAt: null,
+        },
+      ],
+      source: 'xai-api',
+    };
+    renderTokens('main', demoOpen(), 'en', { kind: 'grok', quotas: [anthropic(), xai] });
+    expect(screen.getByRole('note')).toHaveTextContent(
+      'Grok plan, SuperGrok Weekly Credits: 25% used. This session’s tokens are a separate count.',
+    );
+    expect(screen.getByRole('note')).not.toHaveTextContent('Claude plan');
   });
 
   it('places the plan’s window beside the session’s tokens, without adding them up', () => {
@@ -213,6 +272,7 @@ describe('TokensView', () => {
       agentId: 'af00000000000002',
       turnId: 'turn_w2',
       requestId: 'req_w2_9',
+      card: 'request',
     });
   });
 
@@ -222,5 +282,40 @@ describe('TokensView', () => {
     expect(within(totals).getByText('128,800')).toBeInTheDocument();
     const top = screen.getByRole('region', { name: 'Costliest 4 requests' });
     expect(within(top).getAllByRole('button')).toHaveLength(4);
+  });
+});
+
+describe('ContextChart', () => {
+  const point = (i: number): ContextPoint => ({
+    requestId: `r${i}`,
+    turn: 1,
+    call: i + 1,
+    at: null,
+    context: 1_000 * (i + 1),
+    output: 10,
+    compacted: false,
+  });
+  const renderChart = (n: number) =>
+    render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <ContextChart
+          agent="Main"
+          points={Array.from({ length: n }, (_, i) => point(i))}
+          onPick={vi.fn()}
+        />
+      </I18nContext.Provider>,
+    );
+
+  it('draws a dot per request while they are far enough apart', () => {
+    const { container } = renderChart(12);
+    expect(container.querySelectorAll('circle')).toHaveLength(12);
+  });
+
+  it('draws the line alone when dots would merge, keeping the last and the hovered point', () => {
+    const { container } = renderChart(300);
+    expect(container.querySelectorAll('path')).toHaveLength(1);
+    expect(container.querySelectorAll('circle')).toHaveLength(1);
+    fireEvent.mouseEnter(container.querySelectorAll('rect[class*="hit"]')[100] as Element);
+    expect(container.querySelectorAll('circle')).toHaveLength(2);
   });
 });

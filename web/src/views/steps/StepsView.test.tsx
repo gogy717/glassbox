@@ -131,7 +131,8 @@ describe('StepsView', () => {
     );
     expect(first).toHaveTextContent('Let me look at how sessions are discovered first.');
     expect(within(first).getByText('rg -n "sortSessions" src')).toBeInTheDocument();
-    expect(first.querySelector('[class*="chip"]')).toHaveTextContent('610 thinking');
+    // The thinking count is a chip of its own, its figure set apart.
+    expect(within(first).getByText('610').parentElement).toHaveTextContent(/^610 thinking$/);
 
     const second = step(2);
     expect(within(second).getByText('Thought for 12s; content not recorded')).toBeInTheDocument();
@@ -221,6 +222,7 @@ describe('StepsView', () => {
       agentId: 'main',
       turnId: 'turn_m1',
       requestId: 'req_m2',
+      card: 'request',
     });
   });
 
@@ -315,6 +317,55 @@ describe('StepsView', () => {
     expect(heading).toHaveTextContent(/Write the findings to notes\/research\.md, with sources\.$/);
     fireEvent.click(screen.getByRole('button', { name: 'Show full prompt' }));
     expect(heading).toHaveAttribute('data-expanded', 'true');
+  });
+
+  it('filters the conversations, as the execution chain does, and says when none match', () => {
+    renderSteps({ follow: false, route: { turnId: 'turn_m1' } });
+    const list = () => screen.getByRole('list', { name: 'Conversations' });
+    const field = screen.getByRole('searchbox', { name: 'Filter conversations' });
+    fireEvent.change(field, { target: { value: 'design document' } });
+    expect(within(list()).getAllByRole('button')).toHaveLength(1);
+    expect(list()).toHaveTextContent('Now write the design document');
+    fireEvent.change(field, { target: { value: 'nothing like this' } });
+    expect(screen.getByText('No conversation matches')).toBeInTheDocument();
+    // The conversation on stage stays while the filter hides it.
+    expect(screen.getByRole('group', { name: 'Conversation 1' })).toBeInTheDocument();
+  });
+
+  it('follows the newest conversation that passes the filter', () => {
+    renderSteps();
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Filter conversations' }), {
+      target: { value: 'sidebar' },
+    });
+    expect(screen.getByRole('group', { name: 'Conversation 1' })).toBeInTheDocument();
+  });
+
+  it('says a dash, not 0, for tokens that were never reported', () => {
+    const open = demoOpen();
+    for (const id of ['req_m1', 'req_m2']) {
+      const req = open.requests.get(id);
+      if (!req) throw new Error('fixture');
+      open.requests = new Map(open.requests).set(id, { ...req, usage: null });
+    }
+    renderSteps({ open, route: { turnId: 'turn_m1' }, follow: false });
+    const explore = screen.getByRole('heading', { level: 3, name: 'Explore' }).parentElement;
+    expect(explore).toHaveTextContent('— tokens');
+    expect(step(1)).not.toHaveTextContent('tokens');
+    expect(step(3)).toHaveTextContent('38,220 tokens');
+  });
+
+  it('names the tool on each failure when more than one failed', () => {
+    const open = demoOpen();
+    const read = open.toolCalls.get('tu_m2a');
+    if (!read) throw new Error('fixture');
+    open.toolCalls = new Map(open.toolCalls).set('tu_m2a', {
+      ...read,
+      status: 'error',
+      resultPreview: 'File does not exist.',
+    });
+    renderSteps({ open, route: { turnId: 'turn_m1' }, follow: false });
+    expect(step(2)).toHaveTextContent('Read: File does not exist.');
+    expect(step(2)).toHaveTextContent('Edit: String to replace not found in file.');
   });
 
   it('picks a turn from the turn list and pauses follow', () => {
