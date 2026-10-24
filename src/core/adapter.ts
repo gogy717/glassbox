@@ -105,8 +105,9 @@ export interface AgentAdapter {
   liveStatus(): Promise<Map<string, LiveState>>;
   createParser(source: SessionSource): SessionParser;
   /**
-   * The plan's current quota, read without network access or credentials unless the person
-   * opted in (`--fetch-quota`). Null when the agent has not cached any. Optional: adapters without quota data omit it.
+   * The plan's current quota: what the agent caches, and what glassbox fetches with its sign-in
+   * (unless `--no-fetch-quota`). Null when there is none. Optional: adapters without quota data
+   * omit it.
    */
   quota?(): Promise<QuotaSnapshot | null>;
   /** Files whose changes may change `quota()`, for the server to watch. */

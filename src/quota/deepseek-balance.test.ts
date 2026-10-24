@@ -120,9 +120,11 @@ describe('createDeepSeekBalanceSource', () => {
     await source.read();
     expect(fetch).not.toHaveBeenCalled();
     expect(logs).toEqual(['quota fetch (DeepSeek): DEEPSEEK_API_KEY is not set']);
+    expect(source.problem()).toBe('no-credentials');
     env.DEEPSEEK_API_KEY = KEY;
     advance(5 * 60_000);
     expect(await source.read()).toHaveLength(1);
+    expect(source.problem()).toBeNull();
     expect(logs.at(-1)).toBe('quota fetch (DeepSeek): working again');
   });
 

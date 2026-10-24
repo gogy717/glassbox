@@ -4,6 +4,7 @@ import type { AgentAdapter, SessionSource } from '../core/adapter.js';
 import type {
   LiveState,
   QuotaSnapshot,
+  QuotaStaleReason,
   RequestDetail,
   SessionPatch,
   SessionSnapshot,
@@ -21,6 +22,8 @@ export interface SessionStoreOptions {
   adapters: AgentAdapter[];
   /** Plan quota sources besides the adapters' own `quota()`; merged with them per provider. */
   quotaSources?: QuotaSource[];
+  /** Why a stale quota is stale, when the caller can tell (see `QuotaWatcherOptions`). */
+  quotaStaleReason?: (q: QuotaSnapshot) => QuotaStaleReason | undefined;
   /** Parsed sessions kept in memory; busy/waiting and subscribed ones don't count against it. */
   maxOpen?: number;
   /** How often to look for new or updated sessions on disk. */
@@ -161,6 +164,7 @@ export class SessionStore implements WeekStore {
       rateTickMs: RATE_STEP_MS,
       now: Date.now,
       quotaSources: [],
+      quotaStaleReason: () => undefined,
       log: () => {},
       ...opts,
     };
@@ -170,6 +174,7 @@ export class SessionStore implements WeekStore {
     this.quota = new QuotaWatcher({
       sources: [...adapterQuotaSources(this.opts.adapters), ...this.opts.quotaSources],
       pollMs: this.opts.quotaPollMs,
+      staleReason: this.opts.quotaStaleReason,
       log: this.opts.log,
     });
   }
@@ -177,7 +182,9 @@ export class SessionStore implements WeekStore {
   async start(): Promise<void> {
     await this.discoverNow();
     await this.refreshLive();
-    await this.quota.start();
+    // Not awaited: a provider's usage may take a network request (up to its timeout), and the
+    // server must listen without it. Each source's quota is published when it lands.
+    this.quota.start().catch((err) => this.opts.log(`quota: ${errorText(err)}`));
     this.lastSessionsJson = JSON.stringify(this.listSessions());
     this.loop('discoverTimer', this.opts.discoverMs, () => this.discoverNow());
     this.loop('liveTimer', this.opts.liveMs, () => this.refreshLive());

@@ -142,8 +142,12 @@ describe('tokenFrom', () => {
   it('says why there is no token without quoting the file', () => {
     expect(tokenFrom(`{"x": "${TOKEN}`, NOW)).toEqual({
       missing: 'the Grok sign-in is not valid JSON',
+      reason: 'fetch-failed',
     });
-    expect(tokenFrom('{}', NOW)).toEqual({ missing: 'not signed in to Grok (`grok login`)' });
+    expect(tokenFrom('{}', NOW)).toEqual({
+      missing: 'not signed in to Grok (`grok login`)',
+      reason: 'no-credentials',
+    });
   });
 });
 
@@ -199,6 +203,7 @@ describe('createXaiQuotaSource', () => {
     expect(await source.read()).toEqual([]);
     expect(fetch).not.toHaveBeenCalled();
     expect(logs).toEqual([expect.stringContaining('expired')]);
+    expect(source.problem()).toBe('sign-in-expired');
   });
 
   it('is quiet about a missing sign-in after saying so once', async () => {
@@ -208,6 +213,7 @@ describe('createXaiQuotaSource', () => {
     await source.read();
     expect(fetch).not.toHaveBeenCalled();
     expect(logs).toEqual(['quota fetch (xAI): no Grok sign-in found']);
+    expect(source.problem()).toBe('no-credentials');
   });
 
   it('keeps the last quota through a failure and never logs the token', async () => {
@@ -217,13 +223,16 @@ describe('createXaiQuotaSource', () => {
         status === 200 ? Response.json(billingBody) : new Response(TOKEN, { status }),
     });
     const [good] = await source.read();
+    expect(source.problem()).toBeNull();
     status = 401;
     advance(5 * 60_000);
     const [after] = await source.read();
     expect(after).toEqual(good);
+    expect(source.problem()).toBe('fetch-failed');
     status = 200;
     advance(5 * 60_000);
     await source.read();
+    expect(source.problem()).toBeNull();
     expect(logs).toEqual([
       'quota fetch (xAI): the billing endpoint answered HTTP 401',
       'quota fetch (xAI): working again',

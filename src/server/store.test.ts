@@ -484,12 +484,47 @@ describe('SessionStore', () => {
 });
 
 describe('SessionStore token rate', () => {
-  /** A session just opened settles for a live tick (50ms here) before its growth counts. */
-  const settled = () => sleep(200);
+  // The store's clock is the test's, moved only by the test. The wall clock can turn the minute
+  // between two reads, or step back while a session settles (WSL steps it back ~0.8 s every half
+  // minute), and then no fixed wait is long enough.
+  const BASE = Date.parse('2026-10-24T10:00:00.000Z');
+  let clock = BASE;
+  // Live polls finished: a session's settling ends at the first one past its deadline.
+  let polls = 0;
+  beforeEach(() => {
+    clock = BASE;
+    polls = 0;
+    const liveStatus = fake.liveStatus.bind(fake);
+    fake.liveStatus = () =>
+      liveStatus().finally(() => {
+        polls++;
+      });
+  });
+  const startRate = (opts: Partial<SessionStoreOptions> = {}) =>
+    startStore({ rateMs: 20, now: () => clock, ...opts });
+
+  /** Waits for a live poll to finish, from now: it reads the clock as it ends. */
+  async function polled() {
+    const before = polls;
+    await vi.waitFor(() => expect(polls).toBeGreaterThan(before), { timeout: 5000 });
+  }
+
+  /**
+   * Ends the settling of a session that has loaded (until its load's clock plus `liveMs`): moves
+   * the clock past it, and a live poll releases it. Its growth counts from then on.
+   */
+  async function settled() {
+    clock += 1000;
+    await polled();
+  }
+
+  /** The session's usage as the rate has seen it: the store's summary, a flush behind a snapshot. */
+  const usageOf = (s: SessionStore, nativeId: string) =>
+    s.listSessions().find((x) => x.nativeId === nativeId)?.usage ?? null;
 
   it('counts an open session’s growth after its first sighting, for its agent kind', async () => {
     const p = await session('a', rec.req('ra', T(1), 10));
-    const s = await startStore({ rateMs: 20 });
+    const s = await startRate();
     await s.getSnapshot(p.id);
     // Everything it spent before is a baseline, not a spike.
     expect(hourTotal(s.getRate())).toBe(0);
@@ -510,24 +545,21 @@ describe('SessionStore token rate', () => {
   // F S1: a paused session's rate comes down before the minute turns, pushed each 15 s step.
   it('lets the rate decay while spending pauses, and pushes it before the minute turns', async () => {
     const MIN = 60_000;
-    const base = Date.parse('2026-10-24T10:00:00.000Z');
-    let clock = base;
     const p = await session('a', rec.req('ra', T(1), 10));
-    const s = await startStore({ rateMs: 20, rateTickMs: 40, now: () => clock });
+    const s = await startRate({ rateTickMs: 40 });
     await s.getSnapshot(p.id);
-    clock += 1000;
     await settled();
     const pushed: TokenRate[] = [];
     s.onRate((r) => pushed.push(r));
     // Four minutes at 1M a minute, then the first 10 s of the fifth, then nothing.
     for (let m = 1; m <= 5; m++) {
-      clock = base + m * MIN + (m < 5 ? 30_000 : 10_000);
+      clock = BASE + m * MIN + (m < 5 ? 30_000 : 10_000);
       await appendFile(p.main, lines(rec.req(`r${m}`, T(1 + m), m < 5 ? 999_999 : 166_666)));
       const total = Math.min(m, 4) * 1_000_000 + (m === 5 ? 166_667 : 0);
       await vi.waitFor(() => expect(hourTotal(s.getRate())).toBe(total), { timeout: 5000 });
     }
     // At :59, with no new spend, the rate pushed is the 5-minute average as of :59.
-    clock = base + 5 * MIN + 59_000;
+    clock = BASE + 5 * MIN + 59_000;
     await vi.waitFor(() => expect(Date.parse(pushed.at(-1)?.at ?? '')).toBe(clock), {
       timeout: 5000,
     });
@@ -538,7 +570,7 @@ describe('SessionStore token rate', () => {
 
   it('takes a session that vanishes and comes back as a baseline again', async () => {
     const p = await session('a', rec.req('ra', T(1), 10));
-    const s = await startStore({ rateMs: 20 });
+    const s = await startRate();
     await s.getSnapshot(p.id);
     await settled();
     await appendFile(p.main, lines(rec.req('rb', T(2), 7)));
@@ -562,14 +594,14 @@ describe('SessionStore token rate', () => {
 
   it('takes growth while a session settles after opening as history', async () => {
     const p = await session('a', rec.req('ra', T(1), 10));
-    const s = await startStore({ rateMs: 20, liveMs: 400 });
+    const s = await startRate({ liveMs: 400 });
     await s.getSnapshot(p.id);
-    // Still settling: written as the session loaded, not counted as spend.
+    // Still settling, a live poll later (the clock has not reached its end): written as the
+    // session loaded, not counted as spend.
+    await polled();
     await appendFile(p.main, lines(rec.req('rb', T(2), 50)));
-    await vi.waitFor(async () => expect((await s.getSnapshot(p.id))?.requests.length).toBe(2), {
-      timeout: 5000,
-    });
-    await sleep(1000);
+    await vi.waitFor(() => expect(usageOf(s, 'a')?.output).toBe(60), { timeout: 5000 });
+    await settled();
     expect(hourTotal(s.getRate())).toBe(0);
     await appendFile(p.main, lines(rec.req('rc', T(3), 4)));
     await vi.waitFor(() => expect(hourTotal(s.getRate())).toBe(5), { timeout: 3000 });
@@ -578,7 +610,7 @@ describe('SessionStore token rate', () => {
   it('counts nothing of an old session with sub-agents when it opens', async () => {
     const p = await session('a', rec.req('ra', T(1), 10));
     await put(p.subagent('s1'), lines(rec.req('rs1', T(1), 50_000), rec.req('rs2', T(2), 70_000)));
-    const s = await startStore({ rateMs: 20 });
+    const s = await startRate();
     await s.getSnapshot(p.id);
     await settled();
     expect(hourTotal(s.getRate())).toBe(0);
@@ -586,15 +618,13 @@ describe('SessionStore token rate', () => {
 
   it('takes a sub-agent transcript classified after the open as history, then counts its growth', async () => {
     const p = await session('a', rec.req('ra', T(1), 10));
-    const s = await startStore({ rateMs: 20 });
-    const snapshotOf = () => s.getSnapshot(p.id);
-    await snapshotOf();
+    const s = await startRate();
+    await s.getSnapshot(p.id);
     await settled();
-    // A sub-agent file that turns up with an hour of work in it: read now, spent before.
+    // A sub-agent file that turns up with an hour of work in it: read now, spent before. Seen by
+    // the rate before anything more is written, or the two would be read as one.
     await put(p.subagent('s1'), lines(rec.req('rs1', T(1), 90_000)));
-    await vi.waitFor(async () => expect((await snapshotOf())?.requests.length).toBe(2), {
-      timeout: 5000,
-    });
+    await vi.waitFor(() => expect(usageOf(s, 'a')?.output).toBe(90_010), { timeout: 5000 });
     expect(hourTotal(s.getRate())).toBe(0);
     // What it writes from then on is spend.
     await appendFile(p.subagent('s1'), lines(rec.req('rs2', T(2), 6)));
@@ -606,7 +636,10 @@ describe('SessionStore token rate', () => {
     const b = await session('b', rec.req('rb', T(2), 10));
     await setLive({ a: 'busy', b: 'busy' });
     // Room for one open session: the other running one cannot be counted.
-    const s = await startStore({ rateMs: 20, maxOpen: 1 });
+    const s = await startRate({ maxOpen: 1 });
+    // The newer one opens in the background; once loaded, it settles.
+    await vi.waitFor(() => expect(usageOf(s, 'b')).not.toBeNull(), { timeout: 5000 });
+    await settled();
     await vi.waitFor(() => expect(s.getRate().coverage.counted).toBe(1), { timeout: 5000 });
     expect(s.getRate().coverage).toEqual({
       running: 2,
@@ -620,7 +653,7 @@ describe('SessionStore token rate', () => {
 
   it('says nothing about sessions it has not opened, and stops cleanly', async () => {
     await session('a', rec.req('ra', T(1), 10));
-    const s = await startStore({ rateMs: 20 });
+    const s = await startRate();
     expect(s.getRate().agents).toEqual({});
     await s.stop();
     store = undefined;
@@ -638,7 +671,7 @@ describe('SessionStore quota', () => {
     await writeFile(join(root, 'quota.json'), JSON.stringify(q));
     fake = createFakeAdapter(root, { quota: true });
     const s = await startStore({ quotaPollMs: 50 });
-    expect(s.listQuotas()).toEqual([q]);
+    await vi.waitFor(() => expect(s.listQuotas()).toEqual([q]), { timeout: 5000 });
     const seen: QuotaSnapshot[][] = [];
     s.onQuota((x) => seen.push(x));
 
@@ -647,6 +680,20 @@ describe('SessionStore quota', () => {
 
     await vi.waitFor(() => expect(seen.at(-1)).toEqual([aged]), { timeout: 5000 });
     expect(s.listQuotas()).toEqual([aged]);
+  });
+
+  it('starts without waiting for a provider that never answers, and serves the rest as they land', async () => {
+    const q = createDemoQuota(new Date('2026-10-23T02:00:00.000Z'));
+    // A usage fetch on a network that drops packets: its read never settles.
+    const fetching = { id: 'xai-api', read: () => new Promise<QuotaSnapshot[]>(() => {}) };
+    const cache = { id: 'cache', read: async () => [q] };
+    const started = await Promise.race([
+      startStore({ quotaSources: [fetching, cache] }).then(() => 'listening'),
+      new Promise((r) => setTimeout(() => r('blocked'), 1000)),
+    ]);
+    expect(started).toBe('listening');
+    const s = store as SessionStore;
+    await vi.waitFor(() => expect(s.listQuotas()).toEqual([q]), { timeout: 5000 });
   });
 });
 

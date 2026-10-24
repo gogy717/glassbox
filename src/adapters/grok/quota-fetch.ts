@@ -1,8 +1,8 @@
 /**
- * Opt-in (`--fetch-quota`): asks xAI for the SuperGrok plan usage with Grok CLI's own sign-in.
- * The endpoint is the one oh-my-pi asks for its `xai-oauth` provider (and the path Grok CLI's
- * billing extension asks), `GET https://cli-chat-proxy.grok.com/v1/billing?format=credits`; it
- * answers the weekly credit window and its share per product (GrokBot, Grok Build, ...).
+ * On unless `--no-fetch-quota`: asks xAI for the SuperGrok plan usage with Grok CLI's own
+ * sign-in. The endpoint is the one oh-my-pi asks for its `xai-oauth` provider (and the path Grok
+ * CLI's billing extension asks), `GET https://cli-chat-proxy.grok.com/v1/billing?format=credits`;
+ * it answers the weekly credit window and its share per product (GrokBot, Grok Build, ...).
  *
  * Only the access token (`key`) and `expires_at` are read out of `auth.json`; the e-mail, names
  * and ids beside them are not. The token is sent to cli-chat-proxy.grok.com and nowhere else (no
@@ -13,7 +13,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { QuotaSnapshot, QuotaWindow } from '../../core/model.js';
-import type { QuotaSource } from '../../core/quota-source.js';
+import type { FetchProblem, FetchStatus, QuotaSource } from '../../core/quota-source.js';
 import { type Attempt, getJson, periodicFetch } from '../../quota/periodic-fetch.js';
 import { type Obj, obj, STALE_MS } from '../../quota/shared.js';
 
@@ -31,8 +31,8 @@ const isoMs = (v: unknown) => {
   return Number.isNaN(ms) ? null : ms;
 };
 
-/** Why there is no usable token, for the log; never includes the token itself. */
-type TokenRead = { token: string } | { missing: string };
+/** Why there is no usable token, for the log and the UI; never includes the token itself. */
+type TokenRead = { token: string } | { missing: string; reason: FetchProblem };
 
 /**
  * The token in Grok CLI's `auth.json`: one entry per sign-in, keyed by issuer and client; the
@@ -43,7 +43,7 @@ export function tokenFrom(text: string, now: number): TokenRead {
   try {
     root = obj(JSON.parse(text));
   } catch {
-    return { missing: 'the Grok sign-in is not valid JSON' };
+    return { missing: 'the Grok sign-in is not valid JSON', reason: 'fetch-failed' };
   }
   let best: { token: string; expiresAt: number | null } | null = null;
   for (const value of Object.values(root ?? {})) {
@@ -53,9 +53,12 @@ export function tokenFrom(text: string, now: number): TokenRead {
     const expiresAt = isoMs(entry?.expires_at);
     if (!best || (expiresAt ?? -1) > (best.expiresAt ?? -1)) best = { token, expiresAt };
   }
-  if (!best) return { missing: 'not signed in to Grok (`grok login`)' };
+  if (!best) return { missing: 'not signed in to Grok (`grok login`)', reason: 'no-credentials' };
   if (best.expiresAt !== null && best.expiresAt - EXPIRY_MARGIN_MS <= now) {
-    return { missing: 'the Grok sign-in has expired; Grok CLI renews it the next time it runs' };
+    return {
+      missing: 'the Grok sign-in has expired; Grok CLI renews it the next time it runs',
+      reason: 'sign-in-expired',
+    };
   }
   return { token: best.token };
 }
@@ -124,7 +127,7 @@ export interface XaiQuotaOptions {
   now?: () => number;
 }
 
-export function createXaiQuotaSource(opts: XaiQuotaOptions): QuotaSource {
+export function createXaiQuotaSource(opts: XaiQuotaOptions): QuotaSource & FetchStatus {
   const doFetch = opts.fetch ?? fetch;
   const readText = opts.readText ?? ((path: string) => readFile(path, 'utf8'));
   const now = opts.now ?? Date.now;
@@ -134,10 +137,10 @@ export function createXaiQuotaSource(opts: XaiQuotaOptions): QuotaSource {
     try {
       text = await readText(join(opts.grokDir, 'auth.json'));
     } catch {
-      return { problem: 'no Grok sign-in found' };
+      return { problem: 'no Grok sign-in found', reason: 'no-credentials' };
     }
     const read = tokenFrom(text, now());
-    if ('missing' in read) return { problem: read.missing };
+    if ('missing' in read) return { problem: read.missing, reason: read.reason };
     const res = await getJson(
       doFetch,
       BILLING_URL,
@@ -173,5 +176,6 @@ export function createXaiQuotaSource(opts: XaiQuotaOptions): QuotaSource {
       // Rebuilt on every read so `stale` follows the clock.
       return last ? [xaiSnapshot(last.value, last.fetchedAtMs, now())] : [];
     },
+    problem: loop.problem,
   };
 }

@@ -23,6 +23,9 @@
 |                                                          **Now board**                                                           |                                                   **Token rate**                                                    |
 |                                                ![Now board](docs/images/home.png)                                                |                                         ![Token rate](docs/images/rate.png)                                         |
 |                  What runs now, each session saying what it is doing this second; then the recently active ones                  |         Tokens a minute across this machine's CLIs, the last hour as a line; split by CLI and by token kind         |
+|                                                           **Receipt**                                                            |                                                                                                                     |
+|                  <img src="docs/images/receipt.png" alt="Receipt: a session printed as a receipt" width="360">                   |                                                                                                                     |
+| A session printed as a receipt: its work, time and tokens, with the timeline as its barcode; made in your browser, ready to post |                                                                                                                     |
 
 ## Run it
 
@@ -37,7 +40,7 @@ The first run downloads and builds (about a minute), then opens `http://127.0.0.
 Pin a version (recommended, so the contents do not change with the branch):
 
 ```sh
-npx --yes github:gogy717/glassbox#v0.3.0
+npx --yes github:gogy717/glassbox#v0.4.0
 ```
 
 Common options:
@@ -53,8 +56,9 @@ Common options:
 | `--opencode-dir <path>` / `--no-opencode` | OpenCode data dir, default `$XDG_DATA_HOME/opencode` or `~/.local/share/opencode` (OpenCode sessions show whenever it holds `opencode.db`) / don't show them |
 | `--claude-bin <path>`                     | The `claude` used to send messages, default the one on `PATH`                                                                                                |
 | `--use-api-key`                           | Let the `claude` started for messages use `ANTHROPIC_API_KEY` (default: the account you signed in with in the terminal)                                      |
-| `--fetch-quota[=<list>]`                  | Ask providers for plan usage every 5 minutes: `anthropic`, `xai`, `deepseek`; alone, all three (see Data and privacy)                                        |
-| `--demo`                                  | Run on built-in demo data: no local sessions are read and `claude` is never started                                                                          |
+| `--fetch-quota=<list>`                    | Ask only these providers for plan usage, e.g. `--fetch-quota=anthropic,deepseek` (default: all three every 5 minutes, see Data and privacy)                  |
+| `--no-fetch-quota`                        | Ask no provider for plan usage: no network requests, no credentials read; the quota bar shows only what the agents cache                                     |
+| `--demo`                                  | Run on built-in demo data: no local sessions are read, `claude` is never started and no provider is asked for plan usage                                     |
 | `--help`                                  | List every option                                                                                                                                            |
 
 To install it for good: `npm install -g github:gogy717/glassbox`, then run `glassbox`; uninstall with `npm uninstall -g glassbox`. To upgrade, run the command again with the new tag.
@@ -68,14 +72,16 @@ To install it for good: `npm install -g github:gogy717/glassbox`, then run `glas
 - **Timeline**: one lane per agent, split into waiting / thinking / generating / tools; where the time went and the 10 slowest steps.
 - **Multi-agent**: phases, agents, status and tokens of Agent sub-agents and Workflow (ultracode) runs; drill into any agent to see its own chain.
 - **Request details**: with Claude Code ≥ 2.1.300, the system prompt, tools and messages each request actually sent to the model.
-- **Plan usage per provider**: one meter per provider in the top bar, its window closest to the limit; click for every window, reset times, the plan, and where the numbers came from. Stale data greys out per provider and says how old it is.
-  - Anthropic: 5-hour / weekly / per-model quota from Claude Code's own cache (as ClaudeBar reads it).
+- **Plan usage per provider**: one meter per provider in the top bar, its window closest to the limit; click for every window, reset times, the plan, and where the numbers came from. Every 5 minutes glassbox asks the providers it can for fresh numbers (see Data and privacy), and shows whichever is newest: that answer or an agent's own cache. Stale data greys out per provider, says how old it is, and says why (such as an expired sign-in) and how it will refresh.
+  - Anthropic: 5-hour / weekly / per-model quota, asked of Anthropic with Claude Code's sign-in, or from Claude Code's own cache (as ClaudeBar reads it).
   - OpenAI: the ChatGPT plan's limits from Codex's session logs, or from oh-my-pi's cache.
-  - xAI (SuperGrok) and GitHub Copilot: from oh-my-pi's usage cache.
-  - DeepSeek: the account balance, with `--fetch-quota`.
+  - xAI (SuperGrok): the weekly credits, asked of xAI with Grok CLI's sign-in, or from oh-my-pi's usage cache.
+  - GitHub Copilot: from oh-my-pi's usage cache.
+  - DeepSeek: the account balance, asked of DeepSeek when `$DEEPSEEK_API_KEY` is set.
 - **Token rate**: the top bar shows how many tokens a minute the CLIs on this machine spend (a 5-minute average, with the last hour as a line); click it to split the rate by CLI and by token kind. It counts the running sessions glassbox has open, and says how many of them that is ("Counting 2 of 3 running sessions"). The hour is kept in memory only, so it starts afresh each time glassbox starts.
 - **Grok, Codex, oh-my-pi and OpenCode sessions**: when Grok Build, the Codex CLI, oh-my-pi or OpenCode is installed, their sessions appear in the sidebar too (view only), with sub-agents, tokens and time broken down the same way. An OpenCode session's child sessions show as its sub-agents.
 - **Diagnostics**: at the right of the summary bar, "No gaps" or how many there are; click it for what data this session lacks, and why.
+- **Receipt**: press Receipt in the summary bar, then Copy image or Download PNG: the session as a receipt of its work, time and tokens, with its timeline as the barcode. Three sizes (Tall, Post 4:5, Story 9:16), on a paper or a night background, in English or Chinese; Copy as text gives the same receipt as plain text, for a PR or a chat. It is drawn in your browser from the data already on the page, without a single request, and it never prints a path: a path in the title keeps only its last part, and Hide names leaves out the title and the project as well.
 
 ## Sending messages from glassbox
 
@@ -88,24 +94,25 @@ glassbox starts the `claude` installed on your machine, with your own sign-in, s
 
 ## Accounts and terms
 
-glassbox has no sign-in of its own and never reads or stores credentials (unless you add `--fetch-quota`, below). To send a message it starts the official `claude` installed on your machine (in its headless stream-json mode), with the account you are signed in to: the same one you use in a terminal. Make sure this use fits the Anthropic terms that apply to your account; if you are unsure, start glassbox with `--use-api-key` to use an API key instead.
+glassbox has no sign-in of its own and stores no credentials. To keep plan usage fresh it reads Claude Code's and Grok CLI's sign-ins and `$DEEPSEEK_API_KEY` (see Data and privacy; `--no-fetch-quota` turns this off). To send a message it starts the official `claude` installed on your machine (in its headless stream-json mode), with the account you are signed in to: the same one you use in a terminal. Make sure this use fits the Anthropic terms that apply to your account; if you are unsure, start glassbox with `--use-api-key` to use an API key instead.
 
 glassbox is an independent project, not affiliated with or endorsed by Anthropic.
 
 ## Data and privacy
 
 - Reads only:
-  - `~/.claude` (session transcripts) and the `cachedUsageUtilization` entry of `~/.claude.json`;
+  - `~/.claude` (session transcripts), and from `~/.claude.json` only the `cachedUsageUtilization` entry and, in `oauthAccount`, the account id (to tell whose that cache is) and the plan (organization type and rate-limit tier);
   - `~/.grok`;
   - the session records in `~/.codex` (`sessions/`, `archived_sessions/`, `session_index.jsonl`; never credential files such as `auth.json`);
   - oh-my-pi's sessions in `~/.omp/agent/sessions` with the full tool output omp saves beside them (`$PI_CODING_AGENT_DIR` moves `~/.omp/agent`), and its usage cache in `~/.omp/agent/agent.db`: only the usage reports in its `cache` table, never the credential tables. On Linux, `/proc/net/unix` tells whether oh-my-pi has a session open;
-  - OpenCode's database `~/.local/share/opencode/opencode.db`: its sessions, messages and parts. The names of running processes (`/proc` on Linux, `ps` on macOS) tell whether OpenCode runs.
+  - OpenCode's database `~/.local/share/opencode/opencode.db`: its sessions, messages and parts. The names of running processes (`/proc` on Linux, `ps` on macOS) tell whether OpenCode runs;
+  - to ask for plan usage, the three credentials in the table below, unless you add `--no-fetch-quota`.
 - Never changes a Claude Code, Grok, Codex, oh-my-pi or OpenCode file (when you message from glassbox, `claude` writes its own records, just as in a terminal), with one caveat for the SQLite databases below.
 - oh-my-pi and OpenCode keep data in SQLite, which glassbox opens read-only for one short query at a time. While the owning app has pages waiting in its write-ahead log (`-wal`), and only when the `-wal` and `-shm` files have the database's own permissions, glassbox reads them as they are (`mode=ro`, `readonly_shm=1`: nothing is written, not even the shared-memory index); otherwise it opens the database file alone as immutable, and changes not yet checkpointed show up a little later. One rare race remains: if the app deletes its `-wal` between glassbox's check and its open, SQLite creates an empty `-wal` again (with the database's permissions, as the app itself would) and that one read fails. SQLite offers no way to rule this out.
 - On Home and in the sidebar, what a running session is doing shows a shell command only as a summary: the program and its subcommand (`git push`), and "+N" for N more commands in a chain. Never the command line itself, whose flags and text can hold anything.
 - Accepts connections from this machine only: it checks where a connection really comes from, and validates `Host` / `Origin` too. Every write needs a token generated at each start, so other web pages cannot read your sessions or send messages through it.
 - Does not pass `ANTHROPIC_API_KEY` to the `claude` it starts (so you are not billed by the API by accident) unless you add `--use-api-key`.
-- glassbox itself makes no outbound network requests and has no telemetry, unless you add `--fetch-quota`. Then, every 5 minutes, for each provider you selected, it reads one credential and sends it to that provider's own host, and nowhere else:
+- glassbox has no telemetry. Its only outbound requests ask for plan usage: every 5 minutes it reads one credential per provider and sends it to that provider's own host, and nowhere else:
 
   | Provider    | Request                                             | Credential                                                                                      |
   | ----------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
@@ -113,7 +120,9 @@ glassbox is an independent project, not affiliated with or endorsed by Anthropic
   | `xai`       | `cli-chat-proxy.grok.com/v1/billing?format=credits` | Grok CLI's sign-in: the access token in `~/.grok/auth.json`                                     |
   | `deepseek`  | `api.deepseek.com/user/balance`                     | `$DEEPSEEK_API_KEY`                                                                             |
 
-  Credentials are never logged, stored or refreshed; an expired sign-in is skipped until its own app renews it. Requests time out after 10 seconds and never follow redirects. `--no-grok` only hides Grok sessions: it does not stop the `xai` request, which `--fetch-quota=anthropic,deepseek` leaves out. The Anthropic and xAI endpoints are the ones Claude Code's `/usage` and Grok CLI use, not public APIs, so they may change.
+  Credentials are never logged, stored or refreshed. A provider whose credential is missing, or whose sign-in has expired, is skipped (and logged once) until you sign in or its own app renews it. Requests time out after 10 seconds and never follow redirects. The Anthropic and xAI endpoints are the ones Claude Code's `/usage` and Grok CLI use, not public APIs, so they may change.
+
+  To turn this off, start glassbox with `--no-fetch-quota`: glassbox then reads none of these credentials and itself makes no network requests, and plan usage comes only from what the agents cache (it goes stale when they do not refresh it). `--fetch-quota=<list>` asks only the providers listed: `--fetch-quota=anthropic,deepseek` leaves out xAI, which `--no-grok` does not (it only hides Grok sessions). `--demo` never asks.
 
 ## Known limitations
 
@@ -125,10 +134,10 @@ glassbox is an independent project, not affiliated with or endorsed by Anthropic
 - Grok and Codex sessions are view only. Grok records tokens per turn, so a turn's usage is attributed to its last call; Codex encrypts its thinking, so glassbox shows only Codex's own reasoning summaries and thinking tokens.
 - oh-my-pi and OpenCode sessions are view only, and glassbox does not show the per-request cost they record. Request details are partial at best: oh-my-pi records them for sub-agents only, OpenCode only the model and its settings. oh-my-pi writes a reply only once it is complete, and its live state is known on Linux only. OpenCode's live state is a guess: an unfinished reply while OpenCode runs means busy, and anything else shows as closed (OpenCode records no waiting or idle state).
 - glassbox counts OpenCode's reasoning tokens into output, as for every other agent, so its output reads higher than OpenCode's own. Only `opencode.db` in the data dir is read, not a database moved with `OPENCODE_DB` or another channel's `opencode-<channel>.db`; archived sessions show like the others.
-- Claude's quota comes from Claude Code's cache, refreshed by ClaudeBar or `/usage`; when neither runs, the data goes stale (the UI says so). Signing in again or switching accounts clears that cache, so the quota disappears until the next `/usage`. `--fetch-quota` keeps it fresh on its own.
-- oh-my-pi's usage cache only changes while oh-my-pi runs, so xAI, OpenAI and Copilot usage read from it goes stale when oh-my-pi is not in use.
+- When glassbox does not ask Anthropic (`--no-fetch-quota`, or no usable Claude Code sign-in), Claude's quota comes from Claude Code's cache, which only `/usage` or ClaudeBar refreshes; when neither runs, it goes stale (the popover says so, and why). Signing in again or switching accounts clears that cache, so the quota disappears until the next refresh.
+- oh-my-pi's usage cache only changes while oh-my-pi runs, so OpenAI and Copilot usage read from it, and xAI's when glassbox cannot ask xAI, goes stale when oh-my-pi is not in use.
 - Codex records the ChatGPT plan's limits only when you sign in to Codex with ChatGPT, not with an API key.
-- Grok CLI's sign-in lasts about 6 hours, and only Grok CLI renews it; when it has expired, `--fetch-quota` skips xAI until Grok CLI runs again.
+- Grok CLI's sign-in lasts about 6 hours, and only Grok CLI renews it; when it has expired, glassbox skips xAI until Grok CLI runs again, and the popover says so.
 - DeepSeek's balance shows one currency: the first with money on it.
 - The token rate counts what it sees being written: right after glassbox starts or opens a session, the first few seconds and anything already in a transcript are not counted.
 

@@ -272,13 +272,23 @@ export const en: Record<MessageKey, string> = {
   'quota.extra': 'Extra usage {used} / {limit}',
   'quota.windowMonthly': 'Monthly',
   'quota.balance': 'Balance {amount}',
-  'quota.sourceAnthropicApi': "Anthropic's usage API (--fetch-quota)",
+  'quota.sourceAnthropicApi': "Anthropic's usage API",
   'quota.sourceOmpCache': "oh-my-pi's cache",
   'quota.sourceCodexSession': "Codex's session log",
-  'quota.sourceDeepseekApi': "DeepSeek's balance API (--fetch-quota)",
-  'quota.sourceXaiApi': "xAI's usage API (--fetch-quota)",
+  'quota.sourceDeepseekApi': "DeepSeek's balance API",
+  'quota.sourceXaiApi': "xAI's usage API",
   'quota.note':
-    'Quotas come from what your agents cache locally (or from each provider with --fetch-quota) and are shared by all your devices on that account.',
+    'glassbox asks Anthropic, xAI and DeepSeek every 5 minutes (unless it runs with --no-fetch-quota); everything else comes from what your agents cache locally. Quotas are shared by all your devices on that account.',
+  'quota.whyNotFetching':
+    'Not fetched: glassbox was started with --no-fetch-quota (or a --fetch-quota list without it).',
+  'quota.whySignInExpired': '{name} sign-in has expired; this refreshes after you run {app} once.',
+  'quota.whyNoSignIn': 'Not fetched: {app} is not signed in on this machine.',
+  'quota.whyNoKey': 'Not fetched: {env} is not set.',
+  'quota.whyFetchFailed':
+    'Fetching it failed; glassbox tries again every 5 minutes (its log says why).',
+  'quota.whyCacheOnly': 'Updates only while {agent} runs: glassbox has no way to fetch it.',
+  'quota.whyCannotFetch':
+    'Updates only while the agent that caches it runs: glassbox has no way to fetch it.',
   'settings.showProbes': 'Show probe sessions',
   'time.merged':
     '{requests} {requests|request|requests} · {tools} {tools|tool|tools} · total {total}',

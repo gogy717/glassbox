@@ -53,12 +53,29 @@ describe('periodicFetch', () => {
     ]);
   });
 
+  it("keeps the last failure's kind for the UI until a request works", async () => {
+    let next: Attempt<number> = { problem: 'the sign-in has expired', reason: 'sign-in-expired' };
+    const { loop, advance } = setup(async () => next);
+    expect(loop.problem()).toBeNull();
+    await loop.latest();
+    expect(loop.problem()).toBe('sign-in-expired');
+    next = { problem: 'the endpoint answered HTTP 503' };
+    advance(5 * 60_000);
+    await loop.latest();
+    expect(loop.problem()).toBe('fetch-failed');
+    next = { ok: 1 };
+    advance(5 * 60_000);
+    await loop.latest();
+    expect(loop.problem()).toBeNull();
+  });
+
   it('logs a rejected attempt by error name only, never its message', async () => {
     const { loop, logs } = setup(async () => {
       throw new SyntaxError('Unexpected token in "secret-token-fixture"');
     });
     expect(await loop.latest()).toBeNull();
     expect(logs).toEqual(['quota fetch (Test): failed (SyntaxError)']);
+    expect(loop.problem()).toBe('fetch-failed');
   });
 });
 
