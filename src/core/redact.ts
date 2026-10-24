@@ -44,12 +44,54 @@ const awsSecret = (v: string) =>
   ((v.match(/\d+/g)?.length ?? 0) >= 3 || v.split(/[/+]/).filter(flips).length >= 2);
 
 /**
+ * A compiler toolchain's name, its target triplet first: `x86_64-w64-mingw32-gcc`,
+ * `i686-w64-mingw32-g++`, `aarch64-linux-gnu-gcc`, a Rust target `x86_64-unknown-linux-gnu`.
+ */
+const TARGET_TRIPLET =
+  /^(?:x86_64|amd64|i[3-6]86|aarch64|arm64|armv?\d{0,2}[a-z]{0,3}|riscv(?:32|64)[a-z]{0,8}|ppc64(?:le)?|powerpc64(?:le)?|s390x|mips(?:64)?(?:el)?|wasm(?:32|64)|loongarch64)(?:-[a-z]{1,10}\d{0,2}){2,3}(?:-(?:gcc|g\+\+|c\+\+|cc|clang\+?\+?|ld|as|ar|nm|strip|objcopy|objdump|ranlib|windres|gdb|gfortran)(?:-\d+)?)?(?:\.exe)?$/;
+
+/** Words a person builds a password on, with a year or a count after them. */
+const PASSWORD_WORD =
+  /^(?:pass(?:word|wd)?|pwd|secret|welcome|letmein|qwerty|changeme|admin|summer|winter|spring|autumn)$/i;
+
+/**
+ * A name with version or model numbers in it: `ResNet50`, `Exercise1.py`, `ES2020`, `UE4Editor`,
+ * `OAuth2Client`, `Win32_Process`. It has a capital, and every part is words (capitalised, short
+ * acronyms of up to five letters, or small letters of three or more after the first piece) with
+ * at most three short digit runs, each after letters. Keys break this: `Kx9mQ2pLvR7` has lone
+ * small letters, `Tr0ub4dor` a two-letter fragment, `Summer_2024_Pass` a part of digits alone,
+ * `AKIAIOSFODNN7EXAMPLE` a long capital run, a lower-cased key or base32 no capital at all, and
+ * a word people build passwords on (`Welcome1`, `MyPassword123`, `Summer2024Pass`) keeps a word
+ * with digits a key.
+ */
+function versionedName(word: string, parts: string[]): boolean {
+  if (!/[A-Z]/.test(word)) return false;
+  let runs = 0;
+  for (const part of parts) {
+    const pieces = part.match(/[A-Z]{2,}(?![a-z])|[A-Z]?[a-z]+|[A-Z]|\d+/g) ?? [];
+    if (pieces.join('') !== part) return false;
+    for (const [k, piece] of pieces.entries()) {
+      if (/^\d/.test(piece)) {
+        if (k === 0 || piece.length > 4) return false;
+        runs++;
+      } else if (/^[A-Z]+$/.test(piece) && piece.length > 5) return false;
+      else if (PASSWORD_WORD.test(piece)) return false;
+      else if (k > 0 && /^[a-z]+$/.test(piece) && piece.length < 3) return false;
+    }
+  }
+  return runs > 0 && runs <= 3;
+}
+
+/**
  * Whether a word is shaped like a key, a token or a password rather than a name: what a summary
  * must not show in a slot meant for a program, a subcommand, a script or a host label. Names are
- * lowercase-ish words, or CamelCase without digits (`SetEnvironmentVariable`).
+ * lowercase-ish words, CamelCase (`SetEnvironmentVariable`), CamelCase with version numbers
+ * (`ResNet50`) and toolchain names (`x86_64-w64-mingw32-gcc`).
  */
 export function secretShaped(word: string): boolean {
+  if (TARGET_TRIPLET.test(word)) return false;
   const parts = word.split(/[-_.:@/+\\]+/).filter(Boolean);
+  if (versionedName(word, parts)) return false;
   // Kx9mQ2pLvR7: capitals, small letters and digits in one part.
   if (parts.some((p) => p.length >= 6 && /[A-Z]/.test(p) && /[a-z]/.test(p) && /\d/.test(p)))
     return true;
@@ -202,10 +244,11 @@ const RULES: [RegExp, Replacer][] = [
     /(\b(?:aws_secret_access_key|aws_session_token|secret_access_key|secretaccesskey)["']?(?:\s*[=:]\s*|\s+)["']?)([A-Za-z0-9/+=]{16,})/gi,
     maskIf(() => true),
   ],
-  // .netrc's "password …", SQL's PASSWORD '…', and prose that hands one over: a quoted value,
-  // or a bare word that reads as a token ("password reset flow" stays).
+  // .netrc's "password …", SQL's PASSWORD '…', and prose that hands one over ('password is "…"'):
+  // a quoted value, or a bare word that reads as a token ("password reset flow", "password is
+  // required" and "WHERE password IS NULL" stay).
   [
-    new RegExp(String.raw`(\b(?:password|passwd|passphrase)\s+)(${VALUE})`, 'gi'),
+    new RegExp(String.raw`(\b(?:password|passwd|passphrase)\s+(?:(?:is|was)\s+)?)(${VALUE})`, 'gi'),
     maskIf((v) => (quoted(v) ? secretish(v) : tokenLike(v))),
   ],
   // A bare random token: 20 letters and digits or more in one run (no - or _: file names have
@@ -216,15 +259,20 @@ const RULES: [RegExp, Replacer][] = [
   ],
   // A bare AWS secret key: 40 base64 characters that read as random.
   [/(^|[^A-Za-z0-9/+=])([A-Za-z0-9/+]{40})(?![A-Za-z0-9/+=])/g, maskIf(awsSecret)],
-  // E-mail addresses: the domain stays, the person does not (G3).
+  // E-mail addresses: the domain stays, the person does not (G3). Letters of any script on both
+  // sides: josé.garcía@example.com, an IDN domain such as münchen.de.
   [
-    /(^|[^\w.%+-])([\w.%+-]+)(?=@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}(?![\w-]))/g,
+    /(^|[^\p{L}\p{N}_.%+-])([\p{L}\p{N}_.%+-]+)(?=@(?:[\p{L}\p{N}-]+\.)+\p{L}{2,}(?![\p{L}\p{N}_-]))/gu,
     (_m, pre) => `${pre}${MASK}`,
   ],
 ];
 
-/** Invisible characters that would split a token past the rules: zero-width and soft hyphen. */
-const INVISIBLE = /[​-‍⁠﻿­]/g;
+/**
+ * Invisible characters that would split a token past the rules: every format character (zero
+ * widths, soft hyphen, direction marks and isolates, invisible operators, the Mongolian vowel
+ * separator), the combining grapheme joiner and the variation selectors.
+ */
+const INVISIBLE = /\p{Cf}|\u034F|[\uFE00-\uFE0F]/gu;
 
 /** `s` with every credential the rules know masked whole, as "•••", and e-mails' persons. */
 export function redact(s: string): string {

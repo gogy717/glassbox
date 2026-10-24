@@ -549,6 +549,16 @@ const IN_TEXT: Hostile[] = [
   hostile('a zero-width split ghp_', () => `gh​p_${R.ghp.slice(4)}`, R.ghp.slice(4)),
   hostile('a bare AWS key pair', () => `is ${R.akid} ${R.awsSecret} valid`, R.akid, R.awsSecret),
   hostile("ANSI-C SECRET=$'…\\'…'", (s) => `SECRET=$'a\\'${s[0]}' run`, gen(16)),
+  // W6b: a password handed over in prose, and the other invisibles that split a token.
+  hostile('password is "…"', (s) => `password is "${s[0]}"`, gen(16)),
+  hostile("the password was '…'", (s) => `the password was '${s[0]}'`, gen(16)),
+  ...['\u200E', '\u200F', '\u2062', '\u2066', '\u180E', '\u034F', '\uFE0F'].map((c) =>
+    hostile(
+      `ghp_ split by U+${(c.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, '0')}`,
+      () => `${R.ghp.slice(0, 19)}${c}${R.ghp.slice(19)}`,
+      R.ghp.slice(4),
+    ),
+  ),
 ];
 
 describe('the masker guards the text that still shows', () => {
@@ -604,6 +614,8 @@ describe('ordinary text stays as it is', () => {
     '0123456789abcdef0123456789abcdef01234567',
     'W6a-2-auto-continuation-turn-en-light-1440.png',
     'IMG_20240101_123456_HDR2.jpg',
+    'password is required',
+    'the password was wrong',
   ])('%s', (text) => {
     expect(listed('Grep', { pattern: text })).toBe(text);
   });
@@ -618,6 +630,10 @@ describe('ordinary text stays as it is', () => {
     ['Email bob.jones@corp.example about it', 'Email •••@corp.example about it'],
     // An ssh user reads the same way, and is identity too.
     ['ssh git@github.com', 'ssh •••@github.com'],
+    // Letters of any script, on either side of the @.
+    ['josé.garcía@example.com', '•••@example.com'],
+    ['mail alice@例子.测试', 'mail •••@例子.测试'],
+    ['Ünal.Öztürk@straße.de', '•••@straße.de'],
   ])('an e-mail keeps its domain, not its person: %j', (text, expected) => {
     expect(listed('Grep', { pattern: text })).toBe(expected);
     expect(listed('Agent', { description: text })).toBe(expected);
