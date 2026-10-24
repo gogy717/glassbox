@@ -1,5 +1,7 @@
 /** Why a model call did what it did, in one sentence under its call line. */
+
 import type { IsoTime, ModelRequest, ToolCall } from '../../../../src/core/model.js';
+import { thinkingSince } from '../../../../src/core/thinking-clock.js';
 import { plainText } from '../../lib/preview';
 
 /** Two lines of the call's width hold about this much; the rest is in the steps view. */
@@ -76,29 +78,11 @@ function firstLine(markdown: string): string | null {
   return null;
 }
 
-const ms = (t: IsoTime | null): number => {
-  const v = t === null ? Number.NaN : Date.parse(t);
-  return Number.isNaN(v) ? Number.NEGATIVE_INFINITY : v;
-};
-
 /**
- * Where a call in flight's "Thinking · m:ss" clock starts: the end of the latest of its own
- * tools, else the call's start, so a call that spans its tools (Codex, Grok, OpenCode) does not
- * jump back to its start once a tool ends. The same rule as `thinkingSince` in
- * src/core/activity.ts (branch v2-w6-activity); use that once both are merged.
- */
-export function thinkingSince(call: ModelRequest, tools: Iterable<ToolCall>): IsoTime | null {
-  const own = new Set(call.toolCallIds);
-  let since = call.startedAt;
-  for (const t of tools)
-    if (own.has(t.id) && t.endedAt !== null && ms(t.endedAt) > ms(since)) since = t.endedAt;
-  return since;
-}
-
-/**
- * The thinking clock's start for a call in flight that is waiting on the model; null while one
- * of its own tools runs (that is the tool's time, on its card, as `sessionActivity` has it), or
- * once the call has ended.
+ * The thinking clock's start for a call in flight that is waiting on the model: `thinkingSince`
+ * of src/core/thinking-clock.ts, the rule the session's activity line uses, so both tick from the same
+ * instant. Null while one of its own tools runs (that is the tool's time, on its card, as
+ * `sessionActivity` has it), or once the call has ended.
  */
 export function thinkingClock(call: ModelRequest, tools: Iterable<ToolCall>): IsoTime | null {
   if (call.status !== 'in-flight') return null;

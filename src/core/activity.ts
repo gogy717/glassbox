@@ -8,6 +8,9 @@ import { hostOf, summarizeCode, summarizeCommand } from './command-summary.js';
 import type { IsoTime, LiveState, ModelRequest, SessionActivity, ToolCall, Turn } from './model.js';
 import { MAIN_AGENT_ID } from './model.js';
 import { redact, tildeHome } from './redact.js';
+import { latest, ms, thinkingSince } from './thinking-clock.js';
+
+export { thinkingSince };
 
 export interface ActivityInput {
   live: LiveState;
@@ -92,29 +95,6 @@ export function latestTurn(turns: Iterable<Turn>, agentId = MAIN_AGENT_ID): Turn
 /** Between turns since `since`: the whole activity of an idle session. */
 export function idleActivity(since: IsoTime | null): SessionActivity {
   return { kind: 'idle', tool: null, target: null, agentId: MAIN_AGENT_ID, since };
-}
-
-/**
- * Where a call in flight's "Thinking · m:ss" clock starts: at its last step, the end of the
- * latest of its own tools, else the call's start. A call that spans its tools (Codex, Grok,
- * OpenCode) would otherwise jump back to its start once a tool ends. `tools` may hold others.
- */
-export function thinkingSince(call: ModelRequest, tools: Iterable<ToolCall>): IsoTime | null {
-  const own = new Set(call.toolCallIds);
-  let since = call.startedAt;
-  for (const t of tools) if (own.has(t.id)) since = latest(since, t.endedAt);
-  return since;
-}
-
-/** Epoch ms of `t`; -Infinity when unknown or unreadable, so it sorts first. */
-const ms = (t: IsoTime | null): number => {
-  const v = t === null ? Number.NaN : Date.parse(t);
-  return Number.isNaN(v) ? Number.NEGATIVE_INFINITY : v;
-};
-
-/** The later of two times, by instant: "…:05Z" and "…:04.900Z" do not compare as text. */
-function latest<T extends IsoTime | null>(a: T, b: IsoTime | null): T | IsoTime {
-  return b !== null && ms(b) > ms(a) ? b : a;
 }
 
 /**

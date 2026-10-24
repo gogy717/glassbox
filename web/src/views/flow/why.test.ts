@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { thinkingSince as activityThinkingSince } from '../../../../src/core/activity.js';
 import type { ModelRequest, ResponseBlock, ToolCall } from '../../../../src/core/model.js';
 import { demoOpen } from '../../test/demo';
-import { firstSentence, thinkingSince, whyLine } from './why';
+import { firstSentence, thinkingClock, whyLine } from './why';
 
 const AT = '2026-10-24T01:00:00.000Z';
 const text = (t: string): ResponseBlock => ({ kind: 'text', text: t, at: AT });
@@ -90,29 +91,32 @@ describe('firstSentence', () => {
   });
 });
 
-describe('thinkingSince', () => {
-  const tool = (id: string, endedAt: string | null): ToolCall =>
-    ({ id, endedAt }) as unknown as ToolCall;
+// The flow's thinking clock and the session's activity (W6a) share one rule: src/core/activity.ts.
+describe('thinkingClock', () => {
+  const tool = (id: string, endedAt: string | null, status: ToolCall['status'] = 'complete') =>
+    ({ id, endedAt, status }) as unknown as ToolCall;
+  const inFlight = (over: Partial<ModelRequest>) => call([], { status: 'in-flight', ...over });
 
-  it('starts at the end of the call’s latest own tool, else at the call’s start', () => {
-    const c = call([], {
-      startedAt: '2026-10-24T01:00:00.000Z',
-      toolCallIds: ['a', 'b'],
-    });
-    expect(thinkingSince(c, [])).toBe('2026-10-24T01:00:00.000Z');
-    expect(
-      thinkingSince(c, [
-        tool('a', '2026-10-24T01:00:05.000Z'),
+  it.each<[string, ToolCall[], string]>([
+    ['no tools yet: the call’s start', [], '2026-10-24T01:00:05Z'],
+    [
+      'after its tools: the latest own end, by instant, others ignored',
+      [
+        tool('a', '2026-10-24T01:00:04.900Z'),
         tool('b', '2026-10-24T01:00:09.000Z'),
         tool('other', '2026-10-24T01:00:30.000Z'),
-      ]),
-    ).toBe('2026-10-24T01:00:09.000Z');
-    // A running tool has no end yet.
-    expect(thinkingSince(c, [tool('a', null)])).toBe('2026-10-24T01:00:00.000Z');
+      ],
+      '2026-10-24T01:00:09.000Z',
+    ],
+  ])('%s, as the session activity says', (_what, tools, since) => {
+    const c = inFlight({ startedAt: '2026-10-24T01:00:05Z', toolCallIds: ['a', 'b'] });
+    expect(thinkingClock(c, tools)).toBe(since);
+    expect(thinkingClock(c, tools)).toBe(activityThinkingSince(c, tools));
   });
 
-  it('compares instants, not text', () => {
-    const c = call([], { startedAt: '2026-10-24T01:00:05Z', toolCallIds: ['a'] });
-    expect(thinkingSince(c, [tool('a', '2026-10-24T01:00:04.900Z')])).toBe('2026-10-24T01:00:05Z');
+  it('is off while one of its own tools runs, and once the call has ended', () => {
+    const c = inFlight({ startedAt: '2026-10-24T01:00:05Z', toolCallIds: ['a'] });
+    expect(thinkingClock(c, [tool('a', null, 'running')])).toBeNull();
+    expect(thinkingClock({ ...c, status: 'complete' }, [])).toBeNull();
   });
 });
