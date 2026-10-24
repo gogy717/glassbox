@@ -688,6 +688,14 @@ describe('App below three columns', () => {
   });
 
   it('closes once a session is picked, and carries on in the session just opened', () => {
+    // As a browser does, and jsdom does not: no focus inside an inert subtree.
+    const realFocus = HTMLElement.prototype.focus;
+    HTMLElement.prototype.focus = function (this: HTMLElement, options?: FocusOptions) {
+      if (!this.closest('[inert]')) realFocus.call(this, options);
+    };
+    onTestFinished(() => {
+      HTMLElement.prototype.focus = realFocus;
+    });
     openOverlay(true);
     fireEvent.click(screen.getByRole('button', { name: /Fix flaky login test/ }));
     expect(screen.queryByRole('dialog', { name: 'Sessions' })).toBeNull();

@@ -118,7 +118,8 @@ export function SessionSidebar({ sessions, selectedId, now, showProbes, onSelect
             onChange={(e) => setQuery(e.target.value)}
           />
         </label>
-        {agentCounts.length > 1 && (
+        {/* One choice is no choice, unless a filter on it is still armed: then "All" clears it. */}
+        {(agentCounts.length > 1 || agent !== null) && (
           // biome-ignore lint/a11y/useSemanticElements: a row of filter toggles, not a form fieldset
           <div className={css.chips} role="group" aria-label={t('sidebar.filterAgents')}>
             <Chip
@@ -145,7 +146,7 @@ export function SessionSidebar({ sessions, selectedId, now, showProbes, onSelect
             ))}
           </div>
         )}
-        {liveCounts.length > 1 && (
+        {(liveCounts.length > 1 || live !== null) && (
           // biome-ignore lint/a11y/useSemanticElements: a row of filter toggles, not a form fieldset
           <div className={css.chips} role="group" aria-label={t('sidebar.filterStates')}>
             <Chip

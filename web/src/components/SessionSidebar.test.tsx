@@ -509,4 +509,34 @@ describe('SessionSidebar', () => {
     rerender(sidebar(three));
     expect(screen.getAllByRole('button').filter((b) => b.closest('li'))).toHaveLength(three.length);
   });
+
+  it('keeps a chip row while its filter is armed, even with one choice left, so All can clear it', () => {
+    const two = sessions.map((x, i) => (i === 1 ? { ...x, agent: 'grok' } : x));
+    const sidebar = (list: SessionSummary[]) => (
+      <I18nContext.Provider value={makeI18n('en')}>
+        <SessionSidebar
+          sessions={list}
+          selectedId={null}
+          now={DEMO_NOW.getTime()}
+          onSelect={vi.fn()}
+        />
+      </I18nContext.Provider>
+    );
+    const { rerender } = render(sidebar(two));
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'Filter by agent' })).getByRole('button', {
+        name: /^Grok/,
+      }),
+    );
+    // Every Claude Code session goes: Grok is the only agent left, and still the filter.
+    rerender(sidebar(two.filter((x) => x.agent === 'grok')));
+    const group = screen.getByRole('group', { name: 'Filter by agent' });
+    expect(within(group).getByRole('button', { name: /^Grok/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    fireEvent.click(within(group).getByRole('button', { name: /^All/ }));
+    // Nothing armed and one choice: no row.
+    expect(screen.queryByRole('group', { name: 'Filter by agent' })).toBeNull();
+  });
 });

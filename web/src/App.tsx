@@ -174,6 +174,14 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
   const open = state.open;
   const summary = open?.session ?? state.sessions.find((s) => s.id === route.sessionId) ?? null;
   const sidebarShown = floating ? floatOpen : !sidebarCollapsed;
+  // A session picked from the overlay: carry on in it once <main> is no longer inert (a browser
+  // refuses focus inside an inert subtree, so not in the click handler).
+  const focusMainOnClose = useRef(false);
+  useLayoutEffect(() => {
+    if (modal || !focusMainOnClose.current) return;
+    focusMainOnClose.current = false;
+    mainRef.current?.focus();
+  }, [modal]);
   // The list went away with focus inside (a resize past a breakpoint): keep focus on the page.
   useLayoutEffect(() => {
     if (!sidebarShown && asideRef.current?.contains(document.activeElement))
@@ -229,8 +237,8 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
                   navigate({ sessionId: id, agentId: 'main', turnId: null, requestId: null });
                   if (!floating) return;
                   // The list goes away: carry on in the session just opened.
+                  focusMainOnClose.current = true;
                   setFloatOpen(false);
-                  mainRef.current?.focus();
                 }}
               />
             </aside>
