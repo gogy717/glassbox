@@ -20,7 +20,7 @@ import type {
   SessionSnapshot,
   SessionSummary,
 } from '../core/model.js';
-import { hourTotal, rateSeries, type TokenRate } from '../shared/rate.js';
+import { hourTotal, ratePerMinute, rateSeries, type TokenRate } from '../shared/rate.js';
 import { applyPatch } from './__tests__/apply-patch.js';
 import {
   createFakeAdapter,
@@ -505,6 +505,35 @@ describe('SessionStore token rate', () => {
     expect(rateSeries(rate, { kind: 'output' }).at(-1)).toBe(7);
     await vi.waitFor(() => expect(pushed.length).toBeGreaterThan(0), { timeout: 5000 });
     expect(hourTotal(pushed.at(-1) as TokenRate)).toBe(8);
+  });
+
+  // F S1: a paused session's rate comes down before the minute turns, pushed each 15 s step.
+  it('lets the rate decay while spending pauses, and pushes it before the minute turns', async () => {
+    const MIN = 60_000;
+    const base = Date.parse('2026-10-24T10:00:00.000Z');
+    let clock = base;
+    const p = await session('a', rec.req('ra', T(1), 10));
+    const s = await startStore({ rateMs: 20, rateTickMs: 40, now: () => clock });
+    await s.getSnapshot(p.id);
+    clock += 1000;
+    await settled();
+    const pushed: TokenRate[] = [];
+    s.onRate((r) => pushed.push(r));
+    // Four minutes at 1M a minute, then the first 10 s of the fifth, then nothing.
+    for (let m = 1; m <= 5; m++) {
+      clock = base + m * MIN + (m < 5 ? 30_000 : 10_000);
+      await appendFile(p.main, lines(rec.req(`r${m}`, T(1 + m), m < 5 ? 999_999 : 166_666)));
+      const total = Math.min(m, 4) * 1_000_000 + (m === 5 ? 166_667 : 0);
+      await vi.waitFor(() => expect(hourTotal(s.getRate())).toBe(total), { timeout: 5000 });
+    }
+    // At :59, with no new spend, the rate pushed is the 5-minute average as of :59.
+    clock = base + 5 * MIN + 59_000;
+    await vi.waitFor(() => expect(Date.parse(pushed.at(-1)?.at ?? '')).toBe(clock), {
+      timeout: 5000,
+    });
+    const shown = ratePerMinute(pushed.at(-1) as TokenRate);
+    expect(shown).toBeCloseTo(4_166_667 / (4 + 59 / 60), 0);
+    expect(Math.round(shown / 10_000) / 100).toBe(0.84);
   });
 
   it('takes a session that vanishes and comes back as a baseline again', async () => {

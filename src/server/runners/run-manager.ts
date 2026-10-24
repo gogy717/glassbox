@@ -17,6 +17,7 @@ import { randomUUID } from 'node:crypto';
 import { stat } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 import type { LiveState } from '../../core/model.js';
+import { redact, tildeHome } from '../../core/redact.js';
 import type {
   AskQuestion,
   DecidedPermission,
@@ -565,6 +566,9 @@ export class RunManager {
   }
 
   private update(run: Run, change: Partial<RunState>, opts: { throttle?: boolean } = {}): void {
+    // A run's error reaches every view of it (Home, the sidebar, the composer): masked once, here,
+    // as activity targets are, with the home directory as ~.
+    if (change.error) change = { ...change, error: tildeHome(redact(change.error)) };
     run.state = { ...run.state, ...change, updatedAt: this.now().toISOString() };
     this.emit(run, opts.throttle);
   }
