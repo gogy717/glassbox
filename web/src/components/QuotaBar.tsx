@@ -5,6 +5,7 @@ import { type MessageKey, useI18n } from '../i18n';
 import { formatCountdown, formatRelative, formatResetTime } from '../lib/format';
 import { providerName, providerShortName } from '../lib/provider-names';
 import { quotaWindowName } from '../lib/quota';
+import { FigureText } from './FigureText';
 import { useOnePopover } from './popover';
 import css from './QuotaBar.module.css';
 
@@ -194,7 +195,9 @@ export function QuotaBar({ quotas, now }: Props) {
                 <div key={w.id} className={css.row} data-level={levelOf(w.usedPercent)}>
                   <div className={css.rowHead}>
                     <span className={css.rowLabel}>{windowName(w)}</span>
-                    <span className="num">{t('quota.used', { pct: `${pct(w)}%` })}</span>
+                    <span>
+                      <FigureText k="quota.used" params={{ pct: `${pct(w)}%` }} />
+                    </span>
                   </div>
                   <span className={css.track} aria-hidden="true">
                     <span style={{ width: `${pct(w)}%` }} />

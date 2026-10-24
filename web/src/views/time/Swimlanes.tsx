@@ -461,9 +461,12 @@ export function Swimlanes({ open, lanes, now, selectedAgentId, agentName, onPick
               <strong>{segLabel(hover.seg)}</strong>
               <span>{agentName(hover.lane.agentId)}</span>
               {hoverTool && <code>{summarizeInput(hoverTool)}</code>}
-              <span className="num">
-                {formatClock(new Date(hover.seg.start).toISOString())} ·{' '}
-                {formatDuration(hover.seg.end - hover.seg.start)}
+              <span>
+                <span className="figure">
+                  {formatClock(new Date(hover.seg.start).toISOString())}
+                </span>
+                {' · '}
+                <span className="figure">{formatDuration(hover.seg.end - hover.seg.start)}</span>
                 {hover.seg.live ? ` · ${t('time.live')}` : ''}
               </span>
             </div>

@@ -96,7 +96,7 @@ export function Diagnostics({ diagnostics: d }: { diagnostics: Diag }) {
                       <td>
                         <code>{k}</code>
                       </td>
-                      <td className="num">{n(v)}</td>
+                      <td className="figure">{n(v)}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -32,6 +32,10 @@ describe('Diagnostics', () => {
     expect(panel).toHaveTextContent('Unparsable lines: 2');
     expect(panel).toHaveTextContent('Silently re-sent requests filtered out: 3');
     expect(within(panel).getByText('foo-bar')).toBeInTheDocument();
+    // Final review M6: a count is a figure, in the mono face.
+    expect(within(panel).getByText('foo-bar').closest('tr')?.lastElementChild).toHaveClass(
+      'figure',
+    );
   });
 
   it('describes every known gap in Chinese', () => {

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createDemoQuota, createDemoQuotas } from '../../../src/core/fixtures/demo.js';
 import type { QuotaSnapshot } from '../../../src/core/model.js';
 import { I18nContext, type Locale, makeI18n } from '../i18n';
+import { cjkInMono } from '../test/cjk';
 import { DEMO_NOW } from '../test/demo';
 import { formatBalance, QuotaBar } from './QuotaBar';
 import css from './QuotaBar.module.css';
@@ -173,7 +174,7 @@ describe('QuotaBar', () => {
     expect(within(anthropic).getByText('5-hour window')).toBeInTheDocument();
     expect(within(anthropic).getByText('Weekly')).toBeInTheDocument();
     expect(within(anthropic).getByText('Weekly · Opus')).toBeInTheDocument();
-    expect(within(anthropic).getByText('62% used')).toBeInTheDocument();
+    expect(within(anthropic).getByText('62%').parentElement).toHaveTextContent('62% used');
     expect(within(anthropic).getByText('Updated 4 m ago')).toBeInTheDocument();
     expect(within(anthropic).getByText("Source: Claude Code's cache")).toBeInTheDocument();
     expect(within(anthropic).getByText(/Extra usage/)).toHaveTextContent(
@@ -239,6 +240,16 @@ describe('QuotaBar', () => {
     const details = openDetails();
     expect(within(details).getByRole('region', { name: 'moonshot' })).toBeInTheDocument();
     expect(within(details).getByText('Source: some-new-feed')).toBeInTheDocument();
+  });
+
+  // Final review M6: the popover's figures in the mono face, its words in the UI face.
+  it('sets each window’s usage in the details as a figure, its words and Chinese in the UI face', () => {
+    renderBar([demo('anthropic')], 'zh');
+    fireEvent.click(screen.getByRole('button', { name: /额度/ }));
+    const details = screen.getByRole('dialog', { name: '额度' });
+    expect(within(details).getByText('62%')).toHaveClass('figure');
+    expect(within(details).getByText('62%').parentElement).toHaveTextContent('已用 62%');
+    expect(cjkInMono(details)).toEqual([]);
   });
 
   it('speaks Chinese', () => {

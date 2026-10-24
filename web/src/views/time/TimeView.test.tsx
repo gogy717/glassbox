@@ -187,6 +187,9 @@ describe('TimeView', () => {
     expect(tip).toHaveTextContent('Thinking');
     expect(tip).toHaveTextContent('Main');
     expect(tip).toHaveTextContent('8.4s');
+    // Final review M6: the clock and the duration are figures, in the mono face.
+    expect(within(tip).getByText('8.4s')).toHaveClass('figure');
+    expect(within(tip).getByText(/^\d\d:\d\d:\d\d$/)).toHaveClass('figure');
     fireEvent.click(seg);
     expect(navigate).toHaveBeenLastCalledWith({
       tab: 'flow',
