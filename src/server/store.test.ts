@@ -20,6 +20,7 @@ import type {
   SessionSnapshot,
   SessionSummary,
 } from '../core/model.js';
+import { hourTotal, rateSeries, type TokenRate } from '../shared/rate.js';
 import { applyPatch } from './__tests__/apply-patch.js';
 import {
   createFakeAdapter,
@@ -429,6 +430,57 @@ describe('SessionStore', () => {
     await sleep(250);
 
     expect(patches).toEqual([]);
+  });
+});
+
+describe('SessionStore token rate', () => {
+  it('counts an open session’s growth after its first sighting, for its agent kind', async () => {
+    const p = await session('a', rec.req('ra', T(1), 10));
+    const s = await startStore({ rateMs: 20 });
+    await s.getSnapshot(p.id);
+    // Everything it spent before is a baseline, not a spike.
+    expect(hourTotal(s.getRate())).toBe(0);
+    const pushed: TokenRate[] = [];
+    s.onRate((r) => pushed.push(r));
+
+    // One more request: 1 input + 7 output.
+    await appendFile(p.main, lines(rec.req('rb', T(2), 7)));
+    await vi.waitFor(() => expect(hourTotal(s.getRate())).toBe(8), { timeout: 2000 });
+    const rate = s.getRate();
+    expect(rateSeries(rate, { agent: fake.kind }).at(-1)).toBe(8);
+    expect(rateSeries(rate, { kind: 'output' }).at(-1)).toBe(7);
+    await vi.waitFor(() => expect(pushed.length).toBeGreaterThan(0), { timeout: 2000 });
+    expect(hourTotal(pushed.at(-1) as TokenRate)).toBe(8);
+  });
+
+  it('takes a session that vanishes and comes back as a baseline again', async () => {
+    const p = await session('a', rec.req('ra', T(1), 10));
+    const s = await startStore({ rateMs: 20 });
+    await s.getSnapshot(p.id);
+    await appendFile(p.main, lines(rec.req('rb', T(2), 7)));
+    await vi.waitFor(() => expect(hourTotal(s.getRate())).toBe(8), { timeout: 2000 });
+
+    // Gone from disk for two discoveries: dropped, and forgotten.
+    await rm(p.main);
+    await vi.waitFor(() => expect(s.listSessions()).toHaveLength(0), { timeout: 2000 });
+    // Back with far more in it: reopening it is a baseline, not 1,000 tokens at once.
+    await put(
+      p.main,
+      lines(rec.req('ra', T(1), 10), rec.req('rb', T(2), 7), rec.req('rc', T(3), 990)),
+    );
+    await vi.waitFor(() => expect(s.listSessions()).toHaveLength(1), { timeout: 2000 });
+    await s.getSnapshot(p.id);
+    expect(hourTotal(s.getRate())).toBe(8);
+    await appendFile(p.main, lines(rec.req('rd', T(4), 4)));
+    await vi.waitFor(() => expect(hourTotal(s.getRate())).toBe(13), { timeout: 2000 });
+  });
+
+  it('says nothing about sessions it has not opened, and stops cleanly', async () => {
+    await session('a', rec.req('ra', T(1), 10));
+    const s = await startStore({ rateMs: 20 });
+    expect(s.getRate().agents).toEqual({});
+    await s.stop();
+    store = undefined;
   });
 });
 

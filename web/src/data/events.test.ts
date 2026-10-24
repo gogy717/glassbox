@@ -84,6 +84,15 @@ describe('connectEvents', () => {
         patch: { ...snapshot, diagnostics: null },
       },
       quota: { type: 'quota', quotas: [createDemoQuota(NOW)] },
+      rate: {
+        type: 'rate',
+        rate: {
+          minute: NOW.toISOString(),
+          at: NOW.toISOString(),
+          since: NOW.toISOString(),
+          agents: {},
+        },
+      },
       run: { type: 'run', run: { id: 'run_1' } as unknown as RunState },
       'session-missing': { type: 'session-missing', sessionId: SID },
       heartbeat: { type: 'heartbeat', now: NOW.toISOString() },

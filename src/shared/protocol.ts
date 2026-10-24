@@ -11,6 +11,7 @@ import type {
   SessionSnapshot,
   SessionSummary,
 } from '../core/model.js';
+import type { TokenRate } from './rate.js';
 import type { RunState } from './runs.js';
 
 export const DEFAULT_PORT = 7788;
@@ -43,6 +44,8 @@ export const api = {
   token: () => '/api/token',
   /** GET → QuotaResponse. */
   quota: () => '/api/quota',
+  /** GET → RateResponse. */
+  rate: () => '/api/rate',
   /** GET → SessionSummary[]: busy/waiting sessions first, then newest `updatedAt` first. */
   sessions: () => '/api/sessions',
   /** GET → SessionSnapshot. 404 when unknown. */
@@ -74,6 +77,11 @@ export interface ApiErrorResponse {
 export interface TokenResponse {
   token: string;
 }
+/** Tokens per minute over the last hour, by agent kind and token kind (see rate.ts). */
+export interface RateResponse {
+  rate: TokenRate;
+}
+
 /** One snapshot per provider with a known quota, merged from every source; empty when none. */
 export interface QuotaResponse {
   quotas: QuotaSnapshot[];
@@ -101,6 +109,8 @@ export type ServerEvent =
   | { type: 'session-missing'; sessionId: string }
   /** Plan quota; sent on connect and whenever it changes. */
   | { type: 'quota'; quotas: QuotaSnapshot[] }
+  /** Token rate; sent on connect, and when its window changes (≤ 1 per 5 s, and each minute). */
+  | { type: 'rate'; rate: TokenRate }
   /** A glassbox-owned run changed (see runs.ts). Sent to every connection, ≤ 20/s per run. */
   | { type: 'run'; run: RunState }
   /** Every 15 s so clients can detect a dead connection. */

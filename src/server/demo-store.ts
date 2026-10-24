@@ -14,15 +14,51 @@ import type {
   SessionPatch,
   SessionSnapshot,
   SessionSummary,
+  TokenUsage,
   ToolCall,
   Turn,
 } from '../core/model.js';
 import { MAIN_AGENT_ID } from '../core/model.js';
 import { emptyUsage, sumUsage } from '../core/usage.js';
+import { MINUTE_MS, RATE_MINUTES, type RateKind, type TokenRate } from '../shared/rate.js';
 import type { AppStore } from './app.js';
+import { RateTracker } from './rate.js';
 import { compareSessions } from './store.js';
 
 const TICK_MS = 2000;
+
+/**
+ * Believable token traffic for the rate: tokens per minute, per agent and token kind, around
+ * which each simulated session's spend wanders. The Claude Code session dominates, as the open
+ * demo session does; Grok works in bursts.
+ */
+const DEMO_TRAFFIC: {
+  session: string;
+  agent: string;
+  perMin: Record<RateKind, number>;
+  duty: number;
+}[] = [
+  {
+    session: 'demo-rate-claude',
+    agent: 'claude-code',
+    perMin: { input: 2_400, cacheRead: 880_000, cacheWrite: 36_000, output: 9_500 },
+    duty: 0.9,
+  },
+  {
+    session: 'demo-rate-codex',
+    agent: 'codex',
+    perMin: { input: 22_000, cacheRead: 160_000, cacheWrite: 0, output: 3_200 },
+    duty: 0.7,
+  },
+  {
+    session: 'demo-rate-grok',
+    agent: 'grok',
+    perMin: { input: 18_000, cacheRead: 40_000, cacheWrite: 0, output: 2_100 },
+    duty: 0.3,
+  },
+];
+/** How often the simulated sessions report while the past hour is filled in. */
+const HISTORY_STEP_MS = 30_000;
 /** Ticks a main-agent request stays in flight, and a tool stays running. */
 const THINK_TICKS = 2;
 const TOOL_TICKS = 1;
@@ -67,6 +103,13 @@ export class DemoStore implements AppStore {
   private tickNo = 0;
   private serial = 0;
   private lane: Lane;
+  /** The token rate, counted from simulated sessions as the real store counts real ones. */
+  private readonly rate: RateTracker;
+  private rateClock: number;
+  private readonly rateTotals = new Map<string, TokenUsage>();
+  private readonly rateCbs = new Set<(r: TokenRate) => void>();
+  /** A seeded generator: the same believable traffic on every run. */
+  private seed = 0x2f6e2b1;
 
   constructor() {
     const now = new Date();
@@ -80,6 +123,36 @@ export class DemoStore implements AppStore {
     this.lane = inFlight
       ? { phase: 'thinking', ticksLeft: THINK_TICKS, requestId: inFlight.id }
       : { phase: 'idle', ticksLeft: IDLE_TICKS };
+    // Fill in the past hour, so the rate has history to show from the first second.
+    this.rateClock = now.getTime() - RATE_MINUTES * MINUTE_MS;
+    this.rate = new RateTracker(() => this.rateClock);
+    this.spend(0);
+    for (let t = this.rateClock + HISTORY_STEP_MS; t <= now.getTime(); t += HISTORY_STEP_MS) {
+      this.rateClock = t;
+      this.spend(HISTORY_STEP_MS);
+    }
+  }
+
+  /** Each simulated session spends `ms` worth of its traffic, and the tracker sees its totals. */
+  private spend(ms: number): void {
+    for (const s of DEMO_TRAFFIC) {
+      const total = this.rateTotals.get(s.session) ?? emptyUsage();
+      // Working or not this step, and how hard: a wandering share of its usual rate.
+      if (ms > 0 && this.random() < s.duty) {
+        const k = (ms / MINUTE_MS) * (0.55 + this.random() * 0.9);
+        total.input += Math.round(s.perMin.input * k);
+        total.cacheRead += Math.round(s.perMin.cacheRead * k);
+        total.cacheWrite += Math.round(s.perMin.cacheWrite * k);
+        total.output += Math.round(s.perMin.output * k);
+      }
+      this.rateTotals.set(s.session, total);
+      this.rate.observe(s.session, s.agent, { ...total });
+    }
+  }
+
+  private random(): number {
+    this.seed = (this.seed * 1_103_515_245 + 12_345) & 0x7fffffff;
+    return this.seed / 0x7fffffff;
   }
 
   async start(): Promise<void> {
@@ -142,6 +215,15 @@ export class DemoStore implements AppStore {
   }
 
   /** The demo quota never changes. */
+  getRate(): TokenRate {
+    return this.rate.snapshot();
+  }
+
+  onRate(cb: (r: TokenRate) => void): () => void {
+    this.rateCbs.add(cb);
+    return () => this.rateCbs.delete(cb);
+  }
+
   onQuota(_cb: (q: QuotaSnapshot[]) => void): () => void {
     return () => {};
   }
@@ -197,6 +279,11 @@ export class DemoStore implements AppStore {
     for (const cb of this.patchCbs) cb(patch);
     const list = this.listSessions();
     for (const cb of this.sessionCbs) cb(list);
+    // The rate moves with the clock: the simulated sessions spend another tick's worth.
+    this.rateClock = Date.now();
+    this.spend(TICK_MS);
+    const rate = this.rate.snapshot();
+    for (const cb of this.rateCbs) cb(rate);
   }
 
   private advanceLane(now: IsoTime, changed: Changed): void {

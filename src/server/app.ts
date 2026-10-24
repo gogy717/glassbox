@@ -8,6 +8,7 @@ import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type {
   ApiErrorResponse,
   QuotaResponse,
+  RateResponse,
   ServerEvent,
   SessionsResponse,
   TokenResponse,
@@ -33,6 +34,8 @@ export type AppStore = Pick<
   | 'onPatch'
   | 'listQuotas'
   | 'onQuota'
+  | 'getRate'
+  | 'onRate'
   | 'expectSession'
 >;
 
@@ -77,6 +80,7 @@ export function createApp(deps: AppDeps): Hono {
   app.get('/api/token', (c) => jsonResponse<TokenResponse>(c, { token: security.token }));
 
   app.get('/api/quota', (c) => jsonResponse<QuotaResponse>(c, { quotas: store.listQuotas() }));
+  app.get('/api/rate', (c) => jsonResponse<RateResponse>(c, { rate: store.getRate() }));
 
   app.get('/api/sessions', (c) => jsonResponse<SessionsResponse>(c, store.listSessions()));
 
@@ -119,6 +123,8 @@ export function createApp(deps: AppDeps): Hono {
         send({ type: 'sessions', sessions: store.listSessions() });
         cleanups.push(store.onQuota((quotas) => send({ type: 'quota', quotas })));
         send({ type: 'quota', quotas: store.listQuotas() });
+        cleanups.push(store.onRate((rate) => send({ type: 'rate', rate })));
+        send({ type: 'rate', rate: store.getRate() });
         if (deps.runs) {
           const pacer = runEventPacer((run) => send({ type: 'run', run }));
           cleanups.push(deps.runs.onRun((run) => pacer.push(run)));

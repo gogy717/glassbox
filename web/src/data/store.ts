@@ -11,6 +11,7 @@ import type {
   WorkflowRun,
 } from '../../../src/core/model.js';
 import type { ServerEvent } from '../../../src/shared/protocol.js';
+import type { TokenRate } from '../../../src/shared/rate.js';
 import type { RunState } from '../../../src/shared/runs.js';
 
 export type ConnectionState = 'connecting' | 'open' | 'reconnecting';
@@ -39,6 +40,8 @@ export interface ViewState {
   open: OpenSession | null;
   /** Plan quota per provider (account-wide, not per session). */
   quotas: QuotaSnapshot[];
+  /** Tokens per minute over the last hour, by agent and token kind; null until the server says. */
+  rate: TokenRate | null;
   /** Runs glassbox started (B-lite), by id; replayed by the server on every connect. */
   runs: Map<string, RunState>;
 }
@@ -91,6 +94,7 @@ export function createStore(): Store {
     missingId: null,
     open: null,
     quotas: [],
+    rate: null,
     runs: new Map(),
   };
   const listeners = new Set<() => void>();
@@ -133,6 +137,9 @@ export function createStore(): Store {
       }
       case 'quota':
         set({ ...state, quotas: e.quotas });
+        return;
+      case 'rate':
+        set({ ...state, rate: e.rate });
         return;
       case 'run':
         set({ ...state, runs: new Map(state.runs).set(e.run.id, e.run) });

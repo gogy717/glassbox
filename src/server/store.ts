@@ -8,9 +8,11 @@ import type {
   SessionSummary,
 } from '../core/model.js';
 import type { QuotaSource } from '../core/quota-source.js';
+import { MINUTE_MS, type TokenRate } from '../shared/rate.js';
 import { Coalescer } from './coalescer.js';
 import { errorText, OpenSession } from './open-session.js';
 import { adapterQuotaSources, QuotaWatcher } from './quota.js';
+import { RateTracker } from './rate.js';
 
 export interface SessionStoreOptions {
   adapters: AgentAdapter[];
@@ -32,6 +34,10 @@ export interface SessionStoreOptions {
   chunkBytes?: number;
   /** How often to re-read plan quotas (they also go stale with age). */
   quotaPollMs?: number;
+  /** Minimum gap between two token-rate events. */
+  rateMs?: number;
+  /** The clock the token rate counts by. */
+  now?: () => number;
   log?: (msg: string) => void;
 }
 
@@ -56,6 +62,9 @@ const QUICK_DISCOVER_MS = 200;
 
 /** Consecutive discoveries a session must be missing from before it leaves the list. */
 const MISSES_BEFORE_DROP = 2;
+
+/** What a rate event says, without when it was made. */
+const rateKey = (r: TokenRate) => JSON.stringify([r.minute, r.agents]);
 
 /** busy and waiting both mean someone is mid-task in that session right now. */
 export function isActive(live: LiveState): boolean {
@@ -95,6 +104,12 @@ export class SessionStore {
   private quickDiscoverTimer: NodeJS.Timeout | null = null;
   private discovering: Promise<void> | null = null;
   private readonly quota: QuotaWatcher;
+  private readonly rate: RateTracker;
+  private readonly rateListeners = new Set<(r: TokenRate) => void>();
+  private readonly ratePacer: Coalescer;
+  /** The last rate sent, without its timestamp: unchanged windows are not sent again. */
+  private lastRateKey = '';
+  private minuteTimer: NodeJS.Timeout | null = null;
 
   constructor(opts: SessionStoreOptions) {
     this.opts = {
@@ -106,11 +121,15 @@ export class SessionStore {
       pollMs: 1000,
       chunkBytes: 4 * 1024 * 1024,
       quotaPollMs: 30_000,
+      rateMs: 5000,
+      now: Date.now,
       quotaSources: [],
       log: () => {},
       ...opts,
     };
     this.sessionsPacer = new Coalescer(this.opts.sessionsMs, () => this.emitSessions());
+    this.rate = new RateTracker(this.opts.now);
+    this.ratePacer = new Coalescer(this.opts.rateMs, () => this.emitRate());
     this.quota = new QuotaWatcher({
       sources: [...adapterQuotaSources(this.opts.adapters), ...this.opts.quotaSources],
       pollMs: this.opts.quotaPollMs,
@@ -125,6 +144,8 @@ export class SessionStore {
     this.lastSessionsJson = JSON.stringify(this.listSessions());
     this.loop('discoverTimer', this.opts.discoverMs, () => this.discoverNow());
     this.loop('liveTimer', this.opts.liveMs, () => this.refreshLive());
+    this.lastRateKey = rateKey(this.rate.snapshot());
+    this.scheduleMinute();
     this.scheduleAutoOpen();
   }
 
@@ -134,13 +155,26 @@ export class SessionStore {
     this.quickDiscoverTimer = null;
     for (const set of [...this.expecting.values()]) for (const done of [...set]) done(false);
     this.sessionsPacer.cancel();
-    for (const t of [this.discoverTimer, this.liveTimer]) if (t) clearTimeout(t);
-    this.discoverTimer = this.liveTimer = null;
+    this.ratePacer.cancel();
+    for (const t of [this.discoverTimer, this.liveTimer, this.minuteTimer]) if (t) clearTimeout(t);
+    this.discoverTimer = this.liveTimer = this.minuteTimer = null;
     for (const entry of this.entries.values()) this.closeEntry(entry);
     this.quota.stop();
     this.sessionListeners.clear();
     this.patchListeners.clear();
     this.resetListeners.clear();
+    this.rateListeners.clear();
+  }
+
+  /** Tokens per minute bucket over the last hour, by agent and token kind. */
+  getRate(): TokenRate {
+    return this.rate.snapshot();
+  }
+
+  /** Called when the rate's window changes, at most once per `rateMs`. */
+  onRate(cb: (r: TokenRate) => void): () => void {
+    this.rateListeners.add(cb);
+    return () => this.rateListeners.delete(cb);
   }
 
   listSessions(): SessionSummary[] {
@@ -251,6 +285,8 @@ export class SessionStore {
 
   private async openEntry(entry: Entry): Promise<OpenSession> {
     const id = entry.summary.id;
+    // Its first summary is a baseline for the token rate: what it spent before is not now.
+    this.rate.forget(id);
     const session = new OpenSession(entry.adapter, entry.source, {
       patchMs: this.opts.patchMs,
       pollMs: this.opts.pollMs,
@@ -260,6 +296,7 @@ export class SessionStore {
       onSummary: (summary) => {
         if (entry.open !== session && entry.opening === null) return;
         entry.summary = summary;
+        if (this.rate.observe(id, summary.agent, summary.usage)) this.notifyRate();
         this.notifySessions();
       },
       onPatch: (patch) => {
@@ -301,6 +338,7 @@ export class SessionStore {
   private closeEntry(entry: Entry): void {
     entry.open?.close();
     entry.open = null;
+    this.rate.forget(entry.summary.id);
   }
 
   // ── Polling ───────────────────────────────────────────────────────────────────────────
@@ -459,6 +497,32 @@ export class SessionStore {
     } finally {
       this.autoOpening = false;
     }
+  }
+
+  /** At each minute's turn the window moves (and its average decays), whether or not tokens did. */
+  private scheduleMinute(): void {
+    const now = this.opts.now();
+    this.minuteTimer = setTimeout(
+      () => {
+        if (this.stopped) return;
+        this.notifyRate();
+        this.scheduleMinute();
+      },
+      MINUTE_MS - (now % MINUTE_MS) + 20,
+    );
+  }
+
+  private notifyRate(): void {
+    if (!this.stopped) this.ratePacer.request();
+  }
+
+  private emitRate(): void {
+    if (this.stopped) return;
+    const rate = this.rate.snapshot();
+    const key = rateKey(rate);
+    if (key === this.lastRateKey) return;
+    this.lastRateKey = key;
+    for (const cb of this.rateListeners) cb(rate);
   }
 
   /** Emit the list if it changed, at most once per `sessionsMs`. */

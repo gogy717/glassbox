@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDemoQuotas, DEMO_SESSION_ID } from '../core/fixtures/demo.js';
 import { checkSnapshot } from '../core/invariants.js';
 import type { SessionPatch, SessionSnapshot, SessionSummary } from '../core/model.js';
+import { hourTotal, ratePerMinute, rateSeries, type TokenRate } from '../shared/rate.js';
 import { applyPatch } from './__tests__/apply-patch.js';
 import { DemoStore } from './demo-store.js';
 
@@ -138,6 +139,32 @@ describe('DemoStore', () => {
     a.requests.length = 0;
     const b = (await store.getSnapshot(DEMO_SESSION_ID)) as SessionSnapshot;
     expect(b.requests.length).toBeGreaterThan(0);
+  });
+});
+
+describe('DemoStore token rate', () => {
+  it('has an hour of believable history from the start, Claude Code first', () => {
+    const rate = store.getRate();
+    expect(Object.keys(rate.agents).sort()).toEqual(['claude-code', 'codex', 'grok']);
+    const claude = ratePerMinute(rate, { agent: 'claude-code' });
+    expect(claude).toBeGreaterThan(400_000);
+    expect(claude).toBeGreaterThan(ratePerMinute(rate, { agent: 'codex' }));
+    expect(ratePerMinute(rate, { agent: 'codex' })).toBeGreaterThan(
+      ratePerMinute(rate, { agent: 'grok' }),
+    );
+    // Most of the hour is filled in, not just the last minutes.
+    expect(rateSeries(rate).filter((n) => n > 0).length).toBeGreaterThan(50);
+  });
+
+  it('moves with every tick, and tells its listeners', async () => {
+    const before = store.getRate();
+    const pushed: TokenRate[] = [];
+    store.onRate((r) => pushed.push(r));
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(pushed).toHaveLength(3);
+    const after = pushed.at(-1) as TokenRate;
+    expect(Date.parse(after.at)).toBeGreaterThan(Date.parse(before.at));
+    expect(hourTotal(after)).not.toBe(hourTotal(before));
   });
 });
 
