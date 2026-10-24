@@ -1,6 +1,7 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { AgentKind, QuotaSnapshot } from '../../../../src/core/model.js';
+import { emptyUsage } from '../../../../src/core/usage.js';
 import { SessionAgentContext } from '../../data/session-agent';
 import { createStore, StoreContext } from '../../data/store';
 import { I18nContext, makeI18n } from '../../i18n';
@@ -78,6 +79,25 @@ describe('TokensView', () => {
     );
     expect(bars.length).toBeGreaterThan(3);
     for (const bar of bars) expect(bar.style.minWidth).toBe('24px');
+  });
+
+  it('says there is no token data, with “yet” only while the session runs', () => {
+    const open = demoOpen();
+    const agentId = 'a1b2c3d4e5f60718';
+    const zero = emptyUsage();
+    open.requests = new Map(
+      [...open.requests].map(([id, r]) => [id, r.agentId === agentId ? { ...r, usage: zero } : r]),
+    );
+    open.agents = new Map(open.agents).set(agentId, {
+      ...(open.agents.get(agentId) as NonNullable<ReturnType<typeof open.agents.get>>),
+      status: 'complete',
+      usage: zero,
+    });
+    renderTokens(agentId, open);
+    expect(screen.getByText('No token data yet')).toBeInTheDocument();
+    cleanup();
+    renderTokens(agentId, { ...open, session: { ...open.session, live: 'closed' } });
+    expect(screen.getByText('No token data for this agent')).toBeInTheDocument();
   });
 
   it('labels the tree / spend switch as the rows’ order', () => {

@@ -8,7 +8,7 @@ import type { OpenSession } from '../../data/store';
 import { useNow } from '../../data/useNow';
 import { useThrottled } from '../../data/useThrottled';
 import { type MessageKey, useI18n } from '../../i18n';
-import { subtreeIds } from '../../lib/agents';
+import { mayStillRun, subtreeIds } from '../../lib/agents';
 import { DASH, fitSummary, formatDuration } from '../../lib/format';
 import { activeMs, slowest, timeBreakdown, timeSegments } from '../../lib/time-stats';
 import { summarizeInput, type ToolCategory, toolCategory } from '../../lib/tool-category';
@@ -123,7 +123,10 @@ export function TimeView({ open, agentId, navigate }: Props) {
   const active = segments.length > 0 ? formatDuration(activeMs(segments)) : DASH;
 
   if (lanes.every((l) => l.segments.length === 0))
-    return <p className={css.empty}>{t('time.empty')}</p>;
+    // "Yet" only while the session may still add to it.
+    return (
+      <p className={css.empty}>{t(mayStillRun(view, agentId) ? 'time.empty' : 'time.emptyDone')}</p>
+    );
 
   return (
     <div className={css.view}>
@@ -210,7 +213,12 @@ export function TimeView({ open, agentId, navigate }: Props) {
                             }}
                           />
                         )}
-                        {s.live && <em> · {t('time.live')}</em>}
+                        {s.live && (
+                          <>
+                            {' · '}
+                            <em>{t('time.live')}</em>
+                          </>
+                        )}
                       </span>
                     </span>
                     <span className={`${css.slowDur} figure`}>{formatDuration(s.durationMs)}</span>

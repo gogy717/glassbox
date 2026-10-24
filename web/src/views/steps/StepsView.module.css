@@ -198,12 +198,21 @@
   color: var(--text);
 }
 
+/* A chip: lowercase, mono, on layer-3, never coloured ("610 thinking"). */
 .chip {
   padding: 0 6px;
   border-radius: var(--radius-s);
   background: var(--layer-3);
   color: var(--muted);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-transform: lowercase;
   white-space: nowrap;
+}
+
+/* CJK never goes into the mono face: in zh the word is in the UI face, the figure stays mono. */
+.chip:lang(zh) {
+  font-family: var(--font-ui);
 }
 
 .open {

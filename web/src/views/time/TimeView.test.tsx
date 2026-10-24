@@ -214,6 +214,16 @@ describe('TimeView', () => {
     open.toolCalls = new Map([...open.toolCalls].map(([id, t]) => [id, { ...t, startedAt: null }]));
     renderTime('main', open);
     expect(screen.getByText('No timing data yet')).toBeInTheDocument();
+    cleanup();
+    // A session that is over, its agent done, says so without "yet".
+    const main = open.agents.get('main');
+    if (!main) throw new Error('fixture');
+    renderTime('main', {
+      ...open,
+      session: { ...open.session, live: 'closed' },
+      agents: new Map(open.agents).set('main', { ...main, status: 'complete' }),
+    });
+    expect(screen.getByText('No timing data in this session')).toBeInTheDocument();
   });
 
   it('survives malformed timestamps without blanking the chart', () => {

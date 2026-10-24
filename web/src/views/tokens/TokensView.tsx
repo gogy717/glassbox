@@ -8,7 +8,7 @@ import { useSessionAgentKind } from '../../data/session-agent';
 import { type OpenSession, useViewState } from '../../data/store';
 import { useNow } from '../../data/useNow';
 import { useI18n } from '../../i18n';
-import { subtreeIds } from '../../lib/agents';
+import { mayStillRun, subtreeIds } from '../../lib/agents';
 import { formatNumber, formatPercent, formatRelative } from '../../lib/format';
 import { providerShortName } from '../../lib/provider-names';
 import { quotaWindowName, sessionQuota } from '../../lib/quota';
@@ -61,7 +61,13 @@ export function TokensView({ open, agentId, navigate }: Props) {
     [navigate, setFollow],
   );
 
-  if (!total || totalTokens(total) === 0) return <p className={css.empty}>{t('tokens.noData')}</p>;
+  // "Yet" only while the agent may still add to it.
+  if (!total || totalTokens(total) === 0)
+    return (
+      <p className={css.empty}>
+        {t(mayStillRun(open, agentId) ? 'tokens.noData' : 'tokens.noDataDone')}
+      </p>
+    );
 
   return (
     <div className={css.view}>
