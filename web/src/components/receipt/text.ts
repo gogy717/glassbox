@@ -1,63 +1,84 @@
 /**
- * The receipt as text, for a PR, a stand-up or a chat: a fenced block, one line per line of the
- * image (the barcode aside), aligned with spaces at most 40 lines long. CJK counts two columns.
+ * The receipt as text, for a PR, a stand-up or a chat: a fenced block of at most 40 lines and 44
+ * columns, one line per line of the image (the barcode aside). Its figures are always ASCII
+ * ("1h 02m", "18.2M"); in Chinese they come first on a line and the words after them, because a
+ * CJK character's width in a code font varies (about 1.7 columns on GitHub) and nothing after
+ * one can be aligned.
  */
-import { type MessageKey, translate } from '../../i18n';
 import { agentName } from '../../lib/agent-names';
-import { formatCompact } from '../../lib/format';
+import { formatCompact, formatPercent } from '../../lib/format';
 import type { ReceiptData } from './data';
-import { clock, day, durationParts, modelName, partsText, percent } from './format';
+import { clock, day, durationParts, modelName, partsText } from './format';
+import { categoryLine, clip, timed, timeRows } from './rows';
 import { type ReceiptKey, rt } from './strings';
 import type { ReceiptOptions } from './svg';
 
 /** Columns of the block. */
 export const COLUMNS = 44;
 const CJK = /[⺀-鿿豈-﫿＀-￯　-〿]/;
+const TOKENS = /[⺀-鿿豈-﫿＀-￯　-〿]|[^\s⺀-鿿豈-﫿＀-￯　-〿]+|\s+/g;
 
-/** Display width: a CJK character takes two columns. */
+/** Display width, counting a CJK character as two columns (the widest a code font gives it). */
 export const cols = (s: string) => [...s].reduce((n, ch) => n + (CJK.test(ch) ? 2 : 1), 0);
 
 const spread = (left: string, right: string, fill = ' ') =>
   `${left}${fill.repeat(Math.max(1, COLUMNS - cols(left) - cols(right)))}${right}`;
 
-/** `s` in lines of at most COLUMNS, broken between words or CJK characters, `max` lines. */
+/** `left`, a run of dots, then `right`, ending at column `width`. */
+const dots = (left: string, right: string, width = COLUMNS) =>
+  `${left}${'.'.repeat(Math.max(1, width - cols(left) - cols(right)))}${right}`;
+
+/**
+ * `s` in lines of at most COLUMNS, broken between words or CJK characters (a word longer than a
+ * line is broken inside it, never dropped), `max` lines, the last ending in "…" when cut.
+ */
 function wrapCols(s: string, max: number): string[] {
   const lines: string[] = [];
   let line = '';
-  for (const tok of s.match(/[⺀-鿿豈-﫿＀-￯　-〿]|[^\s⺀-鿿豈-﫿＀-￯　-〿]+|\s+/g) ?? []) {
+  for (const tok of s.match(TOKENS) ?? []) {
     if (/^\s+$/.test(tok)) {
       if (line) line += ' ';
-    } else if (cols(line + tok) <= COLUMNS) line += tok;
-    else {
-      if (line.trim()) lines.push(line.trimEnd());
-      line = [...tok].reduce((acc, ch) => (cols(acc + ch) <= COLUMNS ? acc + ch : acc), '');
+      continue;
+    }
+    if (cols(line + tok) <= COLUMNS) {
+      line += tok;
+      continue;
+    }
+    if (line.trim()) lines.push(line.trimEnd());
+    line = '';
+    for (const ch of tok) {
+      if (cols(line + ch) > COLUMNS) {
+        lines.push(line);
+        line = '';
+      }
+      line += ch;
     }
   }
   if (line.trim()) lines.push(line.trimEnd());
   if (lines.length <= max) return lines;
-  let last = lines[max - 1] as string;
-  while (cols(`${last}…`) > COLUMNS) last = [...last].slice(0, -1).join('');
-  return [...lines.slice(0, max - 1), `${last}…`];
+  return [...lines.slice(0, max - 1), clip(`${lines[max - 1]}…`, COLUMNS, cols)];
 }
 
 export function receiptText(d: ReceiptData, o: ReceiptOptions): string {
   const L = o.locale;
+  const zh = L === 'zh';
   const w = (key: ReceiptKey, params?: Record<string, string | number>) => rt(L, key, params);
-  const head = (key: ReceiptKey) => (L === 'zh' ? w(key) : w(key).toUpperCase());
-  const dur = (ms: number) => partsText(durationParts(ms, L));
+  const head = (key: ReceiptKey) => (zh ? w(key) : w(key).toUpperCase());
+  // Figures in ASCII whatever the language: they are what has to line up.
+  const dur = (ms: number) => partsText(durationParts(ms, 'en'));
+  const count = (n: number) => formatCompact(n, 'en');
   const rule = '-'.repeat(COLUMNS);
+  /** Chinese: the figure in a 7-column field, then the words. */
+  const lead = (figure: string, words: string, gap = '  ') => `${figure.padStart(7)}${gap}${words}`;
   const out: string[] = ['```'];
 
-  out.push(spread('glassbox', head('heading')));
-  out.push(
-    [
-      agentName(d.agent),
-      d.model ? modelName(d.model) : null,
-      d.effort ? w('effort', { e: d.effort }) : null,
-    ]
-      .filter(Boolean)
-      .join(' · '),
-  );
+  out.push(zh ? `glassbox · ${w('heading')}` : spread('glassbox', head('heading')));
+  const who = [
+    agentName(d.agent),
+    d.model ? modelName(d.model) : null,
+    d.effort ? w('effort', { e: d.effort }) : null,
+  ];
+  out.push(clip(who.filter(Boolean).join(' · '), COLUMNS, cols));
   const span = d.running
     ? `${d.start !== null ? `${clock(d.start)} ` : ''}→ ${w('now')} · ${w('stillRunning')}`
     : d.start !== null
@@ -68,83 +89,66 @@ export function receiptText(d: ReceiptData, o: ReceiptOptions): string {
   const tail = ` · ${w('stillRunning')}`;
   const moved = d.running && cols(when) > COLUMNS;
   out.push(moved ? when.slice(0, -tail.length) : when);
-  out.push(
-    spread(
-      moved ? `${head('duration')}${tail}` : head('duration'),
-      d.durationMs === null ? '—' : dur(d.durationMs),
-    ),
-  );
+  const duration = d.durationMs === null ? '—' : dur(d.durationMs);
+  const durationName = moved ? `${head('duration')}${tail}` : head('duration');
+  out.push(zh ? lead(duration, durationName) : spread(durationName, duration));
   out.push(rule);
-  if (!o.hideNames && d.project) out.push(`${d.project} /`);
+  if (!o.hideNames && d.project) out.push(`${clip(d.project, COLUMNS - 2, cols)} /`);
   out.push(...wrapCols(o.hideNames || !d.title ? w('untitled') : d.title, 3));
   out.push(rule);
 
   out.push(head('work'));
-  const count = (n: number, key: ReceiptKey) => {
+  const work = (n: number, key: ReceiptKey) => {
     if (n > 0) out.push(`${String(n).padStart(5)}  ${w(key, { n })}`);
   };
-  count(d.work.requests, 'modelCalls');
-  count(d.work.toolCalls, 'toolCalls');
+  work(d.work.requests, 'modelCalls');
+  work(d.work.toolCalls, 'toolCalls');
   if (d.work.toolCalls > 0 && d.work.categories.length > 0)
-    out.push(
-      `       ${d.work.categories
-        .map(({ category, count }) => {
-          const name = translate(L, `steps.cat.${category}` as MessageKey);
-          return `${L === 'en' ? name.toLowerCase() : name} ${count}`;
-        })
-        .join(' · ')}`,
-    );
-  count(d.work.subAgents, 'subAgents');
-  count(d.work.turns, 'conversations');
-  count(d.work.failures, 'failures');
-  count(d.work.compactions, 'compactions');
+    out.push(`       ${categoryLine(d.work.categories, L, (line) => cols(line) <= COLUMNS - 7)}`);
+  work(d.work.subAgents, 'subAgents');
+  work(d.work.turns, 'conversations');
+  work(d.work.failures, 'failures');
+  work(d.work.compactions, 'compactions');
   out.push(rule);
 
-  const parts = (
-    [
-      ['thinking', d.time.thinking],
-      ['generating', d.time.generating],
-      ['tools', d.time.tools],
-      ['approval', d.time.approval],
-      ['queued', d.time.queued],
-    ] as [ReceiptKey, number][]
-  ).filter(([, v]) => v >= 1000);
-  const whole = parts.reduce((s, [, v]) => s + v, 0);
-  // Left out when nothing was timed, as on the image (the barcode is the image's alone).
-  const timed = parts.length > 0 || d.time.longestThink >= 1000;
-  if (timed) out.push(head('time'));
-  for (const [key, v] of parts)
-    out.push(
-      `${spreadTo(`${w(key)} `, ` ${dur(v)}`, COLUMNS - 5)}${percent(v / whole).padStart(5)}`,
-    );
-  if (d.time.longestThink >= 1000)
-    out.push(spreadTo(`${w('longestThink')} `, ` ${dur(d.time.longestThink)}`, COLUMNS - 5));
-  if (timed) out.push(rule);
+  if (timed(d)) {
+    out.push(head('time'));
+    for (const r of timeRows(d))
+      out.push(
+        zh
+          ? lead(dur(r.ms), `${`${r.share}%`.padStart(4)}  ${w(r.key)}`)
+          : `${dots(`${w(r.key)} `, ` ${dur(r.ms)}`, COLUMNS - 5)}${`${r.share}%`.padStart(5)}`,
+      );
+    if (d.time.longestThink >= 1000) {
+      const v = dur(d.time.longestThink);
+      out.push(
+        zh
+          ? lead(v, w('longestThink'), '        ')
+          : dots(`${w('longestThink')} `, ` ${v}`, COLUMNS - 5),
+      );
+    }
+    out.push(rule);
+  }
 
   out.push(head('tokens'));
   const t = d.tokens;
   if (!t.measured) out.push(w('notReported'));
   else {
-    const c = (n: number) => formatCompact(n, L);
-    const tokenRow = (key: ReceiptKey, v: number, indent = '') => {
-      if (v > 0) out.push(spread(`${indent}${w(key)} `, ` ${c(v)}`, '.'));
-    };
-    tokenRow('cacheRead', t.cacheRead);
-    tokenRow('cacheWrite', t.cacheWrite);
-    tokenRow('uncached', t.uncached);
-    tokenRow('output', t.output);
-    tokenRow('ofThinking', t.thinking, '  ');
-    if (t.cacheHit !== null) out.push(spread(`${w('cacheHit')} `, ` ${percent(t.cacheHit)}`, '.'));
-    out.push(spread(head('total'), c(t.total)));
+    const row = (key: ReceiptKey, figure: string, indent = '') =>
+      out.push(zh ? lead(figure, `${indent}${w(key)}`) : dots(`${indent}${w(key)} `, ` ${figure}`));
+    if (t.cacheRead > 0) row('cacheRead', count(t.cacheRead));
+    if (t.cacheWrite > 0) row('cacheWrite', count(t.cacheWrite));
+    if (t.uncached > 0) row('uncached', count(t.uncached));
+    if (t.output > 0) row('output', count(t.output));
+    if (t.thinking > 0) row('ofThinking', count(t.thinking), '  ');
+    if (t.cacheHit !== null) row('cacheHit', formatPercent(t.cacheHit, 'en'));
+    out.push(zh ? lead(count(t.total), w('total')) : spread(head('total'), count(t.total)));
   }
 
-  for (const line of [w('printedBy'), 'npx github:gogy717/glassbox', w('motto')])
+  // "Every token accounted for" only when the tokens were.
+  const foot = [w('printedBy'), 'npx github:gogy717/glassbox', ...(t.measured ? [w('motto')] : [])];
+  for (const line of foot)
     out.push(`${' '.repeat(Math.max(0, Math.floor((COLUMNS - cols(line)) / 2)))}${line}`);
   out.push('```');
   return out.join('\n');
-}
-
-/** `left`, a run of dots, then `right`, ending at column `width`. */
-function spreadTo(left: string, right: string, width: number): string {
-  return `${left}${'.'.repeat(Math.max(1, width - cols(left) - cols(right)))}${right}`;
 }

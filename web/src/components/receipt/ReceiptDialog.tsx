@@ -6,7 +6,7 @@ import { type Locale, useI18n } from '../../i18n';
 import { Modal } from '../Modal';
 import { Switch } from '../Switch';
 import { receiptData } from './data';
-import { canCopyImage, copyImage, download, fileName, rasterize, svgUrl } from './exportImage';
+import { copyOrDownload, download, fileName, rasterize, svgUrl } from './exportImage';
 import css from './ReceiptDialog.module.css';
 import { rt } from './strings';
 import { type Paper, type ReceiptSize, receiptSvg, SCALE } from './svg';
@@ -34,13 +34,13 @@ export function loadChoices(): Choices {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? 'null') as Partial<Choices> | null;
     return {
-      size: raw?.size === 'tall' || raw?.size === 'story' ? raw.size : 'post',
+      size: raw?.size === 'post' || raw?.size === 'story' ? raw.size : 'tall',
       paper: raw?.paper === 'paper' || raw?.paper === 'night' ? raw.paper : null,
       locale: raw?.locale === 'en' || raw?.locale === 'zh' ? raw.locale : null,
       hideNames: raw?.hideNames === true,
     };
   } catch {
-    return { size: 'post', paper: null, locale: null, hideNames: false };
+    return { size: 'tall', paper: null, locale: null, hideNames: false };
   }
 }
 
@@ -70,8 +70,9 @@ export function ReceiptDialog({ open, onClose, returnFocusTo }: Props) {
   const approvals = useApprovalsContext();
   const [choices, setChoices] = useState(loadChoices);
   const [status, setStatus] = useState('');
-  // The figures as of opening the dialog: a running session's receipt says "now" for then.
-  const [now] = useState(() => Date.now());
+  // The session as it was when the dialog opened, read once: a running session's receipt says
+  // "now" for then, and a live update can never redraw it past the time it prints.
+  const [data] = useState(() => receiptData(open, Date.now(), approvals));
   const choose = (change: Partial<Choices>) => {
     const next = { ...choices, ...change };
     setChoices(next);
@@ -86,7 +87,6 @@ export function ReceiptDialog({ open, onClose, returnFocusTo }: Props) {
     }),
     [choices.paper, choices.locale, choices.hideNames, appLocale],
   );
-  const data = useMemo(() => receiptData(open, now, approvals), [open, now, approvals]);
   const image = useMemo(
     () => receiptSvg(data, options, choices.size),
     [data, options, choices.size],
@@ -94,8 +94,8 @@ export function ReceiptDialog({ open, onClose, returnFocusTo }: Props) {
   const text = useMemo(() => receiptText(data, options), [data, options]);
   const url = useMemo(() => svgUrl(image.svg), [image.svg]);
   const name = fileName(data, options.hideNames);
-  const fail = (err: unknown) =>
-    setStatus(ui('failed', { msg: err instanceof Error ? err.message : String(err) }));
+  const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
+  const fail = (err: unknown) => setStatus(ui('failed', { msg: message(err) }));
   const save = () =>
     rasterize(image.svg, image.width, image.height)
       .then((png) => {
@@ -103,19 +103,21 @@ export function ReceiptDialog({ open, onClose, returnFocusTo }: Props) {
         setStatus(ui('downloaded'));
       })
       .catch(fail);
-  const copy = () => {
-    if (!canCopyImage()) return void save();
-    // Made in this click's own turn, the PNG still to come: what Safari needs.
-    copyImage(rasterize(image.svg, image.width, image.height))
-      .then(() => setStatus(ui('copied')))
+  const copy = () =>
+    copyOrDownload(rasterize(image.svg, image.width, image.height), name)
+      .then((how) => setStatus(ui(how === 'copied' ? 'copied' : 'copyFellBack')))
       .catch(fail);
+  const copyText = () => {
+    try {
+      navigator.clipboard
+        .writeText(text)
+        .then(() => setStatus(ui('copiedText')))
+        .catch((err: unknown) => setStatus(ui('textFailed', { msg: message(err) })));
+    } catch (err) {
+      setStatus(ui('textFailed', { msg: message(err) }));
+    }
   };
-  const copyText = () =>
-    navigator.clipboard
-      .writeText(text)
-      .then(() => setStatus(ui('copiedText')))
-      .catch(fail);
-  const heading = [open.session.project, data.title].filter(Boolean).join(' / ');
+  const heading = [data.project, data.title].filter(Boolean).join(' / ');
   const size = `${image.width * SCALE} × ${image.height * SCALE}`;
 
   return (
@@ -186,7 +188,7 @@ export function ReceiptDialog({ open, onClose, returnFocusTo }: Props) {
             />
           </div>
           <div className={css.actions}>
-            <button type="button" className={css.primary} onClick={copy}>
+            <button type="button" className={css.primary} onClick={() => void copy()}>
               <Copy size={14} aria-hidden="true" />
               {ui('copyImage')}
             </button>
@@ -194,7 +196,7 @@ export function ReceiptDialog({ open, onClose, returnFocusTo }: Props) {
               <Download size={14} aria-hidden="true" />
               {ui('download')}
             </button>
-            <button type="button" className={css.button} onClick={() => void copyText()}>
+            <button type="button" className={css.button} onClick={copyText}>
               <AlignLeft size={14} aria-hidden="true" />
               {ui('copyText')}
             </button>

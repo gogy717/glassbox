@@ -4,13 +4,14 @@
  * Latin and figures are set in IBM Plex Mono (embedded, so the image needs nothing from the
  * network); CJK words in the system's UI face, never in mono.
  */
-import { type Locale, type MessageKey, translate } from '../../i18n';
+import type { Locale } from '../../i18n';
 import { agentName } from '../../lib/agent-names';
-import { formatCompact } from '../../lib/format';
+import { formatCompact, formatPercent } from '../../lib/format';
 import { BAR_HEIGHT, type BarKind, barcode } from './barcode';
 import type { ReceiptData } from './data';
 import { FONTS } from './fonts';
-import { clock, day, durationParts, modelName, type Parts, percent, serial } from './format';
+import { clock, day, durationParts, modelName, type Parts, serial } from './format';
+import { categoryLine, clip, timed, timeRows } from './rows';
 import { type ReceiptKey, rt } from './strings';
 
 export type Paper = 'paper' | 'night';
@@ -66,8 +67,12 @@ const UI =
 const CJK = /[⺀-鿿豈-﫿＀-￯　-〿]/;
 const CJK_RUNS = /([⺀-鿿豈-﫿＀-￯　-〿]+)/;
 
+/** Text as XML: its markup characters escaped, and the control characters XML forbids dropped. */
 const esc = (s: string) =>
-  s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c);
+  s
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: these are what it removes
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '')
+    .replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c);
 const num = (n: number) => String(Math.round(n * 100) / 100);
 
 /** Width of `s` at `size`: Plex Mono advances 0.6 em, a CJK character in the UI face about 1 em. */
@@ -229,7 +234,13 @@ export function drawReceipt(d: ReceiptData, o: ReceiptOptions): { body: string; 
     d.model ? modelName(d.model) : null,
     d.effort ? w('effort', { e: d.effort }) : null,
   ];
-  out.push(text(LEFT, y, runs(who.filter(Boolean).join(' · ')), { size: 11, fill: c.soft }));
+  const fits11 = (s: string) => textWidth(s, 11);
+  out.push(
+    text(LEFT, y, runs(clip(who.filter(Boolean).join(' · '), INNER, fits11)), {
+      size: 11,
+      fill: c.soft,
+    }),
+  );
   y += 17;
   const span = d.running
     ? `${d.start !== null ? clock(d.start) : ''} → ${w('now')} · ${w('stillRunning')}`
@@ -260,7 +271,8 @@ export function drawReceipt(d: ReceiptData, o: ReceiptOptions): { body: string; 
   // What it was about, unless the names are withheld.
   y += 18;
   if (!o.hideNames && d.project) {
-    out.push(text(LEFT, y, runs(`${d.project} /`), { size: 11, fill: c.soft }));
+    const project = clip(d.project, INNER - textWidth(' /', 11), fits11);
+    out.push(text(LEFT, y, runs(`${project} /`), { size: 11, fill: c.soft }));
     y += 20;
   }
   const title = o.hideNames || !d.title ? w('untitled') : d.title;
@@ -295,12 +307,8 @@ export function drawReceipt(d: ReceiptData, o: ReceiptOptions): { body: string; 
     workRow(n, key);
     if (key === 'toolCalls' && d.work.categories.length > 0) {
       y += 17;
-      const cats = d.work.categories
-        .map(({ category, count }) => {
-          const name = translate(L, `steps.cat.${category}` as MessageKey);
-          return `${L === 'en' ? name.toLowerCase() : name} ${count}`;
-        })
-        .join(' · ');
+      const room = RIGHT - (numRight + 8);
+      const cats = categoryLine(d.work.categories, L, (line) => textWidth(line, 11) <= room);
       out.push(text(numRight + 8, y, runs(cats), { size: 11, fill: c.soft }));
     }
   }
@@ -313,26 +321,16 @@ export function drawReceipt(d: ReceiptData, o: ReceiptOptions): { body: string; 
 
   // TIME: where it went, each line's share of what is printed, then the barcode; left out when
   // nothing was timed (a session read without its timings).
-  const parts: [ReceiptKey, number][] = (
-    [
-      ['thinking', d.time.thinking],
-      ['generating', d.time.generating],
-      ['tools', d.time.tools],
-      ['approval', d.time.approval],
-      ['queued', d.time.queued],
-    ] as [ReceiptKey, number][]
-  ).filter(([, v]) => v >= 1000);
-  const whole = parts.reduce((s, [, v]) => s + v, 0);
   const code = barcode(d.segments, d.subAgents, d.failedTools, INNER);
   const drawn = code.bars.length > 0 || code.tracks.length > 0;
-  const timed = parts.length > 0 || d.time.longestThink >= 1000 || drawn;
-  if (timed) {
+  const hasTime = timed(d) || drawn;
+  if (hasTime) {
     y += 18;
     label('time');
   }
-  for (const [key, v] of parts) {
+  for (const r of timeRows(d)) {
     y += 19;
-    row(w(key), durationParts(v, L), { valueRight: RIGHT - 42, share: percent(v / whole) });
+    row(w(r.key), durationParts(r.ms, L), { valueRight: RIGHT - 42, share: `${r.share}%` });
   }
   if (d.time.longestThink >= 1000) {
     y += 17;
@@ -362,10 +360,17 @@ export function drawReceipt(d: ReceiptData, o: ReceiptOptions): { body: string; 
       out.push(
         `<rect x="${num(LEFT + t.x)}" y="${num(ty)}" width="${num(t.w)}" height="2" fill="${c.soft}"/>`,
       );
-      if (i === code.tracks.length - 1 && code.more > 0)
+      // "+N" just before the merged track's start (in the margin if need be); after its end only
+      // when even the margin has no room.
+      if (i === code.tracks.length - 1 && code.more > 0) {
+        const label = `+${code.more}`;
+        const before = LEFT + t.x - 4;
         out.push(
-          text(RIGHT, ty + 2.5, runs(`+${code.more}`), { size: 8, fill: c.soft, anchor: 'end' }),
+          before - textWidth(label, 9) >= 4
+            ? text(before, ty + 3, runs(label), { size: 9, fill: c.soft, anchor: 'end' })
+            : text(LEFT + t.x + t.w + 4, ty + 3, runs(label), { size: 9, fill: c.soft }),
         );
+      }
       ty += 4;
     });
     y = ty + 14;
@@ -389,7 +394,7 @@ export function drawReceipt(d: ReceiptData, o: ReceiptOptions): { body: string; 
       }),
     );
   }
-  if (timed) {
+  if (hasTime) {
     y += 18;
     rule();
   }
@@ -431,7 +436,7 @@ export function drawReceipt(d: ReceiptData, o: ReceiptOptions): { body: string; 
     }
     if (t.cacheHit !== null) {
       y += 19;
-      row(w('cacheHit'), figure(percent(t.cacheHit)));
+      row(w('cacheHit'), figure(formatPercent(t.cacheHit, L)));
     }
     y += 14;
     rule(false);
@@ -465,15 +470,18 @@ export function drawReceipt(d: ReceiptData, o: ReceiptOptions): { body: string; 
       anchor: 'middle',
     }),
   );
-  y += 18;
-  out.push(
-    text(WIDTH / 2, y, runs(w('motto')), {
-      size: 11,
-      fill: c.soft,
-      anchor: 'middle',
-      spacing: 0.6,
-    }),
-  );
+  // "Every token accounted for" only when the tokens were.
+  if (t.measured) {
+    y += 18;
+    out.push(
+      text(WIDTH / 2, y, runs(w('motto')), {
+        size: 11,
+        fill: c.soft,
+        anchor: 'middle',
+        spacing: 0.6,
+      }),
+    );
+  }
   return { body: out.join(''), height: Math.ceil(y + 30) };
 }
 

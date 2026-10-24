@@ -24,8 +24,15 @@ export interface ReceiptData {
   /** Its last write, or now while it still runs. */
   end: number;
   running: boolean;
-  project: string;
-  /** Masked (`redact`): a first prompt can hold a pasted key. Null when untitled. */
+  /**
+   * The working directory's last segment; else the agent's project name if it reads as one, not
+   * as an encoded path (`-home-<user>-dev-app`, which would print a user name). Null otherwise.
+   */
+  project: string | null;
+  /**
+   * Masked (`redact`), as a first prompt can hold a pasted key, with any absolute path in it cut
+   * to its last segment. Null when untitled.
+   */
   title: string | null;
   /** The Summary bar's duration; null before any model call, as the bar shows a dash. */
   durationMs: number | null;
@@ -62,6 +69,32 @@ export interface ReceiptData {
   segments: Segment[];
   subAgents: [number, number][];
   failedTools: ReadonlySet<string>;
+}
+
+/** Control characters (a terminal's colour codes) break an SVG and mean nothing on paper. */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: these are what it removes
+const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g;
+const clean = (s: string) => s.replace(CONTROL, '');
+
+/** An absolute path of two segments or more (/a/b, ~/a/b, C:\a\b): kept as its last segment. */
+const ABSOLUTE = /(^|[\s"'(=])(?:~|[A-Za-z]:)?[\\/](?:[^\s\\/"'()]+[\\/])+([^\s\\/"'()]+)/g;
+
+/** The title as printed: masked, control characters out, absolute paths cut to their ends. */
+export const printedTitle = (title: string) =>
+  clean(redact(title)).replace(ABSOLUTE, (_m, before: string, last: string) => before + last);
+
+/** The project as printed: see `ReceiptData.project`. */
+export function printedProject(cwd: string | null, project: string): string | null {
+  if (cwd)
+    return (
+      clean(
+        cwd
+          .split(/[\\/]+/)
+          .filter(Boolean)
+          .at(-1) ?? '',
+      ) || null
+    );
+  return project && !/[\\/]/.test(project) && !project.startsWith('-') ? clean(project) : null;
 }
 
 const ms = (iso: string | null | undefined) => {
@@ -113,14 +146,14 @@ export function receiptData(open: OpenSession, now: number, approvals?: Approval
 
   return {
     agent: open.session.agent,
-    model: open.session.model,
-    effort,
+    model: open.session.model ? clean(open.session.model) : null,
+    effort: effort ? clean(effort) : null,
     nativeId: open.session.nativeId,
     start: ms(open.session.startedAt),
     end: running ? now : (ms(open.session.updatedAt) ?? now),
     running,
-    project: open.session.project,
-    title: open.session.title ? redact(open.session.title) : null,
+    project: printedProject(open.session.cwd, open.session.project),
+    title: open.session.title ? printedTitle(open.session.title) : null,
     durationMs: s.requests === 0 ? null : s.activeMs,
     work: {
       requests: s.requests,

@@ -41,7 +41,12 @@ describe('the receipt dialog', () => {
   it('opens from the summary bar, its image described by the receipt’s text (R5)', async () => {
     const { dialog } = await openDialog();
     const img = within(dialog).getByRole('img');
-    expect(img).toHaveAccessibleName('Receipt, 1080 × 1350; its text follows');
+    // The slip itself by default, the size that stays readable on a phone.
+    expect(img).toHaveAccessibleName(/^Receipt, 1080 × \d{4}; its text follows$/);
+    expect(within(dialog).getByRole('radio', { name: 'Tall' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
     expect(img.getAttribute('src')).toMatch(/^data:image\/svg\+xml;charset=utf-8,/);
     const text = document.getElementById(img.getAttribute('aria-describedby') as string);
     expect(text).toHaveTextContent('npx github:gogy717/glassbox');
@@ -80,6 +85,46 @@ describe('the receipt dialog', () => {
     fireEvent.keyDown(dialog, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(document.activeElement).toBe(button);
+  });
+
+  it('says a text copy failed in its own words', async () => {
+    const { dialog } = await openDialog();
+    clipboard.writeText.mockRejectedValueOnce(new Error('denied'));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Copy as text' }));
+    await within(dialog).findByText('Could not copy the text: denied');
+  });
+
+  it('prints the session as it was when the dialog opened, whatever arrives since (F9)', async () => {
+    const open = demoOpen();
+    const { rerender } = render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <SummaryBar open={open} agentId="main" rate={null} />
+      </I18nContext.Provider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Receipt' }));
+    const img = within(await screen.findByRole('dialog')).getByRole('img');
+    const before = img.getAttribute('src');
+    const more = { ...open, requests: new Map([...open.requests].slice(0, 3)) };
+    rerender(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <SummaryBar open={more} agentId="main" rate={null} />
+      </I18nContext.Provider>,
+    );
+    expect(within(screen.getByRole('dialog')).getByRole('img').getAttribute('src')).toBe(before);
+  });
+
+  it('has nothing to print before the first model call, and says so', () => {
+    const open = { ...demoOpen(), requests: new Map() };
+    render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <SummaryBar open={open} agentId="main" rate={null} />
+      </I18nContext.Provider>,
+    );
+    const button = screen.getByRole('button', { name: 'Receipt' });
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).toHaveAttribute('title', 'Nothing to print yet');
+    fireEvent.click(button);
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('copies the receipt as text', async () => {
@@ -128,9 +173,12 @@ describe('the receipt dialog', () => {
 
     it('downloads a 1080 × 1350 PNG named for the project, asking the network for nothing (R6)', async () => {
       const { dialog } = await openDialog();
+      fireEvent.click(within(dialog).getByRole('radio', { name: 'Post 4:5' }));
       fireEvent.click(within(dialog).getByRole('button', { name: 'Download PNG' }));
       await within(dialog).findByText('Downloaded');
       expect(canvases).toEqual([{ w: 1080, h: 1350 }]);
+      // Kept in the page until the browser has taken it (Firefox and Safari need that).
+      expect(clicked[0]?.isConnected).toBe(true);
       expect(clicked[0]?.download).toMatch(/^glassbox-receipt-glassbox-\d{8}-\d{4}\.png$/);
       expect(fetchSpy).not.toHaveBeenCalled();
       expect(xhrSpy).not.toHaveBeenCalled();
@@ -159,8 +207,25 @@ describe('the receipt dialog', () => {
       await act(async () => {
         fireEvent.click(within(dialog).getByRole('button', { name: 'Copy image' }));
       });
-      await within(dialog).findByText('Downloaded');
+      await within(dialog).findByText(
+        'The clipboard would not take the image: downloaded it instead',
+      );
       expect(clicked).toHaveLength(1);
+    });
+
+    it('downloads the same PNG when the clipboard refuses it, or throws', async () => {
+      vi.stubGlobal('ClipboardItem', class {});
+      const { dialog } = await openDialog();
+      clipboard.write.mockRejectedValueOnce(new Error('NotAllowedError'));
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Copy image' }));
+      await within(dialog).findByText(/downloaded it instead/);
+      expect(clicked).toHaveLength(1);
+      clipboard.write.mockImplementationOnce(() => {
+        throw new Error('no user gesture');
+      });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Copy image' }));
+      await waitFor(() => expect(clicked).toHaveLength(2));
+      expect(clicked[1]?.download).toBe(clicked[0]?.download);
     });
   });
 });

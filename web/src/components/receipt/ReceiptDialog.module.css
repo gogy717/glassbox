@@ -29,9 +29,8 @@
 }
 
 .image[data-size="tall"] {
-  width: min(100%, 480px);
-  height: auto;
-  align-self: flex-start;
+  /* A tall receipt is fitted by its height too: the whole slip in view, as it will be posted. */
+  width: auto;
 }
 
 .dims {

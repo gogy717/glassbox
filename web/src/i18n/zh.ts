@@ -51,6 +51,8 @@ export const zh = {
   'summary.rate': 'Token 速率',
   'summary.more': '更多数字',
   'receipt.open': '小票',
+  'receipt.loading': '正在加载…',
+  'receipt.nothing': '还没有可打印的内容',
   'summary.fewer': '收起',
   'crumb.main': '主会话',
   'crumb.pick': '切换子代理',

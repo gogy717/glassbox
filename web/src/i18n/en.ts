@@ -53,6 +53,8 @@ export const en: Record<MessageKey, string> = {
   'summary.more': 'More figures',
   'summary.fewer': 'Fewer figures',
   'receipt.open': 'Receipt',
+  'receipt.loading': 'Loading…',
+  'receipt.nothing': 'Nothing to print yet',
   'crumb.main': 'Main',
   'crumb.pick': 'Switch sub-agent',
   'crumb.label': 'Agent',

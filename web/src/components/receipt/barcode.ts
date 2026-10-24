@@ -29,9 +29,45 @@ export const BAR_HEIGHT: Record<BarKind, number> = {
   approval: 3,
 };
 
-/** A single idle gap over this share of the span is squeezed to this share of the width. */
+/** No idle gap may take more than this share of the width: longer ones are squeezed to it. */
 const GAP_SHARE = 0.02;
 const MAX_TRACKS = 6;
+
+/**
+ * The idle gaps to squeeze: every one that, drawn to scale, would be wider than its squeezed
+ * width. Squeezing the longest stretches the rest, so it repeats until none is left over.
+ * Returns the longest gap left to scale (buildTimeScale's `gapMs`) and the squeezed width.
+ */
+function squeeze(intervals: [number, number][], width: number) {
+  const sorted = [...intervals].sort((a, b) => a[0] - b[0]);
+  const gaps: number[] = [];
+  let end = sorted[0]?.[1] ?? 0;
+  let busy = 0;
+  let start = sorted[0]?.[0] ?? 0;
+  for (const [a, b] of sorted) {
+    if (a > end) {
+      busy += end - start;
+      gaps.push(a - end);
+      start = a;
+    }
+    end = Math.max(end, b);
+  }
+  busy += end - start;
+  gaps.sort((a, b) => b - a);
+  let squeezed = 0;
+  let breakPx = 0;
+  for (;;) {
+    breakPx = squeezed ? Math.min(width * GAP_SHARE, (width * 0.5) / squeezed) : width * GAP_SHARE;
+    const kept = busy + gaps.slice(squeezed).reduce((s, g) => s + g, 0);
+    const pxPerMs = kept > 0 ? (width - squeezed * breakPx) / kept : 0;
+    const next = gaps[squeezed];
+    if (next === undefined || next * pxPerMs <= breakPx) break;
+    squeezed++;
+  }
+  // buildTimeScale squeezes gaps longer than gapMs: just under the shortest squeezed one.
+  const gapMs = squeezed ? (gaps[squeezed - 1] as number) - 1e-6 : Number.POSITIVE_INFINITY;
+  return { gapMs, breakPx: squeezed ? breakPx : 0, squeezed };
+}
 
 export function barcode(
   segments: Segment[],
@@ -44,14 +80,9 @@ export function barcode(
     ...subAgents,
   ];
   if (intervals.length === 0) return { bars: [], breaks: [], tracks: [], more: 0 };
-  const from = Math.min(...intervals.map(([a]) => a));
-  const to = Math.max(...intervals.map(([, b]) => b));
-  const gapMs = Math.max(1, (to - from) * GAP_SHARE);
-  // First the active time alone, then a scale where it and the squeezed gaps fill the width.
+  const { gapMs, breakPx, squeezed } = squeeze(intervals, width);
   const raw = buildTimeScale(intervals, { pxPerMs: 1, gapMs, breakPx: 0 });
-  const gaps = raw.breaks.length;
-  const breakPx = gaps ? Math.min(width * GAP_SHARE, (width * 0.5) / gaps) : 0;
-  const pxPerMs = raw.width > 0 ? (width - gaps * breakPx) / raw.width : 0;
+  const pxPerMs = raw.width > 0 ? (width - squeezed * breakPx) / raw.width : 0;
   const scale = buildTimeScale(intervals, { pxPerMs, gapMs, breakPx });
 
   // Per column: how much of it each kind covers. Queued time and idle compete but draw nothing.
@@ -59,14 +90,19 @@ export function barcode(
   const cover = new Map<(typeof kinds)[number], Float64Array>(
     kinds.map((k) => [k, new Float64Array(width)]),
   );
-  for (const s of segments) {
-    const kind = s.kind === 'tool' && failedTools.has(s.refId) ? 'fail' : s.kind;
-    const col = cover.get(kind) as Float64Array;
-    const x0 = Math.max(0, scale.x(s.start));
-    const x1 = Math.min(width, scale.x(s.end));
+  const add = (col: Float64Array, start: number, end: number) => {
+    const x0 = Math.max(0, scale.x(start));
+    const x1 = Math.min(width, scale.x(end));
     for (let c = Math.floor(x0); c < x1 && c < width; c++)
       col[c] = (col[c] ?? 0) + Math.min(x1, c + 1) - Math.max(x0, c);
+  };
+  for (const s of segments) {
+    const kind = s.kind === 'tool' && failedTools.has(s.refId) ? 'fail' : s.kind;
+    add(cover.get(kind) as Float64Array, s.start, s.end);
   }
+  // A sub-agent at work while the main agent waits on it is work too: drawn as a tool.
+  const delegated = new Float64Array(width);
+  for (const [a, b] of subAgents) add(delegated, a, b);
   const column: (BarKind | null)[] = [];
   for (let c = 0; c < width; c++) {
     let best: BarKind | null = null;
@@ -80,7 +116,8 @@ export function barcode(
         best = k === 'waiting' ? null : k;
       }
     }
-    column.push(most > 0 && most >= 1 - covered ? best : null);
+    const main = most > 0 && most >= 1 - covered ? best : null;
+    column.push(main ?? (covered === 0 && (delegated[c] ?? 0) >= 0.5 ? 'tool' : null));
   }
   const bars: Bar[] = [];
   for (let c = 0; c < width; c++) {

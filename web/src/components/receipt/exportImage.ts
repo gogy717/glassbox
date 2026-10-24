@@ -32,26 +32,44 @@ export function download(blob: Blob, name: string): void {
   const a = document.createElement('a');
   a.href = url;
   a.download = name;
+  a.hidden = true;
+  document.body.append(a);
   a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
+  // Firefox and Safari start the download after the click returns: keep both a while.
+  setTimeout(() => {
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, 30_000);
 }
 
-/** Whether this browser can put an image on the clipboard (Firefox long could not). */
-export const canCopyImage = () =>
-  typeof ClipboardItem !== 'undefined' && typeof navigator.clipboard?.write === 'function';
-
 /**
- * Puts the PNG on the clipboard. The item is made in the click's own turn, with the PNG still
- * to come, which is what Safari needs; resolves when it is there.
+ * Puts the PNG on the clipboard, or, where the clipboard cannot take an image or refuses it (a
+ * permission, a browser without ClipboardItem, a throw), downloads the same PNG instead. The
+ * item is made in the click's own turn, the PNG still to come, which is what Safari needs.
  */
-export function copyImage(png: Promise<Blob>): Promise<void> {
-  return navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+export function copyOrDownload(png: Promise<Blob>, name: string): Promise<'copied' | 'downloaded'> {
+  let write: Promise<void>;
+  try {
+    if (typeof ClipboardItem === 'undefined' || typeof navigator.clipboard?.write !== 'function')
+      throw new Error('no image clipboard');
+    write = navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+  } catch (err) {
+    write = Promise.reject(err);
+  }
+  return write.then(
+    () => 'copied' as const,
+    async () => {
+      download(await png, name);
+      return 'downloaded' as const;
+    },
+  );
 }
 
 /** glassbox-receipt-<project>-<yyyymmdd-hhmm>.png; without the project when names are hidden. */
 export function fileName(d: ReceiptData, hideNames: boolean): string {
-  const project = hideNames
-    ? ''
-    : d.project.replace(/[^\p{L}\p{N}._-]+/gu, '-').replace(/^-+|-+$/g, '');
+  const project =
+    hideNames || !d.project
+      ? ''
+      : d.project.replace(/[^\p{L}\p{N}._-]+/gu, '-').replace(/^-+|-+$/g, '');
   return `glassbox-receipt-${project ? `${project}-` : ''}${stamp(d.start ?? d.end)}.png`;
 }
