@@ -1,36 +1,43 @@
 /**
  * What the weekly receipt says, from `/api/week`'s result: the server cut every session to the
- * window; here they are only added up, ranked and laid out. Each figure keeps the session
- * receipt's meaning, so a week of one session prints that session's numbers.
+ * window; here they are only added up, ranked and laid out. Agent time is the grid's sum (every
+ * agent's work, parallel agents adding up, DR1); the session time beside it, the longest session
+ * and WORK and TOKENS keep the session receipt's meaning, so a week of one session prints that
+ * session's numbers. The receipt ends at `asOf`, when its data is from.
  */
 import type { AgentKind } from '../../../../src/core/model.js';
 import { addUsage, contextSize, emptyUsage, totalTokens } from '../../../../src/core/usage.js';
 import type { ToolCategory } from '../../../../src/shared/tool-category.js';
 import type { WeekResult, WeekWindowKind } from '../../../../src/shared/week.js';
+import type { Locale } from '../../i18n';
+import { agentName } from '../../lib/agent-names';
 import { printedProject, printedTitle } from './printed';
 import { shares } from './rows';
 import type { TokenFigures } from './slip';
+import { type ReceiptKey, rt } from './strings';
 
 const HOUR = 3_600_000;
 
 export interface GridCell {
   /** Agent time in the hour (ms). */
   ms: number;
-  /** 'future': after now, outlined; 'out': not in the window, not drawn. */
+  /** 'future': after the receipt's end, outlined; 'out': not in the window, not drawn. */
   state: 'past' | 'future' | 'out';
 }
 
 export interface WeekReceipt {
   kind: WeekWindowKind;
-  /** First hour of the window, and when it ends (the time printed). */
+  /** First hour of the window, and when the receipt ends: `asOf`, when its data is from. */
   start: number;
   now: number;
   sessions: number;
   projects: number;
-  /** CLIs with activity, the busiest first. */
+  /** CLIs with activity, the most agent time first. */
   clis: AgentKind[];
-  /** The hero: every session's active time in the window, added up. */
+  /** The hero: the grid's sum, every agent's working time (parallel agents add up). */
   agentMs: number;
+  /** The main agents' turns, added up: the session receipts' DURATION, printed beside it. */
+  sessionMs: number;
   /** 7 rows of 24 hours; `rows[i]` is a time on that row's day (for its weekday). */
   grid: GridCell[][];
   rows: number[];
@@ -46,11 +53,15 @@ export interface WeekReceipt {
     subAgents: number;
     failures: number;
   };
-  /** Agent time by CLI, the shares adding up to 100. */
-  byCli: { agent: AgentKind; ms: number; share: number }[];
+  /**
+   * Agent time by CLI: whole percents adding up to 100 over the CLIs of 1% or more, '<1' for
+   * the others that did anything (DR4).
+   */
+  byCli: { agent: AgentKind; ms: number; share: number | '<1' }[];
+  /** The session that worked longest by its own clock (its session time). */
   longest: { agent: AgentKind; project: string | null; title: string | null; ms: number } | null;
   tokens: TokenFigures;
-  /** Sessions that reported no usage, by CLI: the TOKENS note. */
+  /** Sessions that report no usage, by CLI: the TOKENS note. */
   unreported: { agent: AgentKind; n: number }[];
 }
 
@@ -66,37 +77,52 @@ const daysBetween = (a: number, b: number) => {
 };
 
 /**
- * The 7 × 24 grid. This week: Monday to Sunday, hours after now outlined. The last 7 days: the
- * seven days in order, today last; today's row holds both ends of the window, its hours up to now
- * from today and the rest from the same weekday a week ago (R20). The cursor stands after the
- * current hour on today's row in both.
+ * The 7 × 24 grid, and the cursor after the hour the receipt ends in. This week: Monday to
+ * Sunday by date and hour, the hours after the end outlined. The last 7 days: its 168 hours in
+ * order (R23), so a day that changes the clocks neither doubles an hour nor leaves a hole; today's
+ * row ends with them, its hours up to now on the left, the first hours of the window (the same
+ * weekday a week ago) on the right (R20).
  */
-function layGrid(r: WeekResult, totals: number[]) {
-  const { hourStarts, now } = r.window;
+function layGrid(r: WeekResult, totals: number[], end: number) {
+  const { hourStarts } = r.window;
   const grid: GridCell[][] = Array.from({ length: 7 }, () =>
     Array.from({ length: 24 }, (): GridCell => ({ ms: 0, state: 'out' })),
   );
-  const start = hourStarts[0] ?? now;
-  const week = r.window.kind === 'week';
-  const today = week ? daysBetween(start, now) : 6;
+  const start = hourStarts[0] ?? end;
+  const endHour = hourStarts.findLastIndex((h) => h <= end);
+  let place: (i: number, h: number) => { row: number; col: number };
+  let rows: number[];
+  if (r.window.kind === 'week') {
+    place = (_i, h) => ({ row: Math.min(6, daysBetween(start, h)), col: new Date(h).getHours() });
+    rows = Array.from({ length: 7 }, (_, i) => start + (i * 24 + 12) * HOUR);
+  } else {
+    const n = hourStarts.length;
+    const c = new Date(hourStarts[n - 1] ?? end).getHours();
+    const head = Math.max(0, n - 144 - (c + 1));
+    place = (i) =>
+      i < head
+        ? { row: 6, col: c + 1 + i }
+        : i < head + 144
+          ? { row: Math.floor((i - head) / 24), col: (i - head) % 24 }
+          : { row: 6, col: i - head - 144 };
+    rows = Array.from({ length: 7 }, (_, row) =>
+      row === 6 ? (hourStarts[n - 1] ?? end) : (hourStarts[head + row * 24 + 12] ?? end),
+    );
+  }
   hourStarts.forEach((h, i) => {
-    const days = daysBetween(start, h);
-    // A week back is today's weekday again: the right end of today's row.
-    const back = daysBetween(h, now);
-    const row = week ? days : back >= 7 ? 6 : 6 - back;
-    const cell = grid[Math.min(6, row)]?.[new Date(h).getHours()];
+    const at = place(i, h);
+    const cell = grid[at.row]?.[at.col];
     if (!cell) return;
     cell.ms += totals[i] ?? 0;
-    cell.state = h > now ? 'future' : 'past';
+    cell.state = h > end ? 'future' : 'past';
   });
-  const rows = Array.from({ length: 7 }, (_, i) =>
-    week ? start + (i * 24 + 12) * HOUR : now - (6 - i) * 24 * HOUR,
-  );
-  return { grid, rows, cursor: { row: Math.min(6, today), col: new Date(now).getHours() } };
+  const cursor = place(Math.max(0, endHour), hourStarts[Math.max(0, endHour)] ?? end);
+  return { grid, rows, cursor };
 }
 
 export function weekReceipt(r: WeekResult): WeekReceipt {
-  const { hourStarts, now } = r.window;
+  const { hourStarts } = r.window;
+  const end = Math.min(r.asOf, r.window.now);
   const totals = hourStarts.map((_, i) => r.sessions.reduce((n, s) => n + (s.hours[i] ?? 0), 0));
   const all = totals.reduce((a, b) => a + b, 0);
   let busiest: WeekReceipt['busiest'] = null;
@@ -119,14 +145,14 @@ export function weekReceipt(r: WeekResult): WeekReceipt {
   for (const s of r.sessions) {
     const f = s.inWindow;
     const a = byAgent.get(s.agent) ?? { ms: 0, n: 0 };
-    byAgent.set(s.agent, { ms: a.ms + f.activeMs, n: a.n + 1 });
+    byAgent.set(s.agent, { ms: a.ms + f.agentMs, n: a.n + 1 });
     work.requests += f.requests;
     work.toolCalls += f.toolCalls;
     work.subAgents += f.subAgents;
     work.failures += f.failures;
     for (const [c, n] of Object.entries(f.toolCats) as [ToolCategory, number][])
       cats.set(c, (cats.get(c) ?? 0) + n);
-    if (f.measured) {
+    if (s.reportsUsage) {
       measured = true;
       addUsage(usage, f.usage);
     } else unreported.set(s.agent, (unreported.get(s.agent) ?? 0) + 1);
@@ -141,23 +167,31 @@ export function weekReceipt(r: WeekResult): WeekReceipt {
   const categories = ranked.slice(0, 3).map(([category, count]) => ({ category, count }));
   if (other > 0) categories.push({ category: 'other', count: other });
 
+  // By CLI: the CLIs of 1% or more share 100 between them; the rest print "<1%".
   const clis = [...byAgent].sort((a, b) => b[1].ms - a[1].ms || b[1].n - a[1].n);
-  const pct = shares(clis.map(([, v]) => v.ms));
+  const cliTotal = clis.reduce((n, [, v]) => n + v.ms, 0);
+  const big = clis.filter(([, v]) => cliTotal > 0 && v.ms / cliTotal >= 0.01);
+  const pct = new Map(big.map(([agent], i) => [agent, shares(big.map(([, v]) => v.ms))[i] ?? 0]));
   const ctx = contextSize(usage);
   const top = longest as (typeof r.sessions)[number] | null;
   return {
     kind: r.window.kind,
-    start: hourStarts[0] ?? now,
-    now,
+    start: hourStarts[0] ?? end,
+    now: end,
     sessions: r.sessions.length,
     projects: projects.size,
     clis: clis.map(([agent]) => agent),
-    agentMs: r.sessions.reduce((n, s) => n + s.inWindow.activeMs, 0),
-    ...layGrid(r, totals),
+    agentMs: all,
+    sessionMs: r.sessions.reduce((n, s) => n + s.inWindow.activeMs, 0),
+    ...layGrid(r, totals, end),
     busiest,
     afterHours: all > 0 ? night / all : null,
     work: { ...work, categories },
-    byCli: clis.map(([agent, v], i) => ({ agent, ms: v.ms, share: pct[i] ?? 0 })),
+    byCli: clis.map(([agent, v]) => ({
+      agent,
+      ms: v.ms,
+      share: pct.get(agent) ?? (v.ms > 0 ? '<1' : 0),
+    })),
     longest: top
       ? {
           agent: top.agent,
@@ -180,6 +214,42 @@ export function weekReceipt(r: WeekResult): WeekReceipt {
   };
 }
 
-/** How far into this week `w` is printed: the quiet slip's window (under a day). */
+/** How far into this week the receipt ends. */
 export const weekAge = (w: WeekReceipt) => w.now - w.start;
-export const QUIET_MS = 24 * HOUR;
+/** Under a day into the week, the dialog says what the last 7 days hold. */
+export const HINT_MS = 24 * HOUR;
+/** Under half an hour of agent time this week, the quiet slip, with the way out (DR2). */
+export const QUIET_MS = 30 * 60_000;
+export const isQuiet = (w: WeekReceipt) =>
+  w.kind === 'week' && w.sessions > 0 && w.agentMs < QUIET_MS;
+
+/** The line under LONGEST: its project and title, or only its CLI when names are withheld. */
+export function longestLine(
+  l: NonNullable<WeekReceipt['longest']>,
+  hideNames: boolean,
+  w: (key: ReceiptKey) => string,
+): string {
+  if (hideNames) return `${agentName(l.agent)} · ${w('aSession')}`;
+  return `${l.project ? `${l.project} / ` : ''}${l.title ?? w('untitled')}`;
+}
+
+/**
+ * The TOKENS note on sessions that report no usage, as full as `fits` allows (DR3): "Codex 11 ·
+ * Grok 6 sessions", then without "sessions", then "17 sessions · 2 CLIs". Never cut, never
+ * wrapped; null when there is nothing to note (none missing, or none reported at all).
+ */
+export function unreportedLine(
+  d: WeekReceipt,
+  L: Locale,
+  fits: (line: string) => boolean,
+): string | null {
+  if (!d.tokens.measured || d.unreported.length === 0) return null;
+  const n = d.unreported.reduce((a, u) => a + u.n, 0);
+  const each = d.unreported.map((u) => `${agentName(u.agent)} ${u.n}`).join(' · ');
+  const tries = [
+    rt(L, 'notReportedBy', { who: `${each} ${rt(L, 'sessionsNoun', { n })}` }),
+    rt(L, 'notReportedBy', { who: each }),
+    rt(L, 'notReportedFold', { n, c: d.unreported.length }),
+  ];
+  return tries.find(fits) ?? (tries.at(-1) as string);
+}

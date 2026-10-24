@@ -4,7 +4,7 @@ import { DemoStore } from './demo-store.js';
 import { WeekService } from './week.js';
 import { createDemoWeek } from './week-demo.js';
 
-const NOW = new Date(2026, 9, 24, 20, 41).getTime(); // Sat 24 Oct
+const NOW = new Date(2026, 10, 21, 20, 41).getTime(); // Sat 21 Nov
 
 describe('the demo week', () => {
   let store: DemoStore;
@@ -45,6 +45,6 @@ describe('the demo week', () => {
     expect(hours.filter((h) => h === 0).length).toBeGreaterThan(60);
     expect(Math.max(...hours)).toBeGreaterThan(60 * 60_000);
     // Grok reports no usage here, so "not reported" has a line to print.
-    expect(r.sessions.some((s) => s.agent === 'grok' && !s.inWindow.measured)).toBe(true);
+    expect(r.sessions.some((s) => s.agent === 'grok' && !s.reportsUsage)).toBe(true);
   });
 });

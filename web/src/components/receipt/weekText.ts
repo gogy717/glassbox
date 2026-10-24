@@ -1,7 +1,7 @@
 /**
  * The weekly receipt as text: a fenced block of at most 60 lines and 44 columns, line for line the
  * image's. The grid prints one character an hour (`·` none, `░` under 10 minutes, `▒` under 40,
- * `█` more, blank for hours to come) with a `|` after the current hour on today's row, the other
+ * `█` more, blank for hours to come) with a `|` after the hour the receipt ends in, the other
  * rows spaced to match. Figures are ASCII and, in Chinese, come first (R9); so does the grid, its
  * weekday after it.
  */
@@ -29,12 +29,12 @@ import {
   tokenLines,
   wrapCols,
 } from './text';
-import { QUIET_MS, type WeekReceipt, weekAge } from './week';
-import { elapsedWords, inkOf, type WeekElsewhere, windowLine } from './weekSvg';
+import { isQuiet, longestLine, unreportedLine, type WeekReceipt, weekAge } from './week';
+import { elapsedWords, inkOf, shareText, type WeekElsewhere, windowLine } from './weekSvg';
 
 const SHADE = { none: '·', low: '░', mid: '▒', high: '█', future: ' ', out: ' ' } as const;
 
-/** The grid's rows as text, the cursor marked on today's row. */
+/** The grid's rows as text, the end marked on its row. */
 export function gridLines(d: WeekReceipt, zh: boolean, L: ReceiptOptions['locale']): string[] {
   const empty = d.sessions === 0;
   return d.grid.map((cells, row) => {
@@ -58,11 +58,10 @@ export function weekText(
   const count = (n: number) => countOf(n, 'en');
   const rule = '-'.repeat(COLUMNS);
   const empty = d.sessions === 0;
-  const quiet = !empty && d.kind === 'week' && weekAge(d) < QUIET_MS;
   const out: string[] = ['```'];
 
   out.push(zh ? `glassbox · ${w('weeklyHeading')}` : spread('glassbox', head('weeklyHeading')));
-  out.push(clip(windowLine(d, L, w), COLUMNS, cols));
+  out.push(clip(windowLine(d.kind, d.start, d.now, L, w), COLUMNS, cols));
   if (!empty) {
     out.push(
       clip(
@@ -74,9 +73,13 @@ export function weekText(
       ),
     );
     out.push(zh ? lead(dur(d.agentMs), w('agentTime')) : spread(head('agentTime'), dur(d.agentMs)));
+    if (d.work.subAgents > 0) {
+      const v = dur(d.sessionMs);
+      out.push(zh ? lead(v, w('sessionTime')) : dots(`${w('sessionTime')} `, ` ${v}`));
+    }
   }
   out.push(rule);
-  out.push(head('week'));
+  out.push(head(d.kind === 'week' ? 'week' : 'last7'));
   out.push(...gridLines(d, zh, L));
 
   const close = (measured: boolean) => {
@@ -86,11 +89,15 @@ export function weekText(
     out.push('```');
     return clean(out.join('\n'));
   };
-  if (empty || quiet) {
+  if (empty || isQuiet(d)) {
     out.push('');
     const said = empty
       ? w(d.kind === 'week' ? 'noSessions' : 'noSessions7')
-      : w('quiet', { elapsed: elapsedWords(weekAge(d), (k, q) => w(k, q)), n: d.sessions });
+      : w('quiet', {
+          elapsed: elapsedWords(weekAge(d), (k, q) => w(k, q)),
+          n: d.sessions,
+          time: dur(d.agentMs),
+        });
     out.push(...wrapCols(said, 3));
     if (elsewhere && elsewhere.sessions > 0 && d.kind === 'week')
       out.push(
@@ -136,7 +143,7 @@ export function weekText(
   if (d.byCli.length > 1) {
     out.push(head('byCli'));
     for (const r of d.byCli) {
-      const share = `${r.share}%`;
+      const share = shareText(r.share);
       out.push(
         zh
           ? lead(dur(r.ms), `${share.padStart(4)}  ${agentName(r.agent)}`)
@@ -147,23 +154,14 @@ export function weekText(
   }
 
   if (d.longest) {
-    const s = d.longest;
-    const v = dur(s.ms);
+    const v = dur(d.longest.ms);
     out.push(zh ? lead(v, w('longestSession')) : dots(`${w('longestSession')} `, ` ${v}`));
-    const named = `${s.project ? `${s.project} / ` : ''}${s.title ?? w('untitled')}`;
-    out.push(clip(o.hideNames ? `${agentName(s.agent)} · ${w('aSession')}` : named, COLUMNS, cols));
+    out.push(clip(longestLine(d.longest, o.hideNames, w), COLUMNS, cols));
     out.push(rule);
   }
 
-  const note =
-    d.tokens.measured && d.unreported.length > 0
-      ? w('notReportedBy', {
-          who: d.unreported
-            .map((u) => w('sessionsBy', { agent: agentName(u.agent), n: u.n }))
-            .join(' · '),
-        })
-      : undefined;
-  out.push(...tokenLines(d.tokens, L, note));
+  const note = unreportedLine(d, L, (line) => cols(line) <= COLUMNS);
+  out.push(...tokenLines(d.tokens, L, note ?? undefined));
   out.push(centred(weekSerial(d.kind, d.start, d.now)));
   out.push(...footLines(L, d.tokens.measured));
   out.push('```');

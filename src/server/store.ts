@@ -1,6 +1,6 @@
 import { stat } from 'node:fs/promises';
 import { idleActivity } from '../core/activity.js';
-import type { AgentAdapter, SessionSource } from '../core/adapter.js';
+import type { AgentAdapter, SessionSource, SourceFile } from '../core/adapter.js';
 import type {
   LiveState,
   QuotaSnapshot,
@@ -16,7 +16,7 @@ import { Coalescer } from './coalescer.js';
 import { errorText, OpenSession } from './open-session.js';
 import { adapterQuotaSources, QuotaWatcher } from './quota.js';
 import { RateTracker } from './rate.js';
-import type { WeekRead, WeekStore } from './week.js';
+import { type WeekRead, WeekService, type WeekStore } from './week.js';
 
 export interface SessionStoreOptions {
   adapters: AgentAdapter[];
@@ -149,6 +149,10 @@ export class SessionStore implements WeekStore {
   private rateTimer: NodeJS.Timeout | null = null;
   /** Sessions settling after they opened, and when the rate may count them. */
   private readonly settling = new Map<string, number>();
+  /** The weekly receipt's data, read from this store's sessions. */
+  readonly week: WeekService;
+  /** One-off reads for the week under way: closed when the store stops. */
+  private readonly reading = new Set<OpenSession>();
 
   constructor(opts: SessionStoreOptions) {
     this.opts = {
@@ -177,6 +181,7 @@ export class SessionStore implements WeekStore {
       staleReason: this.opts.quotaStaleReason,
       log: this.opts.log,
     });
+    this.week = new WeekService(this, { log: this.opts.log });
   }
 
   async start(): Promise<void> {
@@ -195,6 +200,8 @@ export class SessionStore implements WeekStore {
 
   async stop(): Promise<void> {
     this.stopped = true;
+    this.week.stop();
+    for (const once of this.reading) once.close();
     if (this.quickDiscoverTimer) clearTimeout(this.quickDiscoverTimer);
     this.quickDiscoverTimer = null;
     for (const set of [...this.expecting.values()]) for (const done of [...set]) done(false);
@@ -248,13 +255,16 @@ export class SessionStore implements WeekStore {
   }
 
   /**
-   * The session as it is now, for the weekly receipt: an open session's snapshot, else one parse
-   * of its files that nothing keeps (it is not opened, watched or counted against `maxOpen`).
+   * The session as it is now, for the weekly receipt: an open session's snapshot (one being
+   * opened is waited for, not parsed a second time), else one parse of its files that nothing
+   * keeps (it is not opened, watched or counted against `maxOpen`).
    */
   async readSession(sessionId: string): Promise<WeekRead | null> {
     const entry = this.entries.get(sessionId);
     if (!entry || this.stopped) return null;
-    if (entry.open) return { snapshot: entry.open.parser.snapshot(), bytes: 0 };
+    const open = entry.open ?? (entry.opening ? await entry.opening.catch(() => null) : null);
+    if (this.stopped) return null;
+    if (open) return { snapshot: open.parser.snapshot(), bytes: 0 };
     const once = new OpenSession(entry.adapter, entry.source, {
       patchMs: this.opts.patchMs,
       pollMs: this.opts.pollMs,
@@ -265,14 +275,30 @@ export class SessionStore implements WeekStore {
       onPatch: () => {},
       onReset: () => {},
     });
-    const { snapshot, files } = await once.readOnce();
+    this.reading.add(once);
+    try {
+      const { snapshot, files } = await once.readOnce();
+      return this.stopped ? null : { snapshot, bytes: await this.bytesOf(entry, files) };
+    } finally {
+      this.reading.delete(once);
+    }
+  }
+
+  /** Bytes a read of the session goes through: 0 when it is open (or opening), nothing to read. */
+  async sizeOf(sessionId: string): Promise<number> {
+    const entry = this.entries.get(sessionId);
+    if (!entry || entry.open || entry.opening || this.stopped) return 0;
+    return this.bytesOf(entry, await entry.adapter.listFiles(entry.source));
+  }
+
+  private async bytesOf(entry: Entry, files: SourceFile[]): Promise<number> {
     let bytes = 0;
     for (const f of files) {
       // A database row source is not its file: the file holds every session.
       if (f.format === 'json' && entry.adapter.readJson) continue;
       bytes += (await stat(f.path).catch(() => null))?.size ?? 0;
     }
-    return { snapshot, bytes };
+    return bytes;
   }
 
   async getSnapshot(sessionId: string): Promise<SessionSnapshot | null> {

@@ -1,8 +1,10 @@
 /**
  * The weekly receipt as one SVG (D3): the session receipt's paper, ink, rows and foot, with the
  * week's hook in place of the barcode, a 7 × 24 grid of when the agents worked. Two quieter
- * slips: a week not a day old (the way out is the last 7 days), and a week with no sessions.
+ * slips: a week with under half an hour of agent time (the way out is the last 7 days), and a
+ * week with no sessions.
  */
+import type { WeekWindowKind } from '../../../../src/shared/week.js';
 import { agentName } from '../../lib/agent-names';
 import {
   clock,
@@ -33,7 +35,14 @@ import {
   wrap,
 } from './slip';
 import type { ReceiptKey } from './strings';
-import { type GridCell, QUIET_MS, type WeekReceipt, weekAge } from './week';
+import {
+  type GridCell,
+  isQuiet,
+  longestLine,
+  unreportedLine,
+  type WeekReceipt,
+  weekAge,
+} from './week';
 
 /** The last 7 days in brief, for the way out of a quiet or empty week. */
 export interface WeekElsewhere {
@@ -53,25 +62,31 @@ export function inkOf(cell: GridCell): 'future' | 'none' | 'low' | 'mid' | 'high
   return cell.ms <= 0 ? 'none' : min < 10 ? 'low' : min < 40 ? 'mid' : 'high';
 }
 
-/** "Five minutes into the week": how far in, in words the quiet slip can use. */
+/** "5 minutes", "3 hours", "4 days": how far into the week, for the quiet slip. */
 export function elapsedWords(ms: number, w: (k: ReceiptKey, p: Record<string, number>) => string) {
   const min = Math.max(1, Math.floor(ms / 60_000));
-  return min < 60 ? w('minutesN', { n: min }) : w('hoursN', { n: Math.floor(min / 60) });
+  if (min < 60) return w('minutesN', { n: min });
+  const hours = Math.floor(min / 60);
+  return hours < 24 ? w('hoursN', { n: hours }) : w('daysN', { n: Math.floor(hours / 24) });
 }
 
-/** The line under the head: which window, from when to when. */
+/** The line under the head (and the dialog's title): which window, from when to when. */
 export function windowLine(
-  d: WeekReceipt,
+  kind: WeekWindowKind,
+  start: number,
+  end: number,
   L: ReceiptOptions['locale'],
   w: (k: ReceiptKey) => string,
 ) {
-  if (d.kind === '7d')
-    return `${w('last7')} · ${shortDay(d.start, L)} ${clock(d.start)} → ${w('now')}`;
-  if (new Date(d.start).toDateString() === new Date(d.now).toDateString())
-    return `${w('thisWeek')} · ${day(d.start, L)}${L === 'zh' ? '' : ','} ${clock(d.start)} → ${clock(d.now)}`;
-  const time = L === 'zh' ? ` ${clock(d.now)}` : ` · ${clock(d.now)}`;
-  return `${w('thisWeek')} · ${shortDay(d.start, L)} → ${shortDay(d.now, L)}${time}`;
+  if (kind === '7d') return `${w('last7')} · ${shortDay(start, L)} ${clock(start)} → ${w('now')}`;
+  if (new Date(start).toDateString() === new Date(end).toDateString())
+    return `${w('thisWeek')} · ${day(start, L)}${L === 'zh' ? '' : ','} ${clock(start)} → ${clock(end)}`;
+  const time = L === 'zh' ? ` ${clock(end)}` : ` · ${clock(end)}`;
+  return `${w('thisWeek')} · ${shortDay(start, L)} → ${shortDay(end, L)}${time}`;
 }
+
+/** The share a CLI's row prints: "76%", or "<1%" for one that did a little (DR4). */
+export const shareText = (share: number | '<1') => `${share}%`;
 
 /** The weekly receipt's drawing and its height, in slip units. */
 export function drawWeek(
@@ -84,13 +99,12 @@ export function drawWeek(
   const w = (key: ReceiptKey, params?: Record<string, string | number>) => p.w(key, params);
   const fits11 = (s: string) => textWidth(s, 11);
   const empty = d.sessions === 0;
-  const quiet = !empty && d.kind === 'week' && weekAge(d) < QUIET_MS;
+  const quiet = isQuiet(d);
 
   p.head('weeklyHeading');
   p.y = 78;
-  p.push(
-    text(LEFT, p.y, runs(clip(windowLine(d, L, w), INNER, fits11)), { size: 11, fill: c.soft }),
-  );
+  const meta = windowLine(d.kind, d.start, d.now, L, w);
+  p.push(text(LEFT, p.y, runs(clip(meta, INNER, fits11)), { size: 11, fill: c.soft }));
   if (!empty) {
     p.y += 17;
     const who =
@@ -98,16 +112,21 @@ export function drawWeek(
         ? `${w('clisN', { n: d.clis.length })} · ${w('projectsN', { n: d.projects })}`
         : d.clis.map(agentName).join(' · ');
     p.push(text(LEFT, p.y, runs(clip(who, INNER, fits11)), { size: 11, fill: c.soft }));
-    // The hero: every session's active time, added up (parallel agents pass the wall clock).
+    // The hero: the grid's sum, every agent's working time (parallel agents pass the clock).
     p.y += 37;
     p.hero('agentTime', partsBody(durationParts(d.agentMs, L)));
-  }
-  p.y += 20;
+    // With sub-agents at work, the main agents' own clock too: the session receipts' DURATION.
+    if (d.work.subAgents > 0) {
+      p.y += 24;
+      p.row(w('sessionTime'), durationParts(d.sessionMs, L), { size: 11, fill: c.soft });
+      p.y += 16;
+    } else p.y += 20;
+  } else p.y += 20;
   p.rule();
 
-  // WEEK: the grid, its hour axis, the busiest hour and the share after hours.
+  // WEEK (or LAST 7 DAYS): the grid, its hour axis, the busiest hour and the share after hours.
   p.y += 18;
-  p.label('week');
+  p.label(d.kind === 'week' ? 'week' : 'last7');
   const top = p.y + 10;
   d.grid.forEach((cells, row) => {
     const y = top + row * PITCH;
@@ -131,7 +150,7 @@ export function drawWeek(
         );
     });
   });
-  // Now: a hairline in the gap after the current hour, on today's row (R20).
+  // The end: a hairline in the gap after the hour the receipt ends in, on its row (R20).
   const cx = GRID_X + (d.cursor.col + 1) * PITCH - 0.5;
   const cy = top + d.cursor.row * PITCH;
   p.push(
@@ -169,6 +188,7 @@ export function drawWeek(
       : w('quiet', {
           elapsed: elapsedWords(weekAge(d), (k, q) => w(k, q)),
           n: d.sessions,
+          time: partsText(durationParts(d.agentMs, L)),
         });
     for (const line of wrap(said, 12, INNER, 3)) {
       p.y += 19;
@@ -232,7 +252,7 @@ export function drawWeek(
   p.y += 22;
   p.rule();
 
-  // BY CLI: only when more than one CLI worked (the meta line names a lone one).
+  // BY CLI: the agent time split by CLI (its rows add up to the hero); only with two or more.
   if (d.byCli.length > 1) {
     p.y += 18;
     p.label('byCli');
@@ -240,36 +260,27 @@ export function drawWeek(
       p.y += 19;
       p.row(agentName(r.agent), durationParts(r.ms, L), {
         valueRight: RIGHT - 42,
-        share: `${r.share}%`,
+        share: shareText(r.share),
       });
     }
     p.y += 20;
     p.rule();
   }
 
-  // LONGEST: the session that worked longest, named unless names are withheld.
+  // LONGEST: the session that worked longest by its own clock, named unless names are withheld.
   if (d.longest) {
     p.y += 22;
     p.row(w('longestSession'), durationParts(d.longest.ms, L));
     p.y += 17;
-    const s = d.longest;
-    const named = `${s.project ? `${s.project} / ` : ''}${s.title ?? w('untitled')}`;
-    const line = o.hideNames ? `${agentName(s.agent)} · ${w('aSession')}` : named;
+    const line = longestLine(d.longest, o.hideNames, w);
     p.push(text(LEFT, p.y, runs(clip(line, INNER, fits11)), { size: 11, fill: c.soft }));
     p.y += 16;
     p.rule();
   }
 
-  // TOKENS, with the sessions that reported none named by CLI.
-  const note =
-    d.tokens.measured && d.unreported.length > 0
-      ? w('notReportedBy', {
-          who: d.unreported
-            .map((u) => w('sessionsBy', { agent: agentName(u.agent), n: u.n }))
-            .join(' · '),
-        })
-      : undefined;
-  p.tokens(d.tokens, note);
+  // TOKENS, with the sessions that report none named by CLI, on one line whatever their number.
+  const note = unreportedLine(d, L, (line) => textWidth(line, 11) <= INNER);
+  p.tokens(d.tokens, note ?? undefined);
   p.y += 27;
   p.serial(weekSerial(d.kind, d.start, d.now));
   const height = p.foot(d.tokens.measured, 24);
@@ -286,12 +297,14 @@ export function weekSvg(
   return frame(drawWeek(d, o, elsewhere), o, size);
 }
 
-/** While the week is read: the head, the window, a progress bar and how far it got. */
+/**
+ * While the week is read: the head, the window, a progress bar and how far it got; when it could
+ * not be read, the head, the window and why, without a bar.
+ */
 export function stubSvg(
   o: ReceiptOptions,
   line: string,
-  done: number,
-  total: number,
+  state: { done: number; total: number } | { failed: string },
   size: ReceiptSize,
 ): { svg: string; width: number; height: number } {
   const p = new Pen(o);
@@ -299,13 +312,20 @@ export function stubSvg(
   p.head('weeklyHeading');
   p.y = 78;
   p.push(text(LEFT, p.y, runs(line), { size: 11, fill: c.soft }));
-  p.y += 12;
-  const share = total > 0 ? Math.min(1, done / total) : 0;
-  p.push(
-    `<rect x="${LEFT}" y="${num(p.y)}" width="${INNER}" height="2" fill="${c.faint}"/>`,
-    `<rect x="${LEFT}" y="${num(p.y)}" width="${num(INNER * share)}" height="2" fill="${c.ink}"/>`,
-  );
-  p.y += 21;
-  p.push(text(LEFT, p.y, runs(p.w('reading', { done, total })), { size: 11, fill: c.soft }));
+  if ('failed' in state) {
+    for (const said of wrap(p.w('weekFailed', { msg: state.failed }), 11, INNER, 3)) {
+      p.y += 19;
+      p.push(text(LEFT, p.y, runs(said), { size: 11, fill: c.fail }));
+    }
+  } else {
+    p.y += 12;
+    const share = state.total > 0 ? Math.min(1, state.done / state.total) : 0;
+    p.push(
+      `<rect x="${LEFT}" y="${num(p.y)}" width="${INNER}" height="2" fill="${c.faint}"/>`,
+      `<rect x="${LEFT}" y="${num(p.y)}" width="${num(INNER * share)}" height="2" fill="${c.ink}"/>`,
+    );
+    p.y += 21;
+    p.push(text(LEFT, p.y, runs(p.w('reading', state)), { size: 11, fill: c.soft }));
+  }
   return frame({ body: p.out.join(''), height: Math.ceil(p.y + 24) }, o, size);
 }

@@ -4,10 +4,12 @@
  * The response is NDJSON: zero or more `progress` lines (`done` never goes down), then one
  * `result` line, or an `error` line. Every session on the machine is read once and kept as sparse
  * hourly buckets, keyed by its id and `updatedAt`; a window is a slice of those buckets, so
- * switching windows reads no file again. Without `refresh` a session read before is served as it
- * was then (the result's `asOf` says when); `refresh=1` reads again every session whose
- * `updatedAt` changed since. Only one computation runs at a time: requests made meanwhile share
- * it, progress included.
+ * switching windows reads no file again. A session last written before the window is not read,
+ * unless it is running (busy or waiting): it may be at work in files its `updatedAt` does not
+ * follow (a background sub-agent's). Without `refresh` a session read before is served as it was
+ * then; `refresh=1` reads again every session whose `updatedAt` changed since, and every running
+ * one. `asOf` is when the data is from, and the receipt prints it as its end. Only one
+ * computation runs at a time: requests made meanwhile share it, or wait their turn with progress.
  *
  * Every figure follows the session's own R1 receipt, cut to the window: a request, a tool call
  * or a failure counts in the hour its start falls in, usage goes with its request, a turn's
@@ -27,7 +29,7 @@ export interface WeekWindow {
    * Sat 17 21:00 → Sat 24 20:00 at 20:41), the current one still in progress.
    */
   hourStarts: number[];
-  /** When the window ends: the time of the request. Hours starting after it are the future. */
+  /** The time of the request, which the hours are counted from (the receipt prints `asOf`). */
   now: number;
 }
 
@@ -37,9 +39,8 @@ export interface WeekFigures {
   activeMs: number;
   /**
    * Working time of the main agent and its sub-agents (thinking, generating, tools; queueing
-   * for the API left out),
-   * each agent's overlapping work counted once, the agents added up: parallel agents exceed the
-   * wall clock. The sum of `hours`.
+   * for the API left out), each agent's overlapping work counted once, the agents added up:
+   * parallel agents exceed the wall clock. The sum of `hours`.
    */
   agentMs: number;
   /** Model calls of the main agent and its sub-agents. */
@@ -52,8 +53,6 @@ export interface WeekFigures {
   /** Failed requests and failed tool calls. */
   failures: number;
   usage: TokenUsage;
-  /** Whether any request in the window reported usage; until one does, `usage` is unknown. */
-  measured: boolean;
 }
 
 export interface WeekSession {
@@ -63,13 +62,20 @@ export interface WeekSession {
   project: string;
   cwd: string | null;
   title: string | null;
+  /** As listed: 'probe' marks a tool's background session, hidden unless asked for. */
+  tags: string[];
+  /**
+   * Whether the session reports usage at all (any call of it did, in the window or not): when
+   * it does not, its tokens are unknown, not zero.
+   */
+  reportsUsage: boolean;
   inWindow: WeekFigures;
   /** Agent time (ms) per hour, aligned with `WeekWindow.hourStarts`. */
   hours: number[];
 }
 
 export interface WeekStats {
-  /** Sessions whose `updatedAt` falls in the window (the others are not read). */
+  /** Sessions whose `updatedAt` falls in the window, and running ones (the others are not read). */
   considered: number;
   /** Of those, read from disk by this request, and served from what was read before. */
   read: number;
@@ -84,9 +90,12 @@ export interface WeekStats {
 
 export interface WeekResult {
   window: WeekWindow;
-  /** Sessions with any activity in the window, most active first. */
+  /** Sessions with any activity in the window, most agent time first. */
   sessions: WeekSession[];
-  /** When the oldest data in the result was read (epoch ms). */
+  /**
+   * When the data is from (epoch ms): the oldest moment a session in the result was read, or
+   * found unchanged. The receipt ends there.
+   */
   asOf: number;
   stats: WeekStats;
 }
@@ -99,3 +108,44 @@ export type WeekLine =
   | { type: 'progress'; done: number; total: number }
   | { type: 'result'; result: WeekResult }
   | { type: 'error'; error: string };
+
+export const HOUR_MS = 3_600_000;
+
+/** Start of the local hour that holds `t`. */
+export function hourStart(t: number): number {
+  const d = new Date(t);
+  d.setMinutes(0, 0, 0);
+  return d.getTime();
+}
+
+/** Start of the local hour after the one starting at `h` (an hour later on any clock). */
+export const nextHour = (h: number) => {
+  const next = hourStart(h + HOUR_MS);
+  return next > h ? next : h + HOUR_MS;
+};
+
+/** Local Monday 00:00 of the week holding `t`. */
+export function weekStart(t: number): number {
+  const d = new Date(t);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return d.getTime();
+}
+
+/** The hours of a window, counted from `now`: see `WeekWindow`. */
+export function weekWindow(kind: WeekWindowKind, now: number): WeekWindow {
+  let start: number;
+  let end: number;
+  if (kind === 'week') {
+    start = weekStart(now);
+    const next = new Date(start);
+    next.setDate(next.getDate() + 7);
+    end = next.getTime();
+  } else {
+    end = nextHour(hourStart(now));
+    start = hourStart(now) - 167 * HOUR_MS;
+  }
+  const hourStarts: number[] = [];
+  for (let h = start; h < end; h = nextHour(h)) hourStarts.push(h);
+  return { kind, hourStarts, now };
+}

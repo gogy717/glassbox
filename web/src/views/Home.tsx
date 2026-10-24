@@ -149,7 +149,7 @@ export function Home({
             />
           </span>
           <span className={css.actions}>
-            <WeeklyReceiptButton />
+            <WeeklyReceiptButton showProbes={showProbes} />
             {latest && (
               <button type="button" className={css.openLatest} onClick={() => onOpen(latest.id)}>
                 {t('home.openLatest')}

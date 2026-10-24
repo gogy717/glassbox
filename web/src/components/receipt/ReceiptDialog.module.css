@@ -153,3 +153,10 @@
   width: min(100%, 300px);
   height: auto;
 }
+
+/* The week could not be read: said once, in the failure's colour. */
+.alert {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--error);
+}

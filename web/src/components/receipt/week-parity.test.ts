@@ -78,7 +78,7 @@ describe('a session alone in its week prints its own receipt’s figures (W3)', 
       expect(f.toolCalls).toBe(r1.work.toolCalls);
       expect(f.failures).toBe(r1.work.failures);
       expect(f.subAgents).toBe(r1.work.subAgents);
-      expect(f.measured).toBe(r1.tokens.measured);
+      expect(week?.reportsUsage).toBe(r1.tokens.measured);
       expect(f.usage.cacheRead).toBe(r1.tokens.cacheRead);
       expect(f.usage.cacheWrite).toBe(r1.tokens.cacheWrite);
       expect(f.usage.input).toBe(r1.tokens.uncached);

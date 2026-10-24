@@ -85,7 +85,7 @@ export function tokenLines(t: TokenFigures, L: Locale, note?: string): string[] 
   if (t.output > 0) row('output', count(t.output));
   if (t.thinking > 0) row('ofThinking', count(t.thinking), '  ');
   if (t.cacheHit !== null) row('cacheHit', formatPercent(t.cacheHit, 'en'));
-  if (note) out.push(...wrapCols(note, 2));
+  if (note) out.push(note);
   out.push(zh ? lead(count(t.total), w('total')) : spread(head('total'), count(t.total)));
   return out;
 }

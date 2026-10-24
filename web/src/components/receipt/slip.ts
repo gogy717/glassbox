@@ -271,8 +271,8 @@ export class Pen {
   }
 
   /**
-   * TOKENS: what was read and written, unless no call reported usage; `note` is a soft line
-   * under the rows (the weekly receipt's sessions that did not report).
+   * TOKENS: what was read and written, unless no call reported usage; `note` is one soft line
+   * under the rows, made to fit by the caller (the weekly receipt's sessions that do not report).
    */
   tokens(t: TokenFigures, note?: string): void {
     const { c, L } = this;
@@ -320,9 +320,9 @@ export class Pen {
       this.y += 19;
       this.row(this.w('cacheHit'), figure(formatPercent(t.cacheHit, L)));
     }
-    for (const line of note ? wrap(note, 11, INNER, 2) : []) {
+    if (note) {
       this.y += 17;
-      this.push(text(LEFT, this.y, runs(line), { size: 11, fill: c.soft }));
+      this.push(text(LEFT, this.y, runs(note), { size: 11, fill: c.soft }));
     }
     this.y += 14;
     this.rule(false);

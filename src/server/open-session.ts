@@ -317,6 +317,8 @@ export class OpenSession {
       if (!r.more) break;
       // Let HTTP requests for other sessions through between chunks of a large file.
       await new Promise<void>((resolve) => setImmediate(resolve));
+      // Closed meanwhile (the server stopping): what is left would be ingested for nobody.
+      if (this.closed) break;
     }
     return { reset: false, changes, lines };
   }
@@ -372,6 +374,7 @@ export class OpenSession {
     const changes: ChangeSet[] = [];
     for (let i = 0; i < all.length; i += ARCHIVE_CHUNK_LINES) {
       if (i > 0) await new Promise<void>((resolve) => setImmediate(resolve));
+      if (this.closed) break;
       changes.push(parser.ingestLines(file, all.slice(i, i + ARCHIVE_CHUNK_LINES)));
     }
     return { reset: false, changes, lines: all.length };

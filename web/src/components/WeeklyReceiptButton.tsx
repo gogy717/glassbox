@@ -12,9 +12,10 @@ const WeeklyReceiptDialog = lazyView(() =>
 
 /**
  * Prints this machine's week as a receipt: the Now board's button, and the dialog once pressed.
- * It works with no session at all: the week then says it had none.
+ * It works with no session at all: the week then says it had none. Probe sessions count only
+ * when the sidebar shows them.
  */
-export function WeeklyReceiptButton() {
+export function WeeklyReceiptButton({ showProbes = false }: { showProbes?: boolean }) {
   const { t } = useI18n();
   const [shown, setShown] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
@@ -34,7 +35,11 @@ export function WeeklyReceiptButton() {
       {shown && (
         <ReceiptBoundary onReset={() => setShown(false)}>
           <Suspense fallback={<ReceiptLoading />}>
-            <WeeklyReceiptDialog returnFocusTo={ref} onClose={() => setShown(false)} />
+            <WeeklyReceiptDialog
+              returnFocusTo={ref}
+              onClose={() => setShown(false)}
+              showProbes={showProbes}
+            />
           </Suspense>
         </ReceiptBoundary>
       )}

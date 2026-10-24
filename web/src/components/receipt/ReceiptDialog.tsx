@@ -1,26 +1,22 @@
 import { AlignLeft, Copy, Download } from 'lucide-react';
-import { type ReactNode, type RefObject, useEffect, useMemo, useRef, useState } from 'react';
-import { weekWindow } from '../../../../src/server/week-buckets.js';
-import {
-  type WeekLine,
-  type WeekResult,
-  type WeekWindowKind,
-  weekPath,
-} from '../../../../src/shared/week.js';
+import { type ReactNode, type RefObject, useEffect, useMemo, useState } from 'react';
+import { type WeekResult, type WeekWindowKind, weekWindow } from '../../../../src/shared/week.js';
 import { useApprovalsContext } from '../../data/approvals';
 import type { OpenSession } from '../../data/store';
 import { type Locale, useI18n } from '../../i18n';
+import { isListed } from '../../lib/sessions';
 import { Modal } from '../Modal';
 import { Switch } from '../Switch';
 import { receiptData } from './data';
 import { copyOrDownload, download, fileName, rasterize, svgUrl, weekFileName } from './exportImage';
-import { clock, shortDay } from './format';
+import { clock } from './format';
 import css from './ReceiptDialog.module.css';
+import { useWeeks } from './readWeek';
 import { type ReceiptKey, rt } from './strings';
 import { type Paper, type ReceiptOptions, type ReceiptSize, receiptSvg, SCALE } from './svg';
 import { receiptText } from './text';
-import { QUIET_MS, weekAge, weekReceipt } from './week';
-import { elapsedWords, stubSvg, type WeekElsewhere, weekSvg } from './weekSvg';
+import { HINT_MS, isQuiet, weekAge, weekReceipt } from './week';
+import { elapsedWords, stubSvg, type WeekElsewhere, weekSvg, windowLine } from './weekSvg';
 import { weekText } from './weekText';
 
 /** The choices, remembered; paper and language follow the app until one is picked. */
@@ -106,8 +102,10 @@ interface SheetProps extends Chosen {
   above?: ReactNode;
   /** The line under the actions. */
   note: ReactNode;
-  /** The image is the stub printed while reading: shown at a slip's size. */
+  /** The image is the stub printed while reading: shown at a slip's size, without its size. */
   stub?: boolean;
+  /** Said at once to a screen reader, as well as shown: the week could not be read. */
+  alert?: string | null;
   onClose(): void;
   returnFocusTo: RefObject<HTMLElement | null>;
 }
@@ -168,9 +166,11 @@ function Sheet(p: SheetProps) {
             data-size={choices.size}
             data-stub={p.stub || undefined}
           />
-          <figcaption className={`${css.dims} figure`}>
-            {`${image.width * SCALE} × ${image.height * SCALE}`}
-          </figcaption>
+          {!p.stub && (
+            <figcaption className={`${css.dims} figure`}>
+              {`${image.width * SCALE} × ${image.height * SCALE}`}
+            </figcaption>
+          )}
           <pre id="receipt-text" className="visually-hidden">
             {p.text}
           </pre>
@@ -240,6 +240,11 @@ function Sheet(p: SheetProps) {
               <AlignLeft size={14} aria-hidden="true" />
               {ui('copyText')}
             </button>
+            {p.alert && (
+              <p className={css.alert} role="alert">
+                {p.alert}
+              </p>
+            )}
             <p className={css.status} role="status">
               {status}
             </p>
@@ -288,181 +293,128 @@ export function ReceiptDialog({ open, onClose, returnFocusTo }: Props) {
   );
 }
 
-/** One window's data: being read (how far), read, or not readable. */
-type WeekState =
-  | { phase: 'reading'; done: number; total: number }
-  | { phase: 'ready'; result: WeekResult }
-  | { phase: 'failed'; msg: string };
-
-/** `/api/week` read to its result, `onProgress` told how far it got on the way. */
-export async function readWeek(
-  kind: WeekWindowKind,
-  refresh: boolean,
-  onProgress: (done: number, total: number) => void,
-  signal?: AbortSignal,
-): Promise<WeekResult> {
-  const res = await fetch(weekPath(kind, refresh), { signal });
-  if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let result: WeekResult | null = null;
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (value) buffer += decoder.decode(value, { stream: !done });
-    for (let i = buffer.indexOf('\n'); i >= 0; i = buffer.indexOf('\n')) {
-      const line = JSON.parse(buffer.slice(0, i)) as WeekLine;
-      buffer = buffer.slice(i + 1);
-      if (line.type === 'progress') onProgress(line.done, line.total);
-      else if (line.type === 'result') result = line.result;
-      else throw new Error(line.error);
-    }
-    if (done) break;
-  }
-  if (!result) throw new Error('no result');
-  return result;
-}
+/** The result without the sessions the sidebar hides: probes, unless it shows them (A1). */
+const listedOnly = (r: WeekResult, showProbes: boolean): WeekResult => ({
+  ...r,
+  sessions: r.sessions.filter((s) => isListed(s, showProbes)),
+});
 
 /** The weekly receipt: every session of the window, read by the server once and summed here. */
-export function WeeklyReceiptDialog({ onClose, returnFocusTo }: Omit<Props, 'open'>) {
+export function WeeklyReceiptDialog({
+  onClose,
+  returnFocusTo,
+  showProbes = false,
+}: Omit<Props, 'open'> & { showProbes?: boolean }) {
   const chosen = useChoices();
-  const { choices, choose, options, ui, appLocale, setStatus } = chosen;
+  const { choices, choose, options, ui, appLocale } = chosen;
   const kind = choices.window;
-  const [states, setStates] = useState<Partial<Record<WeekWindowKind, WeekState>>>({});
-  const [refreshing, setRefreshing] = useState<{ done: number; total: number } | null>(null);
-  const aborts = useRef(new Set<AbortController>());
-  useEffect(() => {
-    const live = aborts.current;
-    return () => {
-      for (const a of live) a.abort();
-    };
-  }, []);
+  const { states, refreshing, refreshFailed, ensure, read } = useWeeks();
+  useEffect(() => ensure(kind), [ensure, kind]);
 
-  const read = (k: WeekWindowKind, refresh = false) => {
-    const abort = new AbortController();
-    aborts.current.add(abort);
-    const set = (s: WeekState) => setStates((all) => ({ ...all, [k]: s }));
-    if (!refresh) set({ phase: 'reading', done: 0, total: 0 });
-    readWeek(
-      k,
-      refresh,
-      (done, total) =>
-        refresh ? setRefreshing({ done, total }) : set({ phase: 'reading', done, total }),
-      abort.signal,
-    )
-      .then((result) => set({ phase: 'ready', result }))
-      .catch((err: unknown) => {
-        if (abort.signal.aborted) return;
-        const msg = err instanceof Error ? err.message : String(err);
-        if (refresh) setStatus(ui('weekFailed', { msg }));
-        else set({ phase: 'failed', msg });
-      })
-      .finally(() => {
-        aborts.current.delete(abort);
-        if (refresh) setRefreshing(null);
-      });
-  };
   const state = states[kind];
-  // biome-ignore lint/correctness/useExhaustiveDependencies: read once per window, on first sight
-  useEffect(() => {
-    if (!state) read(kind);
-  }, [kind]);
-
-  const ready = state?.phase === 'ready' ? state.result : null;
-  const week = useMemo(() => (ready ? weekReceipt(ready) : null), [ready]);
-  // A week not a day old (or empty) points to the last 7 days: read them too, to say how many.
-  const wantsElsewhere = week?.kind === 'week' && (week.sessions === 0 || weekAge(week) < QUIET_MS);
-  const other = states['7d'];
-  // biome-ignore lint/correctness/useExhaustiveDependencies: read once, when first wanted
-  useEffect(() => {
-    if (wantsElsewhere && !other) read('7d');
-  }, [wantsElsewhere]);
-  const elsewhere: WeekElsewhere | null = useMemo(
-    () =>
-      other?.phase === 'ready'
-        ? {
-            sessions: other.result.sessions.length,
-            agentMs: other.result.sessions.reduce((n, s) => n + s.inWindow.activeMs, 0),
-          }
-        : null,
-    [other],
+  const ready = useMemo(
+    () => (state?.phase === 'ready' ? listedOnly(state.result, showProbes) : null),
+    [state, showProbes],
   );
+  const week = useMemo(() => (ready ? weekReceipt(ready) : null), [ready]);
+  // An empty or quiet week, or one under a day old, points to the last 7 days: read them too.
+  const wantsElsewhere =
+    week?.kind === 'week' && (week.sessions === 0 || isQuiet(week) || weekAge(week) < HINT_MS);
+  useEffect(() => {
+    if (wantsElsewhere) ensure('7d');
+  }, [ensure, wantsElsewhere]);
+  const other = states['7d'];
+  const elsewhere: WeekElsewhere | null = useMemo(() => {
+    if (other?.phase !== 'ready') return null;
+    const r = listedOnly(other.result, showProbes);
+    return {
+      sessions: r.sessions.length,
+      agentMs: r.sessions.reduce((n, s) => n + s.inWindow.agentMs, 0),
+    };
+  }, [other, showProbes]);
 
-  const start = ready?.window.hourStarts[0] ?? weekWindow(kind, Date.now()).hourStarts[0] ?? 0;
-  const from = (L: Locale) => `${shortDay(start, L)}${kind === '7d' ? ` ${clock(start)}` : ''}`;
-  const span = (L: Locale) =>
-    `${rt(L, kind === 'week' ? 'thisWeek' : 'last7')} · ${from(L)} → ${rt(L, 'now')}`;
-  const stubLine = span(options.locale);
-  const progress = state?.phase === 'reading' ? state : { done: 0, total: 0 };
+  // Until the week is read, its window as the server counts it; then as the receipt prints it.
+  const start = week?.start ?? weekWindow(kind, Date.now()).hourStarts[0] ?? 0;
+  const end = week?.now ?? Date.now();
+  const line = (L: Locale) => windowLine(kind, start, end, L, (k) => rt(L, k));
+  const failed = state?.phase === 'failed' ? state.msg : null;
+  const done = state?.phase === 'reading' ? state.done : 0;
+  const total = state?.phase === 'reading' ? state.total : 0;
+  const stubLine = line(options.locale);
   const image = useMemo(
     () =>
       week
         ? weekSvg(week, options, choices.size, elsewhere)
-        : stubSvg(options, stubLine, progress.done, progress.total, choices.size),
-    [week, options, choices.size, elsewhere, stubLine, progress.done, progress.total],
+        : stubSvg(options, stubLine, failed !== null ? { failed } : { done, total }, choices.size),
+    [week, options, choices.size, elsewhere, stubLine, failed, done, total],
   );
   const text = useMemo(
     () => (week ? weekText(week, options, elsewhere) : ''),
     [week, options, elsewhere],
   );
 
-  const subtitle = ready
-    ? ui('subtitle', {
-        window: ui(kind === 'week' ? 'thisWeek' : 'last7'),
-        from: from(appLocale),
-        n: ready.sessions.length,
-      })
-    : span(appLocale);
   const blocked =
-    state?.phase === 'failed'
-      ? ui('weekFailed', { msg: state.msg })
+    failed !== null
+      ? ui('weekFailed', { msg: failed })
       : !week
-        ? ui('reading', progress)
+        ? ui('reading', { done, total })
         : week.sessions === 0
           ? ui('nothing')
           : null;
   const hint =
-    week?.kind === 'week' && weekAge(week) < QUIET_MS && elsewhere
+    week?.kind === 'week' && weekAge(week) < HINT_MS && elsewhere
       ? ui('mondayHint', {
           elapsed: elapsedWords(weekAge(week), (k, q) => ui(k, q)),
           n: elsewhere.sessions,
         })
       : null;
-  const refresh = (
-    <button type="button" className={css.link} onClick={() => read(kind, !!week)}>
+  // Chinese runs its sentences on without a space.
+  const gap = appLocale === 'zh' ? '' : ' ';
+  const again = (
+    <button type="button" className={css.link} onClick={() => read(kind, week !== null)}>
       {ui('refresh')}
     </button>
   );
-  const note = week ? (
+  const note = !week ? (
+    failed !== null ? (
+      again
+    ) : (
+      ui('readingNote')
+    )
+  ) : refreshing ? (
     <>
-      {refreshing ? (
-        ui('reading', refreshing)
-      ) : (
-        <>
-          {ui('asOf', { time: clock(week && ready ? ready.asOf : Date.now()) })} · {refresh}.
-        </>
-      )}{' '}
+      {ui('reading', refreshing)}
+      {gap}
       {ui('local')}
     </>
-  ) : state?.phase === 'failed' ? (
-    <>
-      {ui('weekFailed', { msg: state.msg })} {refresh}
-    </>
   ) : (
-    ui('readingNote')
+    <>
+      {refreshFailed !== null
+        ? ui('weekFailed', { msg: refreshFailed })
+        : ui('asOf', { time: clock(week.now) })}{' '}
+      · {again}
+      {ui('stop')}
+      {gap}
+      {ui('local')}
+    </>
   );
 
   return (
     <Sheet
       {...chosen}
       label={ui('weeklyDialog')}
-      subtitle={subtitle}
+      subtitle={
+        week ? ui('subtitle', { line: line(appLocale), n: week.sessions }) : line(appLocale)
+      }
       image={image}
       alt={
-        week
-          ? ui('weekPreview', { w: image.width * SCALE, h: image.height * SCALE })
-          : ui('readingPreview', progress)
+        failed !== null
+          ? ui('weekFailed', { msg: failed })
+          : week
+            ? ui('weekPreview', { w: image.width * SCALE, h: image.height * SCALE })
+            : ui('readingPreview', { done, total })
       }
+      alert={failed !== null ? ui('weekFailed', { msg: failed }) : null}
       text={text}
       name={week ? weekFileName(week) : 'glassbox-week.png'}
       blocked={blocked}

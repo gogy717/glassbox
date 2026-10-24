@@ -1329,3 +1329,38 @@ describe('SessionStore with sources the adapter supplies (readJson)', () => {
     expect(seen.patches).toEqual([]);
   });
 });
+
+describe('SessionStore for the weekly receipt', () => {
+  it('reads a session once without opening it, and says how large it is', async () => {
+    const p = await session('w1', rec.req('r1', T(1)), rec.req('r2', T(2)));
+    const s = await startStore();
+    const size = await s.sizeOf(p.id);
+    expect(size).toBe((await readFile(p.main)).length);
+    const got = await s.readSession(p.id);
+    expect(got?.snapshot.requests).toHaveLength(2);
+    expect(got?.bytes).toBe(size);
+    expect(fake.parsersFor('w1')).toHaveLength(1);
+  });
+
+  it('waits for a session being opened rather than parsing it a second time (M9)', async () => {
+    const p = await session('w2', rec.req('r1', T(1)));
+    const s = await startStore();
+    const opening = s.getSnapshot(p.id);
+    const got = await s.readSession(p.id);
+    await opening;
+    expect(got?.snapshot.requests).toHaveLength(1);
+    expect(fake.parsersFor('w2')).toHaveLength(1);
+    // Open: a read goes through no file.
+    expect(await s.sizeOf(p.id)).toBe(0);
+  });
+
+  it('stops its week with it, dropping a read under way (M9)', async () => {
+    const p = await session('w3', rec.req('r1', T(1)));
+    const s = await startStore();
+    const reading = s.readSession(p.id);
+    await s.stop();
+    store = undefined;
+    expect(await reading).toBeNull();
+    await expect(s.week.compute('week')).rejects.toThrow('stopped');
+  });
+});

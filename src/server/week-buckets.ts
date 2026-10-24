@@ -11,48 +11,15 @@ import { MAIN_AGENT_ID } from '../core/model.js';
 import { addUsage, emptyUsage } from '../core/usage.js';
 import { ms, requestSegments, toolSpan } from '../shared/segments.js';
 import { type ToolCategory, toolCategory } from '../shared/tool-category.js';
-import type { WeekFigures, WeekSession, WeekWindow, WeekWindowKind } from '../shared/week.js';
+import {
+  hourStart,
+  nextHour,
+  type WeekFigures,
+  type WeekSession,
+  type WeekWindow,
+} from '../shared/week.js';
 
-export const HOUR_MS = 3_600_000;
-
-/** Start of the local hour that holds `t`. */
-export function hourStart(t: number): number {
-  const d = new Date(t);
-  d.setMinutes(0, 0, 0);
-  return d.getTime();
-}
-
-/** Start of the local hour after the one starting at `h` (an hour later on any clock). */
-const nextHour = (h: number) => {
-  const next = hourStart(h + HOUR_MS);
-  return next > h ? next : h + HOUR_MS;
-};
-
-/** Local Monday 00:00 of the week holding `t`. */
-export function weekStart(t: number): number {
-  const d = new Date(t);
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-  return d.getTime();
-}
-
-/** The hours of a window: see `WeekWindow`. */
-export function weekWindow(kind: WeekWindowKind, now: number): WeekWindow {
-  let start: number;
-  let end: number;
-  if (kind === 'week') {
-    start = weekStart(now);
-    const next = new Date(start);
-    next.setDate(next.getDate() + 7);
-    end = next.getTime();
-  } else {
-    end = nextHour(hourStart(now));
-    start = hourStart(now) - 167 * HOUR_MS;
-  }
-  const hourStarts: number[] = [];
-  for (let h = start; h < end; h = nextHour(h)) hourStarts.push(h);
-  return { kind, hourStarts, now };
-}
+export { HOUR_MS, hourStart, weekStart, weekWindow } from '../shared/week.js';
 
 export interface HourBucket {
   activeMs: number;
@@ -62,7 +29,6 @@ export interface HourBucket {
   toolCats: Partial<Record<ToolCategory, number>>;
   failures: number;
   usage: TokenUsage;
-  measured: boolean;
 }
 
 /** A session's buckets: what its receipt says, by hour. */
@@ -78,6 +44,8 @@ export interface SessionBuckets {
   hours: Map<number, HourBucket>;
   /** Each sub-agent's life, [start, end]: counted in a window it overlaps. */
   subAgents: [number, number][];
+  /** Whether any of its calls reported usage (the receipt's `measured`, for the whole session). */
+  reportsUsage: boolean;
 }
 
 const emptyBucket = (): HourBucket => ({
@@ -88,7 +56,6 @@ const emptyBucket = (): HourBucket => ({
   toolCats: {},
   failures: 0,
   usage: emptyUsage(),
-  measured: false,
 });
 
 /** Merges overlapping intervals, sorted by start. */
@@ -102,11 +69,16 @@ function union(intervals: [number, number][]): [number, number][] {
   return out;
 }
 
+/** Entities handled between two pauses when a session is bucketed with pauses. */
+const STEP = 2_000;
+
 /**
  * The session's buckets, read from a snapshot taken at `now` (running turns and calls end
- * there). The parity with its receipt (web `receiptData`) is tested on the web side.
+ * there), yielding every `STEP` entities so a caller can pause between them. The parity with
+ * its receipt (web `receiptData`) is tested on the web side.
  */
-export function sessionBuckets(snap: SessionSnapshot, now: number): SessionBuckets {
+function* bucketing(snap: SessionSnapshot, now: number): Generator<void, SessionBuckets> {
+  let n = 0;
   const hours = new Map<number, HourBucket>();
   const at = (t: number) => {
     const h = hourStart(t);
@@ -138,6 +110,7 @@ export function sessionBuckets(snap: SessionSnapshot, now: number): SessionBucke
 
   // Active time: the main agent's turns, a running one up to now.
   for (const t of snap.turns) {
+    if (++n % STEP === 0) yield;
     if (t.agentId !== MAIN_AGENT_ID) continue;
     const start = ms(t.startedAt);
     const end = t.endedAt ? ms(t.endedAt) : t.status === 'running' ? now : null;
@@ -148,7 +121,9 @@ export function sessionBuckets(snap: SessionSnapshot, now: number): SessionBucke
   const fallback = ms(snap.session.startedAt) ?? ms(snap.session.updatedAt) ?? now;
   const turnStart = new Map(snap.turns.map((t) => [t.id, ms(t.startedAt)]));
   const requestStart = new Map<string, number>();
+  let reportsUsage = false;
   for (const r of snap.requests) {
+    if (++n % STEP === 0) yield;
     const start = ms(r.startedAt) ?? (r.turnId ? turnStart.get(r.turnId) : null) ?? fallback;
     requestStart.set(r.id, start);
     const b = at(start);
@@ -157,10 +132,11 @@ export function sessionBuckets(snap: SessionSnapshot, now: number): SessionBucke
     b.requests++;
     if (r.usage) {
       addUsage(b.usage, r.usage);
-      b.measured = true;
+      reportsUsage = true;
     }
   }
   for (const t of snap.toolCalls) {
+    if (++n % STEP === 0) yield;
     const b = at(ms(t.startedAt) ?? requestStart.get(t.requestId) ?? fallback);
     if (t.status === 'error') b.failures++;
     const cat = toolCategory(t.name, t.input);
@@ -177,20 +153,29 @@ export function sessionBuckets(snap: SessionSnapshot, now: number): SessionBucke
     if (list) list.push([a, b]);
     else work.set(agentId, [[a, b]]);
   };
-  for (const r of snap.requests)
+  for (const r of snap.requests) {
+    if (++n % STEP === 0) yield;
     for (const s of requestSegments(r, now))
       if (s.kind !== 'waiting') push(r.agentId, s.start, s.end);
+  }
   for (const t of snap.toolCalls) {
+    if (++n % STEP === 0) yield;
     const span = toolSpan(t, now);
     if (span) push(t.agentId, span[0], span[1]);
   }
-  for (const list of work.values())
+  for (const list of work.values()) {
+    yield;
     for (const [a, b] of union(list)) spread(a, b, (bucket, part) => (bucket.agentMs += part));
+  }
 
-  // Sub-agents' lives: from their start to their end, or to their last activity.
+  // Sub-agents' lives: from their start to their end, or to their last activity. (A reduce, not
+  // Math.max(...list): an agent of a huge session has more intervals than a call takes arguments.)
   const lastActivity = new Map<string, number>();
   for (const [agentId, list] of work)
-    lastActivity.set(agentId, Math.max(...list.map(([, b]) => b)));
+    lastActivity.set(
+      agentId,
+      list.reduce((m, [, b]) => Math.max(m, b), Number.NEGATIVE_INFINITY),
+    );
   const subAgents: [number, number][] = [];
   for (const a of snap.agents) {
     if (a.id === MAIN_AGENT_ID) continue;
@@ -210,11 +195,45 @@ export function sessionBuckets(snap: SessionSnapshot, now: number): SessionBucke
     title: s.title,
     hours,
     subAgents,
+    reportsUsage,
   };
 }
 
-/** What a session did in the given hours (a window's, or any run of hours); null if nothing. */
-export function sliceSession(b: SessionBuckets, window: WeekWindow): WeekSession | null {
+/** The session's buckets: see `bucketing`. */
+export function sessionBuckets(snap: SessionSnapshot, now: number): SessionBuckets {
+  const steps = bucketing(snap, now);
+  for (;;) {
+    const step = steps.next();
+    if (step.done) return step.value;
+  }
+}
+
+/**
+ * The same, awaiting `pause()` every few thousand entities: a session of hundreds of megabytes
+ * is bucketed without holding the event loop.
+ */
+export async function sessionBucketsPausing(
+  snap: SessionSnapshot,
+  now: number,
+  pause: () => Promise<void>,
+): Promise<SessionBuckets> {
+  const steps = bucketing(snap, now);
+  for (;;) {
+    const step = steps.next();
+    if (step.done) return step.value;
+    await pause();
+  }
+}
+
+/**
+ * What a session did in the given hours (a window's, or any run of hours), `tags` as it is
+ * listed; null if nothing.
+ */
+export function sliceSession(
+  b: SessionBuckets,
+  window: WeekWindow,
+  tags: string[] = [],
+): WeekSession | null {
   const index = new Map(window.hourStarts.map((h, i) => [h, i]));
   const hours = window.hourStarts.map(() => 0);
   const f: WeekFigures = {
@@ -226,7 +245,6 @@ export function sliceSession(b: SessionBuckets, window: WeekWindow): WeekSession
     subAgents: 0,
     failures: 0,
     usage: emptyUsage(),
-    measured: false,
   };
   for (const [h, bucket] of b.hours) {
     const i = index.get(h);
@@ -240,7 +258,6 @@ export function sliceSession(b: SessionBuckets, window: WeekWindow): WeekSession
       f.toolCats[cat] = (f.toolCats[cat] ?? 0) + n;
     f.failures += bucket.failures;
     addUsage(f.usage, bucket.usage);
-    f.measured ||= bucket.measured;
   }
   const first = window.hourStarts[0];
   const last = window.hourStarts.at(-1);
@@ -262,6 +279,8 @@ export function sliceSession(b: SessionBuckets, window: WeekWindow): WeekSession
     project: b.project,
     cwd: b.cwd,
     title: b.title,
+    tags,
+    reportsUsage: b.reportsUsage,
     inWindow: f,
     hours,
   };

@@ -1,11 +1,19 @@
 import { createDemoSnapshot } from '../../../src/core/fixtures/demo.js';
 import type { SessionSnapshot } from '../../../src/core/model.js';
-import { sessionBuckets, sliceSession, weekWindow } from '../../../src/server/week-buckets.js';
+import { sessionBuckets, sliceSession } from '../../../src/server/week-buckets.js';
 import { createDemoWeek } from '../../../src/server/week-demo.js';
-import type { WeekResult, WeekSession, WeekWindowKind } from '../../../src/shared/week.js';
+import {
+  type WeekResult,
+  type WeekSession,
+  type WeekWindowKind,
+  weekWindow,
+} from '../../../src/shared/week.js';
 
-/** A Saturday evening: this week runs Monday 19 to now, the last 7 days from Saturday 17. */
-export const WEEK_NOW = new Date(2026, 9, 24, 20, 41).getTime();
+/**
+ * A Saturday evening: this week runs Monday 16 November to now, the last 7 days from Saturday 14
+ * at 21:00. No common time zone changes its clocks in that fortnight, so the tests hold anywhere.
+ */
+export const WEEK_NOW = new Date(2026, 10, 21, 20, 41).getTime();
 
 /** `/api/week`'s result for `snaps` as the server would slice them, at `now`. */
 export function weekResult(
@@ -15,9 +23,12 @@ export function weekResult(
 ): WeekResult {
   const window = weekWindow(kind, now);
   const sessions = snaps
-    .map((s) => sliceSession(sessionBuckets(s, now), window))
+    .map((s) => sliceSession(sessionBuckets(s, now), window, s.session.tags ?? []))
     .filter((s): s is WeekSession => s !== null)
-    .sort((a, b) => b.inWindow.activeMs - a.inWindow.activeMs);
+    .sort(
+      (a, b) =>
+        b.inWindow.agentMs - a.inWindow.agentMs || b.inWindow.activeMs - a.inWindow.activeMs,
+    );
   return {
     window,
     sessions,

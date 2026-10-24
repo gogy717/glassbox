@@ -29,7 +29,7 @@ export function liveFilterOf(s: SessionSummary): LiveFilter {
 }
 
 /** Background probe sessions (e.g. ClaudeBar's) are noise unless asked for. */
-export const isListed = (s: SessionSummary, showProbes = false): boolean =>
+export const isListed = (s: Pick<SessionSummary, 'tags'>, showProbes = false): boolean =>
   showProbes || !s.tags?.includes('probe');
 
 export interface GroupOptions {

@@ -4,7 +4,7 @@ import { type WeekLine, weekPath } from '../shared/week.js';
 import { type AppStore, createApp } from './app.js';
 import { WeekService, type WeekStore } from './week.js';
 
-const NOW = new Date(2026, 9, 24, 20, 41).getTime();
+const NOW = new Date(2026, 10, 21, 20, 41).getTime();
 
 function weekApp() {
   const snaps = [createDemoSnapshot(new Date(NOW)), ...createDemoSideSnapshots(new Date(NOW))];
@@ -63,6 +63,33 @@ describe('GET /api/week', () => {
     expect(foreign.status).toBe(403);
     const bad = await app.request('/api/week?window=month');
     expect(bad.status).toBe(400);
+  });
+
+  it('ends in an error line when the week cannot be read (M4)', async () => {
+    const source: WeekStore = {
+      weekSessions: () => {
+        throw new Error('disk gone');
+      },
+      readSession: async () => null,
+    };
+    const app = createApp({
+      store: {} as AppStore,
+      week: new WeekService(source, { now: () => NOW }),
+      log: () => {},
+    });
+    const lines = await ndjson(await app.request(weekPath('week')));
+    expect(lines.at(-1)).toEqual({ type: 'error', error: 'disk gone' });
+  });
+
+  it('serves the store’s own week by default', async () => {
+    const snaps = [createDemoSnapshot(new Date(NOW))];
+    const week = new WeekService(
+      { weekSessions: () => snaps.map((s) => s.session), readSession: async () => null },
+      { now: () => NOW },
+    );
+    const app = createApp({ store: { week } as AppStore, log: () => {} });
+    const lines = await ndjson(await app.request(weekPath('7d')));
+    expect(lines.at(-1)?.type).toBe('result');
   });
 
   it('is not found without a week source', async () => {

@@ -21,7 +21,7 @@ import type { RunService } from './run-service.js';
 import { registerRunRoutes, runEventPacer } from './runs-routes.js';
 import { createSecurity, type Security, securityHeaders } from './security.js';
 import type { SessionStore } from './store.js';
-import { WeekService, type WeekStore } from './week.js';
+import type { WeekService } from './week.js';
 
 /** Prompts and permission answers are small; nothing the UI sends comes near this. */
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -39,8 +39,10 @@ export type AppStore = Pick<
   | 'getRate'
   | 'onRate'
   | 'expectSession'
-> &
-  Partial<WeekStore>;
+> & {
+  /** The weekly receipt's data, when the store keeps one. */
+  week?: WeekService | null;
+};
 
 export interface AppDeps {
   store: AppStore;
@@ -55,7 +57,7 @@ export interface AppDeps {
   heartbeatMs?: number;
   /** How long a stream waits for an unknown `?session=` before sending `session-missing`. */
   sessionWaitMs?: number;
-  /** The weekly receipt's data; by default read from `store` when it can list and read sessions. */
+  /** The weekly receipt's data; by default the store's own. */
   week?: WeekService | null;
   log?: (msg: string) => void;
 }
@@ -69,16 +71,7 @@ export function createApp(deps: AppDeps): Hono {
   const app = new Hono();
   const fail = (c: Context, status: 400 | 404 | 500, error: string) =>
     jsonResponse<ApiErrorResponse>(c, { error }, status);
-  const { weekSessions, readSession } = store;
-  const week =
-    deps.week !== undefined
-      ? deps.week
-      : weekSessions && readSession
-        ? new WeekService(
-            { weekSessions: weekSessions.bind(store), readSession: readSession.bind(store) },
-            { log },
-          )
-        : null;
+  const week = deps.week !== undefined ? deps.week : (store.week ?? null);
 
   // Outermost, so early answers (403s, 404s, errors) carry the headers too.
   app.use('*', securityHeaders);

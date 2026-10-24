@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { createDemoSideSnapshots, createDemoSnapshot } from '../core/fixtures/demo.js';
+import type { SessionSnapshot } from '../core/model.js';
 import { totalTokens } from '../core/usage.js';
 import type { WeekSession, WeekWindow } from '../shared/week.js';
 import {
@@ -7,10 +8,12 @@ import {
   hourStart,
   type SessionBuckets,
   sessionBuckets,
+  sessionBucketsPausing,
   sliceSession,
   weekStart,
   weekWindow,
 } from './week-buckets.js';
+import { createDemoWeek } from './week-demo.js';
 
 /** Every hour a session's buckets hold: a window that takes all of it. */
 const everything = (b: SessionBuckets): WeekWindow => {
@@ -42,23 +45,26 @@ const plus = (a: ReturnType<typeof additive>, b: ReturnType<typeof additive>) =>
 describe('windows', () => {
   const tz = process.env.TZ;
   afterEach(() => {
-    process.env.TZ = tz;
+    // Assigning undefined would set the zone named "undefined" (UTC) for every later test.
+    if (tz === undefined) delete process.env.TZ;
+    else process.env.TZ = tz;
   });
 
+  // Sat 21 Nov: no common time zone changes its clocks that week (the tests hold anywhere).
   it('starts this week on local Monday 00:00 and runs to next Monday', () => {
-    const now = new Date(2026, 9, 24, 20, 41).getTime(); // Sat 24 Oct
+    const now = new Date(2026, 10, 21, 20, 41).getTime();
     const w = weekWindow('week', now);
-    expect(new Date(w.hourStarts[0] as number)).toEqual(new Date(2026, 9, 19, 0, 0));
+    expect(new Date(w.hourStarts[0] as number)).toEqual(new Date(2026, 10, 16, 0, 0));
     expect(w.hourStarts).toHaveLength(168);
     expect(w.now).toBe(now);
   });
 
   it('takes the last 7 days as 168 hours ending with the current one (R20)', () => {
-    const now = new Date(2026, 9, 24, 20, 41).getTime();
+    const now = new Date(2026, 10, 21, 20, 41).getTime();
     const w = weekWindow('7d', now);
     expect(w.hourStarts).toHaveLength(168);
-    expect(w.hourStarts.at(-1)).toBe(new Date(2026, 9, 24, 20, 0).getTime());
-    expect(w.hourStarts[0]).toBe(new Date(2026, 9, 17, 21, 0).getTime());
+    expect(w.hourStarts.at(-1)).toBe(new Date(2026, 10, 21, 20, 0).getTime());
+    expect(w.hourStarts[0]).toBe(new Date(2026, 10, 14, 21, 0).getTime());
   });
 
   it('has 167 hours in the week the clocks go forward, on local whole hours', () => {
@@ -78,7 +84,7 @@ describe('windows', () => {
 
 describe('a session as hourly buckets', () => {
   it('counts a session crossing Monday 00:00 on both sides, adding up to all of it (W1)', () => {
-    const monday = new Date(2026, 9, 26, 0, 0).getTime();
+    const monday = new Date(2026, 10, 23, 0, 0).getTime();
     const now = monday + 40_000;
     // The demo's 40 minutes end now: its last turn and call run across midnight.
     const snap = createDemoSnapshot(new Date(now));
@@ -124,5 +130,50 @@ describe('a session as hourly buckets', () => {
     const now = new Date(2026, 9, 22, 12, 30).getTime();
     const b = sessionBuckets(createDemoSnapshot(new Date(now)), now);
     expect(sliceSession(b, weekWindow('week', now + 14 * 24 * HOUR_MS))).toBeNull();
+  });
+
+  it('buckets the same with pauses between steps, pausing in a large session (M6)', async () => {
+    const now = new Date(2026, 10, 21, 20, 41).getTime();
+    // A week of sessions as one agent's: thousands of calls and tools, no sub-agent to pause at.
+    const all = createDemoWeek(now);
+    const main = (all[0] as SessionSnapshot).agents.filter((a) => a.id === 'main');
+    const big: SessionSnapshot = {
+      ...(all[0] as SessionSnapshot),
+      agents: main,
+      turns: all.flatMap((x) => x.turns).map((t) => ({ ...t, agentId: 'main' })),
+      requests: all.flatMap((x) => x.requests).map((q) => ({ ...q, agentId: 'main' })),
+      toolCalls: all.flatMap((x) => x.toolCalls).map((t) => ({ ...t, agentId: 'main' })),
+    };
+    expect(big.requests.length + big.toolCalls.length).toBeGreaterThan(6000);
+    let pauses = 0;
+    const paused = await sessionBucketsPausing(big, now, async () => {
+      pauses++;
+    });
+    // Every 2,000 steps through some 26,000 (turns, calls twice, tools twice), and once at the end.
+    expect(pauses).toBeGreaterThanOrEqual(10);
+    expect(paused).toEqual(sessionBuckets(big, now));
+  });
+
+  it('knows a session reports usage though its only call in the window is still in flight (M5)', () => {
+    const now = new Date(2026, 10, 21, 20, 41).getTime();
+    const [side] = createDemoSideSnapshots(new Date(now - 3 * HOUR_MS));
+    if (!side) throw new Error('no side session');
+    const last = side.requests.at(-1);
+    if (!last) throw new Error('no request');
+    Object.assign(last, {
+      status: 'in-flight',
+      usage: null,
+      startedAt: new Date(now - 60_000).toISOString(),
+      firstBlockAt: null,
+      endedAt: null,
+    });
+    const b = sessionBuckets(side, now);
+    const thisHour = { kind: '7d' as const, hourStarts: [hourStart(now)], now };
+    const s = sliceSession(b, thisHour);
+    expect(s?.inWindow.requests).toBe(1);
+    expect(s && totalTokens(s.inWindow.usage)).toBe(0);
+    expect(s?.reportsUsage).toBe(true);
+    for (const q of side.requests) q.usage = null;
+    expect(sessionBuckets(side, now).reportsUsage).toBe(false);
   });
 });

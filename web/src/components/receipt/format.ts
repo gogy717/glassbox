@@ -138,13 +138,14 @@ const monthDay = (t: number) => {
 };
 
 /**
- * The weekly receipt's serial: "W43 · 2026 1019 → 1024 2041" (ISO week, from, to and the time
- * printed), or "7D · 2026 1017 2100 → 1024 2041" for the last 7 days, which start on an hour.
+ * The weekly receipt's serial: "W43 · 2026 1019 → 1024 2041" (the ISO week as the file name has
+ * it, W05 for the fifth; from, to and the time printed), or "7D · 2026 1017 2100 → 1024 2041" for
+ * the last 7 days, which start on an hour.
  */
 export function weekSerial(kind: 'week' | '7d', start: number, now: number): string {
   const hm = (t: number) => clock(t).replace(':', '');
   const from = `${new Date(start).getFullYear()} ${monthDay(start)}`;
   return kind === 'week'
-    ? `W${isoWeek(start)[1]} · ${from} → ${monthDay(now)} ${hm(now)}`
+    ? `W${String(isoWeek(start)[1]).padStart(2, '0')} · ${from} → ${monthDay(now)} ${hm(now)}`
     : `7D · ${from} ${hm(start)} → ${monthDay(now)} ${hm(now)}`;
 }
