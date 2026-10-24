@@ -204,10 +204,11 @@ export async function sessionBucketsPausing(
 }
 
 /**
- * The window hour that holds `t` (the last starting at or before it, an hour long at most), or
- * -1 outside the window. A bucket starts on a local hour, as the window's hours mostly do; where
- * they part (the last 7 days are hours of the clock, which Lord Howe's half-hour change of the
- * clocks moves off its local hours), it goes to the hour it starts in.
+ * The window hour a bucket starting at `t` goes to: the last starting at or before it (an hour
+ * long at most), or -1 outside the window. A bucket starts on a local hour, as the window's hours
+ * mostly do; where they part (the last 7 days are hours of the clock, which Lord Howe's half-hour
+ * change of the clocks moves off its local hours), it goes to the hour it starts in, and one that
+ * starts before the window but runs into its first hour goes to that hour.
  */
 function slotOf(hourStarts: number[], t: number): number {
   let lo = 0;
@@ -220,7 +221,10 @@ function slotOf(hourStarts: number[], t: number): number {
       lo = mid + 1;
     } else hi = mid - 1;
   }
-  if (at < 0) return -1;
+  if (at < 0) {
+    const first = hourStarts[0];
+    return first !== undefined && t > first - HOUR_MS ? 0 : -1;
+  }
   const end = hourStarts[at + 1] ?? (hourStarts[at] as number) + HOUR_MS;
   return t < end ? at : -1;
 }
@@ -248,7 +252,8 @@ export function sliceSession(
   for (const [h, bucket] of b.hours) {
     const i = slotOf(window.hourStarts, h);
     if (i < 0) continue;
-    hours[i] = bucket.agentMs;
+    // Two buckets can share an hour of the window where local hours part from it: add, not set.
+    hours[i] = (hours[i] ?? 0) + bucket.agentMs;
     f.activeMs += bucket.activeMs;
     f.agentMs += bucket.agentMs;
     f.requests += bucket.requests;

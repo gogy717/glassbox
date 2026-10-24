@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { createDemoSideSnapshots, createDemoSnapshot } from '../core/fixtures/demo.js';
 import type { SessionSnapshot } from '../core/model.js';
-import { totalTokens } from '../core/usage.js';
+import { emptyUsage, totalTokens } from '../core/usage.js';
 import type { WeekSession, WeekWindow } from '../shared/week.js';
 import {
   HOUR_MS,
@@ -94,6 +94,26 @@ describe('windows', () => {
     expect(s?.inWindow.agentMs).toBe(
       [...b.hours.values()].reduce((a, bucket) => a + bucket.agentMs, 0),
     );
+  });
+
+  it('puts a bucket that runs into the first hour of the last 7 days in that hour (Lord Howe)', () => {
+    process.env.TZ = 'Australia/Lord_Howe';
+    const now = new Date('2026-10-06T12:30:00+11:00').getTime();
+    const w = weekWindow('7d', now);
+    const first = w.hourStarts[0] as number;
+    // Its local hour, 12:00–13:00 at +10:30, starts half an hour before the window's first.
+    const at = Date.parse('2026-09-29T12:55:00+10:30');
+    const b = sessionBuckets(createDemoSnapshot(new Date(at)), at);
+    expect([...b.hours.keys()]).toEqual([first - HOUR_MS / 2]);
+    const all = [...b.hours.values()].reduce((n, x) => n + x.agentMs, 0);
+    expect(all).toBeGreaterThan(0);
+    const s = sliceSession(b, w);
+    expect(s?.hours[0]).toBe(all);
+    expect(s?.inWindow.agentMs).toBe(all);
+    // An hour earlier it ends before the window: left out.
+    expect(
+      sliceSession(sessionBuckets(createDemoSnapshot(new Date(at - HOUR_MS)), at - HOUR_MS), w),
+    ).toBeNull();
   });
 
   it('keeps hours on the local hour where the offset is half an hour', () => {
@@ -241,5 +261,35 @@ describe('a session as hourly buckets', () => {
         }, 0);
     expect(s?.inWindow.agentMs).toBe(upTo());
     expect(s?.inWindow.activeMs).toBe(upTo('main'));
+  });
+
+  it('adds two buckets that fall in one hour of the window, losing neither', () => {
+    const h = new Date(2026, 10, 21, 10).getTime();
+    const bucket = (agentMs: number) => ({
+      activeMs: agentMs,
+      agentMs,
+      requests: 1,
+      toolCalls: 0,
+      toolCats: {},
+      failures: 0,
+      usage: emptyUsage(),
+    });
+    const b: SessionBuckets = {
+      id: 's',
+      updatedAt: new Date(h).toISOString(),
+      agent: 'claude-code',
+      project: 'p',
+      cwd: null,
+      title: null,
+      hours: new Map([
+        [h, bucket(10 * 60_000)],
+        [h + 30 * 60_000, bucket(5 * 60_000)],
+      ]),
+      subAgents: [],
+      reportsUsage: false,
+    };
+    const s = sliceSession(b, { kind: '7d', hourStarts: [h, h + HOUR_MS], now: h });
+    expect(s?.hours).toEqual([15 * 60_000, 0]);
+    expect(s?.inWindow.agentMs).toBe(15 * 60_000);
   });
 });

@@ -196,6 +196,43 @@ describe('the weekly receipt’s data', () => {
     expect(f.count('a')).toBe(2);
   });
 
+  it('reads again a session found idle that is at work now, though its updatedAt has not moved', async () => {
+    const snap = old(1, 'a');
+    snap.session = { ...snap.session, live: 'idle' };
+    const f = fakeStore([snap]);
+    let now = NOW;
+    const svc = new WeekService(f.store, { now: () => now });
+    await svc.compute('7d');
+    now = NOW + 60_000;
+    snap.session = { ...snap.session, live: 'busy' };
+    await svc.compute('7d');
+    expect(f.count('a')).toBe(2);
+  });
+
+  it('keeps what a session held when it cannot be read again, and counts it failed', async () => {
+    const snap = old(1, 'a');
+    const f = fakeStore([snap, old(2, 'b')]);
+    let now = NOW;
+    const svc = new WeekService(f.store, { now: () => now });
+    const first = await svc.compute('7d');
+    const was = first.sessions.find((s) => s.id === 'a');
+    expect(was).toBeDefined();
+    // Written again, then unreadable: served as it was read, and said to be so.
+    touched(snap, NOW + 30_000);
+    f.failing.add('a');
+    now = NOW + 60_000;
+    const r = await svc.compute('7d');
+    expect(f.count('a')).toBe(2);
+    expect(r.stats.failed).toBe(1);
+    expect(r.sessions.find((s) => s.id === 'a')?.inWindow).toEqual(was?.inWindow);
+    expect(r.sessions).toHaveLength(2);
+    // Readable again: read again (the cache still holds the old updatedAt), nothing failed.
+    f.failing.clear();
+    const again = await svc.compute('7d');
+    expect(f.count('a')).toBe(3);
+    expect(again.stats.failed).toBe(0);
+  });
+
   it('reads again a session that was running when read, though it has finished since (N2)', async () => {
     const [live] = week(NOW);
     if (!live) throw new Error('no demo session');

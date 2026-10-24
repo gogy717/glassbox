@@ -16,6 +16,7 @@ import {
   type Parts,
   partsText,
   shortDay,
+  underOne,
   weekdayMark,
   weekSerial,
 } from './format';
@@ -96,13 +97,18 @@ export const DASH: Parts = [{ digits: '—', unit: '' }];
 export const timeParts = (ms: number, L: ReceiptOptions['locale']): Parts =>
   ms > 0 ? durationParts(ms, L) : DASH;
 
-/** A CLI's time as printed: its share of the hero's minutes (or seconds), "—" for none. */
+/**
+ * A CLI's time as printed: its share of the hero's minutes (or seconds); "<1m" ("<1s") when it
+ * worked but its share comes to none, the unit going to the others so the rows still add up
+ * (DR12); "—" when it has no time at all.
+ */
 export function cliParts(
   r: WeekReceipt['byCli'][number],
   unit: WeekReceipt['cliUnit'],
   L: ReceiptOptions['locale'],
 ): Parts {
   if (r.ms === 0) return DASH;
+  if (r.units === 0) return underOne(unit, L);
   return unit === 'min' ? minuteParts(r.units, L) : durationParts(r.units * 1000, L);
 }
 

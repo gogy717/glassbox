@@ -82,7 +82,10 @@ export interface WeekStats {
   /** Of those, read from disk by this request, and served from what was read before. */
   read: number;
   cached: number;
-  /** Could not be read; left out of the result (the server logs why). */
+  /**
+   * Could not be read by this request (the server logs why): one read before is in the result as
+   * it was then, older than `asOf`; one never read is left out. The dialog says how many.
+   */
   failed: number;
   /** Bytes of the files read by this request. */
   bytes: number;

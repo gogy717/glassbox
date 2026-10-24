@@ -417,6 +417,8 @@ function useWeekSheet(
         {refreshFailed !== undefined
           ? ui('weekFailed', { msg: refreshFailed })
           : ui('asOf', { time: clock(week.now) })}{' '}
+        {/* Read before, not again this time: in the receipt, older than the time beside it. */}
+        {ready && ready.stats.failed > 0 && <>· {ui('notRefreshed', { n: ready.stats.failed })} </>}
         · {again}
         {ui('stop')}
         {gap}
