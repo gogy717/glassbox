@@ -5,8 +5,14 @@ export interface SessionGroup {
   sessions: SessionSummary[];
 }
 
-/** A session blocked on the user's confirmation needs attention as much as a running one. */
-const active = (s: SessionSummary) => Number(s.live === 'busy' || s.live === 'waiting');
+/**
+ * Running: busy, or blocked on the user's confirmation, which needs attention as much. The one
+ * test of it, for the sidebar, Home's board, a row and whether more may still arrive.
+ */
+export const isRunning = (s: Pick<SessionSummary, 'live'>): boolean =>
+  s.live === 'busy' || s.live === 'waiting';
+
+const active = (s: SessionSummary) => Number(isRunning(s));
 
 const busyFirst = (a: SessionSummary, b: SessionSummary) =>
   active(b) - active(a) || b.updatedAt.localeCompare(a.updatedAt);
@@ -18,7 +24,7 @@ export const LIVE_FILTERS: readonly LiveFilter[] = ['running', 'idle', 'closed']
 
 /** Which live-state filter a session falls under; an unknown state counts as closed. */
 export function liveFilterOf(s: SessionSummary): LiveFilter {
-  if (s.live === 'busy' || s.live === 'waiting') return 'running';
+  if (isRunning(s)) return 'running';
   return s.live === 'idle' ? 'idle' : 'closed';
 }
 

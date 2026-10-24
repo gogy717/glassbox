@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SessionSummary } from '../../../src/core/model.js';
-import { groupSessions, liveFilterOf } from './sessions';
+import { groupSessions, isRunning, liveFilterOf } from './sessions';
 
 const base: SessionSummary = {
   id: 'x',
@@ -35,6 +35,18 @@ const sessions: SessionSummary[] = [
 
 const ids = (groups: ReturnType<typeof groupSessions>) =>
   groups.map((g) => [g.project, g.sessions.map((x) => x.id)]);
+
+// Final review M8: one test of "running", which busy and waiting both are.
+describe('isRunning', () => {
+  it.each([
+    ['busy', true],
+    ['waiting', true],
+    ['idle', false],
+    ['closed', false],
+  ] as const)('counts a session that is %s as running: %s', (live, running) => {
+    expect(isRunning({ live })).toBe(running);
+  });
+});
 
 describe('groupSessions', () => {
   it('puts groups with a busy session first, then by most recent update; busy first inside', () => {

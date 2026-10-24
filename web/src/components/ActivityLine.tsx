@@ -1,6 +1,7 @@
 import { X } from 'lucide-react';
 import type { SessionActivity, SessionSummary } from '../../../src/core/model.js';
 import { type MessageKey, translateParts, useI18n } from '../i18n';
+import { isRunning } from '../lib/sessions';
 import { toolCategory } from '../lib/tool-category';
 import css from './ActivityLine.module.css';
 import { UiCjk } from './CompactFigure';
@@ -105,7 +106,7 @@ interface Props {
 export function ActivityLine({ session: s, failure, density }: Props) {
   const { t } = useI18n();
   const card = density === 'card';
-  const running = s.live === 'busy' || s.live === 'waiting';
+  const running = isRunning(s);
   if (failure !== undefined && !running)
     return (
       <span className={css.activity} data-state="failed">

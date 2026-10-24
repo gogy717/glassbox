@@ -2,6 +2,7 @@ import type { AgentNode, WorkflowRun } from '../../../src/core/model.js';
 import { MAIN_AGENT_ID } from '../../../src/core/model.js';
 import { contextSize } from '../../../src/core/usage.js';
 import type { OpenSession } from '../data/store';
+import { isRunning } from './sessions';
 
 export type PathItem =
   | { kind: 'agent'; agent: AgentNode }
@@ -159,9 +160,5 @@ export function summarize(open: OpenSession, agentId: string, now: number): Summ
 
 /** The session is live or the agent is running, so turns and calls may still arrive. */
 export function mayStillRun(open: OpenSession, agentId: string): boolean {
-  return (
-    open.session.live === 'busy' ||
-    open.session.live === 'waiting' ||
-    open.agents.get(agentId)?.status === 'running'
-  );
+  return isRunning(open.session) || open.agents.get(agentId)?.status === 'running';
 }

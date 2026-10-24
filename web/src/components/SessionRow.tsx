@@ -5,6 +5,7 @@ import type { RovingItemProps } from '../data/useRovingFocus';
 import { translateParts, useI18n } from '../i18n';
 import { agentName } from '../lib/agent-names';
 import { formatCompact, formatRelative } from '../lib/format';
+import { isRunning } from '../lib/sessions';
 import { ActivityLine } from './ActivityLine';
 import { AgentTag } from './AgentTag';
 import { CompactFigure } from './CompactFigure';
@@ -44,7 +45,7 @@ export function SessionRow({
   // repeat the row's text (whole), so a screen reader does not hear it twice.
   const [clipped, setClipped] = useState(false);
   const title = s.title ?? t('sidebar.untitled');
-  const running = s.live === 'busy' || s.live === 'waiting';
+  const running = isRunning(s);
   const failed = failure !== undefined && !running;
   const state = failed
     ? [t('status.error'), failure].filter(Boolean).join(': ')
