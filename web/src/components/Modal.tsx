@@ -7,6 +7,8 @@ import css from './Modal.module.css';
 
 interface Props {
   label: string;
+  /** What the dialog is of, muted after its name in the header ("glassbox / Fix the build"). */
+  subtitle?: string;
   onClose(): void;
   /** Extra controls in the header, left of the close button. */
   actions?: ReactNode;
@@ -18,7 +20,15 @@ interface Props {
 }
 
 /** A large inspection dialog. Focus starts on Close and returns to the opener when it closes. */
-export function Modal({ label, onClose, actions, returnFocusTo, size = 'large', children }: Props) {
+export function Modal({
+  label,
+  subtitle,
+  onClose,
+  actions,
+  returnFocusTo,
+  size = 'large',
+  children,
+}: Props) {
   const { t } = useI18n();
   const closeRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -47,7 +57,10 @@ export function Modal({ label, onClose, actions, returnFocusTo, size = 'large', 
         }}
       >
         <div className={css.head}>
-          <span className={css.title}>{label}</span>
+          <span className={css.title}>
+            {label}
+            {subtitle && <span className={css.subtitle}> {subtitle}</span>}
+          </span>
           {actions}
           <button
             ref={closeRef}

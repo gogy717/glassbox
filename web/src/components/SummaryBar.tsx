@@ -1,11 +1,13 @@
+import { Receipt } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useMemo, useState } from 'react';
+import { Suspense, useMemo, useRef, useState } from 'react';
 import type { TokenRate } from '../../../src/shared/rate.js';
 import { type OpenSession, useRate } from '../data/store';
 import { useNow } from '../data/useNow';
 import { useI18n } from '../i18n';
 import { summarize } from '../lib/agents';
 import { DASH, formatDuration, formatNumber, formatPercent } from '../lib/format';
+import { lazyView } from '../lib/lazy-view';
 import { UiCjk } from './CompactFigure';
 import { Diagnostics } from './Diagnostics';
 import css from './SummaryBar.module.css';
@@ -20,6 +22,38 @@ interface Figure {
   aside?: string;
   /** Only below 900px, where the top bar gives it up: the token rate. */
   narrowOnly?: boolean;
+}
+
+// The receipt's dialog, drawing and export are loaded on first use: the app's first load stays.
+const ReceiptDialog = lazyView(() =>
+  import('./receipt/ReceiptDialog').then((m) => m.ReceiptDialog),
+);
+
+/** Prints the session as a receipt image: the button, and the dialog once it is pressed. */
+function ReceiptButton({ open }: { open: OpenSession }) {
+  const { t } = useI18n();
+  const [shown, setShown] = useState(false);
+  const ref = useRef<HTMLButtonElement>(null);
+  return (
+    <>
+      <button
+        ref={ref}
+        type="button"
+        className={css.receipt}
+        aria-label={t('receipt.open')}
+        aria-haspopup="dialog"
+        onClick={() => setShown(true)}
+      >
+        <Receipt size={14} aria-hidden="true" />
+        <span className={css.receiptLabel}>{t('receipt.open')}</span>
+      </button>
+      {shown && (
+        <Suspense fallback={null}>
+          <ReceiptDialog open={open} returnFocusTo={ref} onClose={() => setShown(false)} />
+        </Suspense>
+      )}
+    </>
+  );
 }
 
 /** The readout: each figure in the mono face above its label, a hairline between them. */
@@ -96,6 +130,7 @@ export function SummaryBar({
         </button>
       </div>
       <Diagnostics diagnostics={open.diagnostics} />
+      <ReceiptButton open={open} />
     </section>
   );
 }

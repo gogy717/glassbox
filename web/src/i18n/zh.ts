@@ -50,6 +50,7 @@ export const zh = {
   'summary.title': '汇总',
   'summary.rate': 'Token 速率',
   'summary.more': '更多数字',
+  'receipt.open': '小票',
   'summary.fewer': '收起',
   'crumb.main': '主会话',
   'crumb.pick': '切换子代理',

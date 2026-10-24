@@ -52,6 +52,7 @@ export const en: Record<MessageKey, string> = {
   'summary.rate': 'Token rate',
   'summary.more': 'More figures',
   'summary.fewer': 'Fewer figures',
+  'receipt.open': 'Receipt',
   'crumb.main': 'Main',
   'crumb.pick': 'Switch sub-agent',
   'crumb.label': 'Agent',
