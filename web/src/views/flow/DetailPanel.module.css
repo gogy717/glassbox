@@ -97,6 +97,11 @@
   text-transform: uppercase;
 }
 
+/* Chinese has no case: uppercase would only shout the Latin words in it. */
+.cell h4:lang(zh) {
+  text-transform: none;
+}
+
 /* A reply's rendered markdown, on the same surface as plain text. */
 .content {
   max-height: 420px;

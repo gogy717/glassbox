@@ -55,6 +55,11 @@
   color: var(--faint);
 }
 
+/* Chinese has no case: uppercase would only shout the Latin words in it. */
+.section h2:lang(zh) {
+  text-transform: none;
+}
+
 .section ul {
   display: grid;
   gap: 6px;

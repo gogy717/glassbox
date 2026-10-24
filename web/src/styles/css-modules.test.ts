@@ -112,6 +112,25 @@ describe('CSS modules', () => {
     expect(off).toEqual([]);
   });
 
+  // I3 item 5: Chinese has no case, so an uppercase label only shouts its Latin words ("TOKEN").
+  it('lets every uppercase rule in a module drop the uppercase in Chinese', () => {
+    const missing = moduleFiles(SRC).flatMap((file) => {
+      const root = postcss.parse(readFileSync(file, 'utf8'));
+      const upper: string[] = [];
+      const zhNone = new Set<string>();
+      root.walkDecls('text-transform', (d) => {
+        const rule = d.parent as Rule;
+        for (const sel of rule.selectors ?? []) {
+          if (d.value === 'uppercase') upper.push(sel);
+          const zh = /^(.*?):lang\(zh\)(.*)$/.exec(sel);
+          if (zh && d.value === 'none') zhNone.add(`${zh[1]}${zh[2]}`.trim());
+        }
+      });
+      return upper.filter((sel) => !zhNone.has(sel)).map((sel) => `${relative(SRC, file)}: ${sel}`);
+    });
+    expect(missing).toEqual([]);
+  });
+
   it('animates a module only with keyframes the module declares', () => {
     const missing = moduleFiles(SRC).flatMap((file) => {
       const root = postcss.parse(readFileSync(file, 'utf8'));

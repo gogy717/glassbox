@@ -140,3 +140,8 @@
   letter-spacing: 0.04em;
   color: var(--faint);
 }
+
+/* Chinese has no case: uppercase would only shout the Latin words in it. */
+.menuPhase:lang(zh) {
+  text-transform: none;
+}

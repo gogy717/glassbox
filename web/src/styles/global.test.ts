@@ -8,6 +8,19 @@ const sheet = postcss.parse(readFileSync(join(import.meta.dirname, 'global.css')
 const WEB = join(import.meta.dirname, '../..');
 
 describe('global.css', () => {
+  // I3 item 5: uppercase is for Latin section labels; in zh it only shouts the Latin words
+  // inside them ("TOKEN 速率", "按 TOKEN 类型").
+  it('leaves a Chinese section label’s Latin words as written', () => {
+    const decls: Record<string, string> = {};
+    sheet.walkRules((rule: Rule) => {
+      if (!rule.selectors.some((sel) => /^\.section-label:lang\(zh\)$/.test(sel))) return;
+      rule.walkDecls((d) => {
+        decls[d.prop] = d.value;
+      });
+    });
+    expect(decls['text-transform']).toBe('none');
+  });
+
   it('pins visually hidden text inside its box, so it cannot stretch a scroller it sits in', () => {
     const decls: Record<string, string> = {};
     sheet.walkRules('.visually-hidden', (rule: Rule) => {

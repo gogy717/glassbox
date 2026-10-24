@@ -45,6 +45,11 @@
   text-transform: uppercase;
 }
 
+/* Chinese has no case: uppercase would only shout the Latin words in it. */
+.section h4:lang(zh) {
+  text-transform: none;
+}
+
 .muted {
   margin: 0;
   font-size: 11px;

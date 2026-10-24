@@ -110,6 +110,11 @@ input {
   text-transform: uppercase;
 }
 
+/* Chinese has no case: uppercase would only shout the Latin words in it ("Token 速率"). */
+.section-label:lang(zh) {
+  text-transform: none;
+}
+
 /* Read, not seen. Pinned to its box's corner rather than left where the text would run, so a
    long row's hidden words cannot stretch the scroller around it. */
 .visually-hidden {
