@@ -92,8 +92,12 @@ describe('CSS modules', () => {
   // Empty since I3: W4's TimeView and W5's Composer declare their own.
   const KNOWN: string[] = [];
 
+  /** `--radius-xs` … `--radius-xl`, in px. */
+  const RADIUS_STEPS = [2, 3, 4, 6, 8];
+
   // D1 A2 (I3): nothing rounder than 8 px but a dot, so no pill (the reopen button was 999 px).
-  it('rounds every module only on D1’s scale: a radius token, at most 8px, or a 50% dot', () => {
+  // Final review M4: and only on the scale's steps, so no 5 or 7 px between them.
+  it('rounds every module only on D1’s scale: a radius token, one of its steps, or a 50% dot', () => {
     const off = moduleFiles(SRC).flatMap((file) => {
       const found: string[] = [];
       postcss.parse(readFileSync(file, 'utf8')).walkDecls(/radius$/, (d) => {
@@ -103,7 +107,7 @@ describe('CSS modules', () => {
             /^var\(--radius-(xs|s|m|l|xl)\)$/.test(v) ||
             v === '0' ||
             v === '50%' ||
-            (px !== null && Number(px[1]) <= 8);
+            (px !== null && RADIUS_STEPS.includes(Number(px[1])));
           if (!ok) found.push(`${relative(SRC, file)}: ${d.prop}: ${d.value}`);
         }
       });
