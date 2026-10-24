@@ -144,9 +144,10 @@ const ESCAPABLE = new Set([...' \t"\'\\$`;&|()<>*?[]#~=%!{}\n']);
 
 /**
  * The simple commands of a line, split at `;`, `&&`, `||`, `|`, `&`, newlines and subshell
- * parentheses, each as its words with quotes removed. Comments, heredoc bodies and a `case`'s
- * patterns are skipped. `$(…)`, backquotes, `${…}` and `@{…}` stay inside their word, heredocs
- * inside them included. Reads at most SCAN_MAX characters, plus heredoc bodies.
+ * parentheses, each as its words with quotes removed. Comments (PowerShell's `<# … #>` too),
+ * heredoc bodies and a `case`'s patterns are skipped. `$(…)`, backquotes, `${…}` and `@{…}`
+ * stay inside their word, heredocs inside them included. Reads at most SCAN_MAX characters, plus
+ * heredoc bodies.
  */
 function segments(line: string, ps: boolean): string[][] {
   const n = Math.min(line.length, SCAN_MAX);
@@ -156,6 +157,8 @@ function segments(line: string, ps: boolean): string[][] {
   let word: string | null = null;
   /** After `case … in` or `;;`: the words up to `)` are a pattern, not a command. */
   let pattern = false;
+  /** After `case x` or `for x` ends its line: an `in` line next is still the head. */
+  let headless = false;
   const endWord = () => {
     if (word !== null) words.push(word);
     word = null;
@@ -164,7 +167,15 @@ function segments(line: string, ps: boolean): string[][] {
   const endSegment = (closer = '') => {
     endWord();
     const first = words[0];
-    if (words.length > 0) segs.push(words);
+    if (first === undefined) return;
+    if (headless && first === 'in') {
+      // case $x, then `in` on a line of its own; for f, then `in *.ts`: not a command.
+      words = [];
+      headless = false;
+      return;
+    }
+    headless = /^(?:case|for|select)$/.test(first) && !words.includes('in') && closer !== ')';
+    segs.push(words);
     words = [];
     if (first === 'case') pattern = closer !== ')';
     else if (first === 'esac') pattern = false;
@@ -240,7 +251,10 @@ function segments(line: string, ps: boolean): string[][] {
         j = e === -1 ? n : e + 1;
       } else if (c === '"') j = nest < NEST_MAX ? doubleEnd(j, nest + 1) : j + 1;
       else if (c === '<' && line[j + 1] === '<' && line[j + 2] === '<') j += 3;
-      else if (c === '<' && line[j + 1] === '<') {
+      else if (ps && c === '<' && line[j + 1] === '#') {
+        const e = line.indexOf('#>', j + 2);
+        j = e === -1 ? n : e + 2;
+      } else if (c === '<' && line[j + 1] === '<') {
         const d = delimiterAt(j + 2);
         if (d.word) pending.push(d.word);
         j = Math.max(d.end, j + 2);
@@ -318,6 +332,11 @@ function segments(line: string, ps: boolean): string[][] {
       const stop = closing(i + 1, next, next === '(' ? ')' : '}');
       add(line.slice(i, stop));
       i = stop;
+    } else if (ps && c === '<' && next === '#') {
+      // A PowerShell block comment, <# … #>, over lines or inside one.
+      endWord();
+      const e = line.indexOf('#>', i + 2);
+      i = e === -1 || e >= n ? n : e + 2;
     } else if (c === '#' && word === null) {
       const e = line.indexOf('\n', i);
       i = e === -1 ? n : e;
@@ -566,22 +585,12 @@ const WRAPPERS: Record<string, Options & { positional?: number }> = {
   },
 };
 
-/** Switches common enough to read as switches for any program. */
+/**
+ * Long switches that take no value for any program. Short ones are not trusted this way: `-t`,
+ * `-a` or `-i` takes a value for many programs (`vercel -t <token>`), so only a program's own
+ * list says it is a switch there.
+ */
 const COMMON_SWITCHES = new Set([
-  '-v',
-  '-vv',
-  '-vvv',
-  '-q',
-  '-s',
-  '-y',
-  '-h',
-  '-V',
-  '-g',
-  '-f',
-  '-a',
-  '-i',
-  '-t',
-  '-x',
   '--verbose',
   '--quiet',
   '--silent',
@@ -613,14 +622,17 @@ const COMMON_SWITCHES = new Set([
 const SECRET_OPTION = /token|secret|key|pass|pwd|auth(?!or)|credential|cookie|session|otp/i;
 
 /**
- * Whether an option takes the next word as its value. `--x=y`, `-j8` and `-la` hold their own;
- * unknown is an option no list names, whose next word could be either.
+ * Whether an option takes the next word as its value. `--x=y` and `-j8` hold their own; unknown
+ * is an option no list names, whose next word could be either and so never shows.
  */
 function optionKind(w: string, spec: Options): 'value' | 'switch' | 'unknown' {
   if (w.includes('=')) return 'switch';
   if (spec.values?.includes(w) || SECRET_OPTION.test(w)) return 'value';
   if (spec.switches?.includes(w) || COMMON_SWITCHES.has(w)) return 'switch';
-  if (/^-[^-]./.test(w)) return 'switch';
+  // A short option with its value attached: -j8, -O2, -p5432.
+  if (/^-[A-Za-z]\d+$/.test(w)) return 'switch';
+  // Anything else the program does not list (a common letter such as -t, or a single-dash option
+  // of more letters such as -gs or -Xfoo) may take the next word as its value.
   return 'unknown';
 }
 
@@ -956,16 +968,28 @@ const SUBCOMMANDS: Record<string, string[]> = {
 /** Switches of a program with subcommands, beyond the common ones. */
 const SUBCOMMAND_SWITCHES: Record<string, string[]> = {
   git: ['-p', '-P', '--bare', '--no-replace-objects', '--literal-pathspecs', '--no-optional-locks'],
-  npm: ['-ws', '--workspaces', '--if-present', '-w'],
-  pnpm: ['-r', '-w', '--workspace-root', '--if-present', '--parallel'],
-  yarn: ['--immutable', '--frozen-lockfile'],
+  npm: ['-ws', '--workspaces', '--if-present', '-w', '-g', '-s', '-q', '-y', '-d', '-D'],
+  pnpm: ['-r', '-w', '--workspace-root', '--if-present', '--parallel', '-g', '-s'],
+  yarn: ['--immutable', '--frozen-lockfile', '-s'],
   docker: ['--tls', '--tlsverify', '-D'],
   kubectl: ['--insecure-skip-tls-verify'],
-  cargo: ['--frozen', '--offline'],
+  cargo: ['--frozen', '--offline', '-q', '-v', '-vv'],
+  uv: ['-q', '-v', '-n'],
+  pip: ['-q', '-qq', '-v', '-vv'],
+  pip3: ['-q', '-qq', '-v', '-vv'],
+  pipx: ['-q', '-v'],
+  poetry: ['-q', '-v', '-vv', '-n'],
+  conda: ['-y', '-q'],
+  brew: ['-q', '-v', '-d'],
+  apt: ['-y', '-q', '-qq'],
+  'apt-get': ['-y', '-q', '-qq'],
+  dnf: ['-y', '-q'],
+  yum: ['-y', '-q'],
   az: ['--only-show-errors'],
   aws: ['--no-paginate', '--no-verify-ssl', '--no-sign-request', '--no-cli-pager'],
   make: ['-k', '-B', '-n', '-e', '-r', '-R'],
-  npx: ['--yes', '--no'],
+  npx: ['--yes', '--no', '-y', '-q'],
+  gsutil: ['-m', '-q'],
   claude: ['-p', '--print', '-c', '--continue', '--dangerously-skip-permissions'],
 };
 
