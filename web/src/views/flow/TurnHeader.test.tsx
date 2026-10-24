@@ -27,7 +27,6 @@ function item(n: number, status: UiStatus = 'complete', prompt = `Research ${n}`
     label: `Conversation ${n}`,
     title: prompt,
     prompt,
-    heading: `Conversation ${n}: ${prompt}`,
     calls: 2,
     tools: 2,
     status,

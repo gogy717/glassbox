@@ -319,22 +319,30 @@ describe('FlowView', () => {
     vi.setSystemTime(DEMO_NOW);
     renderFlow();
     const call = row(1);
-    expect(call).toHaveTextContent('Thinking · 1:23');
+    // The why line and the Response card, which say nothing yet, both count the thinking.
+    const why = call.querySelector('p') as HTMLElement;
+    const response = within(call).getByRole('group', { name: 'Response' });
+    expect(why).toHaveTextContent('Thinking · 1:23');
+    expect(response).toHaveTextContent('Thinking · 1:23');
     expect(within(call).getAllByText('claude-opus-5-5').length).toBeGreaterThan(0);
     expect(within(call).getAllByText('max').length).toBeGreaterThan(0);
     act(() => vi.advanceTimersByTime(1000));
-    expect(call).toHaveTextContent('Thinking · 1:24');
+    expect(why).toHaveTextContent('Thinking · 1:24');
+    expect(response).toHaveTextContent('Thinking · 1:24');
   });
 
   it('shows token headers, the failed Edit and the final reply in turn 1', () => {
     renderFlow({ route: { turnId: 'turn_m1' }, follow: false });
     const first = row(1);
-    expect(within(first).getByText('Input 31,250')).toBeInTheDocument();
-    expect(within(first).getByText('Uncached 6')).toBeInTheDocument();
-    expect(within(first).getByText('Cache hit 244')).toBeInTheDocument();
-    expect(within(first).getByText('Cache write 31,000')).toBeInTheDocument();
-    expect(within(first).getByText('Output 820 (thinking 610)')).toBeInTheDocument();
-    expect(within(first).getByText('14s')).toBeInTheDocument();
+    // One line of readings: the words muted, the figures mono.
+    expect(within(first).getByRole('heading', { level: 3 })).toHaveTextContent('#1');
+    expect(within(first).getByRole('heading', { level: 3 })).toHaveAccessibleName('Model call #1');
+    const line = within(first).getByText('in').parentElement?.parentElement as HTMLElement;
+    expect(line).toHaveTextContent(
+      'in 31,250uncached 6cache hit 244cache write 31,000out 820 (610 thinking)',
+    );
+    expect(within(first).getByText('31,250')).toHaveClass('figure');
+    expect(within(first).getByText('14s')).toHaveClass('figure');
 
     const second = row(2);
     expect(
@@ -387,7 +395,7 @@ describe('FlowView', () => {
 
   it('does not make screen readers announce a running timer every second', () => {
     renderFlow({ route: { agentId: 'af00000000000002' } });
-    const bash = within(row(9)).getByRole('button', { name: /^Run\s*Bash/ });
+    const bash = within(row(9)).getByRole('button', { name: /^Bash/ });
     for (const live of bash.querySelectorAll('[aria-live]'))
       expect(live.textContent).not.toMatch(/\d:\d\d/);
   });
@@ -396,7 +404,7 @@ describe('FlowView', () => {
     vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
     vi.setSystemTime(DEMO_NOW);
     renderFlow({ route: { agentId: 'af00000000000002' } });
-    const bash = within(row(9)).getByRole('button', { name: /^Run\s*Bash/ });
+    const bash = within(row(9)).getByRole('button', { name: /^Bash/ });
     expect(bash).toHaveTextContent('Running · 26:22');
   });
 
@@ -487,6 +495,59 @@ describe('FlowView', () => {
     fireEvent.click(back);
     expect(setFollow).toHaveBeenLastCalledWith(true);
     expect(navigate).toHaveBeenLastCalledWith({ turnId: null, requestId: null });
+  });
+
+  it('puts the open card in the URL, so a tool call is a link, and clears it on close', () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{}', { status: 404 })),
+    );
+    const { navigate, setFollow } = renderFlow({ route: { turnId: 'turn_m1' }, follow: false });
+    fireEvent.click(within(row(2)).getByRole('button', { name: /^Edit/ }));
+    expect(navigate).toHaveBeenLastCalledWith(
+      { turnId: 'turn_m1', requestId: 'req_m2', card: 'tool:tu_m2b' },
+      { replace: true },
+    );
+    expect(setFollow).toHaveBeenCalledWith(false);
+    // A clicked call is where the reader is: not marked like a linked one.
+    expect(row(2)).not.toHaveAttribute('data-focused');
+    fireEvent.click(within(row(2)).getByRole('button', { name: /^Edit/ }));
+    expect(navigate).toHaveBeenLastCalledWith(
+      { requestId: null, card: undefined },
+      { replace: true },
+    );
+    vi.unstubAllGlobals();
+  });
+
+  it('opens the card a link names, in its call', () => {
+    renderFlow({
+      route: { turnId: 'turn_m1', requestId: 'req_m2', card: 'tool:tu_m2b' },
+      follow: false,
+    });
+    expect(within(row(2)).getByRole('region', { name: 'Tool call details' })).toBeInTheDocument();
+    expect(row(2)).toHaveAttribute('data-focused');
+  });
+
+  it('opens the call but no panel for a card it no longer has', () => {
+    renderFlow({
+      route: { turnId: 'turn_m1', requestId: 'req_m2', card: 'tool:gone' },
+      follow: false,
+    });
+    expect(row(2)).toHaveAttribute('data-focused');
+    expect(screen.queryByRole('region', { name: /details/ })).toBeNull();
+  });
+
+  it('follows the newest conversation that passes the filter, and keeps the stage when none does', () => {
+    renderFlow();
+    const field = screen.getByRole('searchbox', { name: 'Filter conversations' });
+    fireEvent.change(field, { target: { value: 'busy sessions' } });
+    const list = screen.getByRole('list', { name: 'Conversations' });
+    expect(within(list).getAllByRole('button')).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Conversation 1: Busy/);
+    fireEvent.change(field, { target: { value: 'no such words' } });
+    expect(screen.getByText('No conversation matches')).toBeInTheDocument();
+    // Nothing to follow in the list: the newest conversation stays on stage.
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Conversation 3: /);
   });
 
   it('opens the turn of a linked request and highlights its row', () => {

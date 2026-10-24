@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Turn } from '../../../../src/core/model.js';
@@ -21,7 +23,6 @@ function item(n: number): TurnItem {
     label: `Conversation ${n}`,
     title: `prompt ${n}`,
     prompt: `prompt ${n}`,
-    heading: `Conversation ${n}: prompt ${n}`,
     calls: 1,
     tools: 0,
     status: 'complete',
@@ -184,5 +185,84 @@ describe('TurnList', () => {
     expect(other).toHaveTextContent('1 call · 0 tools');
     fireEvent.click(card);
     expect(onSelect).toHaveBeenCalledWith('turn_6');
+  });
+});
+
+describe('TurnList filter', () => {
+  afterEach(cleanup);
+
+  function renderFiltered(initial = '') {
+    const onQuery = vi.fn();
+    const tree = (query: string) => (
+      <I18nContext.Provider value={makeI18n('en')}>
+        <TurnList
+          items={items}
+          selectedId="turn_5"
+          onSelect={vi.fn()}
+          query={query}
+          onQuery={onQuery}
+        />
+      </I18nContext.Provider>
+    );
+    const view = render(tree(initial));
+    return { ...view, onQuery, type: (q: string) => view.rerender(tree(q)) };
+  }
+
+  const titles = () =>
+    within(screen.getByRole('list', { name: 'Conversations' }))
+      .getAllByRole('button')
+      .map((b) => b.querySelector('[data-title]')?.textContent);
+
+  it('keeps the conversations whose heading matches, newest first, and counts them', () => {
+    const { type, onQuery } = renderFiltered();
+    const field = screen.getByRole('searchbox', { name: 'Filter conversations' });
+    fireEvent.change(field, { target: { value: 'prompt 2' } });
+    expect(onQuery).toHaveBeenLastCalledWith('prompt 2');
+    type('PROMPT');
+    expect(titles()).toEqual(['prompt 5', 'prompt 4', 'prompt 3', 'prompt 2', 'prompt 1']);
+    type('prompt 2');
+    expect(titles()).toEqual(['prompt 2']);
+    expect(screen.getByRole('navigation', { name: 'Conversations' })).toHaveTextContent('1 of 5');
+    // The number the row shows matches too: "Conversation 4".
+    type('conversation 4');
+    expect(titles()).toEqual(['prompt 4']);
+  });
+
+  it('says so when nothing matches, and clears with Escape', () => {
+    const { type, onQuery } = renderFiltered('nothing like this');
+    expect(screen.getByText('No conversation matches')).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Conversations' })).toBeNull();
+    fireEvent.keyDown(screen.getByRole('searchbox'), { key: 'Escape' });
+    expect(onQuery).toHaveBeenLastCalledWith('');
+    type('');
+    expect(titles()).toHaveLength(5);
+  });
+
+  it('is the tab stop before the list', () => {
+    renderFiltered();
+    const field = screen.getByRole('searchbox', { name: 'Filter conversations' });
+    const list = screen.getByRole('list', { name: 'Conversations' });
+    expect(field.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('has no field where the view does not ask for one', () => {
+    renderList('turn_5');
+    expect(screen.queryByRole('searchbox')).toBeNull();
+  });
+});
+
+describe('TurnList styles', () => {
+  // jsdom has no layout: this pins the one rule that keeps the narrow list from widening the page.
+  it('contains each row’s visually hidden text, so the scrolling list cannot widen the page', () => {
+    const sheet = readFileSync(join(import.meta.dirname, 'TurnList.module.css'), 'utf8');
+    const row = /\n\.row \{([^}]*)\}/.exec(sheet)?.[1] ?? '';
+    expect(row).toMatch(/position: relative;/);
+  });
+
+  it('keeps the "local command" note (本地命令) out of the mono face', () => {
+    const sheet = readFileSync(join(import.meta.dirname, 'TurnList.module.css'), 'utf8');
+    const note = /\n\.command \{([^}]*)\}/.exec(sheet)?.[1];
+    expect(note).toBeDefined();
+    expect(note).not.toMatch(/font-family/);
   });
 });

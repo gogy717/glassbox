@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Figures } from '../../components/Figures';
+import { FigureText } from '../../components/FigureText';
 import { StatusMark } from '../../components/Status';
 import { useNow } from '../../data/useNow';
 import { useI18n } from '../../i18n';
@@ -39,7 +39,7 @@ export function TurnHeader({ item, children }: Props) {
           </span>
           <span aria-hidden="true">·</span>
           <span>
-            <Figures text={t('flow.callsTools', { calls: item.calls, tools: item.tools })} />
+            <FigureText k="flow.callsTools" params={{ calls: item.calls, tools: item.tools }} />
           </span>
           <StatusMark status={item.status} />
         </span>

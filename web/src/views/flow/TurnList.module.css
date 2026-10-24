@@ -24,6 +24,47 @@
   font-weight: 400;
 }
 
+/* "Filter conversations": the sidebar search's field, above the list. */
+.filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  height: 32px;
+  margin: 10px 12px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-l);
+  background: var(--layer-1);
+  color: var(--faint);
+}
+
+.filter:focus-within {
+  outline: var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.filter input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-body);
+}
+
+.filter input::placeholder {
+  color: var(--faint);
+}
+
+.none {
+  margin: 16px;
+  color: var(--muted);
+  font-size: var(--fs-small);
+}
+
 /* Rows, not cards: a hairline between them, an ink bar on the open one. */
 .list {
   display: flex;
@@ -44,6 +85,9 @@
 
 /* Number · title · clock, then the counts and the status mark under the title. */
 .row {
+  /* Holds its visually hidden text: in the narrow, horizontally scrolling list, text placed
+     against an outer box would stretch the page sideways. */
+  position: relative;
   display: grid;
   grid-template-columns: 14px minmax(0, 1fr) auto;
   align-items: baseline;
@@ -153,7 +197,6 @@
   grid-column: 2 / -1;
   justify-self: start;
   color: var(--faint);
-  font-family: var(--font-mono);
   font-size: var(--fs-meta);
 }
 
@@ -210,6 +253,10 @@
 
   .head {
     height: 34px;
+  }
+
+  .filter {
+    margin: 6px 8px;
   }
 
   .list {

@@ -1,17 +1,15 @@
 import {
-  AlertCircle,
   ArrowRight,
-  Bot,
-  CheckCircle2,
+  ArrowUpRight,
+  Check,
   ChevronDown,
   Clock3,
-  LoaderCircle,
-  MessageSquareText,
-  Send,
+  CornerDownLeft,
   ShieldQuestion,
   Workflow,
+  X,
 } from 'lucide-react';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import type { AgentNode, ModelRequest, ToolCall, WorkflowRun } from '../../../../src/core/model.js';
 import { contextSize, totalTokens } from '../../../../src/core/usage.js';
 import { CategoryIcon } from '../../components/CategoryIcon';
@@ -26,13 +24,16 @@ import { mcpTool, summarizeInput, toolCategory } from '../../lib/tool-category';
 import css from './cards.module.css';
 import { toolStatus } from './flow-model';
 
-/** Which card of a call row is selected; tool cards use `tool:<id>`. */
-export type CardKey = 'request' | 'response' | `tool:${string}`;
+export type { CardKey } from '../../router';
 
 interface ShellProps {
   kind: 'request' | 'response' | 'tool';
   icon: ReactNode;
   title: string;
+  /** After the title, muted: a tool's category ("· run"). */
+  kindWord?: string;
+  /** A tool card's category colour (`var(--cat-run)`), for its label. */
+  tone?: string;
   selected: boolean;
   onSelect(): void;
   children: ReactNode;
@@ -41,7 +42,18 @@ interface ShellProps {
   label?: string;
 }
 
-function Card({ kind, icon, title, selected, onSelect, children, footer, label }: ShellProps) {
+function Card({
+  kind,
+  icon,
+  title,
+  kindWord,
+  tone,
+  selected,
+  onSelect,
+  children,
+  footer,
+  label,
+}: ShellProps) {
   return (
     // biome-ignore lint/a11y/useSemanticElements: a card groups related buttons; it is not a form fieldset
     <div
@@ -50,11 +62,13 @@ function Card({ kind, icon, title, selected, onSelect, children, footer, label }
       data-selected={selected || undefined}
       role="group"
       aria-label={label ?? title}
+      style={tone ? ({ '--cat': tone } as CSSProperties) : undefined}
     >
       <button type="button" className={css.hit} aria-pressed={selected} onClick={onSelect}>
         <span className={css.header}>
           {icon}
           <span className={css.title}>{title}</span>
+          {kindWord && <span className={css.kindWord}>· {kindWord}</span>}
         </span>
         <span className={css.body}>{children}</span>
       </button>
@@ -88,7 +102,6 @@ export function FinalReply({ req, expanded, panelId, onToggle }: FinalReplyProps
   if (!hasReplyText(req))
     return (
       <span className={css.final} title={t('flow.finalReplyEmpty')}>
-        <MessageSquareText size={14} aria-hidden="true" />
         {t('flow.finalReply')}
       </span>
     );
@@ -101,9 +114,8 @@ export function FinalReply({ req, expanded, panelId, onToggle }: FinalReplyProps
       title={t(expanded ? 'flow.hideFinalReply' : 'flow.showFinalReply')}
       onClick={onToggle}
     >
-      <MessageSquareText size={14} aria-hidden="true" />
-      {t('flow.finalReply')}
       <ChevronDown size={14} aria-hidden="true" className={css.chevron} />
+      {t('flow.finalReply')}
     </button>
   );
 }
@@ -114,17 +126,24 @@ interface CardProps {
   onSelect(): void;
 }
 
+interface ResponseCardProps extends CardProps {
+  /** Where an in-flight call's thinking clock starts (`thinkingSince`); its start by default. */
+  thinkingSince?: string | null;
+}
+
 export function RequestCard({ req, selected, onSelect }: CardProps) {
   const { t, intl } = useI18n();
   return (
     <Card
       kind="request"
-      icon={<Send size={13} aria-hidden="true" />}
+      icon={<ArrowUpRight size={13} aria-hidden="true" />}
       title={t('flow.request')}
       selected={selected}
       onSelect={onSelect}
     >
-      <span className={css.preview}>{req.model ?? t('flow.requestContext')}</span>
+      <span className={req.model ? `${css.preview} ${css.mono}` : css.preview}>
+        {req.model ?? t('flow.requestContext')}
+      </span>
       <span className={css.chips}>
         {req.effort && <span className={css.chip}>{req.effort}</span>}
         {req.usage && (
@@ -137,7 +156,7 @@ export function RequestCard({ req, selected, onSelect }: CardProps) {
   );
 }
 
-export function ResponseCard({ req, selected, onSelect }: CardProps) {
+export function ResponseCard({ req, selected, onSelect, thinkingSince }: ResponseCardProps) {
   const { t } = useI18n();
   const text = req.blocks.find((b) => b.kind === 'text')?.text ?? null;
   const thinking = req.blocks.find((b) => b.kind === 'thinking');
@@ -149,7 +168,7 @@ export function ResponseCard({ req, selected, onSelect }: CardProps) {
 
   let preview: ReactNode;
   if (inFlight && req.startedAt)
-    preview = <Ticking since={req.startedAt} labelKey="flow.thinkingNow" />;
+    preview = <Ticking since={thinkingSince ?? req.startedAt} labelKey="flow.thinkingNow" />;
   else if (req.error) preview = <span className={css.errorText}>{req.error.message}</span>;
   else if (text) preview = plainText(text);
   else if (thinking?.kind === 'thinking' && thinking.text) preview = plainText(thinking.text);
@@ -158,13 +177,9 @@ export function ResponseCard({ req, selected, onSelect }: CardProps) {
   return (
     <Card
       kind="response"
-      icon={
-        inFlight ? (
-          <LoaderCircle size={13} className="spin" aria-hidden="true" />
-        ) : (
-          <Bot size={13} aria-hidden="true" />
-        )
-      }
+      // No spinner: D1's only loops are the status dot's pulse and the live caret; the
+      // "Thinking · m:ss" preview already says the call is under way.
+      icon={<CornerDownLeft size={13} aria-hidden="true" />}
       title={t('flow.response')}
       selected={selected}
       onSelect={onSelect}
@@ -204,17 +219,17 @@ function ResultStrip({ tool }: { tool: ToolCall }) {
     icon = <ShieldQuestion size={12} aria-hidden="true" />;
     label = t('status.approval');
   } else if (status === 'running') {
-    icon = <LoaderCircle size={12} className="spin" aria-hidden="true" />;
+    icon = <LiveDot kind="status" state="running" />;
     label = tool.startedAt ? (
       <Ticking since={tool.startedAt} labelKey="flow.runningFor" />
     ) : (
       t('status.running')
     );
   } else if (status === 'error') {
-    icon = <AlertCircle size={12} aria-hidden="true" />;
+    icon = <X size={12} aria-hidden="true" />;
     label = t('status.error');
   } else if (status === 'complete') {
-    icon = <CheckCircle2 size={12} aria-hidden="true" />;
+    icon = <Check size={12} aria-hidden="true" />;
     label =
       (tool.resultPreview &&
         resultLine(tool.resultPreview, (s) =>
@@ -236,7 +251,7 @@ function ResultStrip({ tool }: { tool: ToolCall }) {
       {icon}
       <span className={css.resultLabel}>{label}</span>
       {status !== 'running' && status !== 'approval' && (
-        <span className="num">{formatDuration(tool.durationMs)}</span>
+        <span className="figure">{formatDuration(tool.durationMs)}</span>
       )}
     </span>
   );
@@ -263,11 +278,15 @@ export function ToolCard({ tool, open, selected, onSelect, onEnterAgent }: ToolC
   }
   const category = toolCategory(tool.name, tool.input);
   const mcp = mcpTool(tool.name);
+  const categoryName = t(`steps.cat.${category}`);
   return (
     <Card
       kind="tool"
-      icon={<CategoryIcon category={category} size={13} label={t(`steps.cat.${category}`)} />}
+      // An MCP tool's title is "server · tool": its plug names the category, so it says it.
+      icon={<CategoryIcon category={category} size={13} label={mcp ? categoryName : undefined} />}
       title={mcp ? `${mcp.server} · ${mcp.tool}` : tool.name}
+      kindWord={mcp ? undefined : categoryName}
+      tone={`var(--cat-${category})`}
       selected={selected}
       onSelect={onSelect}
       footer={footer}
@@ -310,7 +329,7 @@ function SpawnedAgents({
           <LiveDot kind="status" state={a.status} />
           <span className={css.agentLabel}>{a.label}</span>
           <span className={css.agentMeta}>{t(`status.${a.status}`)}</span>
-          <span className={`${css.agentMeta} num`}>
+          <span className={`${css.agentMeta} figure`}>
             {formatCompact(cumulativeTokens(open, a.id), intl)}
           </span>
         </button>

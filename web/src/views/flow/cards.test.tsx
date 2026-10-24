@@ -54,15 +54,15 @@ describe('ToolCard', () => {
       'Port',
     ],
   ])(
-    '%s %s: shows the category icon and what the call did',
+    '%s %s: names the tool and its category, and what the call did',
     (_agent, name, input, cat, summary) => {
       const card = renderCard(tool(name, input));
-      const icon = within(card).getByRole('img', { name: cat });
-      expect(icon).toHaveAttribute('title', cat);
+      // "Bash · run": the category is a word after the name; the icon is decoration beside it.
+      expect(within(card).getByText(`· ${cat}`)).toBeInTheDocument();
+      expect(within(card).queryByRole('img', { name: cat })).toBeNull();
       expect(within(card).getByText(summary)).toBeInTheDocument();
-      // The category leads the button's name, before the tool's.
       expect(within(card).getByRole('button')).toHaveAccessibleName(
-        expect.stringMatching(new RegExp(`^${cat}\\s*${name}`)),
+        expect.stringMatching(new RegExp(`^${name}\\s*· ${cat}`)),
       );
     },
   );
@@ -83,7 +83,7 @@ describe('ToolCard', () => {
 
   it('never shows the input as JSON', () => {
     const card = renderCard(tool('SomethingNew', { n: 3, deep: { a: 1 } }));
-    expect(within(card).getByRole('img', { name: 'Other' })).toBeInTheDocument();
+    expect(within(card).getByText('· Other')).toBeInTheDocument();
     expect(within(card).getByText('n: 3')).toBeInTheDocument();
     expect(card).not.toHaveTextContent('{');
   });
@@ -122,7 +122,7 @@ describe('ToolCard', () => {
 
   it('names the category in Chinese', () => {
     const card = renderCard(tool('Edit', { file_path: '/r/a.ts' }), 'zh');
-    expect(within(card).getByRole('img', { name: '修改' })).toHaveAttribute('title', '修改');
+    expect(within(card).getByText('· 修改')).toBeInTheDocument();
   });
 });
 

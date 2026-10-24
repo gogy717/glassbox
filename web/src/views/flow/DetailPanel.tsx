@@ -1,8 +1,11 @@
-import { ChevronUp } from 'lucide-react';
-import { type ReactNode, useId, useMemo, useState } from 'react';
-import type { ModelRequest, ToolCall } from '../../../../src/core/model.js';
+import { ChevronUp, Maximize2 } from 'lucide-react';
+import { type ReactNode, useId, useMemo, useRef, useState } from 'react';
+import type { ModelRequest, RequestDetail, ToolCall } from '../../../../src/core/model.js';
+import { CopyButton } from '../../components/CodeBlock';
+import { FigureText } from '../../components/FigureText';
 import { JsonInspector } from '../../components/JsonInspector';
 import { Markdown } from '../../components/Markdown';
+import { Modal } from '../../components/Modal';
 import { StatusMark } from '../../components/Status';
 import { TextBlock } from '../../components/TextBlock';
 import { fetchRequestDetail, fetchToolResult } from '../../data/api';
@@ -28,35 +31,104 @@ interface Props {
   onClose(): void;
 }
 
-/** The panel under a call row for the selected card: what was sent, what came back, what ran. */
+/** How fully a request's body was reconstructed, as a quiet mark: never a green badge. */
+function Completeness({ detail }: { detail: RequestDetail }) {
+  const { t } = useI18n();
+  const agent = useSessionAgent();
+  if (detail.completeness === 'full')
+    return <StatusMark status="complete" label={t('detail.full')} />;
+  if (detail.completeness === 'partial')
+    return <StatusMark status="interrupted" label={t('detail.partial')} />;
+  return <StatusMark status="waiting" label={t('detail.unavailable', { agent })} />;
+}
+
+/**
+ * The panel under a call row for the selected card: what was sent, what came back, what ran.
+ * Its head names the card and call, says how complete a request is, and holds the one
+ * Readable | JSON switch, copy (what the panel shows, as JSON), maximize and close.
+ */
 export function DetailPanel({ sessionId, req, tools, card, onClose }: Props) {
   const { t } = useI18n();
   const titleId = useId();
+  const maxRef = useRef<HTMLButtonElement>(null);
+  const [maximized, setMaximized] = useState(false);
   const tool = card.startsWith('tool:') ? tools.find((x) => `tool:${x.id}` === card) : undefined;
+  // Keyed on the status too: what was sent is only final once the request has completed.
+  const key = card === 'request' && req.hasDetail ? `${sessionId}\n${req.id}\n${req.status}` : null;
+  const [state, retry] = useFetch(key, (signal) => fetchRequestDetail(sessionId, req.id, signal));
+  const detail = state.status === 'ok' ? state.data : null;
   const title =
     card === 'request'
       ? t('detail.request')
       : card === 'response'
         ? t('detail.response')
         : t('detail.tool');
+  const callRef = t('detail.callRef', { n: req.index });
+  // Built when Copy is clicked: a request can be megabytes.
+  const copyText = () =>
+    JSON.stringify(
+      card === 'request'
+        ? detail
+        : tool
+          ? { name: tool.name, input: tool.input, result: tool.resultPreview }
+          : { model: req.model, stopReason: req.stopReason, blocks: req.blocks, usage: req.usage },
+      null,
+      2,
+    );
+  const body =
+    card === 'request' ? (
+      <RequestBody req={req} state={state} retry={retry} />
+    ) : card === 'response' ? (
+      <ResponseBody req={req} />
+    ) : tool ? (
+      <ToolBody sessionId={sessionId} tool={tool} />
+    ) : null;
+  const canCopy = card !== 'request' || detail !== null;
   return (
     <section className={css.panel} aria-labelledby={titleId}>
       <div className={css.head}>
         <span id={titleId} className={css.title}>
           {title}
         </span>
-        <button
-          type="button"
-          className={css.close}
-          aria-label={t('detail.close')}
-          onClick={onClose}
-        >
-          <ChevronUp size={16} aria-hidden="true" />
-        </button>
+        <span className={css.callRef}>
+          <FigureText k="detail.callRef" params={{ n: req.index }} />
+        </span>
+        {detail && <Completeness detail={detail} />}
+        <span className={css.headTools}>
+          <ViewToggle />
+          {canCopy && <CopyButton text={copyText} className={css.icon} />}
+          <button
+            ref={maxRef}
+            type="button"
+            className={css.icon}
+            aria-label={t('json.maximize')}
+            title={t('json.maximize')}
+            onClick={() => setMaximized(true)}
+          >
+            <Maximize2 size={14} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className={css.icon}
+            aria-label={t('detail.close')}
+            title={t('detail.close')}
+            onClick={onClose}
+          >
+            <ChevronUp size={16} aria-hidden="true" />
+          </button>
+        </span>
       </div>
-      {card === 'request' && <RequestBody sessionId={sessionId} req={req} />}
-      {card === 'response' && <ResponseBody req={req} />}
-      {tool && <ToolBody sessionId={sessionId} tool={tool} />}
+      {body}
+      {maximized && (
+        <Modal
+          label={`${title} · ${callRef}`}
+          returnFocusTo={maxRef}
+          onClose={() => setMaximized(false)}
+          actions={<ViewToggle />}
+        >
+          {body}
+        </Modal>
+      )}
     </section>
   );
 }
@@ -108,13 +180,18 @@ function Loading<T>({
   return <p className={css.message}>{t('detail.loading')}</p>;
 }
 
-function RequestBody({ sessionId, req }: { sessionId: string; req: ModelRequest }) {
+function RequestBody({
+  req,
+  state,
+  retry,
+}: {
+  req: ModelRequest;
+  state: FetchState<RequestDetail>;
+  retry(): void;
+}) {
   const { t } = useI18n();
   const agent = useSessionAgent();
   const [prefs] = useDetailPrefs();
-  // Keyed on the status too: what was sent is only final once the request has completed.
-  const key = req.hasDetail ? `${sessionId}\n${req.id}\n${req.status}` : null;
-  const [state, retry] = useFetch(key, (signal) => fetchRequestDetail(sessionId, req.id, signal));
   const d = state.status === 'ok' ? state.data : null;
   // Stable wrappers: a new object per render would re-clip and re-render the whole tree.
   const trees = useMemo(
@@ -132,25 +209,13 @@ function RequestBody({ sessionId, req }: { sessionId: string; req: ModelRequest 
     <Loading state={state} retry={retry}>
       {(d) => (
         <>
-          <div className={css.status} data-completeness={d.completeness}>
-            <span className={css.badge}>
-              {d.completeness === 'full'
-                ? t('detail.full')
-                : d.completeness === 'partial'
-                  ? t('detail.partial')
-                  : t('detail.unavailable', { agent })}
-            </span>
-            {d.notes.length > 0 && (
-              <ul className={css.notes}>
-                {d.notes.map((n) => (
-                  <li key={n}>{n}</li>
-                ))}
-              </ul>
-            )}
-            <span className={css.statusTools}>
-              <ViewToggle />
-            </span>
-          </div>
+          {d.notes.length > 0 && (
+            <ul className={css.notes}>
+              {d.notes.map((n) => (
+                <li key={n}>{n}</li>
+              ))}
+            </ul>
+          )}
           {prefs.view === 'readable' ? (
             <RequestReadable detail={d} />
           ) : (
@@ -245,7 +310,7 @@ function ResponseBody({ req }: { req: ModelRequest }) {
           <TextBlock label={t('detail.content')} text={text} />
         )}
       </Cell>
-      <Cell title={t('detail.usage')} tools={<ViewToggle />}>
+      <Cell title={t('detail.usage')}>
         {prefs.view === 'readable' ? (
           <KeyValues entries={usageList} />
         ) : (
@@ -272,7 +337,7 @@ function ToolBody({ sessionId, tool }: { sessionId: string; tool: ToolCall }) {
   );
   return (
     <div className={`${css.grid} ${css.toolGrid}`}>
-      <Cell title={t('detail.args')} tools={<ViewToggle />}>
+      <Cell title={t('detail.args')}>
         {prefs.view === 'readable' ? (
           <ArgsView input={tool.input} label={tool.name} />
         ) : (

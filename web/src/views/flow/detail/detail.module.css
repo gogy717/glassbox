@@ -27,7 +27,7 @@
   gap: 8px;
   min-width: 0;
   padding: 10px 12px 12px;
-  background: var(--layer-2);
+  background: var(--layer-1);
 }
 
 .main .section,
@@ -35,11 +35,14 @@
   flex: 1;
 }
 
+/* A section label: SYSTEM PROMPT, MESSAGES, TOOL DEFINITIONS. */
 .section h4 {
   margin: 0;
-  font-size: 10px;
-  font-weight: 600;
   color: var(--muted);
+  font-size: var(--fs-label);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .muted {
@@ -52,7 +55,7 @@
   align-self: flex-start;
   padding: 3px 8px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-l);
   background: var(--layer-1);
   color: var(--accent);
   font-size: 11px;
@@ -61,7 +64,7 @@
 
 .inline {
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-m);
   background: var(--layer-2);
   font-family: var(--font-mono);
   font-size: 11px;
@@ -112,7 +115,7 @@
   gap: 6px;
   min-width: 0;
   padding: 3px 4px;
-  border-radius: 5px;
+  border-radius: var(--radius-m);
   font-size: 11px;
   cursor: pointer;
 }
@@ -138,7 +141,7 @@
 .tag {
   flex: none;
   padding: 0 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-m);
   background: var(--layer-3);
   color: var(--text);
   font-size: 10px;
@@ -214,35 +217,25 @@
   color: var(--muted);
 }
 
+/* One message: an entry under a hairline, not a box with a coloured edge. */
 .message {
-  --role-bg: var(--layer-3);
   --role-text: var(--text);
-  --role-border: var(--border);
   flex: none;
   min-width: 0;
-  padding: 8px 10px 10px;
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--role-border);
-  border-radius: var(--radius-l);
-  background: var(--layer-1);
+  padding: 8px 0 10px;
+  border-bottom: 1px solid var(--border);
 }
 
 .message[data-role="user"] {
-  --role-bg: var(--card-req-bg);
   --role-text: var(--card-req-text);
-  --role-border: var(--card-req-border);
 }
 
 .message[data-role="assistant"] {
-  --role-bg: var(--card-res-bg);
   --role-text: var(--card-res-text);
-  --role-border: var(--card-res-border);
 }
 
 .message[data-role="tool"] {
-  --role-bg: var(--card-tool-bg);
   --role-text: var(--card-tool-text);
-  --role-border: var(--card-tool-border);
 }
 
 .message article {
@@ -260,12 +253,9 @@
 }
 
 .role {
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: var(--role-bg);
   color: var(--role-text);
-  font-size: 11px;
-  font-weight: 650;
+  font-size: var(--fs-meta);
+  font-weight: 600;
 }
 
 .position {
@@ -343,7 +333,7 @@
   margin: 0;
   padding: 6px 8px;
   border: 1px dashed var(--border-strong);
-  border-radius: 6px;
+  border-radius: var(--radius-l);
   font-size: 11px;
   color: var(--muted);
 }
@@ -392,33 +382,6 @@
 .sysText {
   max-height: 320px;
   overflow: auto;
-}
-
-/* Readable / JSON, newest / oldest */
-
-.segmented {
-  display: inline-flex;
-  flex: none;
-  padding: 2px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--layer-1);
-}
-
-.segmented button {
-  padding: 2px 9px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.segmented button[aria-checked="true"] {
-  background: var(--layer-3);
-  color: var(--text);
-  font-weight: 600;
 }
 
 @container (max-width: 760px) {

@@ -1,38 +1,43 @@
+/* Neutral cards: the kind shows on the glyph and the label only, never as a coloured header. */
 .card {
-  --border-c: var(--card-tool-border);
-  --head-bg: var(--card-tool-bg);
-  --head-text: var(--card-tool-text);
+  /* The kind's ink for the label: AA on the card in both themes. */
+  --kind: var(--card-tool-text);
   position: relative;
   display: flex;
   flex-direction: column;
   /* A width, not a flex-basis: the strip's wrapping goes by it, not by the preview's length. */
   flex: none;
-  width: 206px;
-  border: 1px solid var(--border-c);
+  width: 200px;
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-l);
   background: var(--layer-1);
   overflow: hidden;
+  transition:
+    border-color var(--motion),
+    box-shadow var(--motion);
 }
 
 .card[data-kind="request"] {
-  --border-c: var(--card-req-border);
-  --head-bg: var(--card-req-bg);
-  --head-text: var(--card-req-text);
+  --kind: var(--card-req-text);
 }
 
 .card[data-kind="response"] {
-  --border-c: var(--card-res-border);
-  --head-bg: var(--card-res-bg);
-  --head-text: var(--card-res-text);
+  --kind: var(--card-res-text);
 }
 
-.card[data-selected]::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  box-shadow: inset 0 0 0 2px var(--border-c);
-  pointer-events: none;
+/* A tool card's label in its category colour, mixed toward the text until it reads at AA. */
+.card[data-kind="tool"] {
+  --kind: color-mix(in srgb, var(--cat) 55%, var(--text));
+}
+
+.card:hover {
+  border-color: var(--faint);
+}
+
+.card[data-selected],
+.card[data-selected]:hover {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 1px var(--ink);
 }
 
 .hit {
@@ -42,6 +47,7 @@
   padding: 0;
   border: 0;
   background: transparent;
+  color: inherit;
   text-align: left;
   cursor: pointer;
 }
@@ -50,12 +56,12 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 28px;
-  padding: 0 9px;
-  background: var(--head-bg);
-  color: var(--head-text);
-  font-size: 10px;
-  font-weight: 650;
+  height: 26px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--kind);
+  font-size: var(--fs-small);
+  font-weight: 500;
 }
 
 .title {
@@ -65,12 +71,20 @@
   white-space: nowrap;
 }
 
+/* "· run": what kind of work the tool did, after its name. */
+.kindWord {
+  flex: none;
+  color: var(--muted);
+  font-weight: 400;
+  text-transform: lowercase;
+}
+
 .body {
   display: flex;
   flex-direction: column;
   gap: 8px;
   width: 100%;
-  padding: 10px 11px 11px;
+  padding: 10px;
 }
 
 .preview {
@@ -79,13 +93,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10px;
   color: var(--text);
+  font-size: var(--fs-small);
 }
 
 .mono {
   font-family: var(--font-mono);
-  color: var(--muted);
 }
 
 .errorText {
@@ -98,46 +111,45 @@
   gap: 4px;
 }
 
+/* Lowercase mono chips, never coloured: "max", "context 52.4K", "thinking 28s". */
 .chip {
-  padding: 2px 5px;
+  padding: 1px 5px;
   border-radius: var(--radius-s);
   background: var(--layer-3);
   color: var(--muted);
-  font-size: 9px;
-  line-height: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  line-height: 16px;
   white-space: nowrap;
 }
 
+/* CJK never goes into the mono face. */
+:lang(zh) .chip {
+  font-family: inherit;
+}
+
+/* The result as a mark and words ("✓ 3 matches · 400ms"), not a filled pill. */
 .result {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 5px;
-  padding: 4px 6px;
-  border-radius: 5px;
-  background: var(--layer-2);
+  gap: 6px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--fs-meta);
 }
 
 .result[data-state="running"] {
   color: var(--accent);
-  background: var(--accent-tint);
-}
-
-.result[data-state="complete"] {
-  color: var(--success);
-  background: var(--success-tint);
 }
 
 .result[data-state="approval"] {
   color: var(--warning);
-  background: color-mix(in srgb, var(--warning) 14%, transparent);
+  font-weight: 600;
 }
 
 .result[data-state="error"] {
   color: var(--error);
-  background: var(--error-tint);
+  font-weight: 600;
 }
 
 .resultLabel {
@@ -150,53 +162,44 @@
 .arrow {
   flex: none;
   align-self: flex-start;
-  /* Level with the card bodies, under the 28px headers. */
-  margin: 36px 9px 0;
+  /* Level with the card bodies, under the 26px headers. */
+  margin: 30px 8px 0;
   color: var(--faint);
 }
 
+/* A ghost text button, not a pill: chevron and "Final reply" at the height of the card heads. */
 .final {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   flex: none;
   align-self: flex-start;
-  margin-top: 29px;
-  height: 30px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--layer-2);
+  height: 26px;
+  margin-top: 1px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: var(--radius-m);
+  background: none;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--fs-small);
 }
 
-/* With reply text it is a toggle: a chevron, and the hover / pressed look of the cards. */
 button.final {
-  padding-right: 9px;
-  color: var(--text);
   font-family: inherit;
   cursor: pointer;
+  transition: color var(--motion);
 }
 
-button.final:hover {
-  border-color: var(--border-strong);
-  background: var(--layer-3);
-}
-
+button.final:hover,
 button.final[aria-expanded="true"] {
-  border-color: var(--accent);
-  background: var(--accent-tint);
-  color: var(--accent);
+  color: var(--text);
 }
 
 .chevron {
-  color: var(--muted);
-  transition: transform 0.15s;
+  transition: transform var(--motion);
 }
 
 button.final[aria-expanded="true"] .chevron {
-  color: inherit;
   transform: rotate(180deg);
 }
 
@@ -211,7 +214,7 @@ button.final[aria-expanded="true"] .chevron {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 0 11px 11px;
+  padding: 0 10px 10px;
 }
 
 .spawned {
@@ -223,7 +226,7 @@ button.final[aria-expanded="true"] .chevron {
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 10.5px;
+  font-size: var(--fs-meta);
   font-weight: 600;
 }
 
@@ -235,15 +238,16 @@ button.final[aria-expanded="true"] .chevron {
   min-height: 24px;
   padding: 3px 6px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-m);
   background: var(--layer-2);
-  font-size: 10px;
+  color: inherit;
+  font-size: var(--fs-meta);
   text-align: left;
   cursor: pointer;
 }
 
 .card > .spawned {
-  padding: 0 11px 11px;
+  padding: 0 10px 10px;
 }
 
 .agent:hover {
@@ -266,8 +270,8 @@ button.final[aria-expanded="true"] .chevron {
 }
 
 .more {
-  font-size: 10px;
   color: var(--muted);
+  font-size: var(--fs-meta);
 }
 
 @media (max-width: 560px) {
@@ -279,5 +283,5 @@ button.final[aria-expanded="true"] .chevron {
 /* Cards that list spawned agents need room for label, status and tokens. */
 .card:has(> .spawned),
 .card:has(> .workflow) {
-  width: 252px;
+  width: 224px;
 }

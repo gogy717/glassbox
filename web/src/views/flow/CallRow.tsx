@@ -1,6 +1,6 @@
-import { Clock3 } from 'lucide-react';
-import { memo, useId } from 'react';
+import { memo, type ReactNode, useId } from 'react';
 import type { ModelRequest, ToolCall } from '../../../../src/core/model.js';
+import { FigureText } from '../../components/FigureText';
 import { StatusMark, Ticking } from '../../components/Status';
 import { useApprovalsContext } from '../../data/approvals';
 import { useSessionAgent } from '../../data/session-agent';
@@ -11,6 +11,7 @@ import css from './CallRow.module.css';
 import { Arrow, type CardKey, FinalReply, RequestCard, ResponseCard, ToolCard } from './cards';
 import { DetailPanel } from './DetailPanel';
 import { callStatus, requestDurationMs, startUnknown, tokenHeader } from './flow-model';
+import { thinkingSince, whyLine } from './why';
 
 interface Props {
   req: ModelRequest;
@@ -20,6 +21,30 @@ interface Props {
   selected: CardKey | null;
   onSelect(req: ModelRequest, card: CardKey): void;
   onEnterAgent(agentId: string): void;
+}
+
+function Reading({ word, n, children }: { word: string; n: string; children?: ReactNode }) {
+  return (
+    <span className={css.reading}>
+      <span className={css.word}>{word}</span> <span className="figure">{n}</span>
+      {children}
+    </span>
+  );
+}
+
+/**
+ * The call's reason, on the line under its readings: what it said, else what it thought. While
+ * it is still thinking with nothing to show, how long it has been at it.
+ */
+function WhyLine({ req, tools }: { req: ModelRequest; tools: ToolCall[] }) {
+  const why = whyLine(req);
+  const since = req.status === 'in-flight' ? thinkingSince(req, tools) : null;
+  if (!why && !since) return null;
+  return (
+    <p className={css.why}>
+      {why ?? (since && <Ticking since={since} labelKey="flow.thinkingNow" />)}
+    </p>
+  );
 }
 
 export const CallRow = memo(function CallRow(p: Props) {
@@ -39,34 +64,42 @@ export const CallRow = memo(function CallRow(p: Props) {
       data-focused={p.focused || undefined}
     >
       <div className={css.header}>
-        <h3 className={css.title}>{t('flow.callTitle', { n: req.index })}</h3>
-        <span className={css.meta}>
-          <Clock3 size={11} aria-hidden="true" />
-          <span className="num">{formatClock(req.startedAt)}</span>
-        </span>
-        <span className={`${css.meta} num`}>
-          {req.status === 'in-flight' && req.startedAt ? (
-            <Ticking since={req.startedAt} labelKey="flow.elapsed" />
-          ) : startUnknown(req) ? (
-            <span title={t('flow.startUnknown', { agent })}>{DASH}</span>
-          ) : (
-            formatDuration(requestDurationMs(req, Date.now()))
+        {/* One line of readings: figures in the mono face, the words that name them muted. */}
+        <div className={css.line}>
+          <h3 className={`${css.title} figure`} aria-label={t('flow.callTitle', { n: req.index })}>
+            #{req.index}
+          </h3>
+          <span className={`${css.meta} figure`}>{formatClock(req.startedAt)}</span>
+          <span className={`${css.meta} figure`}>
+            {req.status === 'in-flight' && req.startedAt ? (
+              <Ticking since={req.startedAt} labelKey="flow.elapsed" />
+            ) : startUnknown(req) ? (
+              <span title={t('flow.startUnknown', { agent })}>{DASH}</span>
+            ) : (
+              formatDuration(requestDurationMs(req, Date.now()))
+            )}
+          </span>
+          {tok && (
+            <span className={css.readings}>
+              <Reading word={t('flow.input')} n={n(tok.input)} />
+              {tok.showUncached && <Reading word={t('flow.uncached')} n={n(tok.uncached)} />}
+              {tok.cacheRead > 0 && <Reading word={t('flow.cacheRead')} n={n(tok.cacheRead)} />}
+              {tok.cacheWrite > 0 && <Reading word={t('flow.cacheWrite')} n={n(tok.cacheWrite)} />}
+              <Reading word={t('flow.output')} n={n(tok.output)}>
+                {tok.thinking > 0 && (
+                  <span className={css.word}>
+                    {' ('}
+                    <FigureText k="flow.thinkingOf" params={{ n: n(tok.thinking) }} />)
+                  </span>
+                )}
+              </Reading>
+            </span>
           )}
-        </span>
-        {tok && (
-          <span className={`${css.meta} ${css.tokens} num`}>
-            <span>{t('flow.input', { n: n(tok.input) })}</span>
-            {tok.showUncached && <span>{t('flow.uncached', { n: n(tok.uncached) })}</span>}
-            {tok.cacheRead > 0 && <span>{t('flow.cacheRead', { n: n(tok.cacheRead) })}</span>}
-            {tok.cacheWrite > 0 && <span>{t('flow.cacheWrite', { n: n(tok.cacheWrite) })}</span>}
+          <span className={css.status}>
+            <StatusMark status={status} />
           </span>
-        )}
-        {tok && (
-          <span className={`${css.meta} num`}>
-            {t('flow.output', { n: n(tok.output), thinking: n(tok.thinking) })}
-          </span>
-        )}
-        <StatusMark status={status} />
+        </div>
+        <WhyLine req={req} tools={tools} />
       </div>
       {/* Wraps instead of scrolling: each arrow moves to the next line with its card. */}
       <div className={css.strip}>
@@ -81,6 +114,7 @@ export const CallRow = memo(function CallRow(p: Props) {
             req={req}
             selected={p.selected === 'response'}
             onSelect={() => select('response')}
+            thinkingSince={req.status === 'in-flight' ? thinkingSince(req, tools) : null}
           />
         </div>
         {tools.map((tool) => (

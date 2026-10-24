@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ModelRequest, RequestDetail, ToolCall } from '../../../../src/core/model.js';
 import { SessionAgentContext } from '../../data/session-agent';
@@ -116,6 +116,50 @@ describe('DetailPanel', () => {
     expect(await screen.findByText('Fully reconstructed')).toBeInTheDocument();
   });
 
+  it('heads the panel with the card and the call, and says how complete it is as a mark', async () => {
+    stubFetch({ ...detail, completeness: 'full', notes: [] });
+    renderPanel(req('req_m1'), 'request');
+    const panel = screen.getByRole('region', { name: 'Request details' });
+    const head = within(panel).getByText('Request details').parentElement as HTMLElement;
+    // "call #1": the number in the mono face, the word in the UI face (调用 never goes mono).
+    expect(head).toHaveTextContent('call #1');
+    expect(within(head).getByText('1', { selector: '.figure' })).toBeInTheDocument();
+    expect(within(head).queryByText(/call/, { selector: '.figure' })).toBeNull();
+    const full = await within(head).findByText('Fully reconstructed');
+    // A quiet check and the word, never a filled badge.
+    expect(full.closest('[data-state]')).toHaveAttribute('data-state', 'complete');
+    // One Readable | JSON switch for the panel, in its head.
+    expect(within(panel).getAllByRole('radiogroup', { name: 'Show as' })).toHaveLength(1);
+    expect(within(head).getByRole('radiogroup', { name: 'Show as' })).toBeInTheDocument();
+  });
+
+  it('copies what the panel shows, as JSON', async () => {
+    const writeText = vi.fn(async (_text: string) => {});
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+    renderPanel(req('req_m2'), 'tool:tu_m2b');
+    const panel = screen.getByRole('region', { name: 'Tool call details' });
+    await act(async () => {
+      fireEvent.click(within(panel).getByRole('button', { name: 'Copy' }));
+    });
+    const copied = JSON.parse(writeText.mock.calls[0]?.[0] ?? '');
+    expect(copied).toMatchObject({
+      name: 'Edit',
+      input: { file_path: '/repo/src/server/store.ts' },
+    });
+  });
+
+  it('maximizes into a dialog, and gives focus back when it closes', () => {
+    renderPanel(req('req_m2'), 'tool:tu_m2b');
+    const panel = screen.getByRole('region', { name: 'Tool call details' });
+    const max = within(panel).getByRole('button', { name: 'Maximize' });
+    fireEvent.click(max);
+    const dialog = screen.getByRole('dialog', { name: 'Tool call details · call #2' });
+    expect(within(dialog).getByRole('heading', { name: 'Arguments' })).toBeInTheDocument();
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(max).toHaveFocus();
+  });
+
   it('explains when the request detail could not be loaded, and retries', async () => {
     stubFetch({ error: 'boom' }, 500);
     renderPanel(req('req_m1'), 'request');
@@ -206,11 +250,13 @@ describe('DetailPanel', () => {
   it('shows a tool call’s arguments readable, with the JSON one click away', () => {
     renderPanel(req('req_m2'), 'tool:tu_m2b');
     const panel = screen.getByRole('region', { name: 'Tool call details' });
-    const args = within(panel).getByRole('heading', { name: 'Arguments' }).closest('div')
-      ?.parentElement as HTMLElement;
+    const args = within(panel)
+      .getByRole('heading', { name: 'Arguments' })
+      .closest('div') as HTMLElement;
     expect(within(args).getByText('file_path')).toBeInTheDocument();
     expect(within(args).queryByText('{} JSON')).toBeNull();
-    fireEvent.click(within(args).getByRole('radio', { name: 'JSON' }));
+    // One Readable | JSON switch, in the panel's head.
+    fireEvent.click(within(panel).getByRole('radio', { name: 'JSON' }));
     expect(within(args).getByText('{} JSON')).toBeInTheDocument();
   });
 

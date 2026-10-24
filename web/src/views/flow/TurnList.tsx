@@ -1,6 +1,7 @@
+import { Search } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { Turn } from '../../../../src/core/model.js';
-import { Figures } from '../../components/Figures';
+import { FigureText } from '../../components/FigureText';
 import { StatusMark, type UiStatus } from '../../components/Status';
 import { useApprovalsContext } from '../../data/approvals';
 import { useSessionAgentKind } from '../../data/session-agent';
@@ -29,9 +30,6 @@ export interface TurnItem {
   title: string;
   /** For the open turn's heading: the whole prompt, line breaks kept, without the label. */
   prompt: string;
-  /** The label and the whole prompt in one ("Conversation 2: …"), for a heading that has no
-   *  label of its own (the Steps view, until it uses `TurnHeader`). */
-  heading: string;
   calls: number;
   tools: number;
   status: UiStatus;
@@ -62,8 +60,6 @@ export function useTurnItems(open: OpenSession, agentId: string): TurnItem[] {
           label,
           title: prompt ? truncatePrompt(prompt) : label,
           prompt: prompt || label,
-          heading:
-            prompt && !isOutsideTurn(turn) ? t('flow.turnTitle', { n: turn.index, prompt }) : label,
           calls: reqs.length,
           tools,
           status,
@@ -100,15 +96,17 @@ export function selectTurn(
   route: Route,
   follow: boolean,
   stickyId: string | null = null,
+  latest: TurnItem | undefined = items.at(-1),
 ): TurnItem | undefined {
   const linked = route.requestId ? open.requests.get(route.requestId) : undefined;
   const pinnedId = follow ? null : (route.turnId ?? linked?.turnId ?? stickyId);
-  return items.find((it) => it.turn.id === pinnedId && it.turn.agentId === agentId) ?? items.at(-1);
+  return items.find((it) => it.turn.id === pinnedId && it.turn.agentId === agentId) ?? latest;
 }
 
 /**
  * `selectTurn` plus memory: when follow pauses (scrolling up, opening a card) the turn on screen
- * stays put even if a newer turn arrives, so the reader keeps their place.
+ * stays put even if a newer turn arrives, so the reader keeps their place. `latest` is the turn
+ * follow shows: the newest, or the newest that passes the list's filter.
  */
 export function useSelectedTurn(
   items: TurnItem[],
@@ -116,10 +114,11 @@ export function useSelectedTurn(
   agentId: string,
   route: Route,
   follow: boolean,
+  latest: TurnItem | undefined = items.at(-1),
 ): TurnItem | undefined {
   const [sticky, setSticky] = useState<{ agentId: string; turnId: string } | null>(null);
   const stickyId = sticky?.agentId === agentId ? sticky.turnId : null;
-  const current = selectTurn(items, open, agentId, route, follow, stickyId);
+  const current = selectTurn(items, open, agentId, route, follow, stickyId, latest);
   const currentId = current?.turn.id ?? null;
   useEffect(() => {
     if (follow || !currentId) setSticky(null);
@@ -141,11 +140,24 @@ function reveal(list: HTMLElement, el: HTMLElement): void {
   else if (r.right > l.right) list.scrollLeft += r.right - l.right + EDGE_PX;
 }
 
+/**
+ * The turns whose heading matches `query` (case-insensitive): the label and the prompt the row
+ * shows, never tool output. All of them for an empty query.
+ */
+export function filterTurns(items: TurnItem[], query: string): TurnItem[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return items;
+  return items.filter((it) => `${it.label} ${it.prompt}`.toLowerCase().includes(q));
+}
+
 interface Props {
   /** Chronological, as `useTurnItems` returns them. */
   items: TurnItem[];
   selectedId: string | null;
   onSelect(turnId: string): void;
+  /** With `onQuery`, a filter field above the list (`filterTurns`). */
+  query?: string;
+  onQuery?(query: string): void;
 }
 
 /**
@@ -153,10 +165,17 @@ interface Props {
  * top (on the left in the narrow, horizontal layout). Numbers stay chronological, and the DOM is
  * in display order so keyboard order matches what is seen.
  */
-export const TurnList = memo(function TurnList({ items, selectedId, onSelect }: Props) {
+export const TurnList = memo(function TurnList({
+  items,
+  selectedId,
+  onSelect,
+  query = '',
+  onQuery,
+}: Props) {
   const { t } = useI18n();
   const listRef = useRef<HTMLUListElement>(null);
-  const newestFirst = useMemo(() => [...items].reverse(), [items]);
+  const shown = useMemo(() => filterTurns(items, query), [items, query]);
+  const newestFirst = useMemo(() => [...shown].reverse(), [shown]);
   const ids = useMemo(() => newestFirst.map((it) => it.turn.id), [newestFirst]);
   // One tab stop for the whole list; the arrow keys move between turns.
   const roving = useRovingFocus(listRef, ids, selectedId);
@@ -173,15 +192,46 @@ export const TurnList = memo(function TurnList({ items, selectedId, onSelect }: 
     <nav className={css.pane} aria-label={t('flow.turns')}>
       <div className={css.head}>
         {t('flow.turns')}
-        <span className="figure">{items.length}</span>
+        <span>
+          {shown.length === items.length ? (
+            <span className="figure">{items.length}</span>
+          ) : (
+            <FigureText k="flow.turnsShown" params={{ n: shown.length, total: items.length }} />
+          )}
+        </span>
       </div>
-      <ul ref={listRef} className={css.list} aria-label={t('flow.turns')}>
+      {onQuery && (
+        <label className={css.filter}>
+          <Search size={14} aria-hidden="true" />
+          <input
+            type="search"
+            value={query}
+            placeholder={t('flow.filterTurns')}
+            aria-label={t('flow.filterTurns')}
+            onChange={(e) => onQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape' && query) {
+                e.stopPropagation();
+                onQuery('');
+              }
+            }}
+          />
+        </label>
+      )}
+      {newestFirst.length === 0 && items.length > 0 && (
+        <p className={css.none}>{t('flow.noTurnMatch')}</p>
+      )}
+      <ul
+        ref={listRef}
+        className={css.list}
+        aria-label={t('flow.turns')}
+        hidden={newestFirst.length === 0 && items.length > 0}
+      >
         {newestFirst.map((it) => {
           const clock = formatClock(it.turn.startedAt);
-          // Dense list: a complete turn is the check alone; what needs attention keeps its word,
-          // except at the end of a narrow row's first line, where only the mark fits.
-          const mark = <StatusMark status={it.status} compact={it.status === 'complete'} />;
-          const markOnly = <StatusMark status={it.status} compact />;
+          // Dense list: complete and failed are their glyph alone; the dot states keep their
+          // word, as a dot would differ by colour only.
+          const mark = <StatusMark status={it.status} compact />;
           return (
             <li key={it.turn.id} data-turn={it.turn.id}>
               <button
@@ -213,7 +263,7 @@ export const TurnList = memo(function TurnList({ items, selectedId, onSelect }: 
                   </>
                 ) : (
                   <>
-                    <span className={css.markTop}>{markOnly}</span>
+                    <span className={css.markTop}>{mark}</span>
                     {it.turn.origin !== 'human' && it.turn.sender && (
                       <span className={css.sender}>
                         {t('flow.from', { sender: it.turn.sender })}
@@ -222,8 +272,9 @@ export const TurnList = memo(function TurnList({ items, selectedId, onSelect }: 
                     <span className={css.sub}>
                       <span className={`${css.subClock} figure`}>{clock}</span>
                       <span className={css.counts}>
-                        <Figures
-                          text={t('flow.callsToolsShort', { calls: it.calls, tools: it.tools })}
+                        <FigureText
+                          k="flow.callsToolsShort"
+                          params={{ calls: it.calls, tools: it.tools }}
                         />
                       </span>
                       <span className={css.markSub}>{mark}</span>
