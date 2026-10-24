@@ -60,4 +60,34 @@ describe('SummaryBar', () => {
       'true',
     );
   });
+
+  it('carries the token rate behind the disclosure, for narrow screens where the top bar drops it', () => {
+    const tail = (...v: number[]) => [...new Array<number>(60 - v.length).fill(0), ...v];
+    const minute = Date.UTC(2026, 9, 23, 2, 0, 0);
+    const rate = {
+      minute: new Date(minute).toISOString(),
+      at: new Date(minute + 30_000).toISOString(),
+      since: new Date(minute - 3_600_000).toISOString(),
+      agents: {
+        codex: {
+          input: tail(0),
+          cacheRead: tail(90_000, 90_000, 90_000, 90_000, 45_000),
+          cacheWrite: tail(0),
+          output: tail(0),
+        },
+      },
+      coverage: { running: 2, counted: 1, agents: { codex: { running: 2, counted: 1 } } },
+    };
+    render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <SummaryBar open={demoOpen()} agentId="main" rate={rate} rateAgent="codex" />
+      </I18nContext.Provider>,
+    );
+    expect(value('Token rate')).toBe('≈90K/min');
+    const cell = within(screen.getByRole('region', { name: 'Summary' })).getByText(
+      'Token rate',
+    ).parentElement;
+    expect(cell).toHaveAttribute('data-narrow-only');
+    expect(cell).toHaveAttribute('data-extra');
+  });
 });

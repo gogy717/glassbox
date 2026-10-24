@@ -37,6 +37,14 @@ function storeWith(sessions: SessionSummary[] = []): AppStore {
     listQuotas: () => [],
     expectSession: async () => false,
     onQuota: () => () => {},
+    getRate: () => ({
+      minute: '',
+      at: '',
+      since: '',
+      agents: {},
+      coverage: { running: 0, counted: 0, agents: {} },
+    }),
+    onRate: () => () => {},
   };
 }
 
@@ -332,6 +340,7 @@ describe('run events', () => {
     const sse = sseReader(await t.call('GET', '/api/events'));
     expect((await sse.next()).event).toBe('sessions');
     expect((await sse.next()).event).toBe('quota');
+    expect((await sse.next()).event).toBe('rate');
     const first = [await sse.next(), await sse.next()];
     expect(first.map((e) => [e.event, (e.data as { run: RunState }).run.id])).toEqual([
       ['run', 'run-1'],
@@ -349,6 +358,7 @@ describe('run events', () => {
     const sse = sseReader(await t.call('GET', '/api/events'));
     await sse.next(); // sessions
     await sse.next(); // quota
+    await sse.next(); // rate
 
     const states = Array.from({ length: 10 }, (_, i) => ({
       ...blankRun('run-1'),
@@ -379,6 +389,7 @@ describe('run events', () => {
     const sse = sseReader(await t.call('GET', '/api/events'));
     await sse.next(); // sessions
     await sse.next(); // quota
+    await sse.next(); // rate
     expect(t.runs.listenerCount).toBe(1);
     expect(t.clients.count).toBe(1);
 
@@ -449,6 +460,7 @@ describe('a permission prompt nested deeper than JSON.stringify can go (real run
     const sse = sseReader(await call('GET', '/api/events'));
     await sse.next(); // sessions
     await sse.next(); // quota
+    await sse.next(); // rate
     const nextRun = async (status: RunState['status']) => {
       for (;;) {
         const e = await sse.next();

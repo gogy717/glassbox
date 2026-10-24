@@ -1,10 +1,11 @@
 import { Gauge } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { QuotaSnapshot, QuotaWindow } from '../../../src/core/model.js';
 import { type MessageKey, useI18n } from '../i18n';
 import { formatCountdown, formatRelative, formatResetTime } from '../lib/format';
 import { providerName, providerShortName } from '../lib/provider-names';
 import { quotaWindowName } from '../lib/quota';
+import { useOnePopover } from './popover';
 import css from './QuotaBar.module.css';
 
 interface Props {
@@ -55,6 +56,8 @@ export function formatBalance(balance: { amount: number; currency: string }, int
 export function QuotaBar({ quotas, now }: Props) {
   const { t, intl } = useI18n();
   const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  useOnePopover('quota', open, close);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;

@@ -20,6 +20,7 @@ import type {
   SessionSnapshot,
   SessionSummary,
 } from '../core/model.js';
+import { hourTotal, rateSeries, type TokenRate } from '../shared/rate.js';
 import { applyPatch } from './__tests__/apply-patch.js';
 import {
   createFakeAdapter,
@@ -479,6 +480,121 @@ describe('SessionStore', () => {
     await sleep(250);
 
     expect(patches).toEqual([]);
+  });
+});
+
+describe('SessionStore token rate', () => {
+  /** A session just opened settles for a live tick (50ms here) before its growth counts. */
+  const settled = () => sleep(200);
+
+  it('counts an open session’s growth after its first sighting, for its agent kind', async () => {
+    const p = await session('a', rec.req('ra', T(1), 10));
+    const s = await startStore({ rateMs: 20 });
+    await s.getSnapshot(p.id);
+    // Everything it spent before is a baseline, not a spike.
+    expect(hourTotal(s.getRate())).toBe(0);
+    await settled();
+    const pushed: TokenRate[] = [];
+    s.onRate((r) => pushed.push(r));
+
+    // One more request: 1 input + 7 output.
+    await appendFile(p.main, lines(rec.req('rb', T(2), 7)));
+    await vi.waitFor(() => expect(hourTotal(s.getRate())).toBe(8), { timeout: 2000 });
+    const rate = s.getRate();
+    expect(rateSeries(rate, { agent: fake.kind }).at(-1)).toBe(8);
+    expect(rateSeries(rate, { kind: 'output' }).at(-1)).toBe(7);
+    await vi.waitFor(() => expect(pushed.length).toBeGreaterThan(0), { timeout: 2000 });
+    expect(hourTotal(pushed.at(-1) as TokenRate)).toBe(8);
+  });
+
+  it('takes a session that vanishes and comes back as a baseline again', async () => {
+    const p = await session('a', rec.req('ra', T(1), 10));
+    const s = await startStore({ rateMs: 20 });
+    await s.getSnapshot(p.id);
+    await settled();
+    await appendFile(p.main, lines(rec.req('rb', T(2), 7)));
+    await vi.waitFor(() => expect(hourTotal(s.getRate())).toBe(8), { timeout: 2000 });
+
+    // Gone from disk for two discoveries: dropped, and forgotten.
+    await rm(p.main);
+    await vi.waitFor(() => expect(s.listSessions()).toHaveLength(0), { timeout: 2000 });
+    // Back with far more in it: reopening it is a baseline, not 1,000 tokens at once.
+    await put(
+      p.main,
+      lines(rec.req('ra', T(1), 10), rec.req('rb', T(2), 7), rec.req('rc', T(3), 990)),
+    );
+    await vi.waitFor(() => expect(s.listSessions()).toHaveLength(1), { timeout: 2000 });
+    await s.getSnapshot(p.id);
+    await settled();
+    expect(hourTotal(s.getRate())).toBe(8);
+    await appendFile(p.main, lines(rec.req('rd', T(4), 4)));
+    await vi.waitFor(() => expect(hourTotal(s.getRate())).toBe(13), { timeout: 2000 });
+  });
+
+  it('takes growth while a session settles after opening as history', async () => {
+    const p = await session('a', rec.req('ra', T(1), 10));
+    const s = await startStore({ rateMs: 20, liveMs: 400 });
+    await s.getSnapshot(p.id);
+    // Still settling: written as the session loaded, not counted as spend.
+    await appendFile(p.main, lines(rec.req('rb', T(2), 50)));
+    await vi.waitFor(async () => expect((await s.getSnapshot(p.id))?.requests.length).toBe(2), {
+      timeout: 2000,
+    });
+    await sleep(1000);
+    expect(hourTotal(s.getRate())).toBe(0);
+    await appendFile(p.main, lines(rec.req('rc', T(3), 4)));
+    await vi.waitFor(() => expect(hourTotal(s.getRate())).toBe(5), { timeout: 3000 });
+  });
+
+  it('counts nothing of an old session with sub-agents when it opens', async () => {
+    const p = await session('a', rec.req('ra', T(1), 10));
+    await put(p.subagent('s1'), lines(rec.req('rs1', T(1), 50_000), rec.req('rs2', T(2), 70_000)));
+    const s = await startStore({ rateMs: 20 });
+    await s.getSnapshot(p.id);
+    await settled();
+    expect(hourTotal(s.getRate())).toBe(0);
+  });
+
+  it('takes a sub-agent transcript classified after the open as history, then counts its growth', async () => {
+    const p = await session('a', rec.req('ra', T(1), 10));
+    const s = await startStore({ rateMs: 20 });
+    const snapshotOf = () => s.getSnapshot(p.id);
+    await snapshotOf();
+    await settled();
+    // A sub-agent file that turns up with an hour of work in it: read now, spent before.
+    await put(p.subagent('s1'), lines(rec.req('rs1', T(1), 90_000)));
+    await vi.waitFor(async () => expect((await snapshotOf())?.requests.length).toBe(2), {
+      timeout: 2000,
+    });
+    expect(hourTotal(s.getRate())).toBe(0);
+    // What it writes from then on is spend.
+    await appendFile(p.subagent('s1'), lines(rec.req('rs2', T(2), 6)));
+    await vi.waitFor(() => expect(hourTotal(s.getRate())).toBe(7), { timeout: 2000 });
+  });
+
+  it('counts a running session right after it settles, and says which running ones it counts', async () => {
+    await session('a', rec.req('ra', T(1), 10));
+    const b = await session('b', rec.req('rb', T(2), 10));
+    await setLive({ a: 'busy', b: 'busy' });
+    // Room for one open session: the other running one cannot be counted.
+    const s = await startStore({ rateMs: 20, maxOpen: 1 });
+    await vi.waitFor(() => expect(s.getRate().coverage.counted).toBe(1), { timeout: 2000 });
+    expect(s.getRate().coverage).toEqual({
+      running: 2,
+      counted: 1,
+      agents: { [fake.kind]: { running: 2, counted: 1 } },
+    });
+    // The newer one was opened; its growth counts at once.
+    await appendFile(b.main, lines(rec.req('rc', T(3), 4)));
+    await vi.waitFor(() => expect(hourTotal(s.getRate())).toBe(5), { timeout: 2000 });
+  });
+
+  it('says nothing about sessions it has not opened, and stops cleanly', async () => {
+    await session('a', rec.req('ra', T(1), 10));
+    const s = await startStore({ rateMs: 20 });
+    expect(s.getRate().agents).toEqual({});
+    await s.stop();
+    store = undefined;
   });
 });
 

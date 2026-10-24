@@ -72,8 +72,17 @@
   text-decoration: underline;
 }
 
+/* The token rate lives in the top bar until it gives it up, below 900px. */
+.metric[data-narrow-only] {
+  display: none;
+}
+
 /* Seven labels in one row is a spreadsheet: keep four, the rest behind the button. */
 @media (max-width: 900px) {
+  .bar[data-more] .metric[data-narrow-only] {
+    display: flex;
+  }
+
   .bar:not([data-more]) .metric[data-extra] {
     display: none;
   }

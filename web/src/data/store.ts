@@ -11,6 +11,7 @@ import type {
   WorkflowRun,
 } from '../../../src/core/model.js';
 import type { ServerEvent } from '../../../src/shared/protocol.js';
+import type { TokenRate } from '../../../src/shared/rate.js';
 import type { RunState } from '../../../src/shared/runs.js';
 
 export type ConnectionState = 'connecting' | 'open' | 'reconnecting';
@@ -47,6 +48,12 @@ export interface Store {
   getState(): ViewState;
   subscribe(fn: () => void): () => void;
   applyEvent(e: ServerEvent): void;
+  /**
+   * The machine's token rate, kept apart from the view state: it moves every few seconds, and
+   * only the instruments that show it should re-render, not the whole page.
+   */
+  getRate(): TokenRate | null;
+  subscribeRate(fn: () => void): () => void;
   openSession(id: string | null): void;
   setConnection(c: ConnectionState): void;
 }
@@ -94,6 +101,8 @@ export function createStore(): Store {
     runs: new Map(),
   };
   const listeners = new Set<() => void>();
+  let rate: TokenRate | null = null;
+  const rateListeners = new Set<() => void>();
   const set = (next: ViewState) => {
     state = next;
     for (const fn of listeners) fn();
@@ -134,6 +143,10 @@ export function createStore(): Store {
       case 'quota':
         set({ ...state, quotas: e.quotas });
         return;
+      case 'rate':
+        rate = e.rate;
+        for (const fn of rateListeners) fn();
+        return;
       case 'run':
         set({ ...state, runs: new Map(state.runs).set(e.run.id, e.run) });
         return;
@@ -152,6 +165,11 @@ export function createStore(): Store {
       return () => listeners.delete(fn);
     },
     applyEvent,
+    getRate: () => rate,
+    subscribeRate(fn) {
+      rateListeners.add(fn);
+      return () => rateListeners.delete(fn);
+    },
     openSession(id) {
       if (id === state.openId) return;
       set({ ...state, openId: id, open: null, missingId: null });
@@ -168,6 +186,16 @@ export function useStore(): Store {
   const store = useContext(StoreContext);
   if (!store) throw new Error('useStore outside StoreContext');
   return store;
+}
+
+const noSubscription = () => () => {};
+
+/** The token rate, re-rendering only the caller when it moves; null outside a store too. */
+export function useRate(): TokenRate | null {
+  const store = useContext(StoreContext);
+  return useSyncExternalStore(store ? store.subscribeRate : noSubscription, () =>
+    store ? store.getRate() : null,
+  );
 }
 
 /**

@@ -264,6 +264,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
                       route={route}
                       navigate={navigate}
                       live={run?.partial ?? null}
+                      rateAgent={prefs.rateAgent}
                     />
                   </ApprovalsContext.Provider>
                 </ErrorBoundary>

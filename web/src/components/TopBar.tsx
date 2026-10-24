@@ -1,13 +1,15 @@
 import { Eye, Menu, SlidersHorizontal } from 'lucide-react';
-import { type Ref, useEffect, useRef, useState } from 'react';
+import { type Ref, useCallback, useEffect, useRef, useState } from 'react';
 import type { AgentKind, LiveState, QuotaSnapshot } from '../../../src/core/model.js';
 import type { ConnectionState } from '../data/store';
 import { useNow } from '../data/useNow';
 import { useI18n } from '../i18n';
 import type { Prefs } from '../prefs';
 import { AgentTag } from './AgentTag';
+import { useOnePopover } from './popover';
 import { QuotaBar } from './QuotaBar';
 import { LiveDot } from './Status';
+import { TokenRate } from './TokenRate';
 import css from './TopBar.module.css';
 
 interface Props {
@@ -64,6 +66,11 @@ export function TopBar(p: Props) {
         </span>
       )}
       <span className={css.spacer} />
+      <TokenRate
+        agent={p.prefs.rateAgent}
+        onAgent={(rateAgent) => p.onPrefs({ ...p.prefs, rateAgent })}
+        sessionOpen={p.title !== null}
+      />
       <TopQuota quotas={p.quotas} />
       <span role="status" className={css.conn} data-state={p.connection}>
         {t(`conn.${p.connection}`)}
@@ -115,6 +122,8 @@ function TopQuota({ quotas }: { quotas: QuotaSnapshot[] }) {
 function SettingsMenu({ prefs, onPrefs }: { prefs: Prefs; onPrefs(p: Prefs): void }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  useOnePopover('settings', open, close);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;

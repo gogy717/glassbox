@@ -11,6 +11,7 @@ const LISTENED: Record<ServerEventType, true> = {
   snapshot: true,
   patch: true,
   quota: true,
+  rate: true,
   run: true,
   'session-missing': true,
   heartbeat: true,

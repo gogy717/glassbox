@@ -1,4 +1,5 @@
 import type { Locale } from './i18n';
+import { AGENT_TONES } from './lib/agent-names';
 
 export type ThemePref = 'system' | 'light' | 'dark';
 export interface Prefs {
@@ -6,10 +7,12 @@ export interface Prefs {
   locale: Locale;
   theme: ThemePref;
   showProbes: boolean;
+  /** The CLI whose token rate the top bar shows; null for all of them. */
+  rateAgent: string | null;
 }
 
 const KEY = 'glassbox.prefs';
-const DEFAULTS: Prefs = { locale: 'en', theme: 'system', showProbes: false };
+const DEFAULTS: Prefs = { locale: 'en', theme: 'system', showProbes: false, rateAgent: null };
 
 /** Storage can be unavailable (private windows, blocked site data); prefs are a convenience. */
 export function loadPrefs(): Prefs {
@@ -20,6 +23,10 @@ export function loadPrefs(): Prefs {
       locale: raw?.locale === 'zh' ? 'zh' : 'en',
       theme: raw?.theme === 'light' || raw?.theme === 'dark' ? raw.theme : 'system',
       showProbes: raw?.showProbes === true,
+      // A CLI glassbox knows; anything else (an old or mistyped value) means every CLI.
+      rateAgent: (AGENT_TONES as readonly unknown[]).includes(raw?.rateAgent)
+        ? (raw?.rateAgent as string)
+        : null,
     };
   } catch {
     return DEFAULTS;

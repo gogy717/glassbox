@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react';
-import type { OpenSession } from '../data/store';
+import type { TokenRate } from '../../../src/shared/rate.js';
+import { type OpenSession, useRate } from '../data/store';
 import { useNow } from '../data/useNow';
 import { useI18n } from '../i18n';
 import { summarize } from '../lib/agents';
 import { DASH, formatDuration, formatNumber, formatPercent } from '../lib/format';
 import { Diagnostics } from './Diagnostics';
 import css from './SummaryBar.module.css';
+import { rateText } from './TokenRate';
 
 interface Figure {
   label: string;
@@ -14,11 +16,26 @@ interface Figure {
   more?: boolean;
   /** Muted after the value, e.g. the thinking share of output. */
   aside?: string;
+  /** Only below 900px, where the top bar gives it up: the token rate. */
+  narrowOnly?: boolean;
 }
 
 /** The readout: each figure in the mono face above its label, a hairline between them. */
-export function SummaryBar({ open, agentId }: { open: OpenSession; agentId: string }) {
+export function SummaryBar({
+  open,
+  agentId,
+  rate: given,
+  rateAgent = null,
+}: {
+  open: OpenSession;
+  agentId: string;
+  /** The machine's token rate, for its figure on narrow screens; the store's when not given. */
+  rate?: TokenRate | null;
+  rateAgent?: string | null;
+}) {
   const { t, intl } = useI18n();
+  const stored = useRate();
+  const rate = given !== undefined ? given : stored;
   const now = useNow();
   const [more, setMore] = useState(false);
   // Counts only change with the data; the clock only moves the running duration.
@@ -42,11 +59,23 @@ export function SummaryBar({ open, agentId }: { open: OpenSession; agentId: stri
       aside: s.measured ? `(${formatNumber(s.thinking, intl)})` : undefined,
     },
   ];
+  if (rate)
+    figures.push({
+      label: t('summary.rate'),
+      value: rateText(rate, rateAgent, intl, t('rate.perMin')),
+      more: true,
+      narrowOnly: true,
+    });
   return (
     <section className={css.bar} aria-label={t('summary.title')} data-more={more || undefined}>
       <div className={css.metrics}>
         {figures.map((f) => (
-          <div key={f.label} className={css.metric} data-extra={f.more || undefined}>
+          <div
+            key={f.label}
+            className={css.metric}
+            data-extra={f.more || undefined}
+            data-narrow-only={f.narrowOnly || undefined}
+          >
             <span className={`${css.value} figure`} data-value>
               {f.value}
               {f.aside && <span className={css.aside}> {f.aside}</span>}

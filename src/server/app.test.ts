@@ -16,6 +16,7 @@ import type {
   SessionSummary,
 } from '../core/model.js';
 import { api } from '../shared/protocol.js';
+import type { TokenRate } from '../shared/rate.js';
 import { createFakeAdapter, fakePaths, lines, rec } from './__tests__/fake-adapter.js';
 import { sseReader } from './__tests__/sse-reader.js';
 import { type AppStore, createApp } from './app.js';
@@ -32,7 +33,20 @@ function stubStore() {
   const resetCbs = new Set<(s: SessionSnapshot) => void>();
   const quotaCbs = new Set<(q: QuotaSnapshot[]) => void>();
   const quotas = [createDemoQuota(new Date('2026-10-23T02:00:00.000Z'))];
+  const rateCbs = new Set<(r: TokenRate) => void>();
+  const rate: TokenRate = {
+    minute: '2026-10-23T02:00:00.000Z',
+    at: '2026-10-23T02:00:30.000Z',
+    since: '2026-10-23T01:00:00.000Z',
+    agents: {},
+    coverage: { running: 0, counted: 0, agents: {} },
+  };
   const store: AppStore = {
+    getRate: () => rate,
+    onRate: (cb) => {
+      rateCbs.add(cb);
+      return () => rateCbs.delete(cb);
+    },
     expectSession: async (id) => id === DEMO_SESSION_ID,
     listQuotas: () => quotas,
     onQuota: (cb) => {
@@ -71,8 +85,21 @@ function stubStore() {
       };
     },
   };
-  const listeners = () => sessionCbs.size + patchCbs.size + resetCbs.size + quotaCbs.size;
-  return { store, snapshot, sessions, quotas, sessionCbs, patchCbs, resetCbs, quotaCbs, listeners };
+  const listeners = () =>
+    sessionCbs.size + patchCbs.size + resetCbs.size + quotaCbs.size + rateCbs.size;
+  return {
+    store,
+    snapshot,
+    sessions,
+    quotas,
+    rate,
+    sessionCbs,
+    patchCbs,
+    resetCbs,
+    quotaCbs,
+    rateCbs,
+    listeners,
+  };
 }
 
 let tmp: string | undefined;
@@ -151,6 +178,7 @@ describe('REST routes', () => {
     for (const path of [
       api.token(),
       api.quota(),
+      api.rate(),
       api.sessions(),
       api.session(DEMO_SESSION_ID),
       api.events(DEMO_SESSION_ID),
@@ -218,6 +246,24 @@ describe('static files', () => {
   });
 });
 
+describe('token rate', () => {
+  it('serves the rate, and pushes it over the event stream when it changes', async () => {
+    const t = stubStore();
+    const app = createApp({ store: t.store });
+    expect(await (await app.request(api.rate())).json()).toEqual({ rate: t.rate });
+
+    const sse = sseReader(await app.request(api.events()));
+    expect((await sse.next()).event).toBe('sessions');
+    expect((await sse.next()).event).toBe('quota');
+    expect(await sse.next()).toEqual({ event: 'rate', data: { type: 'rate', rate: t.rate } });
+    const moved = { ...t.rate, at: '2026-10-23T02:01:05.000Z', minute: '2026-10-23T02:01:00.000Z' };
+    for (const cb of t.rateCbs) cb(moved);
+    expect(await sse.next()).toEqual({ event: 'rate', data: { type: 'rate', rate: moved } });
+    await sse.cancel();
+    expect(t.rateCbs.size).toBe(0);
+  });
+});
+
 describe('GET /api/events', () => {
   it('sends the session list, the quota, then the snapshot, then patches and rebuild snapshots', async () => {
     const t = stubStore();
@@ -230,6 +276,7 @@ describe('GET /api/events', () => {
     expect(first.data).toEqual({ type: 'sessions', sessions: t.sessions });
 
     expect(await sse.next()).toEqual({ event: 'quota', data: { type: 'quota', quotas: t.quotas } });
+    expect(await sse.next()).toEqual({ event: 'rate', data: { type: 'rate', rate: t.rate } });
 
     const second = await sse.next();
     expect(second.event).toBe('snapshot');
@@ -271,6 +318,7 @@ describe('GET /api/events', () => {
       const sse = sseReader(await createApp({ store: t.store }).request(path));
       expect((await sse.next()).event).toBe('sessions');
       expect((await sse.next()).event).toBe('quota');
+      expect((await sse.next()).event).toBe('rate');
       // The stub reports unknown ids as never appearing.
       if (path !== api.events()) expect((await sse.next()).event).toBe('session-missing');
       expect(t.patchCbs.size).toBe(0);
@@ -290,6 +338,7 @@ describe('GET /api/events', () => {
     );
     expect((await sse.next()).event).toBe('sessions');
     expect((await sse.next()).event).toBe('quota');
+    expect((await sse.next()).event).toBe('rate');
     const hb = await sse.next();
     expect(hb.event).toBe('heartbeat');
     expect(Number.isNaN(Date.parse((hb.data as { now: string }).now))).toBe(false);
@@ -303,8 +352,9 @@ describe('GET /api/events', () => {
     const sse = sseReader(await createApp({ store: t.store }).request(api.events(DEMO_SESSION_ID)));
     await sse.next(); // sessions
     await sse.next(); // quota
+    await sse.next(); // rate
     await sse.next(); // snapshot
-    expect(t.listeners()).toBe(4);
+    expect(t.listeners()).toBe(5);
     expect(vi.getTimerCount()).toBe(timersBefore + 1);
 
     await sse.cancel();
@@ -360,6 +410,7 @@ describe('with a real SessionStore', () => {
       const sse = sseReader(await createApp({ store }).request(api.events(p.id)));
       expect((await sse.next()).event).toBe('sessions');
       expect(await sse.next()).toEqual({ event: 'quota', data: { type: 'quota', quotas: [] } });
+      expect((await sse.next()).event).toBe('rate');
       const snap = await sse.next();
       expect(snap.event).toBe('snapshot');
       expect(
@@ -441,6 +492,7 @@ describe('a transcript with values nested deeper than JSON.stringify can go', ()
       const sse = sseReader(await app.request(api.events(p.id)));
       expect((await sse.next()).event).toBe('sessions');
       expect((await sse.next()).event).toBe('quota');
+      expect((await sse.next()).event).toBe('rate');
       const snap = await sse.next();
       expect(snap.event).toBe('snapshot');
       expect(JSON.stringify(snap.data)).toContain(marker);
@@ -474,6 +526,7 @@ describe('quota', () => {
     const sse = sseReader(await createApp({ store: t.store }).request(api.events()));
     await sse.next(); // sessions
     await sse.next(); // quota
+    await sse.next(); // rate
 
     const changed = [{ ...(t.quotas[0] as QuotaSnapshot), stale: true }];
     for (const cb of t.quotaCbs) cb(changed);
@@ -513,6 +566,7 @@ describe('subscribing to a session that is not known yet', () => {
     );
     expect((await sse.next()).event).toBe('sessions');
     expect((await sse.next()).event).toBe('quota');
+    expect((await sse.next()).event).toBe('rate');
 
     t.appear();
 
@@ -531,6 +585,7 @@ describe('subscribing to a session that is not known yet', () => {
     );
     await sse.next(); // sessions
     await sse.next(); // quota
+    await sse.next(); // rate
     expect((await sse.next()).event).toBe('heartbeat');
     for (const cb of t.sessionCbs) cb([]);
     let e = await sse.next();
@@ -581,6 +636,7 @@ describe('a session that does not show up in time', () => {
     const sse = sseReader(await app.request(api.events('claude-code:slow')));
     await sse.next(); // sessions
     await sse.next(); // quota
+    await sse.next(); // rate
     expect(await sse.next()).toEqual({
       event: 'session-missing',
       data: { type: 'session-missing', sessionId: 'claude-code:slow' },
@@ -598,6 +654,7 @@ describe('a session that does not show up in time', () => {
     );
     await sse.next(); // sessions
     await sse.next(); // quota
+    await sse.next(); // rate
     expect((await sse.next()).event).toBe('session-missing');
     let finish: () => void = () => {};
     t.store.getSnapshot = () =>
@@ -621,6 +678,7 @@ describe('a session that does not show up in time', () => {
     );
     await sse.next(); // sessions
     await sse.next(); // quota
+    await sse.next(); // rate
     expect((await sse.next()).event).toBe('session-missing');
 
     t.appear();
