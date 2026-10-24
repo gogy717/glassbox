@@ -11,6 +11,7 @@ import {
   type LiveFilter,
   liveFilterOf,
 } from '../lib/sessions';
+import { Delayed } from './Delayed';
 import { SessionRow } from './SessionRow';
 import css from './SessionSidebar.module.css';
 
@@ -184,13 +185,14 @@ export function SessionSidebar({
         )}
       </div>
       <div ref={listRef} className={css.list}>
-        {groups.length === 0 && (
-          <p className={css.empty}>
-            {t(
-              sessions.length ? 'sidebar.noMatch' : loaded ? 'sidebar.empty' : 'sidebar.connecting',
-            )}
-          </p>
-        )}
+        {groups.length === 0 &&
+          (sessions.length || loaded ? (
+            <p className={css.empty}>{t(sessions.length ? 'sidebar.noMatch' : 'sidebar.empty')}</p>
+          ) : (
+            <Delayed>
+              <p className={css.empty}>{t('sidebar.connecting')}</p>
+            </Delayed>
+          ))}
         {groups.map((g) => (
           <ul key={g.project} aria-label={g.project} className={css.group}>
             <li className={`${css.groupTitle} section-label`} aria-hidden="true">

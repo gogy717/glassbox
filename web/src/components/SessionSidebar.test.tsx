@@ -1,10 +1,11 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createDemoSessions } from '../../../src/core/fixtures/demo.js';
 import type { SessionSummary } from '../../../src/core/model.js';
 import { I18nContext, makeI18n } from '../i18n';
 import { DEMO_NOW } from '../test/demo';
 import tagCss from './AgentTag.module.css';
+import { WAIT_MS } from './Delayed';
 import rowCss from './SessionRow.module.css';
 import { SessionSidebar } from './SessionSidebar';
 
@@ -39,8 +40,15 @@ describe('SessionSidebar', () => {
         />
       </I18nContext.Provider>
     );
+    vi.useFakeTimers();
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     const { rerender } = render(empty(false));
     expect(screen.queryByText('No sessions found')).toBeNull();
+    // F-web W8: not for the first 200 ms, so a quick local list never flashes it.
+    expect(screen.queryByText('Connecting…')).toBeNull();
+    act(() => vi.advanceTimersByTime(WAIT_MS));
     expect(screen.getByText('Connecting…')).toBeInTheDocument();
     rerender(empty(true));
     expect(screen.getByText('No sessions found')).toBeInTheDocument();

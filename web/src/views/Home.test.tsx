@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { SessionActivity, SessionSummary } from '../../../src/core/model.js';
+import { WAIT_MS } from '../components/Delayed';
 import { I18nContext, makeI18n } from '../i18n';
 import { Home } from './Home';
 
@@ -220,8 +221,15 @@ describe('Home', () => {
   });
 
   it('says nothing about sessions before the list arrives', () => {
+    vi.useFakeTimers();
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     renderHome([], { loaded: false });
     expect(screen.queryByRole('heading')).toBeNull();
+    // F-web W8: only once the wait has lasted 200 ms.
+    expect(screen.queryByText('Reading local sessions…')).toBeNull();
+    act(() => vi.advanceTimersByTime(WAIT_MS));
     expect(screen.getByText('Reading local sessions…')).toBeInTheDocument();
   });
 

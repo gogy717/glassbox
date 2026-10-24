@@ -54,7 +54,8 @@ describe('DetailPanel', () => {
     const fetch = stubFetch(detail);
     renderPanel(req('req_m1'), 'request');
     const panel = screen.getByRole('region', { name: 'Request details' });
-    expect(within(panel).getByText('Loading…')).toBeInTheDocument();
+    // F-web W8: a quick local fetch never flashes "Loading…".
+    expect(within(panel).queryByText('Loading…')).toBeNull();
     expect(await within(panel).findByText('Partly reconstructed')).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledWith(
       `/api/sessions/${encodeURIComponent(open.id)}/requests/req_m1/detail`,

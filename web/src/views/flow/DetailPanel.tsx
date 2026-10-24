@@ -3,6 +3,7 @@ import { type ReactNode, useId, useMemo, useRef, useState } from 'react';
 import type { ModelRequest, RequestDetail, ToolCall } from '../../../../src/core/model.js';
 import type { ToolResultResponse } from '../../../../src/shared/protocol.js';
 import { CopyButton } from '../../components/CodeBlock';
+import { Delayed } from '../../components/Delayed';
 import { FigureText } from '../../components/FigureText';
 import { JsonInspector } from '../../components/JsonInspector';
 import { Markdown } from '../../components/Markdown';
@@ -192,7 +193,11 @@ function Loading<T>({
         </button>
       </p>
     );
-  return <p className={css.message}>{t('detail.loading')}</p>;
+  return (
+    <Delayed>
+      <p className={css.message}>{t('detail.loading')}</p>
+    </Delayed>
+  );
 }
 
 function RequestBody({

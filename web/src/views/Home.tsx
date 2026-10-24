@@ -2,6 +2,7 @@ import { ArrowRight, Plus } from 'lucide-react';
 import { useMemo, useRef } from 'react';
 import type { AgentKind, SessionSummary } from '../../../src/core/model.js';
 import { AgentTag } from '../components/AgentTag';
+import { Delayed } from '../components/Delayed';
 import { FigureText } from '../components/FigureText';
 import { SessionRow } from '../components/SessionRow';
 import { useRovingFocus } from '../data/useRovingFocus';
@@ -82,7 +83,12 @@ export function Home({
     lastOpened,
   );
 
-  if (!loaded) return <p className={css.placeholder}>{t('home.connecting')}</p>;
+  if (!loaded)
+    return (
+      <Delayed>
+        <p className={css.placeholder}>{t('home.connecting')}</p>
+      </Delayed>
+    );
 
   if (visible.length === 0)
     return (
