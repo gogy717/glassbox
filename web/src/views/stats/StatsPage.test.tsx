@@ -264,9 +264,10 @@ describe('the Stats page (D4)', () => {
     await screen.findByText(/Data as of 20:41/);
     next('fail');
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Could not read the week: HTTP 500 · Refresh',
-    );
+    // The alert says the failure alone; Refresh sits beside it.
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/^Could not read the week: HTTP 500$/);
+    expect(alert.parentElement).toHaveTextContent('Could not read the week: HTTP 500 · Refresh');
     expect(calls.at(-1)).toBe('/api/week?window=week&refresh=1');
     expect(overview()).toHaveTextContent(time(statsWeek(week, false).receipt.agentMs));
   });
@@ -291,10 +292,50 @@ describe('the Stats page (D4)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
     const alert = await screen.findByRole('alert');
     // Read again, and failing again: the same alert, not taken away and said anew.
-    fireEvent.click(within(alert).getByRole('button', { name: 'Refresh' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
     await waitFor(() => expect(fetchCalls()).toBe(3));
     await act(async () => {});
     expect(screen.getByRole('alert')).toBe(alert);
+  });
+
+  it('says it is updating while a failed read is tried again, the failure not said anew', async () => {
+    const { next } = serve({ week });
+    render(page(createStore()));
+    await screen.findByText(/Data as of 20:41/);
+    next('fail');
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    const alert = await screen.findByRole('alert');
+    next('hold');
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(250);
+      });
+      // Updating… where Refresh was, so a second click has nothing to queue behind the read.
+      expect(alert.parentElement).toHaveTextContent(
+        'Could not read the week: HTTP 500 · Updating…',
+      );
+      expect(screen.queryByRole('button', { name: 'Refresh' })).toBeNull();
+      // The alert itself unchanged: a read starting is not announced as the failure again (M4).
+      expect(screen.getByRole('alert')).toBe(alert);
+      expect(alert).toHaveTextContent(/^Could not read the week: HTTP 500$/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('says only that it is reading when a failed first read is tried again, as the dialog does', async () => {
+    const { next } = serve({ week });
+    next('fail');
+    render(page(createStore()));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not read the week: HTTP 500');
+    next('hold');
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Reading sessions…'));
+    // Not run together with the failure it is trying again.
+    expect(screen.queryByText(/Could not read the week/)).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('points an empty week to the last 7 days, when they have sessions', async () => {
@@ -415,6 +456,36 @@ describe('the Stats page (D4)', () => {
       screen.getByRole('button', { name: new RegExp(`^${agentNameOf(other.agent)}`) }),
     );
     expect(hourTitle()).toBe(title);
+  });
+
+  it('keeps a cell’s tip true to the grid under it when Escape lets a pin go', async () => {
+    serve({ week });
+    const w = statsWeek(week, false);
+    render(page(createStore()));
+    const cli = w.receipt.byCli[1];
+    if (!cli) throw new Error('fixture');
+    const row = await screen.findByRole('button', {
+      name: new RegExp(`^${agentNameOf(cli.agent)}`),
+    });
+    // An hour others worked in, this CLI not.
+    const mine = isolated(w, { cli: cli.agent });
+    const at = w.receipt.grid
+      .flatMap((cells, r) => cells.map((c, col) => ({ r, col, ms: c.ms })))
+      .find(({ r, col, ms }) => ms > 0 && (mine.receipt.grid[r]?.[col]?.ms ?? 0) === 0);
+    const cell = at && document.querySelector<HTMLElement>(`[data-cell="${at.r}:${at.col}"]`);
+    if (!cell) throw new Error('fixture');
+    fireEvent.click(row);
+    fireEvent.click(cell);
+    act(() => cell.focus());
+    const title = cell.getAttribute('aria-label')?.split(' · ')[0] ?? '';
+    const tip = () => screen.getByText(title, { selector: 'strong' }).parentElement;
+    expect(tip()).toHaveTextContent(`${title}No agent worked`);
+    fireEvent.keyDown(cell, { key: 'Escape' });
+    expect(row).toHaveAttribute('aria-pressed', 'false');
+    // The whole window drawn again: the tip says what the cell now says.
+    const label = cell.getAttribute('aria-label') ?? '';
+    expect(label).not.toContain('No agent worked');
+    expect(tip()).toHaveTextContent(label.replace(' · ', ''));
   });
 
   it('keeps all three cards on an empty week, each with a dash and no hint (DR4)', async () => {

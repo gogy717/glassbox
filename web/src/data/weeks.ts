@@ -27,8 +27,9 @@ export interface WeekCache {
   get(): Weeks;
   subscribe(fn: () => void): () => void;
   /**
-   * Reads `kind` again, unless a read of it is under way. `refresh` has the server parse the
-   * running sessions it parsed less than 30 s ago as well.
+   * Reads `kind` again. While a read of it is under way, a plain request is passed over and a
+   * refresh waits for that read to end, then runs (M5), unless nothing shows the window by then.
+   * `refresh` has the server parse the running sessions it parsed less than 30 s ago as well.
    */
   request(kind: WeekWindowKind, opts?: { refresh?: boolean }): void;
   /** Something on the page shows `kind`: its reads go on until the last such thing lets go. */

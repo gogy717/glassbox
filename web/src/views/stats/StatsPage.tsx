@@ -172,29 +172,33 @@ function Status({
       {rt(locale, 'refresh')}
     </button>
   );
-  // Until the server says how many sessions there are, only that it is reading them (DR5).
-  const reading = entry.reading;
-  const progress =
-    !entry.result && reading
-      ? reading.total > 0
-        ? rt(locale, 'reading', { done: reading.done, total: reading.total })
-        : st(locale, 'reading')
-      : '';
+  // Updating… where Refresh was, once a read takes a moment (N7): a click then would only queue.
+  const action = updating ? rt(locale, 'updating') : again;
+  // Without a result, a read under way comes first, as in the dialog: the failure it tries again
+  // is not said beside it. Until the server says how many sessions there are, only that it is
+  // reading them (DR5).
+  const first = entry.result ? null : entry.reading;
+  const progress = first
+    ? first.total > 0
+      ? rt(locale, 'reading', { done: first.done, total: first.total })
+      : st(locale, 'reading')
+    : '';
   // Read before, not again this time: in the figures as they were, older than the time beside it.
   const stale = entry.result?.stats.failed ?? 0;
   return (
     <>
       <span role="status">{progress}</span>
-      {entry.failed !== null ? (
-        <span role="alert" className={css.failed}>
-          {rt(locale, 'weekFailed', { msg: entry.failed })} · {again}
+      {first ? null : entry.failed !== null ? (
+        <span className={css.failed}>
+          {/* The failure alone in the alert: a read starting or ending does not say it again (M4). */}
+          <span role="alert">{rt(locale, 'weekFailed', { msg: entry.failed })}</span> · {action}
         </span>
       ) : (
         entry.result && (
           <span>
             {rt(locale, 'asOf', { time: clock(entry.result.asOf) })} ·{' '}
             {stale > 0 && <>{rt(locale, 'notRefreshed', { n: stale })} · </>}
-            {updating ? rt(locale, 'updating') : again}
+            {action}
           </span>
         )
       )}

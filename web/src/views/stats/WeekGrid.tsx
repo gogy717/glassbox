@@ -103,11 +103,10 @@ export const WeekGrid = memo(function WeekGrid({
   const showTip = (e: SyntheticEvent, c: Cell) => {
     const box = ref.current?.getBoundingClientRect();
     const r = (e.target as HTMLElement).getBoundingClientRect();
-    const words = labels[c.row]?.[c.col];
-    if (!box || !words) return;
+    if (!box || !labels[c.row]?.[c.col]) return;
     // From the right half the tip opens leftwards, so it stays over the grid.
     const toLeft = c.col >= 12;
-    tip.current?.show(words, (toLeft ? r.right : r.left) - box.left, r.top - box.top, toLeft);
+    tip.current?.show(c, (toLeft ? r.right : r.left) - box.left, r.top - box.top, toLeft);
   };
   const onKeyDown = (e: KeyboardEvent) => {
     const at = cellOf(e);
@@ -194,33 +193,35 @@ export const WeekGrid = memo(function WeekGrid({
           </tr>
         </tfoot>
       </table>
-      <GridTip ref={tip} />
+      <GridTip ref={tip} labels={labels} />
     </div>
   );
 });
 
 interface TipHandle {
-  show(words: CellLabel, x: number, y: number, toLeft: boolean): void;
+  show(cell: Cell, x: number, y: number, toLeft: boolean): void;
   hide(): void;
 }
 
-/** A cell's tip, with its own state: a hover draws the tip again and nothing else. */
-function GridTip({ ref }: { ref: Ref<TipHandle> }) {
-  const [tip, setTip] = useState<{
-    words: CellLabel;
-    x: number;
-    y: number;
-    toLeft: boolean;
-  } | null>(null);
+/**
+ * A cell's tip, with its own state: a hover draws the tip again and nothing else. It holds the
+ * cell, not its words, and reads them from the labels drawn: a grid drawn anew under it (a pin let
+ * go) changes what it says.
+ */
+function GridTip({ ref, labels }: { ref: Ref<TipHandle>; labels: CellLabel[][] }) {
+  const [tip, setTip] = useState<{ cell: Cell; x: number; y: number; toLeft: boolean } | null>(
+    null,
+  );
   useImperativeHandle(
     ref,
     () => ({
-      show: (words, x, y, toLeft) => setTip({ words, x, y, toLeft }),
+      show: (cell, x, y, toLeft) => setTip({ cell, x, y, toLeft }),
       hide: () => setTip(null),
     }),
     [],
   );
-  if (!tip) return null;
+  const words = tip && labels[tip.cell.row]?.[tip.cell.col];
+  if (!tip || !words) return null;
   return (
     <div
       className={css.tip}
@@ -228,8 +229,8 @@ function GridTip({ ref }: { ref: Ref<TipHandle> }) {
       data-right={tip.toLeft || undefined}
       style={{ left: tip.x, top: tip.y }}
     >
-      <strong>{tip.words.title}</strong>
-      <span>{tip.words.line}</span>
+      <strong>{words.title}</strong>
+      <span>{words.line}</span>
     </div>
   );
 }
