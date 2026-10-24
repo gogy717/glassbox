@@ -58,6 +58,11 @@
   color: var(--muted);
 }
 
+/* A flex item of the readings, whose gap already spaces it. */
+.readings::before {
+  margin-right: 0;
+}
+
 .reading {
   color: var(--text);
   white-space: nowrap;
