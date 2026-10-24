@@ -302,6 +302,7 @@ export const en: Record<MessageKey, string> = {
   'detail.callRef': 'call #{n}',
   'detail.partial': 'Partly reconstructed',
   'detail.unavailable': 'This {agent} version did not record the request',
+  'detail.maximized': 'Shown enlarged',
   'detail.loading': 'Loading…',
   'detail.loadError': 'Could not load: {msg}',
   'detail.retry': 'Retry',

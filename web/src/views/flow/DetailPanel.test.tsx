@@ -162,6 +162,20 @@ describe('DetailPanel', () => {
     expect(max).toHaveFocus();
   });
 
+  // Final review M7 (G4): one body at a time; while maximized the panel says where it went.
+  it('mounts the body once, in the dialog while maximized and back in the panel after', () => {
+    renderPanel(req('req_m2'), 'tool:tu_m2b');
+    const panel = screen.getByRole('region', { name: 'Tool call details' });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Maximize' }));
+    const dialog = screen.getByRole('dialog', { name: 'Tool call details · call #2' });
+    expect(screen.getAllByRole('heading', { name: 'Arguments' })).toHaveLength(1);
+    expect(within(dialog).getByRole('heading', { name: 'Arguments' })).toBeInTheDocument();
+    expect(within(panel).getByText('Shown enlarged')).toBeInTheDocument();
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(within(panel).getByRole('heading', { name: 'Arguments' })).toBeInTheDocument();
+    expect(within(panel).queryByText('Shown enlarged')).toBeNull();
+  });
+
   it('explains when the request detail could not be loaded, and retries', async () => {
     stubFetch({ error: 'boom' }, 500);
     renderPanel(req('req_m1'), 'request');

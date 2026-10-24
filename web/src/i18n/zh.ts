@@ -298,6 +298,7 @@ export const zh = {
   'detail.callRef': '调用 #{n}',
   'detail.partial': '部分还原',
   'detail.unavailable': '此版本 {agent} 未记录请求内容',
+  'detail.maximized': '已放大显示',
   'detail.loading': '加载中…',
   'detail.loadError': '加载失败：{msg}',
   'detail.retry': '重试',

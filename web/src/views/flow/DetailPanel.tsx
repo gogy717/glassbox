@@ -132,7 +132,8 @@ export function DetailPanel({ sessionId, req, tools, card, onClose }: Props) {
           </button>
         </span>
       </div>
-      {body}
+      {/* One body at a time (G4): the dialog's while maximized. */}
+      {maximized ? <p className={css.message}>{t('detail.maximized')}</p> : body}
       {maximized && (
         <Modal
           label={`${title} · ${callRef}`}
