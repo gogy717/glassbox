@@ -592,6 +592,54 @@ describe('App · permission prompts in the views', () => {
   });
 });
 
+describe('App token rate', () => {
+  const tail = (...v: number[]) => [...new Array<number>(60 - v.length).fill(0), ...v];
+  const minute = Date.UTC(2026, 9, 23, 2, 0, 0);
+  const rate = {
+    minute: new Date(minute).toISOString(),
+    at: new Date(minute + 30_000).toISOString(),
+    since: new Date(minute - 3_600_000).toISOString(),
+    agents: {
+      'claude-code': {
+        input: tail(0),
+        cacheRead: tail(900_000, 900_000, 900_000, 900_000, 450_000),
+        cacheWrite: tail(0),
+        output: tail(0),
+      },
+      codex: {
+        input: tail(0),
+        cacheRead: tail(90_000, 90_000, 90_000, 90_000, 45_000),
+        cacheWrite: tail(0),
+        output: tail(0),
+      },
+    },
+    coverage: { running: 2, counted: 2, agents: {} },
+  };
+
+  it('shows the machine’s token rate in the top bar, and remembers the CLI picked', () => {
+    localStorage.clear();
+    const store = createStore();
+    store.applyEvent({ type: 'rate', rate });
+    render(<App store={store} connect={noConnect} />);
+    const banner = screen.getByRole('banner');
+    const instrument = within(banner).getByRole('button', {
+      name: /^Token rate: 990K tokens a minute/,
+    });
+    fireEvent.click(instrument);
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'Show the rate of' })).getByRole('button', {
+        name: 'Codex',
+      }),
+    );
+    expect(
+      within(banner).getByRole('button', { name: /^Token rate of Codex: 90K tokens a minute/ }),
+    ).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem('glassbox.prefs') ?? '{}')).toMatchObject({
+      rateAgent: 'codex',
+    });
+  });
+});
+
 describe('sidebarMode', () => {
   it.each([
     [1440, true, 'column'],

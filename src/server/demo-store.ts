@@ -48,13 +48,13 @@ const DEMO_TRAFFIC: {
     session: 'demo-rate-claude',
     agent: 'claude-code',
     perMin: { input: 2_400, cacheRead: 880_000, cacheWrite: 36_000, output: 9_500 },
-    duty: 0.9,
+    duty: 1,
   },
   {
     session: 'demo-rate-codex',
     agent: 'codex',
     perMin: { input: 22_000, cacheRead: 160_000, cacheWrite: 0, output: 3_200 },
-    duty: 0.7,
+    duty: 0.9,
   },
   {
     session: 'demo-rate-grok',
@@ -148,9 +148,11 @@ export class DemoStore implements AppStore {
   private spend(ms: number): void {
     for (const s of DEMO_TRAFFIC) {
       const total = this.rateTotals.get(s.session) ?? emptyUsage();
-      // Working or not this step, and how hard: a wandering share of its usual rate.
+      // Working or not this step, and how hard: a slow swell around its usual rate, plus noise,
+      // as real sessions drift between long reads and quick steps.
       if (ms > 0 && this.random() < s.duty) {
-        const k = (ms / MINUTE_MS) * (0.55 + this.random() * 0.9);
+        const phase = (this.rateClock / (11 * MINUTE_MS) + s.session.length) * Math.PI;
+        const k = (ms / MINUTE_MS) * (0.8 + 0.35 * Math.sin(phase) + this.random() * 0.25);
         total.input += Math.round(s.perMin.input * k);
         total.cacheRead += Math.round(s.perMin.cacheRead * k);
         total.cacheWrite += Math.round(s.perMin.cacheWrite * k);

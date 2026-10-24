@@ -1,5 +1,6 @@
 import type { KeyboardEvent } from 'react';
 import { MAIN_AGENT_ID } from '../../../src/core/model.js';
+import type { TokenRate } from '../../../src/shared/rate.js';
 import type { LivePartial } from '../../../src/shared/runs.js';
 import { AgentBreadcrumb } from '../components/AgentBreadcrumb';
 import { SummaryBar } from '../components/SummaryBar';
@@ -18,9 +19,19 @@ interface Props {
   navigate: Navigate;
   /** Streaming reply of a glassbox-owned run on this session. */
   live?: LivePartial | null;
+  /** The machine's token rate and the CLI the top bar shows it for: the readout's narrow figure. */
+  rate?: TokenRate | null;
+  rateAgent?: string | null;
 }
 
-export function SessionView({ open, route, navigate, live = null }: Props) {
+export function SessionView({
+  open,
+  route,
+  navigate,
+  live = null,
+  rate = null,
+  rateAgent = null,
+}: Props) {
   const { t } = useI18n();
   // An agent from a stale link (or one whose patch has not arrived yet) falls back to main.
   const agentId = open.agents.has(route.agentId) ? route.agentId : MAIN_AGENT_ID;
@@ -47,7 +58,7 @@ export function SessionView({ open, route, navigate, live = null }: Props) {
 
   return (
     <div className={css.view}>
-      <SummaryBar open={open} agentId={agentId} />
+      <SummaryBar open={open} agentId={agentId} rate={rate} rateAgent={rateAgent} />
       <div className={css.toolbar}>
         <AgentBreadcrumb
           open={open}

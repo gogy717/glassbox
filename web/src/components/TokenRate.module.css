@@ -1,0 +1,293 @@
+.wrap {
+  position: relative;
+  flex: none;
+}
+
+/* The quota button's family: one bordered button, an ink border while its popover is open. */
+.bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  background: var(--layer-1);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color var(--motion);
+}
+
+.bar:hover {
+  border-color: var(--border-strong);
+}
+
+.bar[aria-expanded="true"] {
+  border-color: var(--ink);
+}
+
+.glyph {
+  flex: none;
+  color: var(--muted);
+}
+
+.figure {
+  font-size: var(--fs-meta);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.figure[data-idle] {
+  color: var(--muted);
+}
+
+.unit,
+.approx {
+  color: var(--muted);
+}
+
+.approx {
+  margin-right: 1px;
+}
+
+/* The hour as a 1px line in ink; faint while nothing runs. */
+.spark {
+  flex: none;
+  color: var(--text);
+}
+
+.figure[data-idle] + .spark {
+  color: var(--faint);
+}
+
+/* Two columns: the figure (and the filter's tag) stay, the line goes. */
+@media (max-width: 1199px) {
+  .spark {
+    display: none;
+  }
+}
+
+/* One column with a session open: the readout carries the figure, behind its disclosure. */
+@media (max-width: 900px) {
+  .wrap[data-session] {
+    display: none;
+  }
+}
+
+.popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  display: grid;
+  gap: 14px;
+  width: min(368px, calc(100vw - 24px));
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xl);
+  background: var(--layer-1);
+  box-shadow: var(--shadow);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 0;
+}
+
+.title {
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+
+.scope {
+  font-size: var(--fs-small);
+  color: var(--muted);
+}
+
+/* "All" as a text toggle; each CLI as its tag, 22px. Chosen: an ink border for the edge. */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--tag-edge, transparent);
+  border-radius: var(--radius-m);
+  background: var(--tag-bg, transparent);
+  color: var(--tag-fg, var(--muted));
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--motion);
+}
+
+.chip:not([data-agent]) {
+  font-weight: 400;
+}
+
+.chip:not([data-agent]):hover {
+  color: var(--text);
+}
+
+.chip[aria-pressed="true"] {
+  border-color: var(--ink);
+}
+
+.chip:not([data-agent])[aria-pressed="true"] {
+  color: var(--text);
+}
+
+.figures {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: end;
+  gap: 18px;
+}
+
+.figures > div {
+  display: grid;
+  gap: 3px;
+}
+
+.right {
+  text-align: right;
+}
+
+.label {
+  color: var(--muted);
+}
+
+.big {
+  font-size: var(--fs-total);
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+.bigUnit {
+  font-size: var(--fs-body);
+  color: var(--muted);
+}
+
+.small {
+  font-size: var(--fs-body);
+  font-weight: 500;
+}
+
+.section {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.sectionHead {
+  display: flex;
+  justify-content: space-between;
+  margin: 0;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* tag (and how long it has been quiet) · its hour · rate · share */
+.row {
+  display: grid;
+  grid-template-columns: 1fr 48px 92px 40px;
+  align-items: center;
+  gap: 10px;
+  height: 30px;
+}
+
+.rowName {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.quiet {
+  font-size: var(--fs-meta);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.mini {
+  color: var(--text);
+}
+
+.rowRate,
+.rowShare {
+  font-size: var(--fs-small);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.rowShare,
+.kindShare {
+  color: var(--muted);
+}
+
+/* The token kinds as Where tokens went draws them: one tape, the same colours. */
+.tape {
+  display: flex;
+  gap: 1px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--radius-xs);
+  background: var(--layer-3);
+}
+
+.tape > span {
+  flex-basis: 0;
+}
+
+.legend {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-small);
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.swatch {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-xs);
+}
+
+.kind {
+  color: var(--muted);
+}
+
+.footer {
+  margin: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-meta);
+  line-height: var(--lh);
+  color: var(--muted);
+}

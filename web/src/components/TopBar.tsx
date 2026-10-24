@@ -1,6 +1,7 @@
 import { Eye, Menu, SlidersHorizontal } from 'lucide-react';
 import { type Ref, useEffect, useRef, useState } from 'react';
 import type { AgentKind, LiveState, QuotaSnapshot } from '../../../src/core/model.js';
+import type { TokenRate as Rate } from '../../../src/shared/rate.js';
 import type { ConnectionState } from '../data/store';
 import { useNow } from '../data/useNow';
 import { useI18n } from '../i18n';
@@ -8,6 +9,7 @@ import type { Prefs } from '../prefs';
 import { AgentTag } from './AgentTag';
 import { QuotaBar } from './QuotaBar';
 import { LiveDot } from './Status';
+import { TokenRate } from './TokenRate';
 import css from './TopBar.module.css';
 
 interface Props {
@@ -23,6 +25,8 @@ interface Props {
   live: LiveState | null;
   connection: ConnectionState;
   quotas: QuotaSnapshot[];
+  /** The machine's token rate; null until the server sends it. */
+  rate: Rate | null;
   follow: boolean;
   onFollow(on: boolean): void;
   prefs: Prefs;
@@ -64,6 +68,12 @@ export function TopBar(p: Props) {
         </span>
       )}
       <span className={css.spacer} />
+      <TokenRate
+        rate={p.rate}
+        agent={p.prefs.rateAgent}
+        onAgent={(rateAgent) => p.onPrefs({ ...p.prefs, rateAgent })}
+        sessionOpen={p.title !== null}
+      />
       <TopQuota quotas={p.quotas} />
       <span role="status" className={css.conn} data-state={p.connection}>
         {t(`conn.${p.connection}`)}
