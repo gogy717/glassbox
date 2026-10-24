@@ -414,6 +414,9 @@ export const en: Record<MessageKey, string> = {
   'app.notFound': 'Session not found',
   'error.view': 'This view hit an error: {msg}',
   'error.retry': 'Try again',
+  'error.chunk':
+    'This view’s code could not load: glassbox may have been updated or restarted since this page opened.',
+  'error.reload': 'Reload',
   'json.expand': 'Expand',
   'json.collapse': 'Collapse',
   'flow.outsideTurns': 'Calls outside conversations',

@@ -1,20 +1,19 @@
-import { type KeyboardEvent, lazy, Suspense } from 'react';
+import { type KeyboardEvent, Suspense } from 'react';
 import { MAIN_AGENT_ID } from '../../../src/core/model.js';
 import type { LivePartial } from '../../../src/shared/runs.js';
 import { AgentBreadcrumb } from '../components/AgentBreadcrumb';
 import { SummaryBar } from '../components/SummaryBar';
 import type { OpenSession } from '../data/store';
 import { useI18n } from '../i18n';
+import { lazyView } from '../lib/lazy-view';
 import { type Navigate, type Route, TABS } from '../router';
 import { FlowView } from './flow/FlowView';
 import css from './SessionView.module.css';
 import { StepsView } from './steps/StepsView';
 
 // The charts' views load on first use: the app's first chunk stays under Vite's 500 kB line.
-const TimeView = lazy(() => import('./time/TimeView').then((m) => ({ default: m.TimeView })));
-const TokensView = lazy(() =>
-  import('./tokens/TokensView').then((m) => ({ default: m.TokensView })),
-);
+const TimeView = lazyView(() => import('./time/TimeView').then((m) => m.TimeView));
+const TokensView = lazyView(() => import('./tokens/TokensView').then((m) => m.TokensView));
 
 interface Props {
   open: OpenSession;
