@@ -1,6 +1,7 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { I18nContext, makeI18n } from '../i18n';
+import { cjkInMono } from '../test/cjk';
 import { demoOpen } from '../test/demo';
 import { SummaryBar } from './SummaryBar';
 
@@ -89,5 +90,14 @@ describe('SummaryBar', () => {
     ).parentElement;
     expect(cell).toHaveAttribute('data-narrow-only');
     expect(cell).toHaveAttribute('data-extra');
+    // I3b M4: in Chinese it reads "≈9万/分钟", the 万 and 分钟 out of the mono face.
+    cleanup();
+    render(
+      <I18nContext.Provider value={makeI18n('zh')}>
+        <SummaryBar open={demoOpen()} agentId="main" rate={rate} rateAgent="codex" />
+      </I18nContext.Provider>,
+    );
+    expect(screen.getByRole('region', { name: '汇总' })).toHaveTextContent('≈9万/分钟');
+    expect(cjkInMono(document.body)).toEqual([]);
   });
 });

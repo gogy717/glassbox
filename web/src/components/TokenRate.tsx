@@ -27,6 +27,7 @@ import { type MessageKey, useI18n } from '../i18n';
 import { AGENT_TONES, agentColors, agentName } from '../lib/agent-names';
 import { DASH } from '../lib/format';
 import { AgentTag } from './AgentTag';
+import { CompactFigure, UiCjk } from './CompactFigure';
 import { useOnePopover } from './popover';
 import { RateChart, Sparkline } from './RateCharts';
 import css from './TokenRate.module.css';
@@ -222,8 +223,10 @@ function Instrument({
         ) : (
           <>
             {f.partial && <Approx title={f.partialTitle} />}
-            {f.fmt(f.avg)}
-            <span className={css.unit}>{t('rate.perMin')}</span>
+            <CompactFigure value={f.fmt(f.avg)} />
+            <span className={css.unit}>
+              <UiCjk text={t('rate.perMin')} />
+            </span>
           </>
         )}
       </span>
@@ -343,8 +346,10 @@ function Details({
             ) : (
               <>
                 {f.partial && <Approx title={f.partialTitle} />}
-                {f.fmt(f.avg)}
-                <span className={css.bigUnit}>{t('rate.perMin')}</span>
+                <CompactFigure value={f.fmt(f.avg)} />
+                <span className={css.bigUnit}>
+                  <UiCjk text={t('rate.perMin')} />
+                </span>
               </>
             )}
           </span>
@@ -356,8 +361,10 @@ function Details({
               DASH
             ) : (
               <>
-                {f.fmt(f.last)}
-                <span className={css.unit}>{t('rate.perMin')}</span>
+                <CompactFigure value={f.fmt(f.last)} />
+                <span className={css.unit}>
+                  <UiCjk text={t('rate.perMin')} />
+                </span>
               </>
             )}
           </span>
@@ -370,7 +377,9 @@ function Details({
               t('rate.hour')
             )}
           </span>
-          <span className={`${css.small} figure`}>{f.fmt(f.hour)}</span>
+          <span className={`${css.small} figure`}>
+            <CompactFigure value={f.fmt(f.hour)} />
+          </span>
         </div>
       </div>
       <RateChart
@@ -421,8 +430,10 @@ function Details({
                 <span className={`${css.rowRate} figure`}>
                   {r.avg > 0 ? (
                     <>
-                      {f.fmt(r.avg)}
-                      <span className={css.unit}>{t('rate.perMin')}</span>
+                      <CompactFigure value={f.fmt(r.avg)} />
+                      <span className={css.unit}>
+                        <UiCjk text={t('rate.perMin')} />
+                      </span>
                     </>
                   ) : (
                     DASH
@@ -457,7 +468,9 @@ function Details({
                 aria-hidden="true"
               />
               <span className={css.kind}>{t(KIND_LABEL[kind])}</span>
-              <span className="figure">{f.fmt(n)}</span>
+              <span className="figure">
+                <CompactFigure value={f.fmt(n)} />
+              </span>
               <span className={`${css.kindShare} figure`}>{share(n, kindTotal)}</span>
             </li>
           ))}

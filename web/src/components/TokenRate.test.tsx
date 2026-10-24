@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { MINUTE_MS, RATE_MINUTES, type TokenRate as Rate } from '../../../src/shared/rate.js';
 import { I18nContext, makeI18n } from '../i18n';
+import { cjkInMono } from '../test/cjk';
 import { TokenRate } from './TokenRate';
 
 const MINUTE = Date.UTC(2026, 9, 24, 10, 59, 0);
@@ -61,6 +62,17 @@ function renderRate(
 }
 
 describe('TokenRate', () => {
+  // I3b M4: zh compact figures read "144万" and the unit "/分钟": the digits stay figures, the
+  // CJK never goes into the mono face, in the bar, the popover, its chart and its rows.
+  it('keeps Chinese units and words out of the mono face, bar and popover alike', () => {
+    const { button } = renderRate(rate(), null, vi.fn(), 'zh');
+    expect(button()).toHaveTextContent(/万/);
+    fireEvent.click(button());
+    const dialog = screen.getByRole('dialog', { name: 'Token 速率' });
+    expect(dialog).toHaveTextContent(/万/);
+    expect(cjkInMono(document.body)).toEqual([]);
+  });
+
   it('shows the 5-minute average a minute, with the hour as a line, and says every figure', () => {
     const { button } = renderRate(rate());
     expect(button()).toHaveTextContent('1.42M/min');

@@ -1,5 +1,6 @@
 /** The token rate's charts: a line of the last hour, small in the bar and the rows, large in the popover. */
 import { MINUTE_MS, RATE_MINUTES, type TokenRate } from '../../../src/shared/rate.js';
+import { SvgUiCjk } from './CompactFigure';
 
 /** A small line needs this many counted minutes (two whole ones and the current) to say anything. */
 export const SPARK_MIN_POINTS = 3;
@@ -170,7 +171,7 @@ export function RateChart({
             fill="var(--faint)"
             fontFamily="var(--font-mono)"
           >
-            {text}
+            <SvgUiCjk text={text} />
           </text>
         </g>
       ))}
@@ -186,7 +187,7 @@ export function RateChart({
               fill="var(--faint)"
               fontFamily="var(--font-mono)"
             >
-              {sinceLabel}
+              <SvgUiCjk text={sinceLabel} />
             </text>
           )}
         </g>
@@ -212,7 +213,7 @@ export function RateChart({
           fill={k === 2 ? 'var(--muted)' : 'var(--faint)'}
           fontFamily="var(--font-mono)"
         >
-          {tick}
+          <SvgUiCjk text={tick} />
         </text>
       ))}
     </svg>

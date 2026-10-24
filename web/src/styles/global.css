@@ -102,6 +102,11 @@ input {
   font-variant-numeric: tabular-nums;
 }
 
+/* CJK beside a figure (万, /分钟, 现在), even inside a mono run: the UI face (CompactFigure). */
+.figure-unit {
+  font-family: var(--font-ui);
+}
+
 /* A section label ("CONVERSATION 2", "SYSTEM PROMPT"): the only uppercase in the UI. */
 .section-label {
   font-size: var(--fs-label);

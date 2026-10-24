@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import type { TokenRate } from '../../../src/shared/rate.js';
 import { type OpenSession, useRate } from '../data/store';
@@ -5,13 +6,14 @@ import { useNow } from '../data/useNow';
 import { useI18n } from '../i18n';
 import { summarize } from '../lib/agents';
 import { DASH, formatDuration, formatNumber, formatPercent } from '../lib/format';
+import { UiCjk } from './CompactFigure';
 import { Diagnostics } from './Diagnostics';
 import css from './SummaryBar.module.css';
 import { rateText } from './TokenRate';
 
 interface Figure {
   label: string;
-  value: string;
+  value: ReactNode;
   /** Below 900px, behind "More figures": the bar keeps conversations, calls, duration, output. */
   more?: boolean;
   /** Muted after the value, e.g. the thinking share of output. */
@@ -62,7 +64,8 @@ export function SummaryBar({
   if (rate)
     figures.push({
       label: t('summary.rate'),
-      value: rateText(rate, rateAgent, intl, t('rate.perMin')),
+      // "≈9万/分钟" in Chinese: its CJK out of the figure's mono face.
+      value: <UiCjk text={rateText(rate, rateAgent, intl, t('rate.perMin'))} />,
       more: true,
       narrowOnly: true,
     });
