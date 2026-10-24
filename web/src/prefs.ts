@@ -1,4 +1,5 @@
 import type { Locale } from './i18n';
+import { AGENT_TONES } from './lib/agent-names';
 
 export type ThemePref = 'system' | 'light' | 'dark';
 export interface Prefs {
@@ -22,7 +23,10 @@ export function loadPrefs(): Prefs {
       locale: raw?.locale === 'zh' ? 'zh' : 'en',
       theme: raw?.theme === 'light' || raw?.theme === 'dark' ? raw.theme : 'system',
       showProbes: raw?.showProbes === true,
-      rateAgent: typeof raw?.rateAgent === 'string' && raw.rateAgent ? raw.rateAgent : null,
+      // A CLI glassbox knows; anything else (an old or mistyped value) means every CLI.
+      rateAgent: (AGENT_TONES as readonly unknown[]).includes(raw?.rateAgent)
+        ? (raw?.rateAgent as string)
+        : null,
     };
   } catch {
     return DEFAULTS;

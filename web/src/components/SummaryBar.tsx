@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { TokenRate } from '../../../src/shared/rate.js';
-import type { OpenSession } from '../data/store';
+import { type OpenSession, useRate } from '../data/store';
 import { useNow } from '../data/useNow';
 import { useI18n } from '../i18n';
 import { summarize } from '../lib/agents';
@@ -24,16 +24,18 @@ interface Figure {
 export function SummaryBar({
   open,
   agentId,
-  rate = null,
+  rate: given,
   rateAgent = null,
 }: {
   open: OpenSession;
   agentId: string;
-  /** The machine's token rate, for its figure on narrow screens. */
+  /** The machine's token rate, for its figure on narrow screens; the store's when not given. */
   rate?: TokenRate | null;
   rateAgent?: string | null;
 }) {
   const { t, intl } = useI18n();
+  const stored = useRate();
+  const rate = given !== undefined ? given : stored;
   const now = useNow();
   const [more, setMore] = useState(false);
   // Counts only change with the data; the clock only moves the running duration.

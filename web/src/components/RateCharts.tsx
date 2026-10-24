@@ -1,30 +1,16 @@
 /** The token rate's charts: a line of the last hour, small in the bar and the rows, large in the popover. */
 import { MINUTE_MS, RATE_MINUTES, type TokenRate } from '../../../src/shared/rate.js';
 
+/** A small line needs this many counted minutes (two whole ones and the current) to say anything. */
+export const SPARK_MIN_POINTS = 3;
+/** Its axis never spans fewer minutes than this, so a young line does not stretch over the box. */
+const SPARK_MIN_SLOTS = 10;
+
 /**
- * Index of the first minute bucket counted: the server started within the hour, and the minutes
- * before it are unknown, not idle, so the line starts there.
+ * A series as a 1px line in the current colour, no fill, no dots: the counted minutes from `from`,
+ * right-aligned on an axis of max(10, counted) minutes. Nothing under three points: a line of one
+ * or two reads as a fault.
  */
-export function firstCounted(rate: TokenRate): number {
-  const minute = Date.parse(rate.minute);
-  const since = Math.floor(Date.parse(rate.since) / MINUTE_MS) * MINUTE_MS;
-  const index = RATE_MINUTES - 1 - Math.round((minute - since) / MINUTE_MS);
-  return Math.min(RATE_MINUTES - 1, Math.max(0, index));
-}
-
-const points = (
-  values: number[],
-  from: number,
-  x: (i: number) => number,
-  y: (v: number) => number,
-) =>
-  values
-    .map((v, i) => [i, v] as const)
-    .slice(from)
-    .map(([i, v]) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`)
-    .join(' ');
-
-/** A series as a 1px line in the current colour: no fill, no dots. */
 export function Sparkline({
   values,
   width,
@@ -38,8 +24,11 @@ export function Sparkline({
   from?: number;
   className?: string;
 }) {
-  const max = Math.max(1, ...values);
-  const x = (i: number) => (i / (values.length - 1)) * (width - 1) + 0.5;
+  const shown = values.slice(from);
+  if (shown.length < SPARK_MIN_POINTS) return null;
+  const slots = Math.max(SPARK_MIN_SLOTS, shown.length);
+  const max = Math.max(1, ...shown);
+  const x = (j: number) => ((slots - shown.length + j) / (slots - 1)) * (width - 1) + 0.5;
   const y = (v: number) => height - 0.5 - (v / max) * (height - 1);
   return (
     <svg
@@ -48,9 +37,10 @@ export function Sparkline({
       height={height}
       viewBox={`0 0 ${width} ${height}`}
       aria-hidden="true"
+      data-points={shown.length}
     >
       <polyline
-        points={points(values, from, x, y)}
+        points={shown.map((v, j) => `${x(j).toFixed(1)},${y(v).toFixed(1)}`).join(' ')}
         fill="none"
         stroke="currentColor"
         strokeWidth={1}
@@ -68,33 +58,73 @@ export function niceStep(span: number): number {
   return (unit <= 1 ? 1 : unit <= 2 ? 2 : unit <= 2.5 ? 2.5 : unit <= 5 ? 5 : 10) * power;
 }
 
+/**
+ * The y labels in one unit, the top tick's, as compact notation names it in `locale`
+ * ("1.5M / 1.0M / 0.5M / 0", "150万 / 100万 / 50万 / 0"), with the decimals the step needs.
+ */
+export function axisLabels(step: number, ticks: number, locale?: string): string[] {
+  const top = step * ticks;
+  const parts = new Intl.NumberFormat(locale, { notation: 'compact' }).formatToParts(top);
+  const shown = Number(
+    parts
+      .filter((p) => p.type === 'integer' || p.type === 'decimal' || p.type === 'fraction')
+      .map((p) => (p.type === 'decimal' ? '.' : p.value))
+      .join(''),
+  );
+  const unit = parts.find((p) => p.type === 'compact')?.value ?? '';
+  const divisor = shown > 0 ? top / shown : 1;
+  const inUnit = step / divisor;
+  const decimals = Number.isInteger(inUnit) ? 0 : Number.isInteger(inUnit * 10) ? 1 : 2;
+  const number = new Intl.NumberFormat(locale, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+  return Array.from({ length: ticks + 1 }, (_, k) =>
+    k === 0 ? '0' : `${number.format((k * step) / divisor)}${unit}`,
+  );
+}
+
 const LABELS = 34;
 const PLOT_W = 300;
 const PLOT_H = 96;
 const AXIS = 18;
+/** Room left of the "counting since" rule that its label needs. */
+const SINCE_LABEL_ROOM = 110;
 
 /**
- * The hour as a line on a hairline grid, with round y labels, "−60 min / −30 / now" under it,
- * and a "now" rule with a dot at the latest value. The figures are in `label`.
+ * The hour on a fixed 60-minute axis: a hairline grid with round y labels, "−60 min / −30 / now"
+ * under it, a "now" rule with a dot at the latest value, and the line from the first whole
+ * counted minute. When counting began within the hour, a rule marks when; with room, it says so.
+ * Nothing is drawn for the minutes before: they are unknown, not zero. The figures are in `label`.
  */
 export function RateChart({
+  rate,
   values,
   from,
-  format,
+  locale,
   label,
   ticksX,
+  sinceLabel,
 }: {
+  rate: TokenRate;
   values: number[];
   from: number;
-  format: (n: number) => string;
+  locale?: string;
   label: string;
   ticksX: [string, string, string];
+  /** "counting since 15:22" when counting began within the hour; null otherwise. */
+  sinceLabel: string | null;
 }) {
-  const step = niceStep(Math.max(...values) / 3);
+  const shown = values.slice(from);
+  const step = niceStep(Math.max(0, ...shown) / 3);
+  const labels = axisLabels(step, 3, locale);
   const top = step * 3;
-  const x = (i: number) => LABELS + (i / (values.length - 1)) * PLOT_W;
+  const x = (i: number) => LABELS + (i / (RATE_MINUTES - 1)) * PLOT_W;
   const y = (v: number) => 4 + (PLOT_H - 4) * (1 - v / top);
-  const last = values.length - 1;
+  const last = RATE_MINUTES - 1;
+  // Where counting began, on the minute axis (bucket i starts `last - i` minutes before `minute`).
+  const sinceAt = last - (Date.parse(rate.minute) - Date.parse(rate.since)) / MINUTE_MS;
+  const sinceX = sinceLabel !== null ? x(Math.max(0, sinceAt)) : null;
   return (
     <svg
       width={LABELS + PLOT_W}
@@ -104,8 +134,8 @@ export function RateChart({
       aria-label={label}
       data-chart
     >
-      {[0, 1, 2, 3].map((k) => (
-        <g key={k}>
+      {labels.map((text, k) => (
+        <g key={text}>
           <line
             x1={LABELS}
             x2={LABELS + PLOT_W}
@@ -121,19 +151,40 @@ export function RateChart({
             fill="var(--faint)"
             fontFamily="var(--font-mono)"
           >
-            {format(k * step)}
+            {text}
           </text>
         </g>
       ))}
+      {sinceX !== null && (
+        <g data-since>
+          <line x1={sinceX} x2={sinceX} y1={4} y2={PLOT_H} stroke="var(--muted)" />
+          {sinceX - LABELS >= SINCE_LABEL_ROOM && (
+            <text
+              x={sinceX - 6}
+              y={PLOT_H / 2 + 3}
+              textAnchor="end"
+              fontSize={10}
+              fill="var(--faint)"
+              fontFamily="var(--font-mono)"
+            >
+              {sinceLabel}
+            </text>
+          )}
+        </g>
+      )}
       <line x1={x(last)} x2={x(last)} y1={4} y2={PLOT_H} stroke="var(--muted)" />
-      <polyline
-        points={points(values, from, x, y)}
-        fill="none"
-        stroke="var(--text)"
-        strokeWidth={1.5}
-        strokeLinejoin="round"
-      />
-      <circle cx={x(last)} cy={y(values[last] ?? 0)} r={1.6} fill="var(--text)" />
+      {shown.length > 1 && (
+        <polyline
+          points={shown.map((v, j) => `${x(from + j).toFixed(1)},${y(v).toFixed(1)}`).join(' ')}
+          fill="none"
+          stroke="var(--text)"
+          strokeWidth={1.5}
+          strokeLinejoin="round"
+        />
+      )}
+      {shown.length > 0 && (
+        <circle cx={x(last)} cy={y(values[last] ?? 0)} r={2.6} fill="var(--text)" />
+      )}
       {ticksX.map((tick, k) => (
         <text
           key={tick}

@@ -78,9 +78,32 @@ export function ratePerMinute(rate: TokenRate, scope: RateScope = {}, minutes = 
   return tokens / Math.max(1, span);
 }
 
-/** Tokens in the last complete minute. */
-export function lastMinute(rate: TokenRate, scope: RateScope = {}): number {
+/** Tokens in the last complete minute; null when counting began after that minute started. */
+export function lastMinute(rate: TokenRate, scope: RateScope = {}): number | null {
+  const start = Date.parse(rate.minute) - MINUTE_MS;
+  if (start < Date.parse(rate.since)) return null;
   return rateSeries(rate, scope).at(-2) ?? 0;
+}
+
+/**
+ * When counting began, if that was within the hour the series cover: the "60-min" figures then
+ * cover only the time since. Null when the whole hour is counted.
+ */
+export function countedSince(rate: TokenRate): Date | null {
+  const since = Date.parse(rate.since);
+  const windowStart = Date.parse(rate.minute) - (RATE_MINUTES - 1) * MINUTE_MS;
+  return since > windowStart ? new Date(since) : null;
+}
+
+/**
+ * Index of the first bucket counted whole: the first minute that starts at or after `since`.
+ * The minute counting began in is partial, so a line drawn from it would dip.
+ */
+export function firstCountedIndex(rate: TokenRate): number {
+  const minute = Date.parse(rate.minute);
+  const first = Math.ceil(Date.parse(rate.since) / MINUTE_MS) * MINUTE_MS;
+  const index = RATE_MINUTES - 1 - Math.round((minute - first) / MINUTE_MS);
+  return Math.min(RATE_MINUTES - 1, Math.max(0, index));
 }
 
 /** Tokens counted in the whole hour of history. */

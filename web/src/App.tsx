@@ -206,7 +206,6 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
             live={summary?.live ?? null}
             connection={state.connection}
             quotas={state.quotas}
-            rate={state.rate}
             follow={follow}
             onFollow={setFollow}
             prefs={prefs}
@@ -252,7 +251,6 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
                       route={route}
                       navigate={navigate}
                       live={run?.partial ?? null}
-                      rate={state.rate}
                       rateAgent={prefs.rateAgent}
                     />
                   </ApprovalsContext.Provider>

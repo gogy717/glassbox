@@ -640,6 +640,31 @@ describe('App token rate', () => {
   });
 });
 
+describe('App top-bar popovers', () => {
+  it('keeps one open at a time, also when opened from the keyboard', () => {
+    const store = createStore();
+    store.applyEvent({ type: 'quota', quotas: [createDemoQuota(DEMO_NOW)] });
+    store.applyEvent({
+      type: 'rate',
+      rate: {
+        minute: '2026-10-23T02:00:00.000Z',
+        at: '2026-10-23T02:00:30.000Z',
+        since: '2026-10-23T01:00:00.000Z',
+        agents: {},
+        coverage: { running: 0, counted: 0, agents: {} },
+      },
+    });
+    render(<App store={store} connect={noConnect} />);
+    const banner = screen.getByRole('banner');
+    // A keyboard press is a click with no pointerdown before it.
+    fireEvent.click(within(banner).getByRole('button', { name: /Plan quota/ }));
+    expect(screen.getByRole('dialog', { name: 'Plan quota' })).toBeInTheDocument();
+    fireEvent.click(within(banner).getByRole('button', { name: /^Token rate/ }));
+    expect(screen.getByRole('dialog', { name: 'Token rate' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Plan quota' })).toBeNull();
+  });
+});
+
 describe('sidebarMode', () => {
   it.each([
     [1440, true, 'column'],

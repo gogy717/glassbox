@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  countedSince,
+  firstCountedIndex,
   hourTotal,
   lastMinute,
   MINUTE_MS,
@@ -85,5 +87,25 @@ describe('rate helpers', () => {
   it('lists the agents with anything counted', () => {
     expect(rateAgents(rate()).sort()).toEqual(['claude-code', 'codex']);
     expect(rateAgents(rate({ agents: {} }))).toEqual([]);
+  });
+
+  it('knows the last minute only once it was counted whole', () => {
+    // Counting began 30 s into the last complete minute: that minute is unknown, not 0.
+    const young = rate({ since: new Date(MINUTE - 30_000).toISOString() });
+    expect(lastMinute(young)).toBeNull();
+    expect(lastMinute(rate({ since: new Date(MINUTE - MINUTE_MS).toISOString() }))).toBe(1150);
+  });
+
+  it('says when counting began if that was within the hour', () => {
+    expect(countedSince(rate())).toBeNull();
+    const since = new Date(MINUTE - 12 * MINUTE_MS + 20_000);
+    expect(countedSince(rate({ since: since.toISOString() }))).toEqual(since);
+  });
+
+  it('starts the line at the first minute counted whole', () => {
+    // Since 11:46:20: the 11:46 bucket is partial, so the line starts at 11:47, index 47.
+    const since = new Date(MINUTE - 13 * MINUTE_MS + 20_000).toISOString();
+    expect(firstCountedIndex(rate({ since }))).toBe(RATE_MINUTES - 1 - 12);
+    expect(firstCountedIndex(rate())).toBe(0);
   });
 });

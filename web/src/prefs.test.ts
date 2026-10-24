@@ -31,7 +31,7 @@ describe('prefs', () => {
       showProbes: true,
       rateAgent: 'codex',
     });
-    localStorage.setItem('glassbox.prefs', '{"locale":"fr","showProbes":"yes","rateAgent":7}');
+    localStorage.setItem('glassbox.prefs', '{"locale":"fr","showProbes":"yes","rateAgent":"foo"}');
     expect(loadPrefs()).toEqual({
       locale: 'en',
       theme: 'system',

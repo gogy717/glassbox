@@ -184,4 +184,54 @@ describe('TokenRate', () => {
     expect(dialog).toHaveTextContent('最近 60 分钟 · 本机所有 CLI');
     expect(dialog).toHaveTextContent('统计了 2 个运行中会话里的 2 个。');
   });
+
+  it('keeps All and the chosen CLI’s chip when that CLI has left the hour, so the filter can be undone', () => {
+    const { button, onAgent } = renderRate(rate({ agents: {} }), 'grok');
+    fireEvent.click(button());
+    const group = screen.getByRole('group', { name: 'Show the rate of' });
+    expect(
+      within(group)
+        .getAllByRole('button')
+        .map((c) => [c.textContent, c.getAttribute('aria-pressed')]),
+    ).toEqual([
+      ['All', 'false'],
+      ['Grok', 'true'],
+    ]);
+    fireEvent.click(within(group).getByRole('button', { name: 'All' }));
+    expect(onAgent).toHaveBeenLastCalledWith(null);
+  });
+
+  it('points the instrument at its popover, and marks the headline that misses sessions too', () => {
+    const { button } = renderRate(rate({ coverage: { running: 3, counted: 2, agents: {} } }));
+    fireEvent.click(button());
+    const dialog = screen.getByRole('dialog', { name: 'Token rate' });
+    expect(button()).toHaveAttribute('aria-controls', dialog.id);
+    expect(dialog).toHaveTextContent('5-min average≈1.42M/min');
+    expect(
+      within(dialog).getByTitle('Counting 2 of 3 running sessions: the rate misses some'),
+    ).toBeInTheDocument();
+  });
+
+  it('says "since" for the hour’s figures while counting began within it, and no last minute before it', () => {
+    // Counting began 70 s before `at`, inside the last complete minute: that minute is unknown.
+    const young = rate({ since: new Date(MINUTE + 30_000 - 70_000).toISOString() });
+    const time = new Intl.DateTimeFormat('en', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).format(new Date(MINUTE + 30_000 - 70_000));
+    const { button } = renderRate(young);
+    // No bar line yet: fewer than three minutes counted.
+    expect(button().querySelector('svg[data-points]')).toBeNull();
+    expect(button()).toHaveAccessibleName(
+      new RegExp(`^Token rate: .+ tokens a minute over the last 5 minutes, 6\\.41M since ${time}$`),
+    );
+    fireEvent.click(button());
+    const dialog = screen.getByRole('dialog', { name: 'Token rate' });
+    expect(dialog.querySelector('[data-since]')).toHaveTextContent(`Since ${time}`);
+    expect(dialog).toHaveTextContent('Last minute—');
+    expect(
+      within(dialog).getByRole('img', { name: new RegExp(`^Tokens a minute since ${time}: `) }),
+    ).toBeInTheDocument();
+  });
 });

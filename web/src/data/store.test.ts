@@ -279,3 +279,24 @@ describe('session-missing', () => {
     expect(store.getState().missingId).toBeNull();
   });
 });
+
+describe('token rate', () => {
+  it('reaches rate subscribers only: a push does not re-render the page', () => {
+    const store = createStore();
+    const page = vi.fn();
+    const instruments = vi.fn();
+    store.subscribe(page);
+    store.subscribeRate(instruments);
+    const rate = {
+      minute: '2026-10-24T10:00:00.000Z',
+      at: '2026-10-24T10:00:05.000Z',
+      since: '2026-10-24T09:00:00.000Z',
+      agents: {},
+      coverage: { running: 0, counted: 0, agents: {} },
+    };
+    store.applyEvent({ type: 'rate', rate });
+    expect(instruments).toHaveBeenCalledTimes(1);
+    expect(page).not.toHaveBeenCalled();
+    expect(store.getRate()).toBe(rate);
+  });
+});

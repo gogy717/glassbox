@@ -1,12 +1,12 @@
 import { Eye, Menu, SlidersHorizontal } from 'lucide-react';
-import { type Ref, useEffect, useRef, useState } from 'react';
+import { type Ref, useCallback, useEffect, useRef, useState } from 'react';
 import type { AgentKind, LiveState, QuotaSnapshot } from '../../../src/core/model.js';
-import type { TokenRate as Rate } from '../../../src/shared/rate.js';
 import type { ConnectionState } from '../data/store';
 import { useNow } from '../data/useNow';
 import { useI18n } from '../i18n';
 import type { Prefs } from '../prefs';
 import { AgentTag } from './AgentTag';
+import { useOnePopover } from './popover';
 import { QuotaBar } from './QuotaBar';
 import { LiveDot } from './Status';
 import { TokenRate } from './TokenRate';
@@ -25,8 +25,6 @@ interface Props {
   live: LiveState | null;
   connection: ConnectionState;
   quotas: QuotaSnapshot[];
-  /** The machine's token rate; null until the server sends it. */
-  rate: Rate | null;
   follow: boolean;
   onFollow(on: boolean): void;
   prefs: Prefs;
@@ -69,7 +67,6 @@ export function TopBar(p: Props) {
       )}
       <span className={css.spacer} />
       <TokenRate
-        rate={p.rate}
         agent={p.prefs.rateAgent}
         onAgent={(rateAgent) => p.onPrefs({ ...p.prefs, rateAgent })}
         sessionOpen={p.title !== null}
@@ -125,6 +122,8 @@ function TopQuota({ quotas }: { quotas: QuotaSnapshot[] }) {
 function SettingsMenu({ prefs, onPrefs }: { prefs: Prefs; onPrefs(p: Prefs): void }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  useOnePopover('settings', open, close);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;

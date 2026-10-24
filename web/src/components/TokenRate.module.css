@@ -225,6 +225,13 @@
   white-space: nowrap;
 }
 
+/* Holds the column while a young line is not drawn yet. */
+.miniCell {
+  display: flex;
+  justify-content: flex-end;
+  height: 12px;
+}
+
 .mini {
   color: var(--text);
 }
