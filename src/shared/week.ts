@@ -23,8 +23,8 @@ export interface WeekWindow {
   /**
    * Start (epoch ms) of each hour of the window, in order: local whole hours. 'week': from this
    * Monday 00:00 to next Monday 00:00 (168 hours; 167 or 169 in a week that changes the clocks),
-   * hours after `now` included and empty. '7d': the 168 whole hours before the current one, then
-   * the current one (169).
+   * hours after `now` included and empty. '7d': 168 hours ending with the current one (e.g.
+   * Sat 17 21:00 → Sat 24 20:00 at 20:41), the current one still in progress.
    */
   hourStarts: number[];
   /** When the window ends: the time of the request. Hours starting after it are the future. */

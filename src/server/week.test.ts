@@ -110,7 +110,7 @@ describe('the weekly receipt’s data', () => {
 
   it('switches windows without reading again, and refresh reads only what changed', async () => {
     // Sat 24 Oct: this week starts Mon 19 Oct; a session of Sat 17 Oct is only in the last 7 days.
-    const snaps = [old(0.5, 'today'), old(2, 'thursday'), old(6.9, 'last-saturday')];
+    const snaps = [old(0.5, 'today'), old(2, 'thursday'), old(6.8, 'last-saturday')];
     const f = fakeStore(snaps);
     let now = NOW;
     const svc = new WeekService(f.store, { now: () => now });
@@ -120,7 +120,7 @@ describe('the weekly receipt’s data', () => {
     expect(f.reads.sort()).toEqual(['last-saturday', 'thursday', 'today']);
     expect(d7.stats).toMatchObject({ read: 1, cached: 2 });
     expect(w.window.hourStarts).toHaveLength(168);
-    expect(d7.window.hourStarts).toHaveLength(169);
+    expect(d7.window.hourStarts).toHaveLength(168);
 
     // One session moves on: a plain open still serves what was read, as of then.
     const moved = snaps[0] as SessionSnapshot;

@@ -47,7 +47,7 @@ export function weekWindow(kind: WeekWindowKind, now: number): WeekWindow {
     end = next.getTime();
   } else {
     end = nextHour(hourStart(now));
-    start = hourStart(now) - 168 * HOUR_MS;
+    start = hourStart(now) - 167 * HOUR_MS;
   }
   const hourStarts: number[] = [];
   for (let h = start; h < end; h = nextHour(h)) hourStarts.push(h);

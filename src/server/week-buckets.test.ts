@@ -53,12 +53,12 @@ describe('windows', () => {
     expect(w.now).toBe(now);
   });
 
-  it('takes the last 7 days as the 168 whole hours before the current one, and it', () => {
+  it('takes the last 7 days as 168 hours ending with the current one (R20)', () => {
     const now = new Date(2026, 9, 24, 20, 41).getTime();
     const w = weekWindow('7d', now);
-    expect(w.hourStarts).toHaveLength(169);
+    expect(w.hourStarts).toHaveLength(168);
     expect(w.hourStarts.at(-1)).toBe(new Date(2026, 9, 24, 20, 0).getTime());
-    expect(w.hourStarts[0]).toBe(new Date(2026, 9, 24, 20, 0).getTime() - 168 * HOUR_MS);
+    expect(w.hourStarts[0]).toBe(new Date(2026, 9, 17, 21, 0).getTime());
   });
 
   it('has 167 hours in the week the clocks go forward, on local whole hours', () => {
