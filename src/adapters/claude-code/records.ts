@@ -684,11 +684,37 @@ export function isSlashCommand(text: string): boolean {
   return tagContent(text, 'command-name') !== undefined;
 }
 
+/** The longest title, in characters (code points). The UI cuts what does not fit its row. */
+export const TITLE_MAX = 160;
+
+const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+
+/**
+ * `text` in at most `max` characters, never cut without a mark: a longer one ends at a word
+ * boundary with "…", or between two characters when there is no space near the end (CJK, a long
+ * path). It never splits a character: not a surrogate pair, an emoji sequence or an accent.
+ */
+export function shortTitle(text: string, max = TITLE_MAX): string {
+  if ([...text].length <= max) return text;
+  let head = '';
+  let n = 0;
+  for (const { segment } of graphemes.segment(text)) {
+    const size = [...segment].length;
+    if (n + size > max - 1) break;
+    head += segment;
+    n += size;
+  }
+  // A space in the last part of the head is a word boundary worth cutting at.
+  const space = head.lastIndexOf(' ');
+  return `${(space >= head.length * 0.6 ? head.slice(0, space) : head).trimEnd()}…`;
+}
+
 /** A prompt as a one-line session title; null when nothing a person typed is left. */
 export function cleanPrompt(text: string): string | null {
   const cleaned = cleanTurnPrompt(text);
   if (LABEL.test(cleaned)) return null;
-  return cleaned.replace(/\s+/g, ' ').trim().slice(0, 80) || null;
+  const line = cleaned.replace(/\s+/g, ' ').trim();
+  return line ? shortTitle(line) : null;
 }
 
 /**

@@ -111,15 +111,29 @@
   flex: none;
 }
 
-/* The project before the title, whole: the title gives way. */
+/* The project before the title, whole: the title gives way. Only a very long name is cut, at
+   two fifths of the line, its whole name in the tooltip. */
 .project {
+  display: inline-flex;
   flex: none;
+  align-items: baseline;
+  gap: 0.3em;
+  min-width: 0;
+  max-width: 40%;
   font-size: var(--fs-body);
   font-weight: 400;
   color: var(--muted);
 }
 
+.name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .slash {
+  flex: none;
   color: var(--faint);
 }
 

@@ -136,12 +136,13 @@ describe('Home', () => {
     expect(titles(recent)).toEqual([1, 2, 3, 4, 5, 6].map((i) => `Session ${i}`));
   });
 
-  it('opens the most recently active session from the first section', () => {
+  it('opens the most recently active session of all, running or not', () => {
+    // The idle one moved 3 minutes ago, the running one 9 minutes ago.
     const sessions = [session('a', 'idle', 3), session('b', 'busy', 9)];
     const { onOpen } = renderHome(sessions);
     const running = screen.getByRole('region', { name: 'Running' });
     fireEvent.click(within(running).getByRole('button', { name: /most recently active/ }));
-    expect(onOpen).toHaveBeenCalledWith(sessions[1]?.id);
+    expect(onOpen).toHaveBeenCalledWith(sessions[0]?.id);
   });
 
   it('is one tab stop: the arrows move between rows, across groups and sections', () => {

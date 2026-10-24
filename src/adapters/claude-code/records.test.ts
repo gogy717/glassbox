@@ -9,7 +9,15 @@ import {
   turnDuration,
   userPrompt,
 } from './__fixtures__/builders.js';
-import { cleanPrompt, cleanTurnPrompt, mapUsage, parseRecord, pickTitle } from './records.js';
+import {
+  cleanPrompt,
+  cleanTurnPrompt,
+  mapUsage,
+  parseRecord,
+  pickTitle,
+  shortTitle,
+  TITLE_MAX,
+} from './records.js';
 
 describe('parseRecord', () => {
   it('returns invalid for lines that are not a JSON object', () => {
@@ -206,8 +214,39 @@ describe('cleanPrompt', () => {
     expect(cleanPrompt(input)).toBe(expected);
   });
 
-  it('caps titles at 80 characters', () => {
-    expect(cleanPrompt('y'.repeat(200))).toHaveLength(80);
+  it('keeps a title of up to 160 characters whole', () => {
+    expect(TITLE_MAX).toBe(160);
+    for (const n of [80, 160]) expect(cleanPrompt('y'.repeat(n))).toBe('y'.repeat(n));
+  });
+
+  it('cuts a longer title at a word boundary, with an ellipsis', () => {
+    const words = Array.from({ length: 40 }, (_, i) => `word${i}`).join(' ');
+    const title = cleanPrompt(words) ?? '';
+    expect([...title].length).toBeLessThanOrEqual(160);
+    expect(title).toMatch(/ word\d+…$/);
+    expect(words.startsWith(title.slice(0, -1))).toBe(true);
+    expect(words[title.length - 1]).toBe(' ');
+  });
+
+  it('cuts text with no spaces between characters, with an ellipsis', () => {
+    const cjk = '修复登录测试里偶发的超时问题'.repeat(20);
+    const title = cleanPrompt(cjk) ?? '';
+    expect([...title]).toHaveLength(160);
+    expect(title.endsWith('…')).toBe(true);
+    expect(cjk.startsWith(title.slice(0, -1))).toBe(true);
+    expect(cleanPrompt('y'.repeat(200))).toBe(`${'y'.repeat(159)}…`);
+  });
+
+  it('never splits a character: a surrogate pair, an emoji sequence', () => {
+    const family = '👨‍👩‍👧';
+    for (const s of ['😀'.repeat(200), `${'y'.repeat(157)}${family}${'y'.repeat(9)}`]) {
+      const title = shortTitle(s);
+      expect([...title].length).toBeLessThanOrEqual(160);
+      expect(title).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|\u200D…$/);
+      expect(s.startsWith(title.slice(0, -1))).toBe(true);
+    }
+    // The family (five code points) does not fit before the 159th: it is left out whole.
+    expect(shortTitle(`${'y'.repeat(157)}${family}${'y'.repeat(9)}`)).toBe(`${'y'.repeat(157)}…`);
   });
 });
 

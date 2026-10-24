@@ -1,4 +1,8 @@
+/// <reference types="node" />
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fireEvent, render, screen } from '@testing-library/react';
+import postcss from 'postcss';
 import { describe, expect, it, vi } from 'vitest';
 import { createDemoSessions } from '../../../src/core/fixtures/demo.js';
 import type { SessionSummary } from '../../../src/core/model.js';
@@ -112,6 +116,24 @@ describe('SessionRow', () => {
         failure: 'missing file',
       });
       expect(row.lastElementChild).toHaveTextContent(/^Failed · missing file · .+ ago$/);
+    });
+
+    it('cuts a very long project at two fifths of the line, its whole name in the tooltip', () => {
+      const project = 'a-very-long-monorepo-package-name-that-goes-on-and-on-forever';
+      const row = renderRow({ ...idle, project }, false, vi.fn(), 'en', { density: 'card' });
+      expect(row.querySelector(`[title="${project}"]`)).toHaveTextContent(`${project} /`);
+      const css = readFileSync(join(import.meta.dirname, 'SessionRow.module.css'), 'utf8');
+      const decls = (selector: string) => {
+        const out: Record<string, string> = {};
+        postcss.parse(css).walkRules(selector, (r) => {
+          r.walkDecls((d) => {
+            out[d.prop] = d.value;
+          });
+        });
+        return out;
+      };
+      expect(decls('.project')).toMatchObject({ 'max-width': '40%', 'min-width': '0' });
+      expect(decls('.name')).toMatchObject({ overflow: 'hidden', 'text-overflow': 'ellipsis' });
     });
 
     it('writes no project before the title when it has none', () => {

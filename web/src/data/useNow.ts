@@ -35,7 +35,15 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
-const snapshot = () => second;
+/**
+ * The shared clock's time. Stopped (no label on screen), it catches up with the wall clock
+ * before it is read, at most once a second so that two reads in one render agree: a label
+ * mounted after a pause starts from now, not from when the last one went away.
+ */
+function snapshot(): number {
+  if (timer === null && Math.abs(Date.now() - second) >= 1000) second = Date.now();
+  return second;
+}
 
 /** Wall-clock milliseconds from the shared 1 s clock, for labels that count seconds. */
 export function useSecond(): number {

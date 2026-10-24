@@ -626,7 +626,8 @@ describe('turn status', () => {
 describe('session summary', () => {
   it('title: latest custom title, else latest AI title, else the first human prompt', () => {
     const prompt = userPrompt({ text: `  fix   the\nbuild ${'y'.repeat(100)}` });
-    expect(parseMain(prompt).snapshot().session.title).toBe(`fix the build ${'y'.repeat(66)}`);
+    // Whitespace collapsed; 114 characters fit the 160 a title may have.
+    expect(parseMain(prompt).snapshot().session.title).toBe(`fix the build ${'y'.repeat(100)}`);
     expect(
       parseMain(prompt, aiTitle({ title: 'AI one' }), aiTitle({ title: 'AI two' })).snapshot()
         .session.title,

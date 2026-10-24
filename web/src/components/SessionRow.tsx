@@ -81,8 +81,9 @@ export function SessionRow({
         <span className={css.head}>
           <AgentTag kind={s.agent} />
           {s.project && (
-            <span className={css.project}>
-              {s.project} <span className={css.slash}>/</span>
+            <span className={css.project} title={s.project}>
+              <span className={css.name}>{s.project}</span>
+              <span className={css.slash}> /</span>
             </span>
           )}
           <span className={css.title} data-clip>

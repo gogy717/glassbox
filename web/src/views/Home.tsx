@@ -108,7 +108,8 @@ export function Home({
       </div>
     );
 
-  const latest = rows[0];
+  // The most recently active of all the rows, running or not.
+  const latest = [...rows].sort(newestFirst)[0];
   const list = (items: SessionSummary[]) => (
     <ul className={css.rows}>
       {items.map((s) => (

@@ -35,4 +35,19 @@ describe('useNow', () => {
     for (const h of hooks) h.unmount();
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  it('starts a label mounted after a pause from now, from its first render', () => {
+    const start = Date.parse('2026-10-23T10:00:00.000Z');
+    renderHook(() => useSecond()).unmount();
+    expect(vi.getTimerCount()).toBe(0);
+    // An hour with no label on screen, so no tick moved the clock.
+    vi.setSystemTime(start + 3_600_000);
+    const seen: number[] = [];
+    renderHook(() => {
+      const now = useSecond();
+      seen.push(now);
+      return now;
+    });
+    expect(seen[0]).toBe(start + 3_600_000);
+  });
 });
