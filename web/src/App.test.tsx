@@ -567,6 +567,22 @@ describe('App', () => {
     expect(window.location.hash).toContain('agent=a1b2c3d4e5f60718');
   });
 
+  // Final review M9: every popover closes on Escape and gives focus back to its trigger.
+  it('closes each popover on Escape, wherever focus is, and focuses its trigger again', () => {
+    window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}`;
+    const store = demoStore();
+    store.applyEvent({ type: 'quota', quotas: [createDemoQuota(DEMO_NOW)] });
+    render(<App store={store} connect={noConnect} />);
+    for (const name of ['Settings', /^Plan quota/, /^Data diagnostics/, 'Switch sub-agent']) {
+      const trigger = screen.getByRole('button', { name });
+      fireEvent.click(trigger);
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      fireEvent.keyDown(document.body, { key: 'Escape' });
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(trigger).toHaveFocus();
+    }
+  });
+
   it('speaks English, and says so to the page, even in a Chinese browser', () => {
     localStorage.clear();
     const languages = vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['zh-CN', 'zh']);

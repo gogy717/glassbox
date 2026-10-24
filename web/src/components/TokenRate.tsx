@@ -1,13 +1,5 @@
 import { TrendingUp } from 'lucide-react';
-import {
-  type CSSProperties,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-} from 'react';
+import { type CSSProperties, type ReactNode, useCallback, useId, useRef, useState } from 'react';
 import type { AgentKind } from '../../../src/core/model.js';
 import {
   countedSince,
@@ -28,7 +20,7 @@ import { AGENT_TONES, agentColors, agentName } from '../lib/agent-names';
 import { DASH, formatCompact } from '../lib/format';
 import { AgentTag } from './AgentTag';
 import { CompactFigure, UiCjk } from './CompactFigure';
-import { useOnePopover } from './popover';
+import { useOnePopover, usePopoverDismiss } from './popover';
 import { RateChart, Sparkline } from './RateCharts';
 import css from './TokenRate.module.css';
 
@@ -134,23 +126,7 @@ export function TokenRate({ rate: given, agent, onAgent, sessionOpen }: Props) {
   const popoverId = useId();
   const close = useCallback(() => setOpen(false), []);
   useOnePopover('rate', open, close);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: PointerEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      setOpen(false);
-      buttonRef.current?.focus();
-    };
-    document.addEventListener('pointerdown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('pointerdown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
+  usePopoverDismiss(ref, open, close, buttonRef);
   if (!rate) return null;
   return (
     <div className={css.wrap} ref={ref} data-session={sessionOpen || undefined}>

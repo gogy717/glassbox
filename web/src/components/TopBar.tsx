@@ -1,12 +1,12 @@
 import { Eye, Menu, SlidersHorizontal } from 'lucide-react';
-import { type Ref, useCallback, useEffect, useRef, useState } from 'react';
+import { type Ref, useCallback, useRef, useState } from 'react';
 import type { AgentKind, LiveState, QuotaSnapshot } from '../../../src/core/model.js';
 import type { ConnectionState } from '../data/store';
 import { useNow } from '../data/useNow';
 import { useI18n } from '../i18n';
 import type { Prefs } from '../prefs';
 import { AgentTag } from './AgentTag';
-import { useOnePopover } from './popover';
+import { useOnePopover, usePopoverDismiss } from './popover';
 import { QuotaBar } from './QuotaBar';
 import { LiveDot } from './Status';
 import { TokenRate } from './TokenRate';
@@ -125,23 +125,13 @@ function SettingsMenu({ prefs, onPrefs }: { prefs: Prefs; onPrefs(p: Prefs): voi
   const close = useCallback(() => setOpen(false), []);
   useOnePopover('settings', open, close);
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: PointerEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
-    document.addEventListener('pointerdown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('pointerdown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  usePopoverDismiss(ref, open, close, buttonRef);
 
   return (
     <div className={css.settings} ref={ref}>
       <button
+        ref={buttonRef}
         type="button"
         className={css.iconButton}
         aria-label={t('settings.title')}

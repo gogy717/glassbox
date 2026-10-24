@@ -1,9 +1,10 @@
 import { Activity } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { Diagnostics as Diag } from '../../../src/core/model.js';
 import { useSessionAgent } from '../data/session-agent';
 import { type MessageKey, useI18n } from '../i18n';
 import css from './Diagnostics.module.css';
+import { usePopoverDismiss } from './popover';
 
 /** `Diagnostics.unavailable` keys we can explain; any other key is shown as is. */
 const GAPS: Record<string, MessageKey> = {
@@ -28,20 +29,10 @@ export function Diagnostics({ diagnostics: d }: { diagnostics: Diag }) {
   const { t, intl } = useI18n();
   const agent = useSessionAgent();
   const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: PointerEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
-    document.addEventListener('pointerdown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('pointerdown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  usePopoverDismiss(ref, open, close, buttonRef);
 
   const unknown = Object.entries(d.unknownRecordTypes).filter(([k]) => k !== SUPERSEDED);
   const superseded = d.unknownRecordTypes[SUPERSEDED] ?? 0;
@@ -55,6 +46,7 @@ export function Diagnostics({ diagnostics: d }: { diagnostics: Diag }) {
   return (
     <div className={css.wrap} ref={ref}>
       <button
+        ref={buttonRef}
         type="button"
         className={css.button}
         aria-label={`${t('diag.title')} · ${count}`}

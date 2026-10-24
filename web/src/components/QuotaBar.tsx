@@ -1,12 +1,12 @@
 import { Gauge } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { QuotaSnapshot, QuotaWindow } from '../../../src/core/model.js';
 import { type MessageKey, useI18n } from '../i18n';
 import { formatCountdown, formatRelative, formatResetTime } from '../lib/format';
 import { providerName, providerShortName } from '../lib/provider-names';
 import { quotaWindowName } from '../lib/quota';
 import { FigureText } from './FigureText';
-import { useOnePopover } from './popover';
+import { useOnePopover, usePopoverDismiss } from './popover';
 import css from './QuotaBar.module.css';
 
 interface Props {
@@ -60,19 +60,8 @@ export function QuotaBar({ quotas, now }: Props) {
   const close = useCallback(() => setOpen(false), []);
   useOnePopover('quota', open, close);
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: PointerEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
-    document.addEventListener('pointerdown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('pointerdown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  usePopoverDismiss(ref, open, close, buttonRef);
 
   const shown = quotas.filter((q) => q.windows.length > 0 || q.balance);
   if (shown.length === 0) return null;
@@ -124,7 +113,13 @@ export function QuotaBar({ quotas, now }: Props) {
       data-many={shown.length >= MANY || undefined}
       data-single={shown.length === 1 || undefined}
     >
-      <button type="button" className={css.bar} aria-expanded={open} onClick={() => setOpen(!open)}>
+      <button
+        ref={buttonRef}
+        type="button"
+        className={css.bar}
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
         <Gauge size={14} aria-hidden="true" className={css.icon} />
         <span className="visually-hidden">{t('quota.title')}</span>
         {meters.map((m) => {

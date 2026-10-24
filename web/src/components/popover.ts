@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { type RefObject, useEffect } from 'react';
 
 const EVENT = 'glassbox:popover';
 
@@ -16,4 +16,34 @@ export function useOnePopover(name: string, open: boolean, close: () => void): v
     document.dispatchEvent(new CustomEvent(EVENT, { detail: name }));
     return () => document.removeEventListener(EVENT, onOther);
   }, [open, name, close]);
+}
+
+/**
+ * A popover's dismissal: a pointer down outside `ref` (its trigger and panel) closes it, and so
+ * does Escape wherever focus is, handing focus back to `returnFocusTo`, its trigger, so a
+ * keyboard user is where they were. Listens only while open.
+ */
+export function usePopoverDismiss(
+  ref: RefObject<HTMLElement | null>,
+  open: boolean,
+  close: () => void,
+  returnFocusTo?: RefObject<HTMLElement | null>,
+): void {
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) close();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      close();
+      returnFocusTo?.current?.focus();
+    };
+    document.addEventListener('pointerdown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open, ref, close, returnFocusTo]);
 }

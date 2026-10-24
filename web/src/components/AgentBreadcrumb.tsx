@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronRight, Workflow } from 'lucide-react';
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useMemo, useRef, useState } from 'react';
 import type { AgentNode } from '../../../src/core/model.js';
 import { MAIN_AGENT_ID } from '../../../src/core/model.js';
 import { emptyUsage, totalTokens } from '../../../src/core/usage.js';
@@ -9,6 +9,7 @@ import { agentPath, agentTree, subtreeIds } from '../lib/agents';
 import { formatCompact } from '../lib/format';
 import css from './AgentBreadcrumb.module.css';
 import { CompactFigure } from './CompactFigure';
+import { usePopoverDismiss } from './popover';
 import { LiveDot } from './Status';
 
 interface Props {
@@ -57,7 +58,9 @@ export function AgentBreadcrumb({ open, agentId, onSelect }: Props) {
 function AgentMenu({ open, agentId, onSelect, name }: Props & { name(a: AgentNode): string }) {
   const { t, intl } = useI18n();
   const [shown, setShown] = useState(false);
+  const close = useCallback(() => setShown(false), []);
   const ref = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const rows = useMemo(() => (shown ? agentTree(open) : []), [open, shown]);
   // Cumulative tokens: the agent and everything it spawned.
   const cumulative = (id: string) => {
@@ -66,24 +69,13 @@ function AgentMenu({ open, agentId, onSelect, name }: Props & { name(a: AgentNod
       n += totalTokens(open.agents.get(a)?.usage ?? emptyUsage());
     return n;
   };
-  useEffect(() => {
-    if (!shown) return;
-    const onDown = (e: PointerEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setShown(false);
-    };
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setShown(false);
-    document.addEventListener('pointerdown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('pointerdown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [shown]);
+  usePopoverDismiss(ref, shown, close, buttonRef);
 
   if (open.agents.size < 2) return null;
   return (
     <div className={css.menuWrap} ref={ref}>
       <button
+        ref={buttonRef}
         type="button"
         className={css.menuButton}
         aria-label={t('crumb.pick')}
