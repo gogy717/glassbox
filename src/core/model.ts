@@ -95,7 +95,10 @@ export interface SessionActivity {
   kind: ActivityKind;
   /** The tool as the agent names it ("Read", "shell", "read"), for 'tool' and 'waiting'. */
   tool: string | null;
-  /** What the tool works on, short: a file name, a command, a pattern, a host. Null if unknown. */
+  /**
+   * What the tool works on, short: a file name, a pattern, a host, or a command's summary
+   * (`git commit`, `npm test +1`), never its command line. Null if unknown.
+   */
   target: string | null;
   /** Who is doing it: `MAIN_AGENT_ID`, or the sub-agent whose work started last. */
   agentId: string;

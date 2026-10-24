@@ -18,7 +18,7 @@ describe('activity of a live Codex session', () => {
     expect(upTo(10).snapshot().session.activity).toEqual({
       kind: 'tool',
       tool: 'exec',
-      target: 'ls beds',
+      target: 'ls',
       agentId: 'main',
       since: at(5),
     });

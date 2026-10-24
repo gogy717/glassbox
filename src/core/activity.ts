@@ -4,8 +4,10 @@
  * state, so "Thinking" and "Running" mean the same for every agent, and the same as the call
  * and tool cards (an in-flight call, a running tool).
  */
+import { hostOf, summarizeCode, summarizeCommand } from './command-summary.js';
 import type { IsoTime, LiveState, ModelRequest, SessionActivity, ToolCall, Turn } from './model.js';
 import { MAIN_AGENT_ID } from './model.js';
+import { redact, tildeHome } from './redact.js';
 
 export interface ActivityInput {
   live: LiveState;
@@ -151,85 +153,26 @@ function lastStep(input: ActivityInput, turn: Turn): IsoTime {
 
 // ── Targets ───────────────────────────────────────────────────────────────────────────────
 
+/** Targets are data for a one-line sentence: a name, a pattern, a task. */
 const MAX = 120;
+/** A command's summary: a program, its subcommand or script, a host, a count. */
+const COMMAND_MAX = 60;
 
 /**
- * The start of `s` on one line, cut at MAX characters with "…", secrets masked and the home
- * directory shown as "~". Masking runs on the whole head before the cut, so a secret is masked
- * entire or not shown at all.
+ * The start of `s` on one line, cut at `max` characters with "…", credentials masked and the
+ * home directory shown as "~". Masking runs before the cut and on whole words: a word that the
+ * head's end would split is left out, so no part of a credential shows whose whole would have
+ * been masked.
  */
-function clip(s: string): string {
+function clip(s: string, max = MAX): string {
   // Only the start shows: collapse the whitespace of that, not of a megabyte of input.
-  const head = s.slice(0, MAX * 4);
-  const line = homeless(redact(head)).replace(/\s+/g, ' ').trim();
-  return line.length > MAX || head.length < s.trimEnd().length ? `${line.slice(0, MAX)}…` : line;
-}
-
-const MASK = '•••';
-
-/** Words that make a variable, flag, header or JSON key name a secret. */
-const SECRET_NAME = String.raw`[\w-]*(?:token|secret|key|pass|pwd|auth|credential|cookie|session)[\w-]*`;
-
-/**
- * Credentials a command line, code or a pattern can carry, masked in place: targets go to every
- * client in the session list. Each pattern is linear and runs on at most MAX * 4 characters.
- */
-const SECRETS: [RegExp, string][] = [
-  // GITHUB_TOKEN=ghp_…, --password=…, ?api_key=…: up to a space, quote or separator. Not a
-  // reference ($GH_TOKEN, ${…}, JSX's key={…}), a regex escape (grep "key=\|…"), or a closing
-  // quote ('^export API_KEY=' file): nothing secret shows there.
-  [
-    new RegExp(
-      String.raw`\b(${SECRET_NAME})=(?![{$\\])(?:"[^"\s][^"]*"|'[^'\s][^']*'|[^\s"'&;|]+)`,
-      'gi',
-    ),
-    `$1=${MASK}`,
-  ],
-  // {"token": "…"}
-  [new RegExp(String.raw`("${SECRET_NAME}"\s*:\s*)"[^"]*"`, 'gi'), `$1"${MASK}"`],
-  // -H "X-Api-Key: …", --header 'Cookie: …'
-  [
-    new RegExp(String.raw`((?:-H|--header)[\s=]*["']?${SECRET_NAME}\s*:\s*)[^"'\n]+`, 'gi'),
-    `$1${MASK}`,
-  ],
-  [/\b(Bearer|Basic)\s+[\w.~+/=-]+/g, `$1 ${MASK}`],
-  // --password hunter2, --token …: the value as the next word.
-  [
-    /(--(?:password|passwd|token|secret|api-?key|access-token|auth-token|client-secret)\s+)[^\s"']+/gi,
-    `$1${MASK}`,
-  ],
-  // curl -u user:pass
-  [/((?:\s|^)(?:-u|--user)[\s=]+[^\s:"']+):[^\s"']+/g, `$1:${MASK}`],
-  // mysql -phunter2 (psql's -p is the port).
-  [/\b((?:mysql|mysqldump|mysqladmin|mariadb)\b[^|;&\n]*?\s-p)[^\s"']+/g, `$1${MASK}`],
-  // https://user:pass@host
-  [/\b([a-z][a-z0-9+.-]*:\/\/[^/\s:@]+):[^/\s@]+@/gi, `$1:${MASK}@`],
-  // Tokens known by their prefix: Anthropic and OpenAI, GitHub, GitLab, Slack, AWS, Google, xAI,
-  // Stripe, and JWTs.
-  [
-    /\b(?:sk-[\w-]{16,}|gh[pousr]_\w{20,}|github_pat_\w{20,}|glpat-[\w-]{20,}|xox[abprs]-[\w-]{10,}|(?:AKIA|ASIA)[0-9A-Z]{16}|AIza[\w-]{35}|xai-\w{20,}|[sr]k_(?:live|test)_\w{16,}|eyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,})/g,
-    MASK,
-  ],
-];
-
-function redact(s: string): string {
-  let out = s;
-  for (const [re, to] of SECRETS) out = out.replace(re, to);
-  return out;
-}
-
-/** The server's home directory. The web imports this module too (`thinkingSince`): no node:os. */
-const HOME =
-  (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.HOME ??
-  '';
-const HOME_AT =
-  HOME.length > 1
-    ? new RegExp(`${HOME.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=/|$|[\\s"'])`, 'g')
-    : null;
-
-/** The home directory as "~", as a shell prompt shows it. */
-function homeless(s: string): string {
-  return HOME_AT ? s.replace(HOME_AT, '~') : s;
+  let head = s.slice(0, max * 4);
+  if (head.length < s.length && /\S/.test(s[head.length] ?? '')) {
+    const whole = head.replace(/\S+$/, '');
+    if (whole.trim() !== '') head = whole;
+  }
+  const line = tildeHome(redact(head)).replace(/\s+/g, ' ').trim();
+  return line.length > max || head.length < s.trimEnd().length ? `${line.slice(0, max)}…` : line;
 }
 
 type Obj = Record<string, unknown>;
@@ -242,26 +185,30 @@ const str = (o: Obj, k: string): string | null => {
 const basename = (path: string) => path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
 const isUrl = (s: string) => /^https?:\/\//i.test(s);
 
-/** A URL's host; null when it has none (file:, "user:pass@host/x" read as a scheme). */
-function hostOf(url: string): string | null {
-  try {
-    return new URL(url).host || null;
-  } catch {
-    return clip(url) || null;
-  }
+/**
+ * A URL's host, read with a scheme when it has none (`api.x.io/v1?token=…`); null when it has
+ * no host (file:, "user:pass@host/x" read as a scheme). Never the URL itself.
+ */
+function host(url: string): string | null {
+  const h = /^[a-z][a-z0-9+.-]*:\/\//i.test(url) ? hostOf(url) : hostOf(`https://${url}`);
+  return h && clip(h);
 }
 
-const SHELL_BIN = /(^|[\\/])((ba|z|da|k)?sh|pwsh|powershell)(\.exe)?$/i;
+/** A file's name, or "~" for the home directory itself. */
+const fileName = (path: string) => clip(basename(tildeHome(path.trim())));
 
-/** A shell call's command line: a string, or an argv such as Codex's ["bash", "-lc", "…"]. */
-function command(input: Obj): string | null {
+/**
+ * A shell call's command, a string or an argv such as Codex's ["bash", "-lc", "…"], as its
+ * summary: never the command line, which can carry anything. Undefined when there is none.
+ */
+function commandTarget(name: string, input: Obj): string | null | undefined {
   const v = input.command ?? input.cmd;
-  if (typeof v === 'string') return v.trim() === '' ? null : v;
-  if (!Array.isArray(v) || v.length === 0 || !v.every((a) => typeof a === 'string')) return null;
-  const [bin = '', ...rest] = v as string[];
-  if (rest.length >= 2 && SHELL_BIN.test(bin) && /^(-\w*c|-command)$/i.test(rest.at(-2) ?? ''))
-    return rest.at(-1) ?? null;
-  return v.join(' ');
+  let line: string | string[] | null = null;
+  if (typeof v === 'string' && v.trim() !== '') line = v;
+  else if (Array.isArray(v) && v.length > 0 && v.every((a) => typeof a === 'string')) line = v;
+  if (line === null) return undefined;
+  const summary = summarizeCommand(line, { powershell: /powershell|pwsh/i.test(name) });
+  return summary === null ? null : clip(summary, COMMAND_MAX);
 }
 
 /** The files a patch touches (`*** Update File: src/a.ts`), by name. */
@@ -293,16 +240,19 @@ const LABEL_KEYS = ['description', 'task_name', 'i', 'title', 'skill', 'summary'
 const PARSE_MAX = 100_000;
 
 /**
- * What a tool call works on, as data for the UI's sentence: the command, the pattern, the host,
- * the file name, the patched files, the sub-agent's task or the question. Null rather than a
- * guess: the UI then names the tool alone.
+ * What a tool call works on, as data for the UI's sentence: a command's summary, the pattern,
+ * the host, the file name, the patched files, the sub-agent's task or the question. Null rather
+ * than a guess: the UI then names the tool alone.
  */
 export function activityTarget(name: string, input: unknown): string | null {
   if (typeof input === 'string') {
     const files = patchFiles(input);
     if (files) return files;
-    // Code to run, as Codex's exec takes it after an optional `// @exec: {…}` settings line.
-    if (!/^\s*\{/.test(input)) return clip(input.replace(/^\s*\/\/ @exec:.*\n/, '')) || null;
+    // Code to run, as Codex's exec takes it: named by the commands it hands to tools.
+    if (!/^\s*\{/.test(input)) {
+      const summary = summarizeCode(input);
+      return summary === null ? null : clip(summary, COMMAND_MAX);
+    }
     // Arguments still arriving or that did not parse (OpenCode's pending raw input).
     if (input.length > PARSE_MAX) return null;
     try {
@@ -315,14 +265,14 @@ export function activityTarget(name: string, input: unknown): string | null {
   if (!isObj(input)) return null;
   const patch = str(input, 'input') ?? str(input, 'patchText');
   if (patch && /^\*\*\* Begin Patch/m.test(patch)) return patchFiles(patch);
-  const line = command(input);
-  if (line) return clip(line);
+  const command = commandTarget(name, input);
+  if (command !== undefined) return command;
   const pattern = str(input, 'pattern') ?? str(input, 'query');
   if (pattern) return clip(pattern);
   const url = str(input, 'url');
-  if (url) return hostOf(url);
+  if (url) return host(url);
   const path = PATH_KEYS.map((k) => str(input, k)).find(Boolean);
-  if (path) return isUrl(path) ? hostOf(path) : clip(basename(path));
+  if (path) return isUrl(path) ? host(path) : fileName(path);
   const question = Array.isArray(input.questions) ? input.questions[0] : null;
   if (isObj(question) && str(question, 'question')) return clip(str(question, 'question') ?? '');
   const label = LABEL_KEYS.map((k) => str(input, k)).find(Boolean);

@@ -159,7 +159,7 @@ export function gardenSession(): string[] {
       type: 'custom_tool_call',
       name: 'exec',
       call_id: 'call_exec',
-      input: 'ls beds',
+      input: 'const r = await tools.exec_command({ cmd: "ls beds" });',
       internal_chat_message_metadata_passthrough: { turn_id: TURN_1 },
     }),
     line('event_msg', 11, 5, {

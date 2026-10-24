@@ -124,7 +124,12 @@ describe('activity of a live Claude Code session', () => {
       assistantBlocks({
         requestRef: 'api-1',
         blocks: [
-          { type: 'tool_use', id: 'toolu_rm', name: 'Bash', input: { command: 'rm -rf dist' } },
+          {
+            type: 'tool_use',
+            id: 'toolu_rm',
+            name: 'Bash',
+            input: { command: 'git push --force origin main' },
+          },
         ],
         blockTs: [at(3)],
       }),
@@ -133,7 +138,7 @@ describe('activity of a live Claude Code session', () => {
     expect(activity(p)).toEqual({
       kind: 'waiting',
       tool: 'Bash',
-      target: 'rm -rf dist',
+      target: 'git push',
       agentId: 'main',
       since: at(3),
     });
