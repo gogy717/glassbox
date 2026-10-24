@@ -1,0 +1,61 @@
+/* One line: the mark, the phrase and its clock. Only the target gives way when the row is
+   narrow, so the verb and the clock stay whole. */
+.activity {
+  display: inline-flex;
+  align-items: center;
+  column-gap: 0.3em;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.activity > * {
+  flex: none;
+}
+
+/* The dot sits a little apart from the word, as StatusMark's does. */
+.activity > :first-child {
+  margin-right: 2px;
+}
+
+/* Colour only where it asks for attention: running in the accent, waiting for you in amber,
+   failed in red. Idle and closed stay muted. */
+.activity[data-state="busy"] {
+  color: var(--accent);
+}
+
+.activity[data-state="waiting"] {
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.activity[data-state="failed"] {
+  color: var(--error);
+}
+
+.activity[data-state="failed"] .word {
+  font-weight: 600;
+}
+
+.target,
+.reason {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A file, a pattern, a host or a command: the mono face, CJK in it set apart (UiCjk). */
+.target {
+  font-family: var(--font-mono);
+}
+
+.glyph {
+  flex: none;
+}
+
+.sep {
+  color: var(--faint);
+  font-weight: 400;
+}

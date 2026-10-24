@@ -122,7 +122,7 @@ const words = (list: string[]) => list.map((w) => w.replace(/[+.]/g, '\\$&')).jo
  * (`x86_64-w64-hunter2-gcc`) leaves the name to the key test.
  */
 const TARGET_TRIPLET = new RegExp(
-  `^(?:${ARCH})(?:-(?:${words(SYSTEMS)})){1,3}(?:-(?:${words(TOOLS)})(?:-\\d+(?:\\.\\d+)*)?)?(?:\\.exe)?$`,
+  `^(?:${ARCH})(?:-(?:${words(SYSTEMS)})){1,3}(?:-(?:${words(TOOLS)})(?:-\\d{1,3}(?:\\.\\d{1,3}){0,3})?)?(?:\\.exe)?$`,
 );
 
 /**
@@ -144,6 +144,9 @@ export function secretShaped(word: string): boolean {
     // jbswy3dpehpk3pxp (base32), akiaiosfodnn7example: a long part with a digit; long hex.
     if (p.length >= 12 && /\d/.test(p)) return true;
     if (p.length >= 16 && /^[a-f]+$/i.test(p)) return true;
+    // 4839201746: nine digits or more in a row is an account, a phone or a timestamp, not a
+    // version or a date.
+    if (/\d{9,}/.test(p)) return true;
     // a1b2c3d4: digits in two runs or more.
     if (p.length >= 8 && (p.match(/\d+/g)?.length ?? 0) >= 2) return true;
     if (flips(p)) return true;

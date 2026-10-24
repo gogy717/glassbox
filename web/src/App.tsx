@@ -16,6 +16,7 @@ import { ApprovalsContext, useApprovals } from './data/approvals';
 import { connectEvents } from './data/events';
 import {
   createRunsClient,
+  failedSessions,
   type RunsClient,
   runForSession,
   waitingLive,
@@ -178,6 +179,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
   const waitingKey = waitingSessionIds(state.runs).join('\n');
   const waiting = useMemo(() => (waitingKey ? waitingKey.split('\n') : []), [waitingKey]);
   const sessions = useMemo(() => withWaiting(state.sessions, waiting), [state.sessions, waiting]);
+  const failures = useMemo(() => failedSessions(state.runs), [state.runs]);
   // Escape collapses a prompt without answering it; a newer prompt shows itself again.
   const [dismissed, setDismissed] = useState<string | null>(null);
   const showPrompt = !!pending && pending.id !== dismissed;
@@ -246,6 +248,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
                 loaded={state.sessionsLoaded}
                 selectedId={route.sessionId}
                 showProbes={prefs.showProbes}
+                failures={failures}
                 onSelect={(id) => {
                   navigate({ sessionId: id, agentId: 'main', turnId: null, requestId: null });
                   if (!floating) return;
@@ -283,6 +286,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
                   sessions={sessions}
                   loaded={state.sessionsLoaded}
                   showProbes={prefs.showProbes}
+                  failures={failures}
                   onOpen={(id) =>
                     navigate({ sessionId: id, agentId: 'main', turnId: null, requestId: null })
                   }

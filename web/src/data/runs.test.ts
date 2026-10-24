@@ -3,7 +3,13 @@ import type { SessionSummary } from '../../../src/core/model.js';
 import { TOKEN_HEADER } from '../../../src/shared/protocol.js';
 import type { RunState } from '../../../src/shared/runs.js';
 import { ApiError } from './api';
-import { createRunsClient, runForSession, waitingSessionIds, withWaiting } from './runs';
+import {
+  createRunsClient,
+  failedSessions,
+  runForSession,
+  waitingSessionIds,
+  withWaiting,
+} from './runs';
 
 type Call = { url: string; init: RequestInit | undefined };
 
@@ -116,6 +122,35 @@ describe('runForSession', () => {
     expect(runForSession(runs, 's1')?.id).toBe('b');
     expect(runForSession(runs, 's3')).toBeNull();
     expect(runForSession(runs, null)).toBeNull();
+  });
+});
+
+describe('failedSessions', () => {
+  const run = (id: string, sessionId: string | null, status: RunState['status'], at: string) =>
+    ({
+      id,
+      sessionId,
+      status,
+      error: status === 'error' ? `exit ${id}` : null,
+      updatedAt: `2026-10-23T10:00:${at}.000Z`,
+    }) as RunState;
+
+  it('are the sessions whose latest open run failed, with its error', () => {
+    const runs = new Map(
+      [
+        run('a', 's1', 'error', '05'),
+        run('b', 's2', 'error', '01'),
+        run('c', 's2', 'idle', '04'),
+        run('d', 's3', 'error', '02'),
+        run('e', 's3', 'closed', '09'),
+        run('f', null, 'error', '03'),
+      ].map((r) => [r.id, r]),
+    );
+    // s2 ran again after its failure; s3's later run closed, which leaves the failure.
+    expect([...failedSessions(runs)]).toEqual([
+      ['s1', 'exit a'],
+      ['s3', 'exit d'],
+    ]);
   });
 });
 

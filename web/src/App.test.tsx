@@ -93,7 +93,7 @@ describe('App', () => {
     const store = createStore();
     store.applyEvent({ type: 'sessions', sessions: createDemoSessions(DEMO_NOW) });
     render(<App store={store} connect={noConnect} runs={fakeRuns()} />);
-    const running = screen.getByRole('region', { name: 'Running now' });
+    const running = screen.getByRole('region', { name: 'Running' });
     const card = within(running).getByRole('button', { name: /Live viewer research/ });
     expect(within(card).getByText('Claude Code')).toHaveAttribute('data-agent', 'claude-code');
     expect(within(running).queryByRole('button', { name: /Fix flaky login/ })).toBeNull();
@@ -109,11 +109,11 @@ describe('App', () => {
     if (!idle || !closed) throw new Error('fixture');
     store.applyEvent({ type: 'sessions', sessions: [closed, idle] });
     render(<App store={store} connect={noConnect} runs={fakeRuns()} />);
-    expect(screen.queryByRole('region', { name: 'Running now' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Running' })).toBeNull();
     const recent = screen.getByRole('region', { name: 'Recent' });
     expect(
       within(recent)
-        .getAllByRole('button')
+        .getAllByRole('listitem')
         .map((b) => b.textContent),
     ).toEqual([
       expect.stringContaining('Fix flaky login test'),
@@ -358,6 +358,28 @@ describe('App', () => {
     await waitFor(() =>
       expect(runs.decide).toHaveBeenCalledWith('run_1', 'tu_9', { decision: 'allow' }),
     );
+  });
+
+  // W6: a glassbox run that failed says so where its session is listed: why, on Home's board.
+  it('says a session whose glassbox run failed failed, on Home and in the sidebar', () => {
+    const store = createStore();
+    const [, idle] = createDemoSessions(DEMO_NOW);
+    if (!idle) throw new Error('fixture');
+    store.applyEvent({ type: 'sessions', sessions: createDemoSessions(DEMO_NOW) });
+    render(<App store={store} connect={noConnect} runs={fakeRuns()} />);
+    act(() =>
+      store.applyEvent({
+        type: 'run',
+        run: runState({ id: 'run_2', sessionId: idle.id, status: 'error', error: 'missing file' }),
+      }),
+    );
+    const card = within(screen.getByRole('region', { name: 'Recent' })).getByRole('button', {
+      name: /Fix flaky login test/,
+    });
+    expect(card).toHaveTextContent('Failed · missing file');
+    const row = within(sidebar()).getByRole('button', { name: /Fix flaky login test/ });
+    expect(row).toHaveTextContent('Failed');
+    expect(row).not.toHaveTextContent('missing file');
   });
 
   // I3: the same pending prompt the composer shows makes the session "Waiting for you" in the

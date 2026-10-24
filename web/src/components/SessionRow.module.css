@@ -56,28 +56,21 @@
   overflow: hidden;
 }
 
-/* Colour only where it asks for attention: running in the accent, waiting for you in amber. */
-.state {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex: none;
+/* A long activity (its target) gives way before the age and tokens beside it. */
+.meta > :first-child {
+  flex-shrink: 8;
 }
 
-.state[data-state="busy"] {
-  color: var(--accent);
-}
-
-.state[data-state="waiting"] {
-  color: var(--warning);
-  font-weight: 600;
-}
-
-/* Time and tokens give way first when the row is narrow; the tag stays whole. */
+/* Time and tokens give way next when the row is narrow; the tag stays whole. */
 .when {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Tokens alone, beside an activity: the figure stays whole. */
+.when:not([data-age]) {
+  flex-shrink: 0;
 }
 
 .sep {
@@ -85,6 +78,45 @@
 }
 
 /* Tags line up in a column at the row's right edge. */
-.meta > :last-child {
+.row[data-density="compact"] .meta > :last-child {
   margin-left: auto;
+}
+
+/* Home's board: the agent tag, the title and its age on the first line; what it is doing, its
+   clock and its tokens on the second. Rows of a list, not boxes: no border, no radius. */
+.row[data-density="card"] {
+  gap: 6px;
+  padding: 12px 10px;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.head > :first-child {
+  flex: none;
+  align-self: center;
+}
+
+.row[data-density="card"] .title {
+  flex: 0 1 auto;
+  font-size: var(--fs-body);
+}
+
+.age {
+  flex: none;
+  font-size: var(--fs-small);
+  color: var(--muted);
+}
+
+.row[data-density="card"] .meta {
+  gap: 6px;
+  font-size: var(--fs-small);
+}
+
+.tokens {
+  flex: none;
 }

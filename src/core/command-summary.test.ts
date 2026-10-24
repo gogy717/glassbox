@@ -216,6 +216,10 @@ describe('summarizeCommand', () => {
     ['i686-w64-mingw32-g++ -o a.exe a.cpp', 'i686-w64-mingw32-g++'],
     ['aarch64-linux-gnu-gcc-12 -c x.c', 'aarch64-linux-gnu-gcc-12'],
     ['x86_64-w64-hunter2-gcc -c x.c', null],
+    ['x86_64-linux-gnu-gcc-483920174659 -c x.c', null],
+    ['x86_64-linux-gnu-gcc-4839201746.5928374655 -c x.c', null],
+    ['x86_64-linux-gnu-gcc-12.2.0 -c x.c', 'x86_64-linux-gnu-gcc-12.2.0'],
+    ['./backup-20240101.sh', 'backup-20240101.sh'],
     ['x86_64-abc123def456ghi-linux --help', null],
     // CamelCase with digits cannot be told from a key by its shape (Hunter2), so it is hidden.
     ['python Exercise1.py', 'python'],

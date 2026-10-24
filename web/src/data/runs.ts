@@ -108,6 +108,22 @@ export function runForSession(
 }
 
 /**
+ * The sessions whose glassbox run failed, with the run's error (null when it gave none): the run
+ * `runForSession` picks for the session, the one the composer shows, has the status 'error'.
+ */
+export function failedSessions(runs: Map<string, RunState>): Map<string, string | null> {
+  const latest = new Map<string, RunState>();
+  for (const r of runs.values()) {
+    if (!r.sessionId || r.status === 'closed') continue;
+    const best = latest.get(r.sessionId);
+    if (!best || r.updatedAt > best.updatedAt) latest.set(r.sessionId, r);
+  }
+  const failed = new Map<string, string | null>();
+  for (const [id, r] of latest) if (r.status === 'error') failed.set(id, r.error);
+  return failed;
+}
+
+/**
  * The sessions whose glassbox run has a permission prompt or question open: the prompt the
  * composer shows (`pendingPermissions`). Their process only knows it is busy.
  */

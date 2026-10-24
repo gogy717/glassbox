@@ -21,6 +21,8 @@ interface Props {
   showProbes?: boolean;
   /** False until the first session list arrives: until then the list says it is connecting. */
   loaded?: boolean;
+  /** The sessions whose glassbox run failed, with its error (`failedSessions`). */
+  failures?: ReadonlyMap<string, string | null>;
   onSelect(id: string): void;
 }
 
@@ -44,6 +46,7 @@ export function SessionSidebar({
   now,
   showProbes,
   loaded = true,
+  failures,
   onSelect,
 }: Props) {
   const { t } = useI18n();
@@ -199,6 +202,7 @@ export function SessionSidebar({
                   session={s}
                   selected={s.id === selectedId}
                   now={now}
+                  failure={failures?.get(s.id)}
                   roving={roving(s.id)}
                   onSelect={onSelect}
                 />
