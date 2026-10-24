@@ -409,6 +409,7 @@ export const en: Record<MessageKey, string> = {
   'composer.noSession': 'Pick a session first, or start a new one',
   'composer.error': 'Could not send: {msg}',
   'app.skipToContent': 'Skip to main content',
+  'app.loadingView': 'Loading…',
   'app.notFound': 'Session not found',
   'error.view': 'This view hit an error: {msg}',
   'error.retry': 'Try again',

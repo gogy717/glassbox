@@ -249,15 +249,16 @@ describe('App', () => {
     ).toBe('9');
   });
 
-  it('shows the tab named in the route', () => {
+  it('shows the tab named in the route', async () => {
     window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}?tab=tokens`;
     render(<App store={demoStore()} connect={noConnect} />);
     expect(screen.getByRole('tab', { name: 'Where tokens went' })).toHaveAttribute(
       'aria-selected',
       'true',
     );
+    // Loaded on first use (its own chunk, I3b).
     expect(screen.getByRole('tabpanel')).toContainElement(
-      screen.getByRole('region', { name: 'Total' }),
+      await screen.findByRole('region', { name: 'Total' }),
     );
   });
 
@@ -269,11 +270,11 @@ describe('App', () => {
     );
   });
 
-  it('shows the time tab', () => {
+  it('shows the time tab', async () => {
     window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}?tab=time`;
     render(<App store={demoStore()} connect={noConnect} />);
     expect(screen.getByRole('tabpanel')).toContainElement(
-      screen.getByRole('img', { name: 'Timeline per agent' }),
+      await screen.findByRole('img', { name: 'Timeline per agent' }),
     );
   });
 

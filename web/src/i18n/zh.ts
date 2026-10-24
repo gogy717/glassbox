@@ -403,6 +403,7 @@ export const zh = {
   'composer.noSession': '先选择一个会话，或开始新会话',
   'composer.error': '发送失败：{msg}',
   'app.skipToContent': '跳到主要内容',
+  'app.loadingView': '加载中…',
   'app.notFound': '找不到这个会话',
   'error.view': '这个视图出错了：{msg}',
   'error.retry': '重试',

@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from 'react';
+import { type KeyboardEvent, lazy, Suspense } from 'react';
 import { MAIN_AGENT_ID } from '../../../src/core/model.js';
 import type { LivePartial } from '../../../src/shared/runs.js';
 import { AgentBreadcrumb } from '../components/AgentBreadcrumb';
@@ -9,8 +9,12 @@ import { type Navigate, type Route, TABS } from '../router';
 import { FlowView } from './flow/FlowView';
 import css from './SessionView.module.css';
 import { StepsView } from './steps/StepsView';
-import { TimeView } from './time/TimeView';
-import { TokensView } from './tokens/TokensView';
+
+// The charts' views load on first use: the app's first chunk stays under Vite's 500 kB line.
+const TimeView = lazy(() => import('./time/TimeView').then((m) => ({ default: m.TimeView })));
+const TokensView = lazy(() =>
+  import('./tokens/TokensView').then((m) => ({ default: m.TokensView })),
+);
 
 interface Props {
   open: OpenSession;
@@ -83,8 +87,12 @@ export function SessionView({ open, route, navigate, live = null, rateAgent = nu
         {route.tab === 'steps' && (
           <StepsView open={open} agentId={agentId} route={route} navigate={navigate} />
         )}
-        {route.tab === 'time' && <TimeView open={open} agentId={agentId} navigate={navigate} />}
-        {route.tab === 'tokens' && <TokensView open={open} agentId={agentId} navigate={navigate} />}
+        <Suspense fallback={<p className={css.loading}>{t('app.loadingView')}</p>}>
+          {route.tab === 'time' && <TimeView open={open} agentId={agentId} navigate={navigate} />}
+          {route.tab === 'tokens' && (
+            <TokensView open={open} agentId={agentId} navigate={navigate} />
+          )}
+        </Suspense>
       </div>
     </div>
   );

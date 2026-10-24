@@ -66,3 +66,11 @@
   /* The tabs lay themselves out by the room the panel has, sidebar open or not. */
   container: session-panel / inline-size;
 }
+
+/* While a chart view's chunk loads: one quiet line. */
+.loading {
+  margin: 0;
+  padding: 16px;
+  color: var(--muted);
+  font-size: var(--fs-small);
+}
