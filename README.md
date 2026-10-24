@@ -23,6 +23,9 @@
 |                                                          **Now board**                                                           |                                                   **Token rate**                                                    |
 |                                                ![Now board](docs/images/home.png)                                                |                                         ![Token rate](docs/images/rate.png)                                         |
 |                  What runs now, each session saying what it is doing this second; then the recently active ones                  |         Tokens a minute across this machine's CLIs, the last hour as a line; split by CLI and by token kind         |
+|                                                           **Receipt**                                                            |                                                                                                                     |
+|                  <img src="docs/images/receipt.png" alt="Receipt: a session printed as a receipt" width="360">                   |                                                                                                                     |
+| A session printed as a receipt: its work, time and tokens, with the timeline as its barcode; made in your browser, ready to post |                                                                                                                     |
 
 ## Run it
 
@@ -76,6 +79,7 @@ To install it for good: `npm install -g github:gogy717/glassbox`, then run `glas
 - **Token rate**: the top bar shows how many tokens a minute the CLIs on this machine spend (a 5-minute average, with the last hour as a line); click it to split the rate by CLI and by token kind. It counts the running sessions glassbox has open, and says how many of them that is ("Counting 2 of 3 running sessions"). The hour is kept in memory only, so it starts afresh each time glassbox starts.
 - **Grok, Codex, oh-my-pi and OpenCode sessions**: when Grok Build, the Codex CLI, oh-my-pi or OpenCode is installed, their sessions appear in the sidebar too (view only), with sub-agents, tokens and time broken down the same way. An OpenCode session's child sessions show as its sub-agents.
 - **Diagnostics**: at the right of the summary bar, "No gaps" or how many there are; click it for what data this session lacks, and why.
+- **Receipt**: press Receipt in the summary bar, then Copy image or Download PNG: the session as a receipt of its work, time and tokens, with its timeline as the barcode. Three sizes (Tall, Post 4:5, Story 9:16), on a paper or a night background, in English or Chinese; Copy as text gives the same receipt as plain text, for a PR or a chat. It is drawn in your browser from the data already on the page, without a single request, and it never prints a path: a path in the title keeps only its last part, and Hide names leaves out the title and the project as well.
 
 ## Sending messages from glassbox
 
