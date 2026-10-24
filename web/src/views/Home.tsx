@@ -6,7 +6,7 @@ import { FigureText } from '../components/FigureText';
 import { SessionRow } from '../components/SessionRow';
 import { useRovingFocus } from '../data/useRovingFocus';
 import { useI18n } from '../i18n';
-import { groupSessions, isListed, liveFilterOf, type SessionGroup } from '../lib/sessions';
+import { isListed, liveFilterOf } from '../lib/sessions';
 import css from './Home.module.css';
 
 interface Props {
@@ -16,6 +16,8 @@ interface Props {
   showProbes: boolean;
   /** The sessions whose glassbox run failed, with its error (`failedSessions`). */
   failures: ReadonlyMap<string, string | null>;
+  /** The session open last: back on Home, its row keeps the tab stop. */
+  lastOpened?: string | null;
   onOpen(sessionId: string): void;
   onNewSession(): void;
 }
@@ -23,6 +25,7 @@ interface Props {
 const RECENT = 6;
 const newestFirst = (a: SessionSummary, b: SessionSummary) =>
   b.updatedAt.localeCompare(a.updatedAt);
+const isRunning = (s: SessionSummary) => liveFilterOf(s) === 'running';
 
 /** Where each agent's sessions are read from, and the options that move or drop them. */
 const WHERE: { agent: AgentKind; dir: string; options: string[] }[] = [
@@ -43,37 +46,40 @@ const WHERE: { agent: AgentKind; dir: string; options: string[] }[] = [
 
 /**
  * The screen before a session is open: what is running right now, then what ran recently, each
- * grouped by project, as rows of the sidebar's kind at card density. The rows are one tab stop;
- * the arrow keys move between them and Enter opens one. With no sessions, where glassbox looks.
+ * a flat list, most recently active first, of the sidebar's rows at card density (the project
+ * leads the title). The rows are one tab stop; the arrow keys move between them and Enter opens
+ * one. With no sessions, where glassbox looks.
  */
-export function Home({ sessions, loaded, now, showProbes, failures, onOpen, onNewSession }: Props) {
+export function Home({
+  sessions,
+  loaded,
+  now,
+  showProbes,
+  failures,
+  lastOpened = null,
+  onOpen,
+  onNewSession,
+}: Props) {
   const { t } = useI18n();
   const ref = useRef<HTMLDivElement>(null);
   const visible = useMemo(
     () => sessions.filter((s) => isListed(s, showProbes)),
     [sessions, showProbes],
   );
-  const running = useMemo(
-    () => groupSessions(visible, '', { showProbes: true, live: 'running' }),
-    [visible],
-  );
+  const running = useMemo(() => visible.filter(isRunning).sort(newestFirst), [visible]);
   const recent = useMemo(
     () =>
-      groupSessions(
-        visible
-          .filter((s) => liveFilterOf(s) !== 'running')
-          .sort(newestFirst)
-          .slice(0, RECENT),
-        '',
-        { showProbes: true },
-      ),
+      visible
+        .filter((s) => !isRunning(s))
+        .sort(newestFirst)
+        .slice(0, RECENT),
     [visible],
   );
-  const rows = [...running, ...recent].flatMap((g) => g.sessions);
+  const rows = [...running, ...recent];
   const roving = useRovingFocus(
     ref,
     rows.map((s) => s.id),
-    null,
+    lastOpened,
   );
 
   if (!loaded) return <p className={css.placeholder}>{t('home.connecting')}</p>;
@@ -102,63 +108,58 @@ export function Home({ sessions, loaded, now, showProbes, failures, onOpen, onNe
       </div>
     );
 
-  const count = (groups: SessionGroup[]) => groups.reduce((n, g) => n + g.sessions.length, 0);
   const latest = rows[0];
-  const openLatest = latest && (
-    <button type="button" className={css.openLatest} onClick={() => onOpen(latest.id)}>
-      {t('home.openLatest')}
-      <ArrowRight size={14} aria-hidden="true" />
-    </button>
+  const list = (items: SessionSummary[]) => (
+    <ul className={css.rows}>
+      {items.map((s) => (
+        <li key={s.id}>
+          <SessionRow
+            session={s}
+            selected={false}
+            now={now}
+            density="card"
+            failure={failures.get(s.id)}
+            roving={roving(s.id)}
+            onSelect={onOpen}
+          />
+        </li>
+      ))}
+    </ul>
   );
-  const groups = (list: SessionGroup[]) =>
-    list.map((g) => (
-      <div key={g.project} className={css.group}>
-        <h3 className={`section-label ${css.project}`}>{g.project}</h3>
-        <ul className={css.rows}>
-          {g.sessions.map((s) => (
-            <li key={s.id}>
-              <SessionRow
-                session={s}
-                selected={false}
-                now={now}
-                density="card"
-                failure={failures.get(s.id)}
-                roving={roving(s.id)}
-                onSelect={onOpen}
-              />
-            </li>
-          ))}
-        </ul>
-      </div>
-    ));
 
   return (
     <div className={css.home} ref={ref}>
       <h1 className="visually-hidden">{t('app.emptyTitle')}</h1>
-      {running.length > 0 && (
-        <section className={css.section} aria-labelledby="home-running" data-section="running">
-          <div className={css.header}>
-            <h2 id="home-running">{t('home.running')}</h2>
-            <span className={css.count}>
-              <FigureText
-                k="home.runningOf"
-                params={{ n: count(running), m: visible.length }}
-                figures={['n', 'm']}
-              />
-            </span>
-            {openLatest}
-          </div>
-          {groups(running)}
-        </section>
-      )}
+      <section className={css.section} aria-labelledby="home-running" data-section="running">
+        <div className={css.header}>
+          <h2 id="home-running">{t('home.running')}</h2>
+          <span className={css.count}>
+            <FigureText
+              k="home.runningOf"
+              params={{ n: running.length, m: visible.length }}
+              figures={['n', 'm']}
+            />
+          </span>
+          {latest && (
+            <button type="button" className={css.openLatest} onClick={() => onOpen(latest.id)}>
+              {t('home.openLatest')}
+              <ArrowRight size={14} aria-hidden="true" />
+            </button>
+          )}
+        </div>
+        {running.length > 0 ? (
+          list(running)
+        ) : (
+          <p className={css.none}>{t('home.nothingRunning')}</p>
+        )}
+      </section>
       {recent.length > 0 && (
         <section className={css.section} aria-labelledby="home-recent" data-section="recent">
           <div className={css.header}>
             <h2 id="home-recent">{t('home.recent')}</h2>
-            <span className={`${css.count} figure`}>{count(recent)}</span>
-            {running.length === 0 && openLatest}
+            <span className={`${css.count} figure`}>{recent.length}</span>
           </div>
-          {groups(recent)}
+          {list(recent)}
         </section>
       )}
     </div>

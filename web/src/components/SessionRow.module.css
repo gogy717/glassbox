@@ -82,8 +82,9 @@
   margin-left: auto;
 }
 
-/* Home's board: the agent tag, the title and its age on the first line; what it is doing, its
-   clock and its tokens on the second. Rows of a list, not boxes: no border, no radius. */
+/* Home's board: the agent tag, the project and the title on the first line; what it is doing
+   (or its state and age) and its tokens on the second. Rows of a list, not boxes: no border, no
+   radius. */
 .row[data-density="card"] {
   gap: 6px;
   padding: 12px 10px;
@@ -108,13 +109,18 @@
 
 .age {
   flex: none;
-  font-size: var(--fs-small);
+}
+
+/* The project before the title, whole: the title gives way. */
+.project {
+  flex: none;
+  font-size: var(--fs-body);
+  font-weight: 400;
   color: var(--muted);
 }
 
-.row[data-density="card"] .meta {
-  gap: 6px;
-  font-size: var(--fs-small);
+.slash {
+  color: var(--faint);
 }
 
 .tokens {

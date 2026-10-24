@@ -82,7 +82,7 @@ describe('SessionRow', () => {
   });
 
   describe('at card density', () => {
-    it('reads tag, title and age, then the activity with its clock and the tokens', () => {
+    it('reads tag, project and title, then the activity with its clock and the tokens', () => {
       vi.useFakeTimers();
       vi.setSystemTime(DEMO_NOW);
       try {
@@ -91,10 +91,11 @@ describe('SessionRow', () => {
         const [head, meta] = [...row.children] as HTMLElement[];
         expect([...(head?.children ?? [])].map((c) => c.textContent)).toEqual([
           'Claude Code',
+          'glassbox /',
           'Live viewer research (demo)',
-          expect.stringMatching(/now|ago/),
         ]);
-        expect(meta).toHaveTextContent('Reading tokens.css · 0:04 · 1.9M tokens');
+        // Running with a clock: no age beside it.
+        expect(meta).toHaveTextContent(/^Reading tokens\.css · 0:04 · 1\.9M tokens$/);
         // The figures are mono: the clock and the count, not the words around them.
         expect([...(meta?.querySelectorAll('.figure') ?? [])].map((f) => f.textContent)).toEqual([
           '0:04',
@@ -105,12 +106,17 @@ describe('SessionRow', () => {
       }
     });
 
-    it('gives a failure its reason, and leaves out tokens it does not know', () => {
+    it('gives a failure its reason and age, and leaves out tokens it does not know', () => {
       const row = renderRow(idle, false, vi.fn(), 'en', {
         density: 'card',
         failure: 'missing file',
       });
-      expect(row.lastElementChild).toHaveTextContent(/^Failed · missing file$/);
+      expect(row.lastElementChild).toHaveTextContent(/^Failed · missing file · .+ ago$/);
+    });
+
+    it('writes no project before the title when it has none', () => {
+      const row = renderRow({ ...idle, project: '' }, false, vi.fn(), 'en', { density: 'card' });
+      expect(row.firstElementChild).not.toHaveTextContent('/');
     });
 
     it('sets only the digits of a Chinese count in the mono face', () => {

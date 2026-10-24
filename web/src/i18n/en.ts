@@ -454,6 +454,7 @@ export const en: Record<MessageKey, string> = {
   'home.recent': 'Recent',
   'home.openLatest': 'Open the most recently active session',
   'home.runningOf': '{n} of {m} {m|session|sessions}',
+  'home.nothingRunning': 'Nothing is running.',
   'activity.reading': 'Reading {x}',
   'activity.searching': 'Searching {x}',
   'activity.editing': 'Editing {x}',

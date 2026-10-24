@@ -1,6 +1,6 @@
 import { Check, X } from 'lucide-react';
 import type { LiveState, RunStatus } from '../../../src/core/model.js';
-import { useNow } from '../data/useNow';
+import { useSecond } from '../data/useNow';
 import { type MessageKey, useI18n } from '../i18n';
 import { DASH, formatElapsed } from '../lib/format';
 import css from './Status.module.css';
@@ -91,13 +91,14 @@ export function StatusMark({
 const CLOCK = '\u0000';
 
 /**
- * A label with a live m:ss counter since `since`; only this node re-renders each second. The
+ * A label with a live m:ss counter since `since`, on the shared 1 s clock: only this node
+ * re-renders each second, and however many there are, one interval drives them. The
  * counter alone is a `.figure` (mono, tabular), so it does not jitter while the words around it
  * stay in the UI face: a zh label never falls into a monospace CJK face. `labelKey` holds `{t}`.
  */
 export function Ticking({ since, labelKey }: { since: string; labelKey: MessageKey }) {
   const { t } = useI18n();
-  const now = useNow();
+  const now = useSecond();
   const start = Date.parse(since);
   const elapsed = Number.isFinite(start) ? formatElapsed(now - start) : DASH;
   const [before, after = ''] = t(labelKey, { t: CLOCK }).split(CLOCK);

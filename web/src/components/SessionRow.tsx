@@ -27,8 +27,8 @@ interface Props {
  * lines cut with an ellipsis inside the row, so its focus ring frames it.
  * - `compact`: the title, then what it is doing (or its state and age), its tokens and its agent
  *   tag at the right edge.
- * - `card`: the agent tag, the title and its age, then what it is doing with its clock, and its
- *   tokens.
+ * - `card`: the agent tag, its project and the title, then what it is doing with its clock (or
+ *   its state and age) and its tokens.
  */
 export function SessionRow({
   session: s,
@@ -72,19 +72,31 @@ export function SessionRow({
       ),
     onClick: () => onSelect(s.id),
   };
+  // A running session says what it is doing, which is newer than any age.
+  const showAge = !(running && s.activity);
 
   if (density === 'card')
     return (
       <button {...button}>
         <span className={css.head}>
           <AgentTag kind={s.agent} />
+          {s.project && (
+            <span className={css.project}>
+              {s.project} <span className={css.slash}>/</span>
+            </span>
+          )}
           <span className={css.title} data-clip>
             {title}
           </span>
-          <span className={css.age}>{when}</span>
         </span>
         <span className={css.meta}>
           <ActivityLine session={s} failure={failure} density="card" />
+          {showAge && (
+            <>
+              <span className={css.sep}> · </span>
+              <span className={css.age}>{when}</span>
+            </>
+          )}
           {figure && (
             <>
               <span className={css.sep}> · </span>
@@ -99,8 +111,6 @@ export function SessionRow({
       </button>
     );
 
-  // A running session says what it is doing, which is newer than any age.
-  const showAge = !(running && s.activity);
   return (
     <button {...button}>
       <span className={css.title} data-clip>

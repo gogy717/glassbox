@@ -1,4 +1,4 @@
-/* The board: rows grouped by project, like the sidebar's, with no boxes around them. */
+/* The board: two flat lists of the sidebar's rows, with no boxes around them. */
 .home {
   min-width: 0;
   padding: 26px 32px 48px;
@@ -27,7 +27,7 @@
 }
 
 .count {
-  font-size: var(--fs-small);
+  font-size: var(--fs-meta);
   color: var(--muted);
 }
 
@@ -39,7 +39,7 @@
 }
 
 .section + .section .header {
-  padding-bottom: 4px;
+  padding-bottom: 8px;
   border-bottom: 0;
 }
 
@@ -60,17 +60,7 @@
   text-decoration: underline;
 }
 
-.group {
-  margin-top: 20px;
-}
-
-/* The project, at the rows' left edge. */
-.project {
-  margin: 0 0 2px;
-  padding-left: 10px;
-  color: var(--muted);
-}
-
+/* One column, wide enough for a long title, at any width. */
 .rows {
   max-width: 720px;
   margin: 0;
@@ -78,18 +68,13 @@
   list-style: none;
 }
 
-/* Wide: rows half the width, and recent ones in two columns. */
-@media (min-width: 1440px) {
-  .rows {
-    max-width: calc(50% - 16px);
-  }
-
-  .section[data-section="recent"] .rows {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    column-gap: 32px;
-    max-width: none;
-  }
+/* Nothing running: the section stays, and says so. */
+.none {
+  max-width: 720px;
+  margin: 0;
+  padding: 12px 10px;
+  font-size: var(--fs-body);
+  color: var(--muted);
 }
 
 @media (max-width: 900px) {

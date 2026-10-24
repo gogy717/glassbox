@@ -78,7 +78,7 @@ function renderHome(
 }
 
 const rows = (el: HTMLElement) => within(el).getAllByRole('listitem');
-const labels = (el: HTMLElement) => within(el).getAllByRole('heading', { level: 3 });
+const titles = (el: HTMLElement) => rows(el).map((r) => r.textContent?.match(/Session \d+/)?.[0]);
 
 describe('Home', () => {
   beforeEach(() => {
@@ -88,7 +88,7 @@ describe('Home', () => {
   });
   afterEach(() => vi.useRealTimers());
 
-  it('lists running sessions, then recent ones, each grouped by project', () => {
+  it('lists running sessions, then recent ones, each flat and most recently active first', () => {
     const sessions = [
       session('shopfront', 'idle', 120),
       session('glassbox', 'busy', 0, { activity: thinking(72) }),
@@ -99,16 +99,33 @@ describe('Home', () => {
     renderHome(sessions);
     const running = screen.getByRole('region', { name: 'Running' });
     expect(running).toHaveTextContent('2 of 5 sessions');
-    expect(labels(running).map((h) => h.textContent)).toEqual(['glassbox', 'shopfront']);
+    expect(titles(running)).toEqual(['Session 2', 'Session 3']);
     expect(rows(running).map((r) => r.textContent)).toEqual([
-      expect.stringContaining('Thinking · 1:12'),
-      expect.stringContaining('Waiting for you'),
+      expect.stringContaining('glassbox /Session 2Thinking · 1:12'),
+      expect.stringContaining('shopfront /Session 3Waiting for you'),
     ]);
     const recent = screen.getByRole('region', { name: 'Recent' });
-    // Newest first: each project ranked by its newest session.
-    expect(labels(recent).map((h) => h.textContent)).toEqual(['glassbox', 'lantern', 'shopfront']);
+    expect(titles(recent)).toEqual(['Session 5', 'Session 4', 'Session 1']);
     expect(within(recent).getByText('3')).toHaveClass('figure');
-    for (const h of labels(recent)) expect(h).toHaveClass('section-label');
+    // No project headings: the project leads each row instead.
+    expect(screen.queryAllByRole('heading', { level: 3 })).toEqual([]);
+  });
+
+  it('says a resting session is idle, and since when, on its second line', () => {
+    renderHome([session('a', 'idle', 4)]);
+    const meta = screen.getByRole('listitem').querySelector('button')?.lastElementChild;
+    expect(meta).toHaveTextContent(/^Idle · 4 ?m(in)?( ago)?$/);
+  });
+
+  it('keeps Running when nothing runs, and says so', () => {
+    const sessions = [session('a', 'idle', 3), session('b', 'closed', 9)];
+    const { onOpen } = renderHome(sessions);
+    const running = screen.getByRole('region', { name: 'Running' });
+    expect(running).toHaveTextContent('0 of 2 sessions');
+    expect(within(running).getByText('Nothing is running.')).toBeInTheDocument();
+    expect(within(running).queryByRole('listitem')).toBeNull();
+    fireEvent.click(within(running).getByRole('button', { name: /most recently active/ }));
+    expect(onOpen).toHaveBeenCalledWith(sessions[0]?.id);
   });
 
   it('shows the six newest recent sessions, and hides probes unless asked', () => {
@@ -116,8 +133,7 @@ describe('Home', () => {
     sessions.push(session('probe', 'closed', 0, { tags: ['probe'] }));
     renderHome(sessions);
     const recent = screen.getByRole('region', { name: 'Recent' });
-    expect(labels(recent).map((h) => h.textContent)).toEqual(['p0', 'p1', 'p2', 'p3', 'p4', 'p5']);
-    expect(screen.queryByRole('region', { name: 'Running' })).toBeNull();
+    expect(titles(recent)).toEqual([1, 2, 3, 4, 5, 6].map((i) => `Session ${i}`));
   });
 
   it('opens the most recently active session from the first section', () => {
@@ -154,24 +170,34 @@ describe('Home', () => {
     expect(onOpen).toHaveBeenCalledWith(sessions[0]?.id);
   });
 
+  it('keeps the tab stop on the row of the session open last', () => {
+    const sessions = [session('a', 'busy', 0), session('b', 'idle', 1), session('c', 'closed', 2)];
+    renderHome(sessions, { lastOpened: sessions[2]?.id });
+    const buttons = screen.getAllByRole('listitem').map((li) => within(li).getByRole('button'));
+    expect(buttons.map((b) => b.tabIndex)).toEqual([-1, -1, 0]);
+  });
+
   it('says why a glassbox run failed', () => {
     const failed = session('lantern', 'idle', 18);
     renderHome([failed], { failures: new Map([[failed.id, 'missing file']]) });
     expect(screen.getByRole('listitem')).toHaveTextContent('Failed · missing file');
   });
 
-  it('asks for nothing new, and only the clocks re-render as they tick', () => {
+  it('asks for nothing new, and only the clocks re-render as they tick, on one interval', () => {
     const fetch = vi.fn();
     vi.stubGlobal('fetch', fetch);
     try {
       renderHome([
         session('a', 'busy', 0, { activity: thinking(10) }),
+        session('d', 'busy', 1, { activity: { ...thinking(20), kind: 'writing' } }),
         session('b', 'idle', 5),
         session('c', 'closed', 60),
       ]);
       const before = format.calls;
+      expect(vi.getTimerCount()).toBe(1);
       act(() => vi.advanceTimersByTime(3000));
       expect(screen.getAllByRole('listitem')[0]).toHaveTextContent('Thinking · 0:13');
+      expect(screen.getAllByRole('listitem')[1]).toHaveTextContent('Replying · 0:23');
       expect(format.calls).toBe(before);
       expect(fetch).not.toHaveBeenCalled();
     } finally {

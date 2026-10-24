@@ -444,6 +444,7 @@ export const zh = {
   'home.recent': '最近的会话',
   'home.openLatest': '打开最近活跃的会话',
   'home.runningOf': '{m} 个会话中 {n} 个',
+  'home.nothingRunning': '没有会话在运行。',
   'activity.reading': '正在读取 {x}',
   'activity.searching': '正在搜索 {x}',
   'activity.editing': '正在编辑 {x}',

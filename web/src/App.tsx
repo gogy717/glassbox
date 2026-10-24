@@ -180,6 +180,11 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
   const waiting = useMemo(() => (waitingKey ? waitingKey.split('\n') : []), [waitingKey]);
   const sessions = useMemo(() => withWaiting(state.sessions, waiting), [state.sessions, waiting]);
   const failures = useMemo(() => failedSessions(state.runs), [state.runs]);
+  // The session open last: back on Home, its row keeps the tab stop.
+  const [lastOpened, setLastOpened] = useState<string | null>(null);
+  useEffect(() => {
+    if (route.sessionId) setLastOpened(route.sessionId);
+  }, [route.sessionId]);
   // Escape collapses a prompt without answering it; a newer prompt shows itself again.
   const [dismissed, setDismissed] = useState<string | null>(null);
   const showPrompt = !!pending && pending.id !== dismissed;
@@ -287,6 +292,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
                   loaded={state.sessionsLoaded}
                   showProbes={prefs.showProbes}
                   failures={failures}
+                  lastOpened={lastOpened}
                   onOpen={(id) =>
                     navigate({ sessionId: id, agentId: 'main', turnId: null, requestId: null })
                   }

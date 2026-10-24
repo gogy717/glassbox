@@ -109,7 +109,10 @@ describe('App', () => {
     if (!idle || !closed) throw new Error('fixture');
     store.applyEvent({ type: 'sessions', sessions: [closed, idle] });
     render(<App store={store} connect={noConnect} runs={fakeRuns()} />);
-    expect(screen.queryByRole('region', { name: 'Running' })).toBeNull();
+    // Nothing runs, and Running says so (W6-fix1 DR3).
+    const running = screen.getByRole('region', { name: 'Running' });
+    expect(running).toHaveTextContent('0 of 2 sessions');
+    expect(running).toHaveTextContent('Nothing is running.');
     const recent = screen.getByRole('region', { name: 'Recent' });
     expect(
       within(recent)
@@ -358,6 +361,27 @@ describe('App', () => {
     await waitFor(() =>
       expect(runs.decide).toHaveBeenCalledWith('run_1', 'tu_9', { decision: 'allow' }),
     );
+  });
+
+  // W6-fix1 C2: back on Home, the tab stop is on the row of the session just left.
+  it('keeps Home’s tab stop on the session the user comes back from', async () => {
+    const store = createStore();
+    const [, idle] = createDemoSessions(DEMO_NOW);
+    if (!idle) throw new Error('fixture');
+    store.applyEvent({ type: 'sessions', sessions: createDemoSessions(DEMO_NOW) });
+    render(<App store={store} connect={noConnect} runs={fakeRuns()} />);
+    const card = () =>
+      within(screen.getByRole('main')).getByRole('button', { name: /Fix flaky login test/ });
+    expect(card().tabIndex).toBe(-1);
+    fireEvent.click(card());
+    await waitFor(() => expect(store.getState().openId).toBe(idle.id));
+    window.location.hash = '#/';
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Recent' })).toBeInTheDocument());
+    expect(card().tabIndex).toBe(0);
+    const stops = within(screen.getByRole('main'))
+      .getAllByRole('listitem')
+      .filter((li) => li.querySelector('button')?.tabIndex === 0);
+    expect(stops).toHaveLength(1);
   });
 
   // W6: a glassbox run that failed says so where its session is listed: why, on Home's board.
