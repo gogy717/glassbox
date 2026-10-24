@@ -317,6 +317,22 @@ describe('tokens.css', () => {
     },
   );
 
+  // I3: CJK that lands in a mono run (a fenced message, a tool summary) takes the UI's CJK face
+  // right after Plex, never a CJK monospace further down the stack.
+  it('puts the UI’s CJK faces right after Plex Mono in the mono stack', () => {
+    const stack = (name: string) =>
+      (new RegExp(`${name}:([^;]+);`).exec(css)?.[1] ?? '')
+        .split(',')
+        .map((f) => f.trim().replace(/"/g, ''));
+    const mono = stack('--font-mono');
+    const cjk = stack('--font-ui').filter((f) =>
+      ['PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei'].includes(f),
+    );
+    expect(cjk).toHaveLength(3);
+    expect(mono.slice(0, 4)).toEqual(['IBM Plex Mono', ...cjk]);
+    expect(mono.at(-1)).toBe('monospace');
+  });
+
   // cards.module.css: a tool card's label is `color-mix(in srgb, var(--cat) 55%, var(--text))`.
   it.each(NAMES.map((name, i) => [name, i] as const))(
     'every tool category label reads at AA on its card (%s)',

@@ -14,7 +14,13 @@ import { SessionSidebar } from './components/SessionSidebar';
 import { TopBar } from './components/TopBar';
 import { ApprovalsContext, useApprovals } from './data/approvals';
 import { connectEvents } from './data/events';
-import { createRunsClient, type RunsClient, runForSession } from './data/runs';
+import {
+  createRunsClient,
+  type RunsClient,
+  runForSession,
+  waitingSessionIds,
+  withWaiting,
+} from './data/runs';
 import { SessionAgentContext } from './data/session-agent';
 import { createStore, type Store, StoreContext } from './data/store';
 import { useNow } from './data/useNow';
@@ -166,6 +172,13 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
     else setAwaiting(r.id);
   };
   const pending = run?.pendingPermissions[0];
+  // A session with a prompt open is waiting for you, in the top bar and the list: the composer's
+  // prompt says so, while its process only knows it is busy.
+  const waitingKey = waitingSessionIds(state.runs).join('\n');
+  const sessions = useMemo(
+    () => withWaiting(state.sessions, waitingKey ? waitingKey.split('\n') : []),
+    [state.sessions, waitingKey],
+  );
   // Escape collapses a prompt without answering it; a newer prompt shows itself again.
   const [dismissed, setDismissed] = useState<string | null>(null);
   const showPrompt = !!pending && pending.id !== dismissed;
@@ -203,7 +216,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
             title={route.sessionId ? (summary?.title ?? t('sidebar.untitled')) : null}
             agent={route.sessionId ? (summary?.agent ?? null) : null}
             sidebarOpen={sidebarShown}
-            live={summary?.live ?? null}
+            live={pending ? 'waiting' : (summary?.live ?? null)}
             connection={state.connection}
             quotas={state.quotas}
             follow={follow}
@@ -230,7 +243,8 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
                 : {})}
             >
               <SidebarContainer
-                sessions={state.sessions}
+                sessions={sessions}
+                loaded={state.sessionsLoaded}
                 selectedId={route.sessionId}
                 showProbes={prefs.showProbes}
                 onSelect={(id) => {
@@ -266,7 +280,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
                 </p>
               ) : (
                 <HomeContainer
-                  sessions={state.sessions}
+                  sessions={sessions}
                   loaded={state.sessionsLoaded}
                   showProbes={prefs.showProbes}
                   onOpen={(id) =>

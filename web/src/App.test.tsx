@@ -359,6 +359,44 @@ describe('App', () => {
     );
   });
 
+  // I3: the same pending prompt the composer shows makes the session "Waiting for you" in the
+  // top bar and on its sidebar row, with W1's waiting mark, though its process says busy.
+  it('says a session with an open permission prompt is waiting for you, in the top bar and sidebar', () => {
+    window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}`;
+    const store = demoStore();
+    store.applyEvent({ type: 'sessions', sessions: createDemoSessions(DEMO_NOW) });
+    render(<App store={store} connect={noConnect} runs={fakeRuns()} />);
+    const top = screen.getByRole('banner');
+    const row = () => within(sidebar()).getByRole('button', { name: /Live viewer research/ });
+    expect(top).toHaveTextContent('Running');
+    expect(row()).toHaveTextContent('Running');
+    act(() =>
+      store.applyEvent({
+        type: 'run',
+        run: runState({
+          status: 'waiting-permission',
+          pendingPermissions: [
+            {
+              id: 'tu_1',
+              toolName: 'Bash',
+              input: { command: 'ls' },
+              questions: null,
+              requestedAt: DEMO_NOW.toISOString(),
+            },
+          ],
+        }),
+      }),
+    );
+    for (const where of [top, row()]) {
+      expect(where).toHaveTextContent('Waiting for you');
+      expect(where.querySelector('[data-kind="live"][data-state="waiting"]')).not.toBeNull();
+    }
+    // Answered: back to what the process says.
+    act(() => store.applyEvent({ type: 'run', run: runState({ status: 'running' }) }));
+    expect(top).toHaveTextContent('Running');
+    expect(row()).not.toHaveTextContent('Waiting for you');
+  });
+
   it('collapses a permission prompt on Escape and reopens it from the composer', () => {
     window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}`;
     const store = demoStore();

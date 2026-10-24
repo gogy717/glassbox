@@ -25,6 +25,25 @@ function renderSidebar(onSelect = vi.fn()) {
 }
 
 describe('SessionSidebar', () => {
+  // I3: "No sessions found" is a claim about the list, so it waits for the list to arrive.
+  it('says nothing about an empty list until the first one has loaded', () => {
+    const empty = (loaded: boolean) => (
+      <I18nContext.Provider value={makeI18n('en')}>
+        <SessionSidebar
+          sessions={[]}
+          selectedId={null}
+          now={DEMO_NOW.getTime()}
+          loaded={loaded}
+          onSelect={() => {}}
+        />
+      </I18nContext.Provider>
+    );
+    const { rerender } = render(empty(false));
+    expect(screen.queryByText('No sessions found')).toBeNull();
+    rerender(empty(true));
+    expect(screen.getByText('No sessions found')).toBeInTheDocument();
+  });
+
   it('marks every session with its agent, in that agent’s colours, even with one agent', () => {
     renderSidebar();
     const items = screen.getAllByRole('button').filter((b) => b.closest('li'));

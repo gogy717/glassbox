@@ -92,6 +92,26 @@ describe('CSS modules', () => {
   // Empty since I3: W4's TimeView and W5's Composer declare their own.
   const KNOWN: string[] = [];
 
+  // D1 A2 (I3): nothing rounder than 8 px but a dot, so no pill (the reopen button was 999 px).
+  it('rounds every module only on D1’s scale: a radius token, at most 8px, or a 50% dot', () => {
+    const off = moduleFiles(SRC).flatMap((file) => {
+      const found: string[] = [];
+      postcss.parse(readFileSync(file, 'utf8')).walkDecls(/radius$/, (d) => {
+        for (const v of d.value.split(/\s+(?![^(]*\))/)) {
+          const px = /^(\d+(?:\.\d+)?)px$/.exec(v);
+          const ok =
+            /^var\(--radius-(xs|s|m|l|xl)\)$/.test(v) ||
+            v === '0' ||
+            v === '50%' ||
+            (px !== null && Number(px[1]) <= 8);
+          if (!ok) found.push(`${relative(SRC, file)}: ${d.prop}: ${d.value}`);
+        }
+      });
+      return found;
+    });
+    expect(off).toEqual([]);
+  });
+
   it('animates a module only with keyframes the module declares', () => {
     const missing = moduleFiles(SRC).flatMap((file) => {
       const root = postcss.parse(readFileSync(file, 'utf8'));

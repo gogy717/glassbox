@@ -1,4 +1,6 @@
 /** Client for glassbox-owned runs (B-lite): start, message, interrupt, end, answer prompts. */
+
+import type { SessionSummary } from '../../../src/core/model.js';
 import {
   type ApiErrorResponse,
   api,
@@ -103,4 +105,27 @@ export function runForSession(
     if (!best || r.updatedAt > best.updatedAt) best = r;
   }
   return best;
+}
+
+/**
+ * The sessions whose glassbox run has a permission prompt or question open: the prompt the
+ * composer shows (`pendingPermissions`). Their process only knows it is busy.
+ */
+export function waitingSessionIds(runs: Map<string, RunState>): string[] {
+  const ids = new Set<string>();
+  for (const r of runs.values())
+    if (r.sessionId && r.status !== 'closed' && r.pendingPermissions.length > 0)
+      ids.add(r.sessionId);
+  return [...ids].sort();
+}
+
+/** `sessions` with those in `waiting` live as 'waiting' ("Waiting for you"); the same list else. */
+export function withWaiting(
+  sessions: SessionSummary[],
+  waiting: readonly string[],
+): SessionSummary[] {
+  if (waiting.length === 0) return sessions;
+  return sessions.map((s) =>
+    waiting.includes(s.id) && s.live !== 'waiting' ? { ...s, live: 'waiting' } : s,
+  );
 }

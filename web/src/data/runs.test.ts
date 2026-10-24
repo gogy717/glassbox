@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { SessionSummary } from '../../../src/core/model.js';
 import { TOKEN_HEADER } from '../../../src/shared/protocol.js';
 import type { RunState } from '../../../src/shared/runs.js';
 import { ApiError } from './api';
-import { createRunsClient, runForSession } from './runs';
+import { createRunsClient, runForSession, waitingSessionIds, withWaiting } from './runs';
 
 type Call = { url: string; init: RequestInit | undefined };
 
@@ -115,5 +116,35 @@ describe('runForSession', () => {
     expect(runForSession(runs, 's1')?.id).toBe('b');
     expect(runForSession(runs, 's3')).toBeNull();
     expect(runForSession(runs, null)).toBeNull();
+  });
+});
+
+describe('waitingSessionIds and withWaiting', () => {
+  const ask = { id: 'tu_1', toolName: 'Bash', input: {}, questions: null, requestedAt: '' };
+  const run = (id: string, sessionId: string | null, status: RunState['status'], open: number) =>
+    ({ id, sessionId, status, pendingPermissions: Array(open).fill(ask) }) as RunState;
+
+  it('are the sessions with a prompt open on a run that has not closed', () => {
+    const runs = new Map(
+      [
+        run('a', 's1', 'waiting-permission', 1),
+        run('b', 's2', 'running', 0),
+        run('c', 's3', 'closed', 1),
+        run('d', null, 'waiting-permission', 1),
+        run('e', 's1', 'idle', 0),
+      ].map((r) => [r.id, r]),
+    );
+    expect(waitingSessionIds(runs)).toEqual(['s1']);
+  });
+
+  it('say those sessions are waiting, and leave the list as it was when none is', () => {
+    const sessions = [
+      { id: 's1', live: 'busy' },
+      { id: 's2', live: 'busy' },
+    ] as SessionSummary[];
+    expect(withWaiting(sessions, []).map((s) => s.live)).toEqual(['busy', 'busy']);
+    expect(withWaiting(sessions, [])).toBe(sessions);
+    expect(withWaiting(sessions, ['s1']).map((s) => s.live)).toEqual(['waiting', 'busy']);
+    expect(withWaiting(sessions, ['s1'])[1]).toBe(sessions[1]);
   });
 });

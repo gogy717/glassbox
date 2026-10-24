@@ -19,6 +19,8 @@ interface Props {
   selectedId: string | null;
   now: number;
   showProbes?: boolean;
+  /** False until the first session list arrives: "no sessions" is not said before it. */
+  loaded?: boolean;
   onSelect(id: string): void;
 }
 
@@ -36,7 +38,14 @@ const HIDDEN: Record<LiveFilter, MessageKey> = {
   closed: 'sidebar.hiddenClosed',
 };
 
-export function SessionSidebar({ sessions, selectedId, now, showProbes, onSelect }: Props) {
+export function SessionSidebar({
+  sessions,
+  selectedId,
+  now,
+  showProbes,
+  loaded = true,
+  onSelect,
+}: Props) {
   const { t } = useI18n();
   const [query, setQuery] = useState('');
   const [onlyAgent, setOnlyAgent] = useState<AgentKind | null>(null);
@@ -172,7 +181,7 @@ export function SessionSidebar({ sessions, selectedId, now, showProbes, onSelect
         )}
       </div>
       <div ref={listRef} className={css.list}>
-        {groups.length === 0 && (
+        {groups.length === 0 && (loaded || sessions.length > 0) && (
           <p className={css.empty}>{t(sessions.length ? 'sidebar.noMatch' : 'sidebar.empty')}</p>
         )}
         {groups.map((g) => (

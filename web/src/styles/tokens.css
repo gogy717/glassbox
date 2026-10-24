@@ -140,10 +140,12 @@
   --font-ui:
     -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
     "Microsoft YaHei", system-ui, sans-serif;
-  /* IBM Plex Mono is self-hosted (global.css); CJK is never set in it. */
+  /* IBM Plex Mono is self-hosted (global.css); CJK is never set in it. CJK that lands in a mono
+     run (a fenced message, a tool summary) takes the UI's CJK faces, listed right after Plex,
+     never a CJK monospace further down. */
   --font-mono:
-    "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, "Cascadia Mono", Consolas, "DejaVu Sans Mono",
-    monospace;
+    "IBM Plex Mono", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", ui-monospace, "SF Mono",
+    Menlo, "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
 
   /* Type scale, nothing else. Section labels (.section-label) are the only uppercase. */
   --fs-label: 10px; /* 600, uppercase, 0.06em */
