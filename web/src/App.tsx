@@ -42,8 +42,28 @@ import { Home } from './views/Home';
 import { SessionView } from './views/SessionView';
 import type { StatsPageProps } from './views/stats/StatsPage';
 
-// Its own chunk, with the receipt's counting it shares: the first load stays as it was.
-const StatsPage = lazyView(() => import('./views/stats/StatsPage').then((m) => m.StatsPage));
+// Its own chunk, with the receipt's counting it shares: the first load stays as it was. Fetched
+// once the page is idle; from then on it renders without suspending (a lazy view suspends once
+// even when loaded, and React holds that fallback a moment), so a first visit shows at once.
+let statsModule: typeof import('./views/stats/StatsPage') | null = null;
+const loadStats = () =>
+  import('./views/stats/StatsPage').then((m) => {
+    statsModule = m;
+    return m;
+  });
+const LazyStatsPage = lazyView(() => loadStats().then((m) => m.StatsPage));
+
+function usePrefetchStats(): void {
+  useEffect(() => {
+    const load = () => void loadStats().catch(() => {});
+    if (typeof window.requestIdleCallback === 'function') {
+      const id = window.requestIdleCallback(load, { timeout: 5000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = setTimeout(load, 2000);
+    return () => clearTimeout(id);
+  }, []);
+}
 
 export interface AppProps {
   /** Injected in tests; the real app creates its own. */
@@ -136,6 +156,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
   const state = useSyncExternalStore(store.subscribe, store.getState);
   const [route, navigate] = useRoute();
   const page = pageOf(route);
+  usePrefetchStats();
   const here = formatRoute(route);
   // Pausing follow is about the session being read: opening another one starts it afresh,
   // following its latest turn, unless the link names a turn or a request (a pasted link, Back or
@@ -410,7 +431,8 @@ function HomeContainer(props: Omit<Parameters<typeof Home>[0], 'now'>) {
 function StatsContainer(props: Omit<StatsPageProps, 'now'>) {
   // Reset times and the head's span move by the minute at most.
   const now = useNow(30_000);
-  return <StatsPage {...props} now={now} />;
+  const Page = statsModule?.StatsPage ?? LazyStatsPage;
+  return <Page {...props} now={now} />;
 }
 
 function SidebarContainer(props: Omit<Parameters<typeof SessionSidebar>[0], 'now'>) {
