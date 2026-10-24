@@ -243,4 +243,44 @@ describe('adapter quota()', () => {
     await rm(path);
     expect((await older.quota?.())?.source).toBe('anthropic-usage-api');
   });
+
+  it("names the plan as the config does, over the sign-in's, whichever numbers are newer", async () => {
+    const path = join(dir, '.claude.json');
+    const account = (over: Record<string, unknown>) => ({
+      oauthAccount: { accountUuid: ACCOUNT, organizationType: 'claude_max', ...over },
+    });
+    await writeFile(
+      path,
+      JSON.stringify(config(account({ organizationRateLimitTier: 'default_claude_max_20x' }))),
+    );
+    // The sign-in recorded 5x at login; the config, rewritten since, says 20x.
+    const signedIn = (fetchedAt: number) => ({
+      latest: async () => ({
+        provider: 'anthropic',
+        agent: 'claude-code',
+        plan: 'Max 5x',
+        fetchedAt: new Date(fetchedAt).toISOString(),
+        stale: false,
+        windows: [],
+        extraUsage: null,
+        balance: null,
+        source: 'anthropic-usage-api',
+      }),
+      problem: () => null,
+    });
+    const fresh = createClaudeCodeAdapter({ claudeDir: dir, quotaFetcher: signedIn(NOW) });
+    expect(await fresh.quota?.()).toMatchObject({ source: 'anthropic-usage-api', plan: 'Max 20x' });
+    const old = createClaudeCodeAdapter({
+      claudeDir: dir,
+      quotaFetcher: signedIn(NOW - 3_600_000),
+    });
+    expect(await old.quota?.()).toMatchObject({ source: 'claude-code-cache', plan: 'Max 20x' });
+
+    // A config without a plan of its own leaves the sign-in's.
+    await writeFile(path, JSON.stringify(config(account({ organizationType: undefined }))));
+    expect(await fresh.quota?.()).toMatchObject({ plan: 'Max 5x' });
+    // So does a cache of another account: nothing ties the config to this sign-in.
+    await writeFile(path, JSON.stringify(config({ oauthAccount: { accountUuid: 'other' } })));
+    expect(await fresh.quota?.()).toMatchObject({ plan: 'Max 5x' });
+  });
 });

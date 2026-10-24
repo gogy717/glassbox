@@ -52,7 +52,11 @@ export function createClaudeCodeAdapter({
       if (read.kind === 'ok') lastQuota = read.quota;
       const fetched = (await quotaFetcher?.latest()) ?? null;
       if (!fetched || !lastQuota) return fetched ?? lastQuota;
-      return Date.parse(fetched.fetchedAt) >= Date.parse(lastQuota.fetchedAt) ? fetched : lastQuota;
+      const newer =
+        Date.parse(fetched.fetchedAt) >= Date.parse(lastQuota.fetchedAt) ? fetched : lastQuota;
+      // The plan as the config names it (for the account its cache belongs to) wins, whichever
+      // numbers are newer: the sign-in's tier is the one recorded at login and can be outdated.
+      return { ...newer, plan: lastQuota.plan ?? newer.plan };
     },
     quotaFiles: () => [configPath],
   };
