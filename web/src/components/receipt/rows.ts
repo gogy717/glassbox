@@ -7,15 +7,16 @@ import type { ReceiptData } from './data';
 import type { ReceiptKey } from './strings';
 
 /**
- * Whole percents of `values` that add up to exactly 100: each takes its floor, and the points
- * left go to the largest remainders (rounding each alone gives 99 or 101).
+ * `units` whole units shared out in proportion to `values`, adding up to exactly `units`: each
+ * takes its floor, and the units left go to the largest remainders (rounding each alone can
+ * give one more or one less).
  */
-export function shares(values: number[]): number[] {
+export function apportion(values: number[], units: number): number[] {
   const total = values.reduce((a, b) => a + b, 0);
   if (total <= 0) return values.map(() => 0);
-  const exact = values.map((v) => (v / total) * 100);
+  const exact = values.map((v) => (v / total) * units);
   const out = exact.map((e) => Math.floor(e));
-  let left = 100 - out.reduce((a, b) => a + b, 0);
+  let left = units - out.reduce((a, b) => a + b, 0);
   const order = exact.map((e, i) => [e - Math.floor(e), i] as const).sort((a, b) => b[0] - a[0]);
   for (const [, i] of order) {
     if (left <= 0) break;
@@ -24,6 +25,9 @@ export function shares(values: number[]): number[] {
   }
   return out;
 }
+
+/** Whole percents of `values` that add up to exactly 100. */
+export const shares = (values: number[]) => apportion(values, 100);
 
 export interface TimeRow {
   key: ReceiptKey;

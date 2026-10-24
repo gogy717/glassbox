@@ -6,9 +6,10 @@
  * hourly buckets, keyed by its id and `updatedAt`; a window is a slice of those buckets, so
  * switching windows reads no file again. A session last written before the window is not read,
  * unless it is running (busy or waiting): it may be at work in files its `updatedAt` does not
- * follow (a background sub-agent's). Without `refresh` a session read before is served as it was
- * then; `refresh=1` reads again every session whose `updatedAt` changed since, and every running
- * one. `asOf` is when the data is from, and the receipt prints it as its end. Only one
+ * follow (a background sub-agent's). Every request buckets again the sessions not known to be as
+ * cached (changed since, running now or when read; an open one from memory, one that has to be
+ * parsed no more than once in 30 s, unless `refresh=1`) and finds the rest unchanged, so the
+ * result is as of when it was put together (`asOf`), and the receipt ends there. Only one
  * computation runs at a time: requests made meanwhile share it, or wait their turn with progress.
  *
  * Every figure follows the session's own R1 receipt, cut to the window: a request, a tool call
@@ -25,8 +26,9 @@ export interface WeekWindow {
   /**
    * Start (epoch ms) of each hour of the window, in order: local whole hours. 'week': from this
    * Monday 00:00 to next Monday 00:00 (168 hours; 167 or 169 in a week that changes the clocks),
-   * hours after `now` included and empty. '7d': 168 hours ending with the current one (e.g.
-   * Sat 17 21:00 → Sat 24 20:00 at 20:41), the current one still in progress.
+   * hours after `now` included and empty. '7d': the 168 hours (of the clock, an hour apart
+   * whatever the zone does) ending with the current one, e.g. Sat 17 21:00 → Sat 24 20:00 at
+   * 20:41, the current one still in progress.
    */
   hourStarts: number[];
   /** The time of the request, which the hours are counted from (the receipt prints `asOf`). */
@@ -38,8 +40,8 @@ export interface WeekFigures {
   /** The main agent's turns, cut to the window: the Summary bar's active time. */
   activeMs: number;
   /**
-   * Working time of the main agent and its sub-agents (thinking, generating, tools; queueing
-   * for the API left out), each agent's overlapping work counted once, the agents added up:
+   * Every agent's own turns in the window, the main agent's and each sub-agent's, added up (each
+   * the Summary bar's active time for that agent): `activeMs` is the main agent's share, and
    * parallel agents exceed the wall clock. The sum of `hours`.
    */
   agentMs: number;
@@ -93,8 +95,9 @@ export interface WeekResult {
   /** Sessions with any activity in the window, most agent time first. */
   sessions: WeekSession[];
   /**
-   * When the data is from (epoch ms): the oldest moment a session in the result was read, or
-   * found unchanged. The receipt ends there.
+   * When the result was put together (epoch ms): every session in it was read then, or found
+   * unchanged then (a running one parsed less than 30 s before is not parsed again so soon). The
+   * receipt ends there, and the dialog says "Data as of" it.
    */
   asOf: number;
   stats: WeekStats;
@@ -134,18 +137,16 @@ export function weekStart(t: number): number {
 
 /** The hours of a window, counted from `now`: see `WeekWindow`. */
 export function weekWindow(kind: WeekWindowKind, now: number): WeekWindow {
-  let start: number;
-  let end: number;
-  if (kind === 'week') {
-    start = weekStart(now);
-    const next = new Date(start);
-    next.setDate(next.getDate() + 7);
-    end = next.getTime();
-  } else {
-    end = nextHour(hourStart(now));
-    start = hourStart(now) - 167 * HOUR_MS;
+  if (kind === '7d') {
+    // Hours of the clock, not of the wall: 168 of them even where a change of the clocks moves
+    // by half an hour (Lord Howe).
+    const start = hourStart(now) - 167 * HOUR_MS;
+    return { kind, hourStarts: Array.from({ length: 168 }, (_, i) => start + i * HOUR_MS), now };
   }
+  const start = weekStart(now);
+  const next = new Date(start);
+  next.setDate(next.getDate() + 7);
   const hourStarts: number[] = [];
-  for (let h = start; h < end; h = nextHour(h)) hourStarts.push(h);
+  for (let h = start; h < next.getTime(); h = nextHour(h)) hourStarts.push(h);
   return { kind, hourStarts, now };
 }

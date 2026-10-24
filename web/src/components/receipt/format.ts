@@ -35,6 +35,18 @@ export function durationParts(ms: number, locale: Locale): Parts {
 
 export const partsText = (p: Parts) => p.map((x) => x.digits + x.unit).join('');
 
+/** Whole minutes as the receipt prints a duration of ten minutes or more: "4h 12m", "38m". */
+export function minuteParts(minutes: number, locale: Locale): Parts {
+  const u = locale === 'zh' ? { h: ' 小时 ', m: ' 分' } : { h: 'h ', m: 'm' };
+  const h = Math.floor(minutes / 60);
+  return h > 0
+    ? [
+        { digits: String(h), unit: u.h },
+        { digits: pad(minutes % 60), unit: u.m },
+      ]
+    : [{ digits: String(minutes), unit: u.m }];
+}
+
 const DAYS_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS_EN = [
   'Jan',

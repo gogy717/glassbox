@@ -3,9 +3,10 @@
  * of the window read once and kept, in memory only, as hourly buckets; each request slices them.
  *
  * Reading is the slow part (tens to hundreds of sessions, most never opened), so it runs two
- * sessions at a time with a yield between them, one very large session at a time, and only one
- * computation runs at once: a request for the window being read joins it, progress and all; any
- * other waits its turn, hearing meanwhile how many of its sessions are ready.
+ * sessions at a time with a yield between them, the smallest first and one very large session at
+ * a time, and only one computation runs at once: a request for the window being read joins it,
+ * progress and all; any other waits its turn, hearing meanwhile how many of its sessions are
+ * ready.
  */
 import type { SessionSnapshot, SessionSummary } from '../core/model.js';
 import {
@@ -16,6 +17,7 @@ import {
   type WeekWindowKind,
   weekWindow,
 } from '../shared/week.js';
+import { isActive } from './live.js';
 import { type SessionBuckets, sessionBucketsPausing, sliceSession } from './week-buckets.js';
 
 /** A session read for the week, and the bytes of the files read for it (0 when it was open). */
@@ -39,6 +41,8 @@ export interface WeekOptions {
   concurrency?: number;
   /** A session this large (bytes) is read alone: two at once would hold both in memory. */
   bigBytes?: number;
+  /** A running session that has to be parsed is parsed again no sooner than this (ms). */
+  reparseMs?: number;
   now?: () => number;
   log?: (msg: string) => void;
 }
@@ -47,10 +51,12 @@ export type WeekProgress = Extract<WeekLine, { type: 'progress' }>;
 
 interface Cached {
   buckets: SessionBuckets;
-  /** The listed `updatedAt` the buckets were read at: refresh reads again when it moved on. */
+  /** The listed `updatedAt` the buckets were read at: the next computation reads again if it moved. */
   updatedAt: string;
-  /** When the buckets were last known to be the session's: read then, or found unchanged. */
+  /** When the buckets were made (the computation's time): a running session's next parse waits. */
   readAt: number;
+  /** It was running when read: its files may have grown since whatever its `updatedAt` says. */
+  running: boolean;
 }
 
 interface Job {
@@ -61,20 +67,20 @@ interface Job {
   last: WeekProgress;
 }
 
-/** Which sessions a computation counts, and which of them it has to read. */
+/** Which sessions a computation counts, and which of them are not known to be as cached. */
 interface Plan {
   window: WeekWindow;
   wanted: SessionSummary[];
-  toRead: SessionSummary[];
+  stale: SessionSummary[];
 }
 
 const yieldToLoop = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 /** Busy or waiting: it may be working in files its `updatedAt` does not follow. */
-const running = (s: SessionSummary) => s.live === 'busy' || s.live === 'waiting';
+const running = (s: SessionSummary) => isActive(s.live);
 
 /** `onProgress` with `done` held from going down (a plan can shrink when it is made again). */
-function steady(onProgress?: (p: WeekProgress) => void) {
+export function steady(onProgress?: (p: WeekProgress) => void) {
   if (!onProgress) return undefined;
   let last = 0;
   return (p: WeekProgress) => {
@@ -91,6 +97,7 @@ export class WeekService {
   private bigRead: Promise<void> = Promise.resolve();
   private readonly concurrency: number;
   private readonly bigBytes: number;
+  private readonly reparseMs: number;
   private readonly now: () => number;
   private readonly log: (msg: string) => void;
 
@@ -100,6 +107,7 @@ export class WeekService {
   ) {
     this.concurrency = Math.max(1, opts.concurrency ?? 2);
     this.bigBytes = opts.bigBytes ?? 64 * 1024 * 1024;
+    this.reparseMs = opts.reparseMs ?? 30_000;
     this.now = opts.now ?? Date.now;
     this.log = opts.log ?? (() => {});
   }
@@ -128,9 +136,9 @@ export class WeekService {
       if (current.kind === kind && (current.refresh || !refresh)) return this.join(current, hear);
       // Another window is being read: say how many of this one's sessions are ready, and keep
       // saying as that reading fills the cache, until this one's turn comes.
-      const plan = this.plan(kind, refresh, this.now());
+      const plan = this.plan(kind, this.now());
       const ready = () => {
-        const left = new Set(this.plan(kind, refresh, this.now()).toRead.map((s) => s.id));
+        const left = new Set(this.plan(kind, this.now()).stale.map((s) => s.id));
         return plan.wanted.filter((s) => !left.has(s.id)).length;
       };
       const tell = () => hear?.({ type: 'progress', done: ready(), total: plan.wanted.length });
@@ -173,20 +181,21 @@ export class WeekService {
   }
 
   /**
-   * The sessions a window counts: those last written since it began, and every running one; to
-   * read, those not read yet and, on a refresh, those changed since and every running one.
+   * The sessions a window counts: those last written since it began, and every running one; of
+   * them, those whose buckets are not known to be current: not read yet, changed since (by their
+   * `updatedAt`), running now, or running when they were read.
    */
-  private plan(kind: WeekWindowKind, refresh: boolean, now: number): Plan {
+  private plan(kind: WeekWindowKind, now: number): Plan {
     const window = weekWindow(kind, now);
     const from = window.hourStarts[0] ?? now;
     const wanted = this.store
       .weekSessions()
       .filter((s) => running(s) || !(Date.parse(s.updatedAt) < from));
-    const toRead = wanted.filter((s) => {
+    const stale = wanted.filter((s) => {
       const c = this.cache.get(s.id);
-      return !c || (refresh && (running(s) || c.updatedAt !== s.updatedAt));
+      return !c || running(s) || c.running || c.updatedAt !== s.updatedAt;
     });
-    return { window, wanted, toRead };
+    return { window, wanted, stale };
   }
 
   /** Forgets sessions no longer listed, and finished ones written before both windows began. */
@@ -200,9 +209,12 @@ export class WeekService {
     for (const id of this.cache.keys()) if (!keep.has(id)) this.cache.delete(id);
   }
 
-  /** Reads one session into the cache; its bytes, or null when it could not be read. */
-  private async read(s: SessionSummary): Promise<number | null> {
-    const big = this.store.sizeOf ? (await this.store.sizeOf(s.id)) >= this.bigBytes : false;
+  /**
+   * Reads one session (`size` bytes) into the cache, bucketed as of `asOf` (the computation's
+   * time); its bytes, or null when it was not read.
+   */
+  private async read(s: SessionSummary, size: number, asOf: number): Promise<number | null> {
+    const big = size >= this.bigBytes;
     let release = () => {};
     if (big) {
       const before = this.bigRead;
@@ -215,10 +227,9 @@ export class WeekService {
       if (this.stopped) return null;
       const got = await this.store.readSession(s.id);
       if (!got || this.stopped) return null;
-      const readAt = this.now();
-      const buckets = await sessionBucketsPausing(got.snapshot, readAt, yieldToLoop);
+      const buckets = await sessionBucketsPausing(got.snapshot, asOf, yieldToLoop);
       if (this.stopped) return null;
-      this.cache.set(s.id, { buckets, updatedAt: s.updatedAt, readAt });
+      this.cache.set(s.id, { buckets, updatedAt: s.updatedAt, readAt: asOf, running: running(s) });
       return got.bytes;
     } finally {
       release();
@@ -229,23 +240,41 @@ export class WeekService {
     const started = performance.now();
     const now = this.now();
     this.prune(this.store.weekSessions(), now);
-    const { window, wanted, toRead } = this.plan(job.kind, job.refresh, now);
+    const { window, wanted, stale } = this.plan(job.kind, now);
     const total = wanted.length;
-    let done = total - toRead.length;
+    let done = total - stale.length;
     const emit = () => {
       job.last = { type: 'progress', done, total };
       for (const cb of job.listeners) cb(job.last);
     };
     emit();
 
+    // Open sessions are bucketed again from memory every time; a running one that has to be
+    // parsed, no sooner than `reparseMs` after its last parse, unless a refresh asks.
+    const sizeOf = this.store.sizeOf?.bind(this.store);
+    const sized = await Promise.all(
+      stale.map(async (s) => ({ s, size: sizeOf ? await sizeOf(s.id).catch(() => 0) : 0 })),
+    );
+    const toRead = sized.filter(({ s, size }) => {
+      const c = this.cache.get(s.id);
+      return !c || job.refresh || size === 0 || !(running(s) && now - c.readAt < this.reparseMs);
+    });
+    if (toRead.length < sized.length) {
+      done += sized.length - toRead.length;
+      emit();
+    }
+    // The smallest first: a large session waits for the small ones, never the other way.
+    toRead.sort((a, b) => a.size - b.size);
+
     let read = 0;
     let failed = 0;
     let bytes = 0;
     let next = 0;
     const worker = async () => {
-      for (let s = toRead[next++]; s && !this.stopped; s = toRead[next++]) {
+      for (let item = toRead[next++]; item && !this.stopped; item = toRead[next++]) {
+        const { s, size } = item;
         try {
-          const got = await this.read(s);
+          const got = await this.read(s, size, now);
           if (got === null) failed++;
           else {
             bytes += got;
@@ -264,19 +293,14 @@ export class WeekService {
     await Promise.all(Array.from({ length: Math.min(this.concurrency, toRead.length) }, worker));
     if (this.stopped) throw new Error('stopped');
 
-    // A finished session listed with the `updatedAt` it was read at is the same as then: known
-    // good as of now. A running one is only as good as its last read.
-    const reread = new Set(toRead.map((s) => s.id));
+    // Every session not read again was finished when read and is listed as then: the same now.
+    // So the result is as of now (R27), save a running one parsed in the last `reparseMs`.
     const sessions: WeekSession[] = [];
-    let asOf = now;
     for (const s of wanted) {
       const c = this.cache.get(s.id);
       if (!c) continue;
-      if (!reread.has(s.id) && !running(s) && c.updatedAt === s.updatedAt) c.readAt = now;
       const row = sliceSession(c.buckets, window, s.tags ?? []);
-      if (!row) continue;
-      sessions.push(row);
-      asOf = Math.min(asOf, c.readAt);
+      if (row) sessions.push(row);
     }
     sessions.sort(
       (a, b) =>
@@ -285,7 +309,7 @@ export class WeekService {
     return {
       window,
       sessions,
-      asOf,
+      asOf: now,
       stats: {
         considered: total,
         read,

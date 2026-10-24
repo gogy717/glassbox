@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDemoSideSnapshots, createDemoSnapshot } from '../core/fixtures/demo.js';
 import type { SessionSnapshot } from '../core/model.js';
-import { type WeekProgress, type WeekRead, WeekService, type WeekStore } from './week.js';
+import { steady, type WeekProgress, type WeekRead, WeekService, type WeekStore } from './week.js';
 import { HOUR_MS } from './week-buckets.js';
 
 // Sat 21 Nov: no common time zone changes its clocks this week or the one before, so the tests
@@ -16,7 +16,9 @@ const tick = () => new Promise((r) => setTimeout(r, 5));
  */
 function fakeStore(snaps: SessionSnapshot[], sizes: Record<string, number> = {}) {
   const reads: string[] = [];
-  let open = 0;
+  /** Sessions open in the store: read from memory, no file to go through. */
+  const open = new Set<string>();
+  let reading = 0;
   let maxOpen = 0;
   let bigOpen = 0;
   let maxBig = 0;
@@ -28,9 +30,9 @@ function fakeStore(snaps: SessionSnapshot[], sizes: Record<string, number> = {})
     readSession: async (id): Promise<WeekRead | null> => {
       reads.push(id);
       const big = (sizes[id] ?? 0) > 0;
-      open++;
+      reading++;
       if (big) bigOpen++;
-      maxOpen = Math.max(maxOpen, open);
+      maxOpen = Math.max(maxOpen, reading);
       maxBig = Math.max(maxBig, bigOpen);
       try {
         if (gate) await gate;
@@ -40,15 +42,16 @@ function fakeStore(snaps: SessionSnapshot[], sizes: Record<string, number> = {})
         const snap = snaps.find((s) => s.session.id === id);
         return snap ? { snapshot: structuredClone(snap), bytes: 1000 } : null;
       } finally {
-        open--;
+        reading--;
         if (big) bigOpen--;
       }
     },
-    sizeOf: async (id) => sizes[id] ?? 1000,
+    sizeOf: async (id) => (open.has(id) ? 0 : (sizes[id] ?? 1000)),
   };
   return {
     store,
     reads,
+    open,
     failing,
     maxOpen: () => maxOpen,
     maxBig: () => maxBig,
@@ -136,21 +139,90 @@ describe('the weekly receipt’s data', () => {
     expect(r.stats.considered).toBe(1);
   });
 
-  it('reads a running session whatever its updatedAt, and again on every refresh (I3)', async () => {
+  it('reads a running session whatever its updatedAt (I3)', async () => {
     // Busy, its main file last written days ago: a background sub-agent works in its own files.
     const [live] = week(NOW);
     if (!live) throw new Error('no demo session');
     touched(live, NOW - 10 * DAY);
     const f = fakeStore([live]);
-    const svc = new WeekService(f.store, { now: () => NOW });
-    const r = await svc.compute('week');
+    const r = await new WeekService(f.store, { now: () => NOW }).compute('week');
     expect(f.reads).toEqual([live.session.id]);
     expect(r.sessions).toHaveLength(1);
-    await svc.compute('week', { refresh: true });
-    expect(f.count(live.session.id)).toBe(2);
-    // A plain open serves it as read.
+  });
+
+  it('buckets a running session again on every open: from memory when open, a parse no more than every 30 s (R27)', async () => {
+    const [live] = week(NOW);
+    if (!live) throw new Error('no demo session');
+    const id = live.session.id;
+    const f = fakeStore([live]);
+    let now = NOW;
+    const svc = new WeekService(f.store, { now: () => now });
     await svc.compute('week');
-    expect(f.count(live.session.id)).toBe(2);
+    expect(f.count(id)).toBe(1);
+    // 20 s on: parsed too recently, its buckets stand, and are not stamped as if read now.
+    now = NOW + 20_000;
+    await svc.compute('week');
+    expect(f.count(id)).toBe(1);
+    // 35 s after the parse (not after the last open): parsed again.
+    now = NOW + 35_000;
+    await svc.compute('week');
+    expect(f.count(id)).toBe(2);
+    // A refresh asks: parsed at once.
+    now = NOW + 40_000;
+    await svc.compute('week', { refresh: true });
+    expect(f.count(id)).toBe(3);
+    // Open in the store: bucketed again from memory on every open.
+    f.open.add(id);
+    await svc.compute('week');
+    await svc.compute('week');
+    expect(f.count(id)).toBe(5);
+  });
+
+  it('parses a session that starts running at once, however lately it was found unchanged', async () => {
+    const snap = old(1, 'a');
+    snap.session = { ...snap.session, live: 'idle' };
+    const f = fakeStore([snap]);
+    let now = NOW;
+    const svc = new WeekService(f.store, { now: () => now });
+    await svc.compute('7d');
+    now = NOW + 60_000;
+    await svc.compute('7d');
+    expect(f.count('a')).toBe(1);
+    // 10 s after it was last found unchanged, it is at work again.
+    now = NOW + 70_000;
+    snap.session = { ...snap.session, live: 'busy' };
+    touched(snap, NOW + 65_000);
+    await svc.compute('7d');
+    expect(f.count('a')).toBe(2);
+  });
+
+  it('reads again a session that was running when read, though it has finished since (N2)', async () => {
+    const [live] = week(NOW);
+    if (!live) throw new Error('no demo session');
+    const id = live.session.id;
+    const f = fakeStore([live]);
+    let now = NOW;
+    const svc = new WeekService(f.store, { now: () => now });
+    await svc.compute('week');
+    // It finished, its listed updatedAt the same: still read again, once.
+    live.session = { ...live.session, live: 'idle' };
+    now = NOW + 5_000;
+    await svc.compute('week');
+    expect(f.count(id)).toBe(2);
+    now = NOW + 10_000;
+    const r = await svc.compute('week');
+    expect(f.count(id)).toBe(2);
+    expect(r.asOf).toBe(now);
+  });
+
+  it('reads the smallest sessions first (N1)', async () => {
+    const f = fakeStore([old(1, 'huge'), old(1, 'tiny'), old(1, 'mid')], {
+      huge: 300e6,
+      tiny: 10,
+      mid: 5e6,
+    });
+    await new WeekService(f.store, { now: () => NOW, concurrency: 1 }).compute('7d');
+    expect(f.reads).toEqual(['tiny', 'mid', 'huge']);
   });
 
   it('switches windows without reading again, and refresh reads only what changed', async () => {
@@ -167,25 +239,26 @@ describe('the weekly receipt’s data', () => {
     expect(w.window.hourStarts).toHaveLength(168);
     expect(d7.window.hourStarts).toHaveLength(168);
 
-    // One session moves on: a plain open still serves what was read, as of then.
+    // One session moves on: the next open reads it again; the result is as of that open.
     touched(snaps[0] as SessionSnapshot, NOW + 60_000);
     now = NOW + 120_000;
     const again = await svc.compute('week');
-    expect(f.reads).toHaveLength(3);
-    expect(again.asOf).toBe(NOW);
-    const refreshed = await svc.compute('week', { refresh: true });
     expect(f.count('today')).toBe(2);
-    expect(refreshed.stats).toMatchObject({ read: 1, cached: 1 });
-    expect(refreshed.asOf).toBe(now);
+    expect(again.stats).toMatchObject({ read: 1, cached: 1 });
+    expect(again.asOf).toBe(now);
+    // Nothing changed since: a refresh reads nothing.
+    const refreshed = await svc.compute('week', { refresh: true });
+    expect(f.reads).toHaveLength(4);
+    expect(refreshed.stats).toMatchObject({ read: 0, cached: 2 });
   });
 
-  it('moves asOf on when a refresh finds every session unchanged (I2)', async () => {
+  it('is as of when it is put together: finished sessions found unchanged, read again (R27)', async () => {
     const f = fakeStore([old(1, 'a'), old(2, 'b')]);
     let now = NOW;
     const svc = new WeekService(f.store, { now: () => now });
     expect((await svc.compute('week')).asOf).toBe(NOW);
     now = NOW + 10 * 60_000;
-    const r = await svc.compute('week', { refresh: true });
+    const r = await svc.compute('week');
     expect(f.reads).toHaveLength(2);
     expect(r.asOf).toBe(now);
   });
@@ -324,5 +397,21 @@ describe('the weekly receipt’s data', () => {
     expect(r.sessions.map((s) => s.id)).toEqual(['fine']);
     expect(r.stats.failed).toBe(1);
     expect(logged[0]).toContain('broken');
+  });
+
+  it('holds each request’s progress from going down, though its total may shrink', () => {
+    const seen: WeekProgress[] = [];
+    const hear = steady((p) => seen.push(p));
+    hear?.({ type: 'progress', done: 5, total: 10 });
+    hear?.({ type: 'progress', done: 3, total: 10 });
+    hear?.({ type: 'progress', done: 6, total: 9 });
+    hear?.({ type: 'progress', done: 2, total: 4 });
+    expect(seen.map((p) => [p.done, p.total])).toEqual([
+      [5, 10],
+      [5, 10],
+      [6, 9],
+      [4, 4],
+    ]);
+    expect(steady(undefined)).toBeUndefined();
   });
 });

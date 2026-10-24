@@ -74,6 +74,28 @@ describe('windows', () => {
     expect(w.hourStarts.every((h) => new Date(h).getMinutes() === 0)).toBe(true);
   });
 
+  it('takes 168 hours for the last 7 days even across a half-hour change of the clocks (N3)', () => {
+    process.env.TZ = 'Australia/Lord_Howe'; // DST from Sun 4 Oct 2026, 02:00 → 02:30
+    const now = new Date('2026-10-06T12:30:00+11:00').getTime();
+    const w = weekWindow('7d', now);
+    expect(w.hourStarts).toHaveLength(168);
+    expect(
+      new Set(w.hourStarts.map((h, i) => h - (w.hourStarts[0] as number) - i * HOUR_MS)),
+    ).toEqual(new Set([0]));
+    expect(w.hourStarts.at(-1)).toBe(hourStart(now));
+    // A session before the change, its buckets on local hours half an hour off the window's
+    // hours of the clock: every one still lands in an hour of the window.
+    const at = Date.parse('2026-10-03T12:30:00+10:30');
+    const snap = createDemoSnapshot(new Date(at));
+    const b = sessionBuckets(snap, at);
+    expect([...b.hours.keys()].every((k) => !w.hourStarts.includes(k))).toBe(true);
+    const s = sliceSession(b, w);
+    expect(s?.hours.reduce((a, h) => a + h, 0)).toBe(s?.inWindow.agentMs);
+    expect(s?.inWindow.agentMs).toBe(
+      [...b.hours.values()].reduce((a, bucket) => a + bucket.agentMs, 0),
+    );
+  });
+
   it('keeps hours on the local hour where the offset is half an hour', () => {
     process.env.TZ = 'Asia/Kolkata';
     const t = Date.parse('2026-10-22T10:10:00Z'); // 15:40 local
@@ -149,8 +171,8 @@ describe('a session as hourly buckets', () => {
     const paused = await sessionBucketsPausing(big, now, async () => {
       pauses++;
     });
-    // Every 2,000 steps through some 26,000 (turns, calls twice, tools twice), and once at the end.
-    expect(pauses).toBeGreaterThanOrEqual(10);
+    // Every 2,000 steps through some 13,000 (turns, calls, tools).
+    expect(pauses).toBeGreaterThanOrEqual(5);
     expect(paused).toEqual(sessionBuckets(big, now));
   });
 
@@ -175,5 +197,49 @@ describe('a session as hourly buckets', () => {
     expect(s?.reportsUsage).toBe(true);
     for (const q of side.requests) q.usage = null;
     expect(sessionBuckets(side, now).reportsUsage).toBe(false);
+  });
+
+  it('counts every agent’s own turns as agent time, the main agent’s as session time (DR7)', () => {
+    const now = new Date(2026, 10, 21, 20, 41).getTime();
+    const snap = createDemoSnapshot(new Date(now));
+    const b = sessionBuckets(snap, now);
+    const s = sliceSession(b, everything(b));
+    const turns = (agentId?: string) =>
+      snap.turns
+        .filter((t) => agentId === undefined || t.agentId === agentId)
+        .reduce(
+          (n, t) => n + ((t.endedAt ? Date.parse(t.endedAt) : now) - Date.parse(t.startedAt)),
+          0,
+        );
+    expect(s?.inWindow.activeMs).toBe(turns('main'));
+    expect(s?.inWindow.agentMs).toBe(turns());
+    expect(s?.inWindow.agentMs).toBeGreaterThan(s?.inWindow.activeMs ?? 0);
+  });
+
+  it('counts no time after the moment it is bucketed as of, though the snapshot runs on', () => {
+    const now = new Date(2026, 10, 21, 20, 41).getTime();
+    const snap = createDemoSnapshot(new Date(now));
+    // In the middle of a finished turn of the main agent's, before the sub-agents start.
+    const cut = now - 34.5 * 60_000;
+    expect(
+      snap.turns.some(
+        (t) => t.endedAt && Date.parse(t.startedAt) < cut && Date.parse(t.endedAt) > cut,
+      ),
+    ).toBe(true);
+    const b = sessionBuckets(snap, cut);
+    expect(Math.max(...[...b.hours].filter(([, x]) => x.agentMs > 0).map(([h]) => h))).toBe(
+      hourStart(cut),
+    );
+    const s = sliceSession(b, everything(b));
+    const upTo = (agentId?: string) =>
+      snap.turns
+        .filter((t) => agentId === undefined || t.agentId === agentId)
+        .reduce((n, t) => {
+          const start = Date.parse(t.startedAt);
+          const end = Math.min(t.endedAt ? Date.parse(t.endedAt) : now, cut);
+          return n + Math.max(0, end - start);
+        }, 0);
+    expect(s?.inWindow.agentMs).toBe(upTo());
+    expect(s?.inWindow.activeMs).toBe(upTo('main'));
   });
 });

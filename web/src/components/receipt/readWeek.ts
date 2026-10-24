@@ -51,8 +51,11 @@ export type WeekState =
 /** The windows the dialog has asked for, as they are read. */
 export function useWeeks() {
   const [states, setStates] = useState<Partial<Record<WeekWindowKind, WeekState>>>({});
-  const [refreshing, setRefreshing] = useState<{ done: number; total: number } | null>(null);
-  const [refreshFailed, setRefreshFailed] = useState<string | null>(null);
+  // A refresh of one window says nothing about the other's.
+  const [refreshing, setRefreshing] = useState<
+    Partial<Record<WeekWindowKind, { done: number; total: number }>>
+  >({});
+  const [refreshFailed, setRefreshFailed] = useState<Partial<Record<WeekWindowKind, string>>>({});
   const aborts = useRef(new Set<AbortController>());
   const asked = useRef(new Set<WeekWindowKind>());
   useEffect(() => {
@@ -69,27 +72,29 @@ export function useWeeks() {
     const abort = new AbortController();
     aborts.current.add(abort);
     const set = (s: WeekState) => setStates((all) => ({ ...all, [kind]: s }));
+    const progress = (p: { done: number; total: number } | undefined) =>
+      setRefreshing((all) => ({ ...all, [kind]: p }));
     if (refresh) {
-      setRefreshFailed(null);
-      setRefreshing({ done: 0, total: 0 });
+      setRefreshFailed((all) => ({ ...all, [kind]: undefined }));
+      progress({ done: 0, total: 0 });
     } else set({ phase: 'reading', done: 0, total: 0 });
     readWeek(
       kind,
       refresh,
       (done, total) =>
-        refresh ? setRefreshing({ done, total }) : set({ phase: 'reading', done, total }),
+        refresh ? progress({ done, total }) : set({ phase: 'reading', done, total }),
       abort.signal,
     )
       .then((result) => set({ phase: 'ready', result }))
       .catch((err: unknown) => {
         if (abort.signal.aborted) return;
         const msg = err instanceof Error ? err.message : String(err);
-        if (refresh) setRefreshFailed(msg);
+        if (refresh) setRefreshFailed((all) => ({ ...all, [kind]: msg }));
         else set({ phase: 'failed', msg });
       })
       .finally(() => {
         aborts.current.delete(abort);
-        if (refresh) setRefreshing(null);
+        if (refresh) progress(undefined);
       });
   }, []);
 

@@ -5,6 +5,7 @@ import { useApprovalsContext } from '../../data/approvals';
 import type { OpenSession } from '../../data/store';
 import { type Locale, useI18n } from '../../i18n';
 import { isListed } from '../../lib/sessions';
+import { loadPrefs } from '../../prefs';
 import { Modal } from '../Modal';
 import { Switch } from '../Switch';
 import { receiptData } from './data';
@@ -25,8 +26,6 @@ interface Choices {
   paper: Paper | null;
   locale: Locale | null;
   hideNames: boolean;
-  /** The weekly receipt's window. */
-  window: WeekWindowKind;
 }
 
 const KEY = 'glassbox.receipt';
@@ -40,10 +39,9 @@ export function loadChoices(): Choices {
       paper: raw?.paper === 'paper' || raw?.paper === 'night' ? raw.paper : null,
       locale: raw?.locale === 'en' || raw?.locale === 'zh' ? raw.locale : null,
       hideNames: raw?.hideNames === true,
-      window: raw?.window === '7d' ? '7d' : 'week',
     };
   } catch {
-    return { size: 'tall', paper: null, locale: null, hideNames: false, window: 'week' };
+    return { size: 'tall', paper: null, locale: null, hideNames: false };
   }
 }
 
@@ -98,8 +96,10 @@ interface SheetProps extends Chosen {
   name: string;
   /** Null when the receipt can be printed; else why the actions are off. */
   blocked: string | null;
-  /** Choices above the shared ones (the weekly receipt's window). */
+  /** Choices above the shared ones: the scope. */
   above?: ReactNode;
+  /** What Hide names withholds, said under it. */
+  namesHint: string;
   /** The line under the actions. */
   note: ReactNode;
   /** The image is the stub printed while reading: shown at a slip's size, without its size. */
@@ -216,7 +216,7 @@ function Sheet(p: SheetProps) {
           </div>
           <div className={css.field}>
             <span className={css.toggleName}>{ui('hideNames')}</span>
-            <span className={css.hint}>{ui('hideNamesHint')}</span>
+            <span className={css.hint}>{p.namesHint}</span>
             <Switch
               label={ui('hideNames')}
               value={choices.hideNames ? 'on' : 'off'}
@@ -256,41 +256,29 @@ function Sheet(p: SheetProps) {
   );
 }
 
+/** What the receipt prints: the session it was opened from, this week, or the last 7 days. */
+type Scope = 'session' | WeekWindowKind;
+
 interface Props {
-  open: OpenSession;
   onClose(): void;
-  /** The Receipt button: focus goes back to it on close. */
+  /** The button that opened it: focus goes back to it on close. */
   returnFocusTo: RefObject<HTMLElement | null>;
+  /** Probe sessions count in a week only when the sidebar shows them. */
+  showProbes?: boolean;
 }
 
-/** The session's receipt, drawn from the open session. */
-export function ReceiptDialog({ open, onClose, returnFocusTo }: Props) {
-  const chosen = useChoices();
-  const { choices, options, ui } = chosen;
-  const approvals = useApprovalsContext();
-  // The session as it was when the dialog opened, read once: a running session's receipt says
-  // "now" for then, and a live update can never redraw it past the time it prints.
-  const [data] = useState(() => receiptData(open, Date.now(), approvals));
-  const image = useMemo(
-    () => receiptSvg(data, options, choices.size),
-    [data, options, choices.size],
-  );
-  const text = useMemo(() => receiptText(data, options), [data, options]);
-  return (
-    <Sheet
-      {...chosen}
-      label={ui('dialog')}
-      subtitle={[data.project, data.title].filter(Boolean).join(' / ')}
-      image={image}
-      alt={ui('preview', { w: image.width * SCALE, h: image.height * SCALE })}
-      text={text}
-      name={fileName(data, options.hideNames)}
-      blocked={null}
-      note={ui('local')}
-      onClose={onClose}
-      returnFocusTo={returnFocusTo}
-    />
-  );
+/**
+ * A session's receipt, from its Receipt button: on This session, the weeks one switch away. Its
+ * weeks count probe sessions as the sidebar does, by the saved preference.
+ */
+export function ReceiptDialog(props: Props & { open: OpenSession }) {
+  const [showProbes] = useState(() => props.showProbes ?? loadPrefs().showProbes);
+  return <ReceiptSheet {...props} showProbes={showProbes} start="session" />;
+}
+
+/** The weekly receipt, from Home: on This week, or the last 7 days. */
+export function WeeklyReceiptDialog(props: Props) {
+  return <ReceiptSheet {...props} start="week" />;
 }
 
 /** The result without the sessions the sidebar hides: probes, unless it shows them (A1). */
@@ -299,19 +287,39 @@ const listedOnly = (r: WeekResult, showProbes: boolean): WeekResult => ({
   sessions: r.sessions.filter((s) => isListed(s, showProbes)),
 });
 
-/** The weekly receipt: every session of the window, read by the server once and summed here. */
-export function WeeklyReceiptDialog({
-  onClose,
-  returnFocusTo,
-  showProbes = false,
-}: Omit<Props, 'open'> & { showProbes?: boolean }) {
-  const chosen = useChoices();
-  const { choices, choose, options, ui, appLocale } = chosen;
-  const kind = choices.window;
-  const { states, refreshing, refreshFailed, ensure, read } = useWeeks();
-  useEffect(() => ensure(kind), [ensure, kind]);
+/** What the sheet shows for a scope. */
+type Shown = Pick<
+  SheetProps,
+  | 'label'
+  | 'subtitle'
+  | 'image'
+  | 'alt'
+  | 'text'
+  | 'name'
+  | 'blocked'
+  | 'note'
+  | 'stub'
+  | 'alert'
+  | 'namesHint'
+> & { hint?: string | null };
 
-  const state = states[kind];
+/**
+ * The weekly receipt for `kind` (nothing while the sheet shows a session): the window read as
+ * it streams, a stub while it is, the receipt once it is.
+ */
+function useWeekSheet(
+  kind: WeekWindowKind | null,
+  chosen: Chosen,
+  showProbes: boolean,
+): Shown | null {
+  const { choices, options, ui, appLocale } = chosen;
+  const weeks = useWeeks();
+  const { states, ensure, read } = weeks;
+  useEffect(() => {
+    if (kind) ensure(kind);
+  }, [ensure, kind]);
+
+  const state = kind ? states[kind] : undefined;
   const ready = useMemo(
     () => (state?.phase === 'ready' ? listedOnly(state.result, showProbes) : null),
     [state, showProbes],
@@ -333,41 +341,36 @@ export function WeeklyReceiptDialog({
     };
   }, [other, showProbes]);
 
-  // Until the week is read, its window as the server counts it; then as the receipt prints it.
-  const start = week?.start ?? weekWindow(kind, Date.now()).hourStarts[0] ?? 0;
-  const end = week?.now ?? Date.now();
-  const line = (L: Locale) => windowLine(kind, start, end, L, (k) => rt(L, k));
   const failed = state?.phase === 'failed' ? state.msg : null;
   const done = state?.phase === 'reading' ? state.done : 0;
   const total = state?.phase === 'reading' ? state.total : 0;
+  // Until the week is read, its window as the server counts it; then as the receipt prints it.
+  const start = kind ? (week?.start ?? weekWindow(kind, Date.now()).hourStarts[0] ?? 0) : 0;
+  const end = week?.now ?? Date.now();
+  const line = (L: Locale) => (kind ? windowLine(kind, start, end, L, (k) => rt(L, k)) : '');
   const stubLine = line(options.locale);
   const image = useMemo(
     () =>
-      week
-        ? weekSvg(week, options, choices.size, elsewhere)
-        : stubSvg(options, stubLine, failed !== null ? { failed } : { done, total }, choices.size),
-    [week, options, choices.size, elsewhere, stubLine, failed, done, total],
+      !kind
+        ? null
+        : week
+          ? weekSvg(week, options, choices.size, elsewhere)
+          : stubSvg(
+              options,
+              stubLine,
+              failed !== null ? { failed } : { done, total },
+              choices.size,
+            ),
+    [kind, week, options, choices.size, elsewhere, stubLine, failed, done, total],
   );
   const text = useMemo(
     () => (week ? weekText(week, options, elsewhere) : ''),
     [week, options, elsewhere],
   );
+  if (!kind || !image) return null;
 
-  const blocked =
-    failed !== null
-      ? ui('weekFailed', { msg: failed })
-      : !week
-        ? ui('reading', { done, total })
-        : week.sessions === 0
-          ? ui('nothing')
-          : null;
-  const hint =
-    week?.kind === 'week' && weekAge(week) < HINT_MS && elsewhere
-      ? ui('mondayHint', {
-          elapsed: elapsedWords(weekAge(week), (k, q) => ui(k, q)),
-          n: elsewhere.sessions,
-        })
-      : null;
+  const refreshing = weeks.refreshing[kind];
+  const refreshFailed = weeks.refreshFailed[kind];
   // Chinese runs its sentences on without a space.
   const gap = appLocale === 'zh' ? '' : ' ';
   const again = (
@@ -375,66 +378,131 @@ export function WeeklyReceiptDialog({
       {ui('refresh')}
     </button>
   );
-  const note = !week ? (
-    failed !== null ? (
-      again
+  return {
+    label: ui('weeklyDialog'),
+    subtitle: week ? ui('subtitle', { line: line(appLocale), n: week.sessions }) : line(appLocale),
+    image,
+    alt:
+      failed !== null
+        ? ui('weekFailed', { msg: failed })
+        : week
+          ? ui('weekPreview', { w: image.width * SCALE, h: image.height * SCALE })
+          : ui('readingPreview', { done, total }),
+    alert: failed !== null ? ui('weekFailed', { msg: failed }) : null,
+    text,
+    name: week ? weekFileName(week) : 'glassbox-week.png',
+    blocked:
+      failed !== null
+        ? ui('weekFailed', { msg: failed })
+        : !week
+          ? ui('reading', { done, total })
+          : week.sessions === 0
+            ? ui('nothing')
+            : null,
+    stub: !week,
+    note: !week ? (
+      failed !== null ? (
+        again
+      ) : (
+        ui('readingNote')
+      )
+    ) : refreshing ? (
+      <>
+        {ui('reading', refreshing)}
+        {gap}
+        {ui('localWeek')}
+      </>
     ) : (
-      ui('readingNote')
-    )
-  ) : refreshing ? (
-    <>
-      {ui('reading', refreshing)}
-      {gap}
-      {ui('local')}
-    </>
-  ) : (
-    <>
-      {refreshFailed !== null
-        ? ui('weekFailed', { msg: refreshFailed })
-        : ui('asOf', { time: clock(week.now) })}{' '}
-      · {again}
-      {ui('stop')}
-      {gap}
-      {ui('local')}
-    </>
-  );
+      <>
+        {refreshFailed !== undefined
+          ? ui('weekFailed', { msg: refreshFailed })
+          : ui('asOf', { time: clock(week.now) })}{' '}
+        · {again}
+        {ui('stop')}
+        {gap}
+        {ui('localWeek')}
+      </>
+    ),
+    namesHint: ui('hideNamesHintWeek'),
+    hint:
+      week?.kind === 'week' && weekAge(week) < HINT_MS && elsewhere
+        ? ui('mondayHint', {
+            elapsed: elapsedWords(weekAge(week), (k, q) => ui(k, q)),
+            n: elsewhere.sessions,
+          })
+        : null,
+  };
+}
 
+/**
+ * The receipt dialog of both entries: a session's Receipt button starts it on This session,
+ * Home on This week. The Scope switch swaps the slip in place; the other choices carry across,
+ * and the scope is not remembered: where it starts is the entry's to say.
+ */
+function ReceiptSheet({
+  open,
+  start,
+  onClose,
+  returnFocusTo,
+  showProbes = false,
+}: Props & { open?: OpenSession; start: Scope }) {
+  const chosen = useChoices();
+  const { choices, options, ui, setStatus } = chosen;
+  const [scope, setScope] = useState<Scope>(start);
+  const approvals = useApprovalsContext();
+  // The session as it was when the dialog opened, read once: a running session's receipt says
+  // "now" for then, and a live update can never redraw it past the time it prints.
+  const [data] = useState(() => (open ? receiptData(open, Date.now(), approvals) : null));
+  const session = scope === 'session' ? data : null;
+  const sessionImage = useMemo(
+    () => (session ? receiptSvg(session, options, choices.size) : null),
+    [session, options, choices.size],
+  );
+  const sessionText = useMemo(
+    () => (session ? receiptText(session, options) : ''),
+    [session, options],
+  );
+  const weekShown = useWeekSheet(scope === 'session' ? null : scope, chosen, showProbes);
+  const shown: Shown | null =
+    session && sessionImage
+      ? {
+          label: ui('dialog'),
+          subtitle: [session.project, session.title].filter(Boolean).join(' / '),
+          image: sessionImage,
+          alt: ui('preview', { w: sessionImage.width * SCALE, h: sessionImage.height * SCALE }),
+          text: sessionText,
+          name: fileName(session, options.hideNames),
+          blocked: null,
+          note: ui('local'),
+          namesHint: ui('hideNamesHint'),
+        }
+      : weekShown;
+  if (!shown) return null;
+  const scopes: Scope[] = data ? ['session', 'week', '7d'] : ['week', '7d'];
+  const scopeName: Record<Scope, ReceiptKey> = {
+    session: 'thisSession',
+    week: 'thisWeek',
+    '7d': 'last7',
+  };
   return (
     <Sheet
       {...chosen}
-      label={ui('weeklyDialog')}
-      subtitle={
-        week ? ui('subtitle', { line: line(appLocale), n: week.sessions }) : line(appLocale)
-      }
-      image={image}
-      alt={
-        failed !== null
-          ? ui('weekFailed', { msg: failed })
-          : week
-            ? ui('weekPreview', { w: image.width * SCALE, h: image.height * SCALE })
-            : ui('readingPreview', { done, total })
-      }
-      alert={failed !== null ? ui('weekFailed', { msg: failed }) : null}
-      text={text}
-      name={week ? weekFileName(week) : 'glassbox-week.png'}
-      blocked={blocked}
-      stub={!week}
+      {...shown}
       above={
         <div className={css.field}>
-          <span className="section-label">{ui('window')}</span>
+          <span className="section-label">{ui('scope')}</span>
           <Switch
-            label={ui('window')}
-            value={kind}
-            onChange={(window) => choose({ window })}
-            options={[
-              { value: 'week', label: ui('thisWeek') },
-              { value: '7d', label: ui('last7') },
-            ]}
+            label={ui('scope')}
+            value={scope}
+            onChange={(next) => {
+              setScope(next);
+              setStatus('');
+            }}
+            options={scopes.map((value) => ({ value, label: ui(scopeName[value]) }))}
           />
-          {hint && <span className={css.hint}>{hint}</span>}
+          {shown.hint && <span className={css.hint}>{shown.hint}</span>}
         </div>
       }
-      note={note}
       onClose={onClose}
       returnFocusTo={returnFocusTo}
     />

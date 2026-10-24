@@ -12,6 +12,7 @@ import {
   day,
   durationParts,
   hourOf,
+  minuteParts,
   type Parts,
   partsText,
   shortDay,
@@ -88,6 +89,37 @@ export function windowLine(
 /** The share a CLI's row prints: "76%", or "<1%" for one that did a little (DR4). */
 export const shareText = (share: number | '<1') => `${share}%`;
 
+/** What a figure prints when nothing it comes from was timed (G8). */
+export const DASH: Parts = [{ digits: '—', unit: '' }];
+
+/** A time as printed, "—" when nothing was timed. */
+export const timeParts = (ms: number, L: ReceiptOptions['locale']): Parts =>
+  ms > 0 ? durationParts(ms, L) : DASH;
+
+/** A CLI's time as printed: its share of the hero's minutes (or seconds), "—" for none. */
+export function cliParts(
+  r: WeekReceipt['byCli'][number],
+  unit: WeekReceipt['cliUnit'],
+  L: ReceiptOptions['locale'],
+): Parts {
+  if (r.ms === 0) return DASH;
+  return unit === 'min' ? minuteParts(r.units, L) : durationParts(r.units * 1000, L);
+}
+
+type Words = (k: ReceiptKey, p?: Record<string, string | number>) => string;
+
+/** The quiet slip's line: how far into the week, how many sessions, and their time if timed. */
+export function quietLine(d: WeekReceipt, w: Words, time: (ms: number) => string): string {
+  const said = { elapsed: elapsedWords(weekAge(d), (k, q) => w(k, q)), n: d.sessions };
+  return d.agentMs > 0 ? w('quiet', { ...said, time: time(d.agentMs) }) : w('quietUntimed', said);
+}
+
+/** The way out of a quiet or empty week: the last 7 days, their time left out if there is none. */
+export const wayOutLine = (e: WeekElsewhere, w: Words, time: (ms: number) => string) =>
+  e.agentMs > 0
+    ? w('wayOut', { n: e.sessions, time: time(e.agentMs) })
+    : w('wayOutUntimed', { n: e.sessions });
+
 /** The weekly receipt's drawing and its height, in slip units. */
 export function drawWeek(
   d: WeekReceipt,
@@ -114,11 +146,11 @@ export function drawWeek(
     p.push(text(LEFT, p.y, runs(clip(who, INNER, fits11)), { size: 11, fill: c.soft }));
     // The hero: the grid's sum, every agent's working time (parallel agents pass the clock).
     p.y += 37;
-    p.hero('agentTime', partsBody(durationParts(d.agentMs, L)));
+    p.hero('agentTime', partsBody(timeParts(d.agentMs, L)));
     // With sub-agents at work, the main agents' own clock too: the session receipts' DURATION.
     if (d.work.subAgents > 0) {
       p.y += 24;
-      p.row(w('sessionTime'), durationParts(d.sessionMs, L), { size: 11, fill: c.soft });
+      p.row(w('sessionTime'), timeParts(d.sessionMs, L), { size: 11, fill: c.soft });
       p.y += 16;
     } else p.y += 20;
   } else p.y += 20;
@@ -166,8 +198,8 @@ export function drawWeek(
   const elsewhereLine = () => {
     if (!elsewhere || elsewhere.sessions === 0 || d.kind !== 'week') return;
     p.y += 10;
-    const time = partsText(durationParts(elsewhere.agentMs, L));
-    for (const line of wrap(w('wayOut', { n: elsewhere.sessions, time }), 11.5, INNER, 3)) {
+    const said = wayOutLine(elsewhere, w, (ms) => partsText(durationParts(ms, L)));
+    for (const line of wrap(said, 11.5, INNER, 3)) {
       p.y += 17;
       p.push(text(LEFT, p.y, runs(line), { size: 11.5, fill: c.soft }));
     }
@@ -185,11 +217,7 @@ export function drawWeek(
     p.y += 14;
     const said = empty
       ? w(d.kind === 'week' ? 'noSessions' : 'noSessions7')
-      : w('quiet', {
-          elapsed: elapsedWords(weekAge(d), (k, q) => w(k, q)),
-          n: d.sessions,
-          time: partsText(durationParts(d.agentMs, L)),
-        });
+      : quietLine(d, w, (ms) => partsText(durationParts(ms, L)));
     for (const line of wrap(said, 12, INNER, 3)) {
       p.y += 19;
       p.push(text(LEFT, p.y, runs(line), { fill: c.ink }));
@@ -198,15 +226,20 @@ export function drawWeek(
     return close(!empty && d.tokens.measured);
   }
 
-  if (d.busiest) {
-    p.y += 24;
-    const at: Parts = [{ digits: `${hourOf(d.busiest.at, L)} · `, unit: '' }];
-    p.row(w('busiestHour'), [...at, ...durationParts(d.busiest.ms, L)]);
-  }
-  if (d.afterHours !== null) {
-    p.y += 19;
-    p.row(w('afterHours'), [{ digits: `${Math.round(d.afterHours * 100)}%`, unit: '' }]);
-  }
+  // The busiest hour and the share after hours, "—" in a week of which nothing was timed.
+  p.y += 24;
+  const busiest = d.busiest;
+  p.row(
+    w('busiestHour'),
+    busiest
+      ? [{ digits: `${hourOf(busiest.at, L)} · `, unit: '' }, ...durationParts(busiest.ms, L)]
+      : DASH,
+  );
+  p.y += 19;
+  p.row(
+    w('afterHours'),
+    d.afterHours !== null ? [{ digits: `${Math.round(d.afterHours * 100)}%`, unit: '' }] : DASH,
+  );
   p.y += 20;
   p.rule();
 
@@ -258,25 +291,26 @@ export function drawWeek(
     p.label('byCli');
     for (const r of d.byCli) {
       p.y += 19;
-      p.row(agentName(r.agent), durationParts(r.ms, L), {
+      p.row(agentName(r.agent), cliParts(r, d.cliUnit, L), {
         valueRight: RIGHT - 42,
-        share: shareText(r.share),
+        share: r.share === null ? undefined : shareText(r.share),
       });
     }
     p.y += 20;
     p.rule();
   }
 
-  // LONGEST: the session that worked longest by its own clock, named unless names are withheld.
+  // LONGEST: the session that worked longest by its own clock, named unless names are withheld;
+  // "—", naming none, when no session's clock ran.
+  p.y += 22;
+  p.row(w('longestSession'), d.longest ? timeParts(d.longest.ms, L) : DASH);
   if (d.longest) {
-    p.y += 22;
-    p.row(w('longestSession'), durationParts(d.longest.ms, L));
     p.y += 17;
     const line = longestLine(d.longest, o.hideNames, w);
     p.push(text(LEFT, p.y, runs(clip(line, INNER, fits11)), { size: 11, fill: c.soft }));
     p.y += 16;
-    p.rule();
-  }
+  } else p.y += 20;
+  p.rule();
 
   // TOKENS, with the sessions that report none named by CLI, on one line whatever their number.
   const note = unreportedLine(d, L, (line) => textWidth(line, 11) <= INNER);

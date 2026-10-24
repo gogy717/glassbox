@@ -29,8 +29,17 @@ import {
   tokenLines,
   wrapCols,
 } from './text';
-import { isQuiet, longestLine, unreportedLine, type WeekReceipt, weekAge } from './week';
-import { elapsedWords, inkOf, shareText, type WeekElsewhere, windowLine } from './weekSvg';
+import { isQuiet, longestLine, unreportedLine, type WeekReceipt } from './week';
+import {
+  cliParts,
+  inkOf,
+  quietLine,
+  shareText,
+  timeParts,
+  type WeekElsewhere,
+  wayOutLine,
+  windowLine,
+} from './weekSvg';
 
 const SHADE = { none: '·', low: '░', mid: '▒', high: '█', future: ' ', out: ' ' } as const;
 
@@ -55,6 +64,8 @@ export function weekText(
   const w = (key: ReceiptKey, params?: Record<string, string | number>) => rt(L, key, params);
   const head = (key: ReceiptKey) => (zh ? w(key) : w(key).toUpperCase());
   const dur = (ms: number) => partsText(durationParts(ms, 'en'));
+  /** A time, "—" when nothing was timed. */
+  const time = (ms: number) => partsText(timeParts(ms, 'en'));
   const count = (n: number) => countOf(n, 'en');
   const rule = '-'.repeat(COLUMNS);
   const empty = d.sessions === 0;
@@ -72,9 +83,10 @@ export function weekText(
         cols,
       ),
     );
-    out.push(zh ? lead(dur(d.agentMs), w('agentTime')) : spread(head('agentTime'), dur(d.agentMs)));
+    const hero = time(d.agentMs);
+    out.push(zh ? lead(hero, w('agentTime')) : spread(head('agentTime'), hero));
     if (d.work.subAgents > 0) {
-      const v = dur(d.sessionMs);
+      const v = time(d.sessionMs);
       out.push(zh ? lead(v, w('sessionTime')) : dots(`${w('sessionTime')} `, ` ${v}`));
     }
   }
@@ -91,32 +103,23 @@ export function weekText(
   };
   if (empty || isQuiet(d)) {
     out.push('');
-    const said = empty
-      ? w(d.kind === 'week' ? 'noSessions' : 'noSessions7')
-      : w('quiet', {
-          elapsed: elapsedWords(weekAge(d), (k, q) => w(k, q)),
-          n: d.sessions,
-          time: dur(d.agentMs),
-        });
+    const said = empty ? w(d.kind === 'week' ? 'noSessions' : 'noSessions7') : quietLine(d, w, dur);
     out.push(...wrapCols(said, 3));
     if (elsewhere && elsewhere.sessions > 0 && d.kind === 'week')
-      out.push(
-        ...wrapCols(w('wayOut', { n: elsewhere.sessions, time: dur(elsewhere.agentMs) }), 3),
-      );
+      out.push(...wrapCols(wayOutLine(elsewhere, w, dur), 3));
     return close(!empty && d.tokens.measured);
   }
 
+  // "—" for both in a week of which nothing was timed.
   if (d.busiest) {
     const at = hourOf(d.busiest.at, L);
     const v = dur(d.busiest.ms);
     out.push(
       zh ? lead(v, `${w('busiestHour')}（${at}）`) : dots(`${w('busiestHour')} `, ` ${at} · ${v}`),
     );
-  }
-  if (d.afterHours !== null) {
-    const share = `${Math.round(d.afterHours * 100)}%`;
-    out.push(zh ? lead(share, w('afterHours')) : dots(`${w('afterHours')} `, ` ${share}`));
-  }
+  } else out.push(zh ? lead('—', w('busiestHour')) : dots(`${w('busiestHour')} `, ' —'));
+  const share = d.afterHours !== null ? `${Math.round(d.afterHours * 100)}%` : '—';
+  out.push(zh ? lead(share, w('afterHours')) : dots(`${w('afterHours')} `, ` ${share}`));
   out.push(rule);
 
   out.push(head('work'));
@@ -143,22 +146,23 @@ export function weekText(
   if (d.byCli.length > 1) {
     out.push(head('byCli'));
     for (const r of d.byCli) {
-      const share = shareText(r.share);
+      const share = r.share === null ? '' : shareText(r.share);
+      const v = partsText(cliParts(r, d.cliUnit, 'en'));
       out.push(
         zh
-          ? lead(dur(r.ms), `${share.padStart(4)}  ${agentName(r.agent)}`)
-          : `${dots(`${agentName(r.agent)} `, ` ${dur(r.ms)}`, COLUMNS - 5)}${share.padStart(5)}`,
+          ? lead(v, `${share.padStart(4)}  ${agentName(r.agent)}`)
+          : `${dots(`${agentName(r.agent)} `, ` ${v}`, COLUMNS - 5)}${share.padStart(5)}`,
       );
     }
     out.push(rule);
   }
 
-  if (d.longest) {
-    const v = dur(d.longest.ms);
-    out.push(zh ? lead(v, w('longestSession')) : dots(`${w('longestSession')} `, ` ${v}`));
-    out.push(clip(longestLine(d.longest, o.hideNames, w), COLUMNS, cols));
-    out.push(rule);
-  }
+  const longest = d.longest ? time(d.longest.ms) : '—';
+  out.push(
+    zh ? lead(longest, w('longestSession')) : dots(`${w('longestSession')} `, ` ${longest}`),
+  );
+  if (d.longest) out.push(clip(longestLine(d.longest, o.hideNames, w), COLUMNS, cols));
+  out.push(rule);
 
   const note = unreportedLine(d, L, (line) => cols(line) <= COLUMNS);
   out.push(...tokenLines(d.tokens, L, note ?? undefined));

@@ -1363,4 +1363,27 @@ describe('SessionStore for the weekly receipt', () => {
     expect(await reading).toBeNull();
     await expect(s.week.compute('week')).rejects.toThrow('stopped');
   });
+
+  it('cuts a read under way short at its next chunk when the store stops (M9)', async () => {
+    const many = Array.from({ length: 3000 }, (_, i) => rec.req(`r${i}`, T(1)));
+    const p = await session('w4', ...many);
+    // A whole read, for how many chunks it takes.
+    const whole = await startStore({ chunkBytes: 256 });
+    expect((await whole.readSession(p.id))?.snapshot.requests).toHaveLength(3000);
+    const chunks = fake.parsersFor('w4')[0]?.ingested.length ?? 0;
+    expect(chunks).toBeGreaterThan(100);
+    await whole.stop();
+    // The same read, the store stopping a few chunks in.
+    const s = await startStore({ chunkBytes: 256 });
+    const reading = s.readSession(p.id);
+    const parser = () => fake.parsersFor('w4')[1];
+    for (let i = 0; i < 500 && (parser()?.ingested.length ?? 0) === 0; i++)
+      await new Promise((r) => setImmediate(r));
+    await s.stop();
+    store = undefined;
+    expect(await reading).toBeNull();
+    const read = parser()?.ingested.length ?? 0;
+    expect(read).toBeGreaterThan(0);
+    expect(read).toBeLessThan(chunks / 2);
+  });
 });

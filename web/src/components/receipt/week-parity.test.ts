@@ -7,8 +7,7 @@ import { createDemoSideSnapshots, createDemoSnapshot } from '../../../../src/cor
 import { MAIN_AGENT_ID, type SessionSnapshot } from '../../../../src/core/model.js';
 import { HOUR_MS, sessionBuckets, sliceSession } from '../../../../src/server/week-buckets.js';
 import { createStore, type OpenSession } from '../../data/store';
-import { summarize } from '../../lib/agents';
-import { activeMs, timeSegments } from '../../lib/time-stats';
+import { subtreeIds, summarize } from '../../lib/agents';
 import { toolCategory } from '../../lib/tool-category';
 import { DEMO_NOW } from '../../test/demo';
 import { receiptData } from './data';
@@ -70,8 +69,7 @@ describe('a session alone in its week prints its own receipt’s figures (W3)', 
       for (let h = hs[0] ?? 0; h <= (hs.at(-1) ?? 0); h += HOUR_MS) hourStarts.push(h);
       const week = sliceSession(b, { kind: '7d', hourStarts, now: NOW });
       const f = week?.inWindow;
-      expect(f).toBeDefined();
-      if (!f) return;
+      if (!f) throw new Error('nothing in the window');
 
       expect(f.activeMs).toBe(summary.activeMs);
       expect(f.requests).toBe(r1.work.requests);
@@ -91,13 +89,15 @@ describe('a session alone in its week prints its own receipt’s figures (W3)', 
         cats[c] = (cats[c] ?? 0) + 1;
       }
       expect(f.toolCats).toEqual(cats);
-      // Agent time: each lane's work (the Timeline's segments, queueing left out), added up.
-      const lanes = timeSegments(open, NOW);
-      const agentMs = lanes.reduce(
-        (n, l) => n + activeMs(l.segments.filter((s) => s.kind !== 'waiting')),
+      // Agent time: every agent's own turns (each one's Summary bar active time), added up; the
+      // main agent's share is the session's active time (DR7).
+      const agentMs = [...subtreeIds(open, MAIN_AGENT_ID)].reduce(
+        (n, id) => n + summarize(open, id, NOW).activeMs,
         0,
       );
       expect(f.agentMs).toBe(agentMs);
       expect(week?.hours.reduce((a, h) => a + h, 0)).toBe(agentMs);
+      expect(f.agentMs).toBeGreaterThanOrEqual(f.activeMs);
+      if (f.subAgents === 0) expect(f.agentMs).toBe(f.activeMs);
     });
 });

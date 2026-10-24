@@ -55,7 +55,7 @@ export const en: Record<MessageKey, string> = {
   'receipt.open': 'Receipt',
   'receipt.loading': 'Loading…',
   'receipt.nothing': 'Nothing to print yet',
-  'receipt.week': "This week's receipt",
+  'receipt.week': 'Weekly receipt',
   'crumb.main': 'Main',
   'crumb.pick': 'Switch sub-agent',
   'crumb.label': 'Agent',
