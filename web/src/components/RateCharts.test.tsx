@@ -1,7 +1,7 @@
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { MINUTE_MS, RATE_MINUTES, type TokenRate } from '../../../src/shared/rate.js';
-import { axisLabels, niceStep, RateChart, Sparkline } from './RateCharts';
+import { axisLabels, labelWidth, niceStep, RateChart, Sparkline } from './RateCharts';
 
 const series = (known: number) => [
   ...new Array<number>(RATE_MINUTES - known).fill(0),
@@ -86,5 +86,37 @@ describe('RateChart cold start', () => {
     const c = chart(120 * MINUTE_MS, 0, null);
     expect(c.querySelector('[data-since]')).toBeNull();
     expect(c.querySelector('polyline')?.getAttribute('points')?.split(' ')).toHaveLength(60);
+  });
+
+  it('keeps the rule at "now" when a clock set back puts counting in the future', () => {
+    const c = chart(-2 * MINUTE_MS, RATE_MINUTES - 1, 'counting since 11:01');
+    expect(Number(c.querySelector('[data-since] line')?.getAttribute('x1'))).toBe(334);
+  });
+
+  it('labels the rule only where the label fits left of it, by its own width in each language', () => {
+    expect(labelWidth('counting since 10:19')).toBe(120);
+    expect(labelWidth('10:19 起计数')).toBe(66);
+    // About 100px left of the rule: room for the Chinese label (72px), not the English (126px).
+    expect(
+      chart(39.8 * MINUTE_MS, 20, 'counting since 10:19').querySelector('[data-since] text'),
+    ).toBeNull();
+    expect(
+      chart(39.8 * MINUTE_MS, 20, '10:19 起计数').querySelector('[data-since] text'),
+    ).toHaveTextContent('10:19 起计数');
+    // About 130px: room for both.
+    expect(
+      chart(33.9 * MINUTE_MS, 26, 'counting since 10:25').querySelector('[data-since] text'),
+    ).not.toBeNull();
+  });
+
+  it('draws no line under three counted minutes, only the rules', () => {
+    const c = chart(2 * MINUTE_MS, RATE_MINUTES - 2, 'counting since 10:57');
+    expect(c.querySelector('polyline')).toBeNull();
+    expect(c.querySelector('circle')).toBeNull();
+    expect(c.querySelector('[data-since] line')).not.toBeNull();
+    const nowRule = [...c.querySelectorAll('line')].filter(
+      (l) => l.getAttribute('x1') === '334' && l.getAttribute('y1') === '4',
+    );
+    expect(nowRule).toHaveLength(1);
   });
 });

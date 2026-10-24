@@ -88,8 +88,24 @@ const LABELS = 34;
 const PLOT_W = 300;
 const PLOT_H = 96;
 const AXIS = 18;
-/** Room left of the "counting since" rule that its label needs. */
-const SINCE_LABEL_ROOM = 110;
+/** Space between the "counting since" rule and its label. */
+const SINCE_LABEL_GAP = 6;
+
+/**
+ * Width of `text` in the chart's labels, 10px: Plex Mono advances 0.6em for every Latin
+ * character, and a CJK character falls back to a full-width face, 1em. SVG text cannot be measured
+ * before it is drawn (nor in tests), and these metrics are fixed.
+ */
+export function labelWidth(text: string, fontSize = 10): number {
+  let wide = 0;
+  let narrow = 0;
+  for (const ch of text) {
+    if (/[\u2e80-\u9fff\uf900-\ufaff\uff00-\uffef]/.test(ch)) wide++;
+    else narrow++;
+  }
+  // In tenths of an em, so twenty narrow characters make 12em exactly.
+  return ((wide * 10 + narrow * 6) * fontSize) / 10;
+}
 
 /**
  * The hour on a fixed 60-minute axis: a hairline grid with round y labels, "−60 min / −30 / now"
@@ -124,7 +140,10 @@ export function RateChart({
   const last = RATE_MINUTES - 1;
   // Where counting began, on the minute axis (bucket i starts `last - i` minutes before `minute`).
   const sinceAt = last - (Date.parse(rate.minute) - Date.parse(rate.since)) / MINUTE_MS;
-  const sinceX = sinceLabel !== null ? x(Math.max(0, sinceAt)) : null;
+  // Held between the axis's ends: a clock set back can put `since` after `minute`.
+  const sinceX = sinceLabel !== null ? x(Math.min(last, Math.max(0, sinceAt))) : null;
+  // Fewer than three points is no line, as for the small ones: the rules and the label say it.
+  const drawn = shown.length >= SPARK_MIN_POINTS;
   return (
     <svg
       width={LABELS + PLOT_W}
@@ -158,9 +177,9 @@ export function RateChart({
       {sinceX !== null && (
         <g data-since>
           <line x1={sinceX} x2={sinceX} y1={4} y2={PLOT_H} stroke="var(--muted)" />
-          {sinceX - LABELS >= SINCE_LABEL_ROOM && (
+          {sinceLabel !== null && sinceX - LABELS >= labelWidth(sinceLabel) + SINCE_LABEL_GAP && (
             <text
-              x={sinceX - 6}
+              x={sinceX - SINCE_LABEL_GAP}
               y={PLOT_H / 2 + 3}
               textAnchor="end"
               fontSize={10}
@@ -173,7 +192,7 @@ export function RateChart({
         </g>
       )}
       <line x1={x(last)} x2={x(last)} y1={4} y2={PLOT_H} stroke="var(--muted)" />
-      {shown.length > 1 && (
+      {drawn && (
         <polyline
           points={shown.map((v, j) => `${x(from + j).toFixed(1)},${y(v).toFixed(1)}`).join(' ')}
           fill="none"
@@ -182,9 +201,7 @@ export function RateChart({
           strokeLinejoin="round"
         />
       )}
-      {shown.length > 0 && (
-        <circle cx={x(last)} cy={y(values[last] ?? 0)} r={2.6} fill="var(--text)" />
-      )}
+      {drawn && <circle cx={x(last)} cy={y(values[last] ?? 0)} r={2.6} fill="var(--text)" />}
       {ticksX.map((tick, k) => (
         <text
           key={tick}
