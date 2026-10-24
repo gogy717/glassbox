@@ -1,7 +1,8 @@
 import { Gauge } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
 import type { QuotaSnapshot, QuotaWindow } from '../../../src/core/model.js';
-import { type MessageKey, useI18n } from '../i18n';
+import { type I18n, type MessageKey, useI18n } from '../i18n';
+import { agentName } from '../lib/agent-names';
 import { formatCountdown, formatRelative, formatResetTime } from '../lib/format';
 import { providerName, providerShortName } from '../lib/provider-names';
 import { quotaWindowName } from '../lib/quota';
@@ -32,6 +33,48 @@ const SOURCES: Record<string, MessageKey> = {
   'deepseek-api': 'quota.sourceDeepseekApi',
   'xai-api': 'quota.sourceXaiApi',
 };
+
+/** What glassbox asks each provider with: an app's sign-in, or a key in the environment. */
+const CREDENTIALS: Record<string, { app: string } | { env: string }> = {
+  anthropic: { app: 'Claude Code' },
+  xai: { app: 'Grok CLI' },
+  deepseek: { env: 'DEEPSEEK_API_KEY' },
+};
+
+/** Why a stale quota is stale and how it will refresh, in a sentence; null when not known. */
+export function staleReasonText(q: QuotaSnapshot, t: I18n['t']): string | null {
+  if (!q.stale || !q.staleReason) return null;
+  const credential = CREDENTIALS[q.provider];
+  const app = credential && 'app' in credential ? credential.app : null;
+  switch (q.staleReason) {
+    case 'not-fetching':
+      return t('quota.whyNotFetching');
+    case 'sign-in-expired':
+      return app
+        ? t('quota.whySignInExpired', { name: providerShortName(q.provider), app })
+        : t('quota.whyFetchFailed');
+    case 'no-credentials':
+      if (app) return t('quota.whyNoSignIn', { app });
+      return credential && 'env' in credential
+        ? t('quota.whyNoKey', { env: credential.env })
+        : t('quota.whyFetchFailed');
+    case 'fetch-failed':
+      return t('quota.whyFetchFailed');
+    case 'cache-only':
+      return q.agent
+        ? t('quota.whyCacheOnly', { agent: agentName(q.agent) })
+        : t('quota.whyCannotFetch');
+    default:
+      return null;
+  }
+}
+
+/** A stale provider's reason, a line of its own in the details. */
+function StaleReason({ q }: { q: QuotaSnapshot }) {
+  const { t } = useI18n();
+  const text = staleReasonText(q, t);
+  return text ? <p className={css.why}>{text}</p> : null;
+}
 
 /** "¥12.30": the currency's own symbol; a code Intl does not know follows the amount instead. */
 export function formatBalance(balance: { amount: number; currency: string }, intl: string): string {
@@ -136,6 +179,7 @@ export function QuotaBar({ quotas, now }: Props) {
             top && resetText(top),
             q.balance && t('quota.balance', { amount: formatBalance(q.balance, intl) }),
             q.stale && age(q),
+            staleReasonText(q, t),
           ]
             .filter(Boolean)
             .join(' · ');
@@ -218,6 +262,7 @@ export function QuotaBar({ quotas, now }: Props) {
                 </p>
               )}
               <p className={css.meta}>{age(q)}</p>
+              <StaleReason q={q} />
               <p className={css.meta}>{t('quota.source', { source: sourceName(q.source) })}</p>
             </section>
           ))}

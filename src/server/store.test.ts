@@ -638,7 +638,7 @@ describe('SessionStore quota', () => {
     await writeFile(join(root, 'quota.json'), JSON.stringify(q));
     fake = createFakeAdapter(root, { quota: true });
     const s = await startStore({ quotaPollMs: 50 });
-    expect(s.listQuotas()).toEqual([q]);
+    await vi.waitFor(() => expect(s.listQuotas()).toEqual([q]), { timeout: 5000 });
     const seen: QuotaSnapshot[][] = [];
     s.onQuota((x) => seen.push(x));
 
@@ -647,6 +647,20 @@ describe('SessionStore quota', () => {
 
     await vi.waitFor(() => expect(seen.at(-1)).toEqual([aged]), { timeout: 5000 });
     expect(s.listQuotas()).toEqual([aged]);
+  });
+
+  it('starts without waiting for a provider that never answers, and serves the rest as they land', async () => {
+    const q = createDemoQuota(new Date('2026-10-23T02:00:00.000Z'));
+    // A usage fetch on a network that drops packets: its read never settles.
+    const fetching = { id: 'xai-api', read: () => new Promise<QuotaSnapshot[]>(() => {}) };
+    const cache = { id: 'cache', read: async () => [q] };
+    const started = await Promise.race([
+      startStore({ quotaSources: [fetching, cache] }).then(() => 'listening'),
+      new Promise((r) => setTimeout(() => r('blocked'), 1000)),
+    ]);
+    expect(started).toBe('listening');
+    const s = store as SessionStore;
+    await vi.waitFor(() => expect(s.listQuotas()).toEqual([q]), { timeout: 5000 });
   });
 });
 

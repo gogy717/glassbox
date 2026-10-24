@@ -227,6 +227,7 @@ describe('adapter quota()', () => {
         balance: null,
         source: 'anthropic-usage-api',
       }),
+      problem: () => null,
     });
     // The fixture's cache was fetched 4 minutes before NOW.
     const newer = createClaudeCodeAdapter({
@@ -241,5 +242,59 @@ describe('adapter quota()', () => {
     expect((await older.quota?.())?.source).toBe('claude-code-cache');
     await rm(path);
     expect((await older.quota?.())?.source).toBe('anthropic-usage-api');
+  });
+
+  it("names the plan as the config does, over the sign-in's, whichever numbers are newer", async () => {
+    const path = join(dir, '.claude.json');
+    const account = (over: Record<string, unknown>) => ({
+      oauthAccount: { accountUuid: ACCOUNT, organizationType: 'claude_max', ...over },
+    });
+    await writeFile(
+      path,
+      JSON.stringify(config(account({ organizationRateLimitTier: 'default_claude_max_20x' }))),
+    );
+    // The sign-in recorded 5x at login; the config, rewritten since, says 20x.
+    const signedIn = (fetchedAt: number) => ({
+      latest: async () => ({
+        provider: 'anthropic',
+        agent: 'claude-code',
+        plan: 'Max 5x',
+        fetchedAt: new Date(fetchedAt).toISOString(),
+        stale: false,
+        windows: [],
+        extraUsage: null,
+        balance: null,
+        source: 'anthropic-usage-api',
+      }),
+      problem: () => null,
+    });
+    const fresh = createClaudeCodeAdapter({ claudeDir: dir, quotaFetcher: signedIn(NOW) });
+    expect(await fresh.quota?.()).toMatchObject({ source: 'anthropic-usage-api', plan: 'Max 20x' });
+    const old = createClaudeCodeAdapter({
+      claudeDir: dir,
+      quotaFetcher: signedIn(NOW - 3_600_000),
+    });
+    expect(await old.quota?.()).toMatchObject({ source: 'claude-code-cache', plan: 'Max 20x' });
+
+    // Signing in again clears the cache, not the account record: its plan still wins.
+    await writeFile(
+      path,
+      JSON.stringify(
+        config({
+          ...account({ organizationRateLimitTier: 'default_claude_max_20x' }),
+          cachedUsageUtilization: undefined,
+        }),
+      ),
+    );
+    expect(await fresh.quota?.()).toMatchObject({ source: 'anthropic-usage-api', plan: 'Max 20x' });
+    // Caught mid-write, the config keeps naming the plan it named last.
+    await writeFile(path, '{"oauthAccount": {"organizationType": "claude_m');
+    expect(await fresh.quota?.()).toMatchObject({ source: 'anthropic-usage-api', plan: 'Max 20x' });
+
+    // Only a config whose account record names no plan leaves the sign-in's.
+    await writeFile(path, JSON.stringify(config(account({ organizationType: undefined }))));
+    expect(await fresh.quota?.()).toMatchObject({ plan: 'Max 5x' });
+    await rm(path);
+    expect(await fresh.quota?.()).toMatchObject({ plan: 'Max 5x' });
   });
 });

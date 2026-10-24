@@ -1,6 +1,6 @@
 import { dirname } from 'node:path';
 import type { AgentAdapter } from '../core/adapter.js';
-import type { QuotaProvider, QuotaSnapshot } from '../core/model.js';
+import type { QuotaProvider, QuotaSnapshot, QuotaStaleReason } from '../core/model.js';
 import type { QuotaSource } from '../core/quota-source.js';
 import { errorText } from './open-session.js';
 import { type DirWatcher, watchDirs } from './tail/watch.js';
@@ -16,6 +16,8 @@ export interface QuotaWatcherOptions {
    * only catches a source that hangs; it also bounds how long `start()` waits.
    */
   readTimeoutMs?: number;
+  /** Why a stale quota is stale, when the caller can tell; added to the snapshot for the UI. */
+  staleReason?: (q: QuotaSnapshot) => QuotaStaleReason | undefined;
   log?: (msg: string) => void;
 }
 
@@ -88,6 +90,7 @@ export class QuotaWatcher {
   private readonly pollMs: number;
   private readonly debounceMs: number;
   private readonly readTimeoutMs: number;
+  private readonly staleReason: (q: QuotaSnapshot) => QuotaStaleReason | undefined;
   private readonly log: (msg: string) => void;
   private readonly listeners = new Set<(q: QuotaSnapshot[]) => void>();
   /** Sources whose last read failed; logged once per failure streak, not every poll. */
@@ -113,12 +116,15 @@ export class QuotaWatcher {
     this.pollMs = opts.pollMs ?? 30_000;
     this.debounceMs = opts.debounceMs ?? 500;
     this.readTimeoutMs = opts.readTimeoutMs ?? 15_000;
+    this.staleReason = opts.staleReason ?? (() => undefined);
     this.log = opts.log ?? (() => {});
   }
 
   async start(): Promise<void> {
     if (this.sources.length === 0) return;
     await this.refresh();
+    // Stopped while the first reads were in flight: watch nothing.
+    if (this.stopped) return;
     const files = new Set(this.sources.flatMap((s) => s.watchFiles?.() ?? []));
     if (files.size > 0) {
       const dirs = [...new Set([...files].map((f) => dirname(f)))];
@@ -196,9 +202,15 @@ export class QuotaWatcher {
     this.publish();
   }
 
-  /** Merges every source's latest snapshots, in source order, and tells listeners of a change. */
+  /**
+   * Merges every source's latest snapshots, in source order, says why each stale one is stale,
+   * and tells listeners of a change. A fetcher's reason changes only on a read, which publishes.
+   */
   private publish(): void {
-    const quotas = mergeQuotas(this.sources.flatMap((s) => this.latest.get(s) ?? []));
+    const quotas = mergeQuotas(this.sources.flatMap((s) => this.latest.get(s) ?? [])).map((q) => {
+      const staleReason = q.stale ? this.staleReason(q) : undefined;
+      return staleReason ? { ...q, staleReason } : q;
+    });
     const json = JSON.stringify(quotas);
     if (json === this.json) return;
     this.json = json;

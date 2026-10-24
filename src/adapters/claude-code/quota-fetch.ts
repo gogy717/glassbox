@@ -1,7 +1,7 @@
 /**
- * Opt-in (`--fetch-quota`): asks Anthropic's usage endpoint for the plan quota with Claude Code's
- * own sign-in, so the quota stays fresh without `/usage` or ClaudeBar refreshing Claude Code's
- * cache.
+ * On unless `--no-fetch-quota`: asks Anthropic's usage endpoint for the plan quota with Claude
+ * Code's own sign-in, so the quota stays fresh without `/usage` or ClaudeBar refreshing Claude
+ * Code's cache.
  *
  * Only `claudeAiOauth.accessToken`, `expiresAt` and the plan (`subscriptionType`, `rateLimitTier`)
  * are read out of the credentials. The token is sent to api.anthropic.com and nowhere else (no
@@ -13,6 +13,7 @@ import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { QuotaSnapshot } from '../../core/model.js';
+import type { FetchProblem, FetchStatus } from '../../core/quota-source.js';
 import { type Attempt, getJson, periodicFetch } from '../../quota/periodic-fetch.js';
 import { type Obj, obj } from '../../quota/shared.js';
 import { planName, quotaFromUtilization } from './quota.js';
@@ -24,7 +25,7 @@ const KEYCHAIN_TIMEOUT_MS = 10_000;
 /** Treat a token this close to expiry as expired: it could lapse mid-request. */
 const EXPIRY_MARGIN_MS = 60_000;
 
-export interface QuotaFetcher {
+export interface QuotaFetcher extends FetchStatus {
   /** The last fetched quota, fetching first when the interval has passed. Never rejects. */
   latest(): Promise<QuotaSnapshot | null>;
 }
@@ -53,23 +54,30 @@ const readKeychain = () =>
     ),
   );
 
-/** Why there is no usable token, for the log; never includes the token itself. */
-type TokenRead = { token: string; plan: string | null } | { missing: string };
+/** Why there is no usable token, for the log and the UI; never includes the token itself. */
+type TokenRead = { token: string; plan: string | null } | { missing: string; reason: FetchProblem };
 
 function tokenFrom(text: string, now: number): TokenRead {
   let oauth: Obj | null;
   try {
     oauth = obj(obj(JSON.parse(text))?.claudeAiOauth);
   } catch {
-    return { missing: 'the credentials are not valid JSON' };
+    return { missing: 'the credentials are not valid JSON', reason: 'fetch-failed' };
   }
   const token = oauth?.accessToken;
-  if (typeof token !== 'string' || token === '') return { missing: 'not signed in to Claude' };
+  if (typeof token !== 'string' || token === '') {
+    return { missing: 'not signed in to Claude', reason: 'no-credentials' };
+  }
   // A header cannot carry it, and fetch would quote it in the error.
-  if (!/^[\x21-\x7e]+$/.test(token)) return { missing: 'the sign-in token is malformed' };
+  if (!/^[\x21-\x7e]+$/.test(token)) {
+    return { missing: 'the sign-in token is malformed', reason: 'fetch-failed' };
+  }
   const expiresAt = oauth?.expiresAt;
   if (typeof expiresAt === 'number' && expiresAt - EXPIRY_MARGIN_MS <= now) {
-    return { missing: 'the sign-in has expired; Claude Code renews it on its next request' };
+    return {
+      missing: 'the sign-in has expired; Claude Code renews it on its next request',
+      reason: 'sign-in-expired',
+    };
   }
   return { token, plan: planName(oauth?.subscriptionType, oauth?.rateLimitTier) };
 }
@@ -94,12 +102,14 @@ export function createQuotaFetcher(opts: QuotaFetcherOptions): QuotaFetcher {
     } catch {
       if (platform === 'darwin') text = await keychain().catch(() => null);
     }
-    return text === null ? { missing: 'no Claude Code sign-in found' } : tokenFrom(text, now());
+    return text === null
+      ? { missing: 'no Claude Code sign-in found', reason: 'no-credentials' }
+      : tokenFrom(text, now());
   }
 
   async function attempt(): Promise<Attempt<Usage>> {
     const read = await readToken();
-    if ('missing' in read) return { problem: read.missing };
+    if ('missing' in read) return { problem: read.missing, reason: read.reason };
     const res = await getJson(
       doFetch,
       USAGE_URL,
@@ -141,5 +151,6 @@ export function createQuotaFetcher(opts: QuotaFetcherOptions): QuotaFetcher {
           )
         : null;
     },
+    problem: loop.problem,
   };
 }

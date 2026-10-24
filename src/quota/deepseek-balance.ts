@@ -1,13 +1,13 @@
 /**
- * Opt-in (`--fetch-quota`): the prepaid balance of a DeepSeek API account, asked of DeepSeek's
- * public API with the person's own `DEEPSEEK_API_KEY`. No agent is involved, so the snapshot's
- * `agent` is null.
+ * On unless `--no-fetch-quota`: the prepaid balance of a DeepSeek API account, asked of
+ * DeepSeek's public API with the person's own `DEEPSEEK_API_KEY`. No agent is involved, so the
+ * snapshot's `agent` is null.
  *
  * The key is read from the environment only when a request is due, is sent to api.deepseek.com
  * and nowhere else (no redirects), and is never logged or kept between requests.
  */
 import type { QuotaSnapshot } from '../core/model.js';
-import type { QuotaSource } from '../core/quota-source.js';
+import type { FetchStatus, QuotaSource } from '../core/quota-source.js';
 import { type Attempt, getJson, periodicFetch } from './periodic-fetch.js';
 import { obj, STALE_MS } from './shared.js';
 
@@ -67,14 +67,16 @@ export interface DeepSeekBalanceOptions {
   now?: () => number;
 }
 
-export function createDeepSeekBalanceSource(opts: DeepSeekBalanceOptions = {}): QuotaSource {
+export function createDeepSeekBalanceSource(
+  opts: DeepSeekBalanceOptions = {},
+): QuotaSource & FetchStatus {
   const env = opts.env ?? process.env;
   const doFetch = opts.fetch ?? fetch;
   const now = opts.now ?? Date.now;
 
   async function attempt(): Promise<Attempt<Balance>> {
     const key = env[DEEPSEEK_KEY_ENV]?.trim();
-    if (!key) return { problem: `${DEEPSEEK_KEY_ENV} is not set` };
+    if (!key) return { problem: `${DEEPSEEK_KEY_ENV} is not set`, reason: 'no-credentials' };
     const res = await getJson(
       doFetch,
       DEEPSEEK_BALANCE_URL,
@@ -105,5 +107,6 @@ export function createDeepSeekBalanceSource(opts: DeepSeekBalanceOptions = {}): 
       // Rebuilt on every read so `stale` follows the clock.
       return last ? [balanceSnapshot(last.value, last.fetchedAtMs, now())] : [];
     },
+    problem: loop.problem,
   };
 }
