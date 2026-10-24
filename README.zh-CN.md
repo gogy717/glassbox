@@ -130,7 +130,7 @@ glassbox 是独立项目，与 Anthropic 没有关联，也未获其认可。
 - 只有用 ChatGPT 登录 Codex 时，Codex 才会记录 ChatGPT 套餐的限额；用 API key 登录时没有。
 - Grok CLI 的登录大约 6 小时有效，只有 Grok CLI 自己会续期；过期后 `--fetch-quota` 会跳过 xAI，直到 Grok CLI 再次运行。
 - DeepSeek 余额只显示一种币种：第一个有余额的币种。
-- Token 速率按 glassbox 读到 token 的时间计数，而不是 token 实际花掉的时间：glassbox 刚启动或刚打开一个会话时，晚一些才读到的记录（比如子代理的）会显示成一小段尖峰。
+- Token 速率只统计它看着写进记录的内容：glassbox 刚启动或刚打开一个会话时，最初几秒和记录里已经有的内容都不计入。
 
 ## 本地开发
 

@@ -30,7 +30,7 @@ import {
 } from '../shared/rate.js';
 import type { AppStore } from './app.js';
 import { RateTracker } from './rate.js';
-import { compareSessions, listedSummary } from './store.js';
+import { compareSessions, isActive, listedSummary } from './store.js';
 
 const TICK_MS = 2000;
 
@@ -64,11 +64,6 @@ const DEMO_TRAFFIC: {
     duty: 0.3,
   },
 ];
-const DEMO_COVERAGE: RateCoverage = {
-  running: DEMO_TRAFFIC.length,
-  counted: DEMO_TRAFFIC.length,
-  agents: Object.fromEntries(DEMO_TRAFFIC.map((s) => [s.agent, { running: 1, counted: 1 }])),
-};
 /** How often the simulated sessions report while the past hour is filled in. */
 const HISTORY_STEP_MS = 30_000;
 /** Ticks a main-agent request stays in flight, and a tool stays running. */
@@ -232,9 +227,26 @@ export class DemoStore implements AppStore {
     return structuredClone(this.quotas);
   }
 
-  /** Every simulated session runs and is counted. */
   getRate(): TokenRate {
-    return this.rate.snapshot(DEMO_COVERAGE);
+    return this.rate.snapshot(this.coverage());
+  }
+
+  /**
+   * The demo's own running sessions, as the real store covers its own: each one counted. Not the
+   * simulated spenders, which the list never shows.
+   */
+  private coverage(): RateCoverage {
+    const c: RateCoverage = { running: 0, counted: 0, agents: {} };
+    for (const s of this.listSessions()) {
+      if (!isActive(s.live)) continue;
+      const agent = c.agents[s.agent] ?? { running: 0, counted: 0 };
+      c.agents[s.agent] = agent;
+      c.running++;
+      c.counted++;
+      agent.running++;
+      agent.counted++;
+    }
+    return c;
   }
 
   onRate(cb: (r: TokenRate) => void): () => void {

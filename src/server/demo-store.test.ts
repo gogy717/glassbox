@@ -173,6 +173,23 @@ describe('DemoStore token rate', () => {
     expect(rateSeries(rate).filter((n) => n > 0).length).toBeGreaterThan(50);
   });
 
+  // F-web HO2: the coverage matches the demo's own list, which runs one session, not the three
+  // simulated spenders ("Counting 3 of 3" beside one running row).
+  it('counts the running sessions the demo lists, each one counted', async () => {
+    const running = store.listSessions().filter((s) => s.live === 'busy' || s.live === 'waiting');
+    expect(running.map((s) => s.agent)).toEqual(['claude-code']);
+    const coverage = {
+      running: 1,
+      counted: 1,
+      agents: { 'claude-code': { running: 1, counted: 1 } },
+    };
+    expect(store.getRate().coverage).toEqual(coverage);
+    const pushed: TokenRate[] = [];
+    store.onRate((r) => pushed.push(r));
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(pushed.at(-1)?.coverage).toEqual(coverage);
+  });
+
   it('moves with every tick, and tells its listeners', async () => {
     const before = store.getRate();
     const pushed: TokenRate[] = [];

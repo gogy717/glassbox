@@ -130,7 +130,7 @@ glassbox is an independent project, not affiliated with or endorsed by Anthropic
 - Codex records the ChatGPT plan's limits only when you sign in to Codex with ChatGPT, not with an API key.
 - Grok CLI's sign-in lasts about 6 hours, and only Grok CLI renews it; when it has expired, `--fetch-quota` skips xAI until Grok CLI runs again.
 - DeepSeek's balance shows one currency: the first with money on it.
-- The token rate counts tokens when glassbox reads them, not when they were spent: just after glassbox starts or opens a session, a transcript it reads late (a sub-agent's, say) can show as a short burst.
+- The token rate counts what it sees being written: right after glassbox starts or opens a session, the first few seconds and anything already in a transcript are not counted.
 
 ## Local development
 
