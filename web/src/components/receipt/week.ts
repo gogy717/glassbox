@@ -1,9 +1,9 @@
 /**
  * What the weekly receipt says, from `/api/week`'s result: the server cut every session to the
- * window; here they are only added up, ranked and laid out. Agent time is the grid's sum (every
- * agent's work, parallel agents adding up, DR1); the session time beside it, the longest session
- * and WORK and TOKENS keep the session receipt's meaning, so a week of one session prints that
- * session's numbers. The receipt ends at `asOf`, when its data is from.
+ * window; here they are only added up, ranked and laid out. Agent time is every agent's own
+ * turns added up and the grid's sum (DR7); the session time beside it (the main agents' turns),
+ * the longest session and WORK and TOKENS keep the session receipt's meaning, so a week of one
+ * session prints that session's numbers. The receipt ends at `asOf`, when it was put together.
  */
 import type { AgentKind } from '../../../../src/core/model.js';
 import { addUsage, contextSize, emptyUsage, totalTokens } from '../../../../src/core/usage.js';
@@ -12,7 +12,7 @@ import type { WeekResult, WeekWindowKind } from '../../../../src/shared/week.js'
 import type { Locale } from '../../i18n';
 import { agentName } from '../../lib/agent-names';
 import { printedProject, printedTitle } from './printed';
-import { shares } from './rows';
+import { apportion, shares } from './rows';
 import type { TokenFigures } from './slip';
 import { type ReceiptKey, rt } from './strings';
 
@@ -34,7 +34,7 @@ export interface WeekReceipt {
   projects: number;
   /** CLIs with activity, the most agent time first. */
   clis: AgentKind[];
-  /** The hero: the grid's sum, every agent's working time (parallel agents add up). */
+  /** The hero: every agent's own turns added up, the grid's sum; 0 when nothing was timed. */
   agentMs: number;
   /** The main agents' turns, added up: the session receipts' DURATION, printed beside it. */
   sessionMs: number;
@@ -54,11 +54,14 @@ export interface WeekReceipt {
     failures: number;
   };
   /**
-   * Agent time by CLI: whole percents adding up to 100 over the CLIs of 1% or more, '<1' for
-   * the others that did anything (DR4).
+   * Agent time by CLI, most first: `units` of the hero's own unit (`cliUnit`: whole minutes from
+   * ten minutes up, seconds below), shared out so the rows add up to the hero as printed (DR10);
+   * whole percents adding up to 100 over the CLIs of 1% or more, '<1' for the others that did
+   * anything (DR4); a CLI with no time at all last, no share (DR8).
    */
-  byCli: { agent: AgentKind; ms: number; share: number | '<1' }[];
-  /** The session that worked longest by its own clock (its session time). */
+  byCli: { agent: AgentKind; ms: number; units: number; share: number | '<1' | null }[];
+  cliUnit: 'min' | 's';
+  /** The session that worked longest by its own clock (its session time); none if none did. */
   longest: { agent: AgentKind; project: string | null; title: string | null; ms: number } | null;
   tokens: TokenFigures;
   /** Sessions that report no usage, by CLI: the TOKENS note. */
@@ -114,7 +117,10 @@ function layGrid(r: WeekResult, totals: number[], end: number) {
     const cell = grid[at.row]?.[at.col];
     if (!cell) return;
     cell.ms += totals[i] ?? 0;
-    cell.state = h > end ? 'future' : 'past';
+    // Only an empty hour after the end is outlined: an hour with ink is never (DR9), nor a cell
+    // that also holds an hour before the end (the hour a change of the clocks repeats).
+    if (h <= end || cell.ms > 0) cell.state = 'past';
+    else if (cell.state === 'out') cell.state = 'future';
   });
   const cursor = place(Math.max(0, endHour), hourStarts[Math.max(0, endHour)] ?? end);
   return { grid, rows, cursor };
@@ -122,7 +128,7 @@ function layGrid(r: WeekResult, totals: number[], end: number) {
 
 export function weekReceipt(r: WeekResult): WeekReceipt {
   const { hourStarts } = r.window;
-  const end = Math.min(r.asOf, r.window.now);
+  const end = r.asOf;
   const totals = hourStarts.map((_, i) => r.sessions.reduce((n, s) => n + (s.hours[i] ?? 0), 0));
   const all = totals.reduce((a, b) => a + b, 0);
   let busiest: WeekReceipt['busiest'] = null;
@@ -158,7 +164,7 @@ export function weekReceipt(r: WeekResult): WeekReceipt {
     } else unreported.set(s.agent, (unreported.get(s.agent) ?? 0) + 1);
     const project = printedProject(s.cwd, s.project);
     if (project) projects.add(project);
-    if (!longest || f.activeMs > longest.inWindow.activeMs) longest = s;
+    if (f.activeMs > (longest?.inWindow.activeMs ?? 0)) longest = s;
   }
 
   // The tool categories as the session receipt groups them: the three largest, then the rest.
@@ -167,9 +173,16 @@ export function weekReceipt(r: WeekResult): WeekReceipt {
   const categories = ranked.slice(0, 3).map(([category, count]) => ({ category, count }));
   if (other > 0) categories.push({ category: 'other', count: other });
 
-  // By CLI: the CLIs of 1% or more share 100 between them; the rest print "<1%".
+  // By CLI: the hero's printed minutes (or seconds) shared out over the CLIs; the CLIs of 1% or
+  // more share 100 percent between them, the rest print "<1%"; one with no time, no share.
   const clis = [...byAgent].sort((a, b) => b[1].ms - a[1].ms || b[1].n - a[1].n);
   const cliTotal = clis.reduce((n, [, v]) => n + v.ms, 0);
+  const cliUnit = cliTotal >= 10 * 60_000 ? 'min' : 's';
+  const unitMs = cliUnit === 'min' ? 60_000 : 1000;
+  const units = apportion(
+    clis.map(([, v]) => v.ms),
+    Math.floor(cliTotal / unitMs),
+  );
   const big = clis.filter(([, v]) => cliTotal > 0 && v.ms / cliTotal >= 0.01);
   const pct = new Map(big.map(([agent], i) => [agent, shares(big.map(([, v]) => v.ms))[i] ?? 0]));
   const ctx = contextSize(usage);
@@ -187,11 +200,13 @@ export function weekReceipt(r: WeekResult): WeekReceipt {
     busiest,
     afterHours: all > 0 ? night / all : null,
     work: { ...work, categories },
-    byCli: clis.map(([agent, v]) => ({
+    byCli: clis.map(([agent, v], i) => ({
       agent,
       ms: v.ms,
-      share: pct.get(agent) ?? (v.ms > 0 ? '<1' : 0),
+      units: units[i] ?? 0,
+      share: v.ms > 0 ? (pct.get(agent) ?? '<1') : null,
     })),
+    cliUnit,
     longest: top
       ? {
           agent: top.agent,
@@ -218,10 +233,14 @@ export function weekReceipt(r: WeekResult): WeekReceipt {
 export const weekAge = (w: WeekReceipt) => w.now - w.start;
 /** Under a day into the week, the dialog says what the last 7 days hold. */
 export const HINT_MS = 24 * HOUR;
-/** Under half an hour of agent time this week, the quiet slip, with the way out (DR2). */
+/**
+ * Under half an hour of agent time this week and under 20 model calls, the quiet slip, with the
+ * way out (DR2, R26). A week that was not timed (only Codex, say) has its calls to print.
+ */
 export const QUIET_MS = 30 * 60_000;
+export const QUIET_CALLS = 20;
 export const isQuiet = (w: WeekReceipt) =>
-  w.kind === 'week' && w.sessions > 0 && w.agentMs < QUIET_MS;
+  w.kind === 'week' && w.sessions > 0 && w.agentMs < QUIET_MS && w.work.requests < QUIET_CALLS;
 
 /** The line under LONGEST: its project and title, or only its CLI when names are withheld. */
 export function longestLine(

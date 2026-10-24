@@ -13,6 +13,7 @@ import type {
 import type { QuotaSource } from '../core/quota-source.js';
 import { type RateCoverage, ratePerMinute, type TokenRate } from '../shared/rate.js';
 import { Coalescer } from './coalescer.js';
+import { isActive } from './live.js';
 import { errorText, OpenSession } from './open-session.js';
 import { adapterQuotaSources, QuotaWatcher } from './quota.js';
 import { RateTracker } from './rate.js';
@@ -87,10 +88,7 @@ const rateKey = (r: TokenRate) =>
     ratePerMinute(r) > 0 ? Math.floor(Date.parse(r.at) / RATE_STEP_MS) : null,
   ]);
 
-/** busy and waiting both mean someone is mid-task in that session right now. */
-export function isActive(live: LiveState): boolean {
-  return live === 'busy' || live === 'waiting';
-}
+export { isActive } from './live.js';
 
 /**
  * The summary under the latest polled live state. An open session's parser hears of a change

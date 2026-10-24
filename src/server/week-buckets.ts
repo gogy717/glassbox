@@ -2,16 +2,17 @@
  * A session as sparse hourly buckets, and a window as a slice of them (the weekly receipt).
  *
  * Pure: no I/O. Every figure is the one the session's own receipt prints (the Summary bar's
- * `summarize`, the Timeline's segments, the Tokens tab's totals), only split by hour, so the
- * buckets of a session add up to its receipt. Hours are local: a bucket is keyed by the instant
- * its local hour starts.
+ * `summarize`, for the main agent and for each sub-agent, the Tokens tab's totals), only split by
+ * hour, so the buckets of a session add up to its receipt. Hours are local: a bucket is keyed by
+ * the instant its local hour starts.
  */
 import type { SessionSnapshot, TokenUsage } from '../core/model.js';
 import { MAIN_AGENT_ID } from '../core/model.js';
 import { addUsage, emptyUsage } from '../core/usage.js';
-import { ms, requestSegments, toolSpan } from '../shared/segments.js';
+import { ms, toolSpan } from '../shared/segments.js';
 import { type ToolCategory, toolCategory } from '../shared/tool-category.js';
 import {
+  HOUR_MS,
   hourStart,
   nextHour,
   type WeekFigures,
@@ -58,24 +59,14 @@ const emptyBucket = (): HourBucket => ({
   usage: emptyUsage(),
 });
 
-/** Merges overlapping intervals, sorted by start. */
-function union(intervals: [number, number][]): [number, number][] {
-  const out: [number, number][] = [];
-  for (const [a, b] of [...intervals].sort((p, q) => p[0] - q[0])) {
-    const last = out.at(-1);
-    if (last && a <= last[1]) last[1] = Math.max(last[1], b);
-    else out.push([a, b]);
-  }
-  return out;
-}
-
 /** Entities handled between two pauses when a session is bucketed with pauses. */
 const STEP = 2_000;
 
 /**
- * The session's buckets, read from a snapshot taken at `now` (running turns and calls end
- * there), yielding every `STEP` entities so a caller can pause between them. The parity with
- * its receipt (web `receiptData`) is tested on the web side.
+ * The session's buckets as of `now`: running turns and calls end there, and no time is counted
+ * after it (a turn that ended while the session was being read is cut there). Yields every
+ * `STEP` entities so a caller can pause between them. The parity with its receipt (web
+ * `receiptData`) is tested on the web side.
  */
 function* bucketing(snap: SessionSnapshot, now: number): Generator<void, SessionBuckets> {
   let n = 0;
@@ -108,13 +99,28 @@ function* bucketing(snap: SessionSnapshot, now: number): Generator<void, Session
       }
   }
 
-  // Active time: the main agent's turns, a running one up to now.
+  // Each agent's first and last moment at work: a sub-agent's life when its own are unknown.
+  const seen = new Map<string, [number, number]>();
+  const saw = (agentId: string, a: number, b: number) => {
+    const was = seen.get(agentId);
+    seen.set(agentId, was ? [Math.min(was[0], a), Math.max(was[1], b)] : [a, b]);
+  };
+
+  // Agent time: every agent's own turns, a running one up to now (each agent's Summary bar active
+  // time); the main agent's are the session's active time too.
   for (const t of snap.turns) {
     if (++n % STEP === 0) yield;
-    if (t.agentId !== MAIN_AGENT_ID) continue;
+    if (!ids.has(t.agentId)) continue;
     const start = ms(t.startedAt);
-    const end = t.endedAt ? ms(t.endedAt) : t.status === 'running' ? now : null;
-    if (start !== null && end !== null) spread(start, end, (b, part) => (b.activeMs += part));
+    const ended = t.endedAt ? ms(t.endedAt) : t.status === 'running' ? now : null;
+    if (start === null || ended === null) continue;
+    const end = Math.min(ended, now);
+    saw(t.agentId, start, Math.max(start, end));
+    const main = t.agentId === MAIN_AGENT_ID;
+    spread(start, end, (b, part) => {
+      b.agentMs += part;
+      if (main) b.activeMs += part;
+    });
   }
 
   // When a request or tool call without a start time happened: its turn's, else the session's.
@@ -126,6 +132,7 @@ function* bucketing(snap: SessionSnapshot, now: number): Generator<void, Session
     if (++n % STEP === 0) yield;
     const start = ms(r.startedAt) ?? (r.turnId ? turnStart.get(r.turnId) : null) ?? fallback;
     requestStart.set(r.id, start);
+    saw(r.agentId, start, ms(r.endedAt) ?? (r.status === 'in-flight' ? now : start));
     const b = at(start);
     if (r.status === 'error') b.failures++;
     if (!ids.has(r.agentId)) continue;
@@ -138,50 +145,21 @@ function* bucketing(snap: SessionSnapshot, now: number): Generator<void, Session
   for (const t of snap.toolCalls) {
     if (++n % STEP === 0) yield;
     const b = at(ms(t.startedAt) ?? requestStart.get(t.requestId) ?? fallback);
+    const span = toolSpan(t, now);
+    if (span) saw(t.agentId, span[0], span[1]);
     if (t.status === 'error') b.failures++;
     const cat = toolCategory(t.name, t.input);
     b.toolCats[cat] = (b.toolCats[cat] ?? 0) + 1;
     if (ids.has(t.agentId)) b.toolCalls++;
   }
 
-  // Agent time: each agent's work (not its queueing), its overlaps counted once; the agents the
-  // calls are counted for, as the Timeline draws them.
-  const work = new Map<string, [number, number][]>();
-  const push = (agentId: string, a: number, b: number) => {
-    if (b <= a || !ids.has(agentId)) return;
-    const list = work.get(agentId);
-    if (list) list.push([a, b]);
-    else work.set(agentId, [[a, b]]);
-  };
-  for (const r of snap.requests) {
-    if (++n % STEP === 0) yield;
-    for (const s of requestSegments(r, now))
-      if (s.kind !== 'waiting') push(r.agentId, s.start, s.end);
-  }
-  for (const t of snap.toolCalls) {
-    if (++n % STEP === 0) yield;
-    const span = toolSpan(t, now);
-    if (span) push(t.agentId, span[0], span[1]);
-  }
-  for (const list of work.values()) {
-    yield;
-    for (const [a, b] of union(list)) spread(a, b, (bucket, part) => (bucket.agentMs += part));
-  }
-
-  // Sub-agents' lives: from their start to their end, or to their last activity. (A reduce, not
-  // Math.max(...list): an agent of a huge session has more intervals than a call takes arguments.)
-  const lastActivity = new Map<string, number>();
-  for (const [agentId, list] of work)
-    lastActivity.set(
-      agentId,
-      list.reduce((m, [, b]) => Math.max(m, b), Number.NEGATIVE_INFINITY),
-    );
+  // Sub-agents' lives: from their start to their end, else to their first and last activity.
   const subAgents: [number, number][] = [];
   for (const a of snap.agents) {
     if (a.id === MAIN_AGENT_ID) continue;
-    const start = ms(a.startedAt) ?? work.get(a.id)?.reduce((m, [s]) => Math.min(m, s), Infinity);
-    if (start === undefined || !Number.isFinite(start)) continue;
-    const end = ms(a.endedAt) ?? (a.status === 'running' ? now : (lastActivity.get(a.id) ?? start));
+    const start = ms(a.startedAt) ?? seen.get(a.id)?.[0];
+    if (start === undefined) continue;
+    const end = ms(a.endedAt) ?? (a.status === 'running' ? now : (seen.get(a.id)?.[1] ?? start));
     subAgents.push([start, Math.max(start, end)]);
   }
 
@@ -226,6 +204,28 @@ export async function sessionBucketsPausing(
 }
 
 /**
+ * The window hour that holds `t` (the last starting at or before it, an hour long at most), or
+ * -1 outside the window. A bucket starts on a local hour, as the window's hours mostly do; where
+ * they part (the last 7 days are hours of the clock, which Lord Howe's half-hour change of the
+ * clocks moves off its local hours), it goes to the hour it starts in.
+ */
+function slotOf(hourStarts: number[], t: number): number {
+  let lo = 0;
+  let hi = hourStarts.length - 1;
+  let at = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if ((hourStarts[mid] as number) <= t) {
+      at = mid;
+      lo = mid + 1;
+    } else hi = mid - 1;
+  }
+  if (at < 0) return -1;
+  const end = hourStarts[at + 1] ?? (hourStarts[at] as number) + HOUR_MS;
+  return t < end ? at : -1;
+}
+
+/**
  * What a session did in the given hours (a window's, or any run of hours), `tags` as it is
  * listed; null if nothing.
  */
@@ -234,7 +234,6 @@ export function sliceSession(
   window: WeekWindow,
   tags: string[] = [],
 ): WeekSession | null {
-  const index = new Map(window.hourStarts.map((h, i) => [h, i]));
   const hours = window.hourStarts.map(() => 0);
   const f: WeekFigures = {
     activeMs: 0,
@@ -247,8 +246,8 @@ export function sliceSession(
     usage: emptyUsage(),
   };
   for (const [h, bucket] of b.hours) {
-    const i = index.get(h);
-    if (i === undefined) continue;
+    const i = slotOf(window.hourStarts, h);
+    if (i < 0) continue;
     hours[i] = bucket.agentMs;
     f.activeMs += bucket.activeMs;
     f.agentMs += bucket.agentMs;
@@ -262,7 +261,7 @@ export function sliceSession(
   const first = window.hourStarts[0];
   const last = window.hourStarts.at(-1);
   if (first !== undefined && last !== undefined) {
-    const end = nextHour(last);
+    const end = last + HOUR_MS;
     f.subAgents = b.subAgents.filter(([a, z]) => a < end && z >= first).length;
   }
   const any =
