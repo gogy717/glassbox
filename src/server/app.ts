@@ -196,6 +196,10 @@ export function createApp(deps: AppDeps): Hono {
 
   if (staticDir) {
     app.use('*', serveStatic({ root: staticDir }));
+    // A built file that is not there (a chunk of an older build, after an upgrade) is a 404, not
+    // the page: a script or font that gets HTML back fails in a way no retry can recover from.
+    app.all('/assets/*', (c) => c.notFound());
+    app.all('/fonts/*', (c) => c.notFound());
     // Client-side routes all render the single page.
     app.get('*', async (c) => c.html(await readFile(join(staticDir, 'index.html'), 'utf8')));
   }

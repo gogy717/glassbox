@@ -4,6 +4,7 @@
  * The transcript format is internal to Claude Code and changes between versions, so every
  * field is read defensively: a wrong type becomes null/0/empty, never an exception.
  */
+import { summarizeCommand } from '../../core/command-summary.js';
 import type { TokenUsage, TurnOrigin } from '../../core/model.js';
 
 type Obj = Record<string, unknown>;
@@ -709,8 +710,18 @@ export function shortTitle(text: string, max = TITLE_MAX): string {
   return `${(space >= head.length * 0.6 ? head.slice(0, space) : head).trimEnd()}…`;
 }
 
-/** A prompt as a one-line session title; null when nothing a person typed is left. */
+/**
+ * A prompt as a one-line session title; null when nothing a person typed is left. A bash-mode
+ * command (`!git push origin main --force`) is titled by its summary (`!git push`), never by its
+ * command line, which can hold a secret; a command with no safe summary gives no title.
+ */
 export function cleanPrompt(text: string): string | null {
+  const bash =
+    tagContent(text, 'command-name') === undefined ? tagContent(text, 'bash-input') : undefined;
+  if (bash !== undefined) {
+    const summary = summarizeCommand(bash);
+    return summary ? `!${summary}` : null;
+  }
   const cleaned = cleanTurnPrompt(text);
   if (LABEL.test(cleaned)) return null;
   const line = cleaned.replace(/\s+/g, ' ').trim();

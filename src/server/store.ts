@@ -9,7 +9,7 @@ import type {
   SessionSummary,
 } from '../core/model.js';
 import type { QuotaSource } from '../core/quota-source.js';
-import { MINUTE_MS, type RateCoverage, type TokenRate } from '../shared/rate.js';
+import { type RateCoverage, ratePerMinute, type TokenRate } from '../shared/rate.js';
 import { Coalescer } from './coalescer.js';
 import { errorText, OpenSession } from './open-session.js';
 import { adapterQuotaSources, QuotaWatcher } from './quota.js';
@@ -37,6 +37,8 @@ export interface SessionStoreOptions {
   quotaPollMs?: number;
   /** Minimum gap between two token-rate events. */
   rateMs?: number;
+  /** How often the rate is looked at again without new spend (its average decays meanwhile). */
+  rateTickMs?: number;
   /** The clock the token rate counts by. */
   now?: () => number;
   log?: (msg: string) => void;
@@ -64,8 +66,21 @@ const QUICK_DISCOVER_MS = 200;
 /** Consecutive discoveries a session must be missing from before it leaves the list. */
 const MISSES_BEFORE_DROP = 2;
 
-/** What a rate event says, without when it was made. */
-const rateKey = (r: TokenRate) => JSON.stringify([r.minute, r.agents, r.coverage]);
+/** Steps of time in which a decaying rate is pushed again; a minute's turn is one of them. */
+const RATE_STEP_MS = 15_000;
+
+/**
+ * What a rate event says, without the exact time it was made. While the 5-minute window holds
+ * tokens its average falls as time passes with no new spend, so the 15 s step counts too: a
+ * paused session's rate comes down before the minute turns.
+ */
+const rateKey = (r: TokenRate) =>
+  JSON.stringify([
+    r.minute,
+    r.agents,
+    r.coverage,
+    ratePerMinute(r) > 0 ? Math.floor(Date.parse(r.at) / RATE_STEP_MS) : null,
+  ]);
 
 /** busy and waiting both mean someone is mid-task in that session right now. */
 export function isActive(live: LiveState): boolean {
@@ -126,7 +141,7 @@ export class SessionStore {
   private readonly ratePacer: Coalescer;
   /** The last rate sent, without its timestamp: unchanged windows are not sent again. */
   private lastRateKey = '';
-  private minuteTimer: NodeJS.Timeout | null = null;
+  private rateTimer: NodeJS.Timeout | null = null;
   /** Sessions settling after they opened, and when the rate may count them. */
   private readonly settling = new Map<string, number>();
 
@@ -141,6 +156,7 @@ export class SessionStore {
       chunkBytes: 4 * 1024 * 1024,
       quotaPollMs: 30_000,
       rateMs: 5000,
+      rateTickMs: RATE_STEP_MS,
       now: Date.now,
       quotaSources: [],
       log: () => {},
@@ -164,7 +180,7 @@ export class SessionStore {
     this.loop('discoverTimer', this.opts.discoverMs, () => this.discoverNow());
     this.loop('liveTimer', this.opts.liveMs, () => this.refreshLive());
     this.lastRateKey = rateKey(this.getRate());
-    this.scheduleMinute();
+    this.scheduleRateTick();
     this.scheduleAutoOpen();
   }
 
@@ -175,8 +191,8 @@ export class SessionStore {
     for (const set of [...this.expecting.values()]) for (const done of [...set]) done(false);
     this.sessionsPacer.cancel();
     this.ratePacer.cancel();
-    for (const t of [this.discoverTimer, this.liveTimer, this.minuteTimer]) if (t) clearTimeout(t);
-    this.discoverTimer = this.liveTimer = this.minuteTimer = null;
+    for (const t of [this.discoverTimer, this.liveTimer, this.rateTimer]) if (t) clearTimeout(t);
+    this.discoverTimer = this.liveTimer = this.rateTimer = null;
     for (const entry of this.entries.values()) this.closeEntry(entry);
     this.quota.stop();
     this.sessionListeners.clear();
@@ -549,16 +565,20 @@ export class SessionStore {
     }
   }
 
-  /** At each minute's turn the window moves (and its average decays), whether or not tokens did. */
-  private scheduleMinute(): void {
-    const now = this.opts.now();
-    this.minuteTimer = setTimeout(
+  /**
+   * On each step of time (each 15 s, the minute's turn among them) the rate is looked at again,
+   * whether or not tokens moved: the window moves at the turn, and its average decays between.
+   * It is pushed only when what it says changed (`rateKey`).
+   */
+  private scheduleRateTick(): void {
+    const step = this.opts.rateTickMs;
+    this.rateTimer = setTimeout(
       () => {
         if (this.stopped) return;
         this.notifyRate();
-        this.scheduleMinute();
+        this.scheduleRateTick();
       },
-      MINUTE_MS - (now % MINUTE_MS) + 20,
+      step - (this.opts.now() % step) + 20,
     );
   }
 

@@ -238,6 +238,19 @@ describe('static files', () => {
     expect(await res.text()).toBe('wOF2');
   });
 
+  // F S4: a missing chunk or font is not found; only client routes get the page.
+  it('answers a built file that is not there with 404, not the page', async () => {
+    const { store } = stubStore();
+    const app = createApp({ store, staticDir: await site() });
+    for (const path of ['/assets/TimeView-0ld8u1ld.js', '/assets/', '/fonts/Gone.woff2']) {
+      const res = await app.request(path);
+      expect(res.status).toBe(404);
+      expect(res.headers.get('content-type')).not.toContain('text/html');
+    }
+    expect((await app.request('/assets/app.js')).status).toBe(200);
+    expect((await app.request('/s/claude-code%3Aabc')).status).toBe(200);
+  });
+
   it('keeps json 404s for unknown api paths when serving static files', async () => {
     const { store } = stubStore();
     const res = await createApp({ store, staticDir: await site() }).request('/api/nope');

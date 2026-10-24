@@ -304,6 +304,25 @@ describe('a turn', () => {
     expect(state().error).toBe('This turn failed: too many turns; stopped');
   });
 
+  // F S2: the error is masked where it is made, so no view shows a home path or a credential.
+  it('masks a run’s error: the home directory as ~, credentials hidden', async () => {
+    const home = process.env.HOME ?? '/home/someone';
+    const { proc, state, manager, run } = await running();
+    proc.push(
+      result({
+        is_error: true,
+        result: `cannot read ${home}/dev/app/.env: API_KEY="Kx9mQ2pLvR7tW3nZ" is invalid`,
+      }),
+    );
+    expect(state().error).toBe(
+      'This turn failed: cannot read ~/dev/app/.env: API_KEY=••• is invalid',
+    );
+    manager.send(run.id, 'again');
+    proc.exit(1, [`fatal: ${home}/dev/app: password is "hunter2hunter2"`]);
+    expect(state().error).toBe('fatal: ~/dev/app: password is •••');
+    expect(JSON.stringify(manager.list())).not.toContain(home);
+  });
+
   it('ignores unknown and malformed messages', async () => {
     const { proc, state } = await running();
     proc.push({ type: 'brand_new_message' });

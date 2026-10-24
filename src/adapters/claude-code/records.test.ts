@@ -197,7 +197,13 @@ describe('cleanPrompt', () => {
     ],
     ['<command-message>clear</command-message>\n<command-name>/clear</command-name>', '/clear'],
     ['<local-command-stdout>Set model to Opus</local-command-stdout>', null],
-    ['<bash-input>ls -la</bash-input>', '!ls -la'],
+    // Bash mode: the command's summary, never its command line.
+    ['<bash-input>ls -la</bash-input>', '!ls'],
+    ['<bash-input>git push origin main --force-with-lease</bash-input>', '!git push'],
+    ['<bash-input>curl -u admin:hunter2 https://api.x.io/v1</bash-input>', '!curl api.x.io'],
+    ['<bash-input>export GITHUB_TOKEN=ghp_x; npm test</bash-input>', '!npm test'],
+    ['<bash-input>Kx9mQ2pLvR7tW3nZ --help</bash-input>', null],
+    ['<bash-input></bash-input>', null],
     ['  fix   the\nbuild  ', 'fix the build'],
     [
       '<cross-session-message from="peer-1" mode="x">Status:\n all green</cross-session-message>',
