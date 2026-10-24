@@ -48,10 +48,10 @@ describe('QuotaBar', () => {
     expect(meters.map((m) => m.getAttribute('aria-valuenow'))).toEqual(['62', '41', '25', '74']);
   });
 
-  it('colours by usage: under 70% neutral, 70–90% amber, 90% and over red', () => {
+  it('colours by usage: under 80% neutral, 80–95% amber, 95% and over red', () => {
     renderBar([
-      withWindow(0, { usedPercent: 75 }),
-      { ...withWindow(1, { usedPercent: 93 }), provider: 'openai' },
+      withWindow(0, { usedPercent: 85 }),
+      { ...withWindow(1, { usedPercent: 96 }), provider: 'openai' },
       { ...createDemoQuota(DEMO_NOW), provider: 'xai' },
     ]);
     const levels = screen.getAllByRole('meter').map((m) => m.getAttribute('data-level'));
@@ -258,6 +258,24 @@ describe('QuotaBar', () => {
     expect(
       within(details).getByText('来源：DeepSeek 余额接口（--fetch-quota）'),
     ).toBeInTheDocument();
+  });
+
+  it('marks a stale meter by its track, and says its age in words only where it stands alone', () => {
+    const old = {
+      ...demo('xai'),
+      stale: true,
+      fetchedAt: new Date(NOW - 3 * 3_600_000).toISOString(),
+    };
+    const { container, unmount } = renderBar([createDemoQuota(DEMO_NOW), old]);
+    const [claude, grok] = screen.getAllByRole('meter');
+    // Under its track, as formatRelative words it ("3 hours ago", or "3 h ago").
+    expect(grok).toHaveTextContent(/25%3\s?h(ours)? ago$/);
+    expect(claude).not.toHaveTextContent(/ago/);
+    // Beside another meter the age is in the tooltip; alone, it is shown too.
+    expect(container.querySelector('[data-single]')).toBeNull();
+    unmount();
+    const alone = renderBar([old]);
+    expect(alone.container.querySelector('[data-single]')).not.toBeNull();
   });
 
   it('renders nothing without quota data', () => {

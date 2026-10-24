@@ -4,6 +4,7 @@ import type { Diagnostics as Diag } from '../../../src/core/model.js';
 import { SessionAgentContext } from '../data/session-agent';
 import { I18nContext, makeI18n } from '../i18n';
 import { Diagnostics } from './Diagnostics';
+import css from './Diagnostics.module.css';
 
 const renderDiag = (d: Diag, locale: 'en' | 'zh' = 'en') =>
   render(
@@ -21,7 +22,7 @@ describe('Diagnostics', () => {
     });
     // Three gaps, unparsable lines, one unknown record type; re-sends are not a gap.
     const button = screen.getByRole('button', { name: 'Data diagnostics · 5 gaps' });
-    expect(button).toHaveAttribute('data-alert');
+    expect(button.querySelector(`.${css.dot}`)).not.toBeNull();
     expect(button).toHaveTextContent('5 gaps');
     fireEvent.click(button);
     const panel = screen.getByRole('dialog', { name: 'Data diagnostics' });
@@ -73,9 +74,9 @@ describe('Diagnostics', () => {
       parseErrors: 0,
       unknownRecordTypes: { 'superseded-request': 4 },
     });
-    const button = screen.getByRole('button', { name: 'Data diagnostics' });
-    expect(button).not.toHaveAttribute('data-alert');
-    expect(button).toHaveTextContent('');
+    const button = screen.getByRole('button', { name: 'Data diagnostics · No gaps' });
+    expect(button.querySelector(`.${css.dot}`)).toBeNull();
+    expect(button).toHaveTextContent('No gaps');
     fireEvent.click(button);
     const panel = screen.getByRole('dialog', { name: 'Data diagnostics' });
     expect(panel).toHaveTextContent('No problems found');

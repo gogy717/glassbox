@@ -4,6 +4,7 @@ import type { QuotaSnapshot, QuotaWindow } from '../../../src/core/model.js';
 import { type MessageKey, useI18n } from '../i18n';
 import { formatCountdown, formatRelative, formatResetTime } from '../lib/format';
 import { providerName, providerShortName } from '../lib/provider-names';
+import { quotaWindowName } from '../lib/quota';
 import css from './QuotaBar.module.css';
 
 interface Props {
@@ -12,7 +13,8 @@ interface Props {
 }
 
 type Level = 'ok' | 'warn' | 'danger';
-const levelOf = (pct: number): Level => (pct >= 90 ? 'danger' : pct >= 70 ? 'warn' : 'ok');
+/** Amber from 80%, red from 95%: colour is for a limit that is near. */
+const levelOf = (pct: number): Level => (pct >= 95 ? 'danger' : pct >= 80 ? 'warn' : 'ok');
 
 const pct = (w: QuotaWindow) => Math.round(Math.min(100, Math.max(0, w.usedPercent)));
 
@@ -97,24 +99,27 @@ export function QuotaBar({ quotas, now }: Props) {
     const key = SOURCES[id];
     return key ? t(key) : id;
   };
-  const windowName = (w: QuotaWindow) =>
-    w.label ??
-    (w.kind === 'session'
-      ? t('quota.windowSession')
-      : w.kind === 'weekly'
-        ? t('quota.windowWeekly')
-        : w.kind === 'weekly-model'
-          ? t('quota.windowModel', { model: w.model ?? w.id })
-          : w.kind === 'monthly'
-            ? t('quota.windowMonthly')
-            : w.id);
+  const windowName = (w: QuotaWindow) => quotaWindowName(w, t);
   const heading = (q: QuotaSnapshot) =>
     q.plan ? `${providerName(q.provider)} · ${q.plan}` : providerName(q.provider);
   const age = (q: QuotaSnapshot) =>
     t(q.stale ? 'quota.stale' : 'quota.updated', { age: formatRelative(q.fetchedAt, now, intl) });
+  const reading = (name: string, value: string) => (
+    <span className={`${css.reading} figure`}>
+      <span className={css.name}>{name}</span> <span className={css.value}>{value}</span>
+    </span>
+  );
+  // How old a stale meter's figure is, a muted line under its track ("6 h ago").
+  const ageLine = (q: QuotaSnapshot) =>
+    q.stale && <span className={css.age}>{formatRelative(q.fetchedAt, now, intl)}</span>;
 
   return (
-    <div className={css.wrap} ref={ref} data-many={shown.length >= MANY || undefined}>
+    <div
+      className={css.wrap}
+      ref={ref}
+      data-many={shown.length >= MANY || undefined}
+      data-single={shown.length === 1 || undefined}
+    >
       <button type="button" className={css.bar} aria-expanded={open} onClick={() => setOpen(!open)}>
         <Gauge size={14} aria-hidden="true" className={css.icon} />
         <span className="visually-hidden">{t('quota.title')}</span>
@@ -155,24 +160,22 @@ export function QuotaBar({ quotas, now }: Props) {
               data-level={top ? levelOf(top.usedPercent) : 'ok'}
               data-reset={!top || undefined}
             >
-              <span className="num">
-                {name} {value}
-              </span>
+              {reading(name, value)}
               <span className={css.track} aria-hidden="true">
                 <span style={{ width: `${top ? pct(top) : 0}%` }} />
               </span>
+              {ageLine(q)}
             </span>
           ) : (
             <span key={m.key} {...shared} data-balance>
-              <span className="num">
-                {name} {value}
-              </span>
+              {reading(name, value)}
               {/* Keeps the text level with the meters beside it. */}
               <span className={css.track} data-empty aria-hidden="true" />
+              {ageLine(q)}
             </span>
           );
         })}
-        {meters.length > 1 && <span className={css.more}>+{meters.length - 1}</span>}
+        {meters.length > 1 && <span className={`${css.more} figure`}>+{meters.length - 1}</span>}
       </button>
       {open && (
         <div className={css.popover} role="dialog" aria-label={t('quota.title')}>

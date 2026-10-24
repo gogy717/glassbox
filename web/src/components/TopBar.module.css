@@ -3,16 +3,26 @@
   align-items: center;
   gap: 10px;
   flex: none;
-  min-height: 48px;
+  min-height: 44px;
   padding: 0 12px 0 8px;
   border-bottom: 1px solid var(--border);
   background: var(--layer-1);
 }
 
+/* The wordmark shares the instruments' face. */
 .logo {
-  font-weight: 700;
-  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-title);
+  font-weight: 500;
   letter-spacing: -0.01em;
+}
+
+.mark {
+  flex: none;
 }
 
 .session {
@@ -20,7 +30,7 @@
   align-items: center;
   gap: 10px;
   min-width: 0;
-  padding-left: 10px;
+  padding-left: 12px;
   border-left: 1px solid var(--border);
 }
 
@@ -29,16 +39,22 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: var(--fs-title);
   font-weight: 600;
 }
 
+/* Colour only where it asks for attention: running in the accent, waiting for you in amber. */
 .live {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   flex: none;
-  font-size: 11px;
+  font-size: var(--fs-meta);
   color: var(--muted);
+}
+
+.live[data-state="busy"] {
+  color: var(--accent);
 }
 
 .live[data-state="waiting"] {
@@ -50,16 +66,36 @@
   flex: 1;
 }
 
+/* A 6px dot and the word; green only while connected. */
 .conn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   flex: none;
-  font-size: 11px;
-  color: var(--faint);
+  font-size: var(--fs-meta);
+  color: var(--muted);
   white-space: nowrap;
+}
+
+.conn::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--faint);
+}
+
+.conn[data-state="open"]::before {
+  background: var(--success);
 }
 
 .conn[data-state="reconnecting"] {
   color: var(--error);
   font-weight: 600;
+}
+
+.conn[data-state="reconnecting"]::before {
+  background: var(--error);
 }
 
 .iconButton {
@@ -73,32 +109,43 @@
   background: transparent;
   color: var(--muted);
   cursor: pointer;
+  transition:
+    background var(--motion),
+    color var(--motion);
 }
 
-.iconButton:hover {
-  background: var(--layer-2);
+.iconButton:hover,
+.iconButton[aria-expanded="true"] {
+  background: var(--layer-3);
   color: var(--text);
 }
 
+/* A real toggle: pressed is an ink border, not a tint. */
 .toggle {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   flex: none;
   height: 28px;
-  padding: 0 9px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-l);
   background: var(--layer-1);
-  font-size: 11px;
+  font-size: var(--fs-small);
   color: var(--muted);
   cursor: pointer;
+  transition:
+    border-color var(--motion),
+    color var(--motion);
+}
+
+.toggle:hover {
+  color: var(--text);
 }
 
 .toggle[aria-pressed="true"] {
-  border-color: var(--accent);
-  background: var(--accent-tint);
-  color: var(--accent);
+  border-color: var(--ink);
+  color: var(--text);
 }
 
 .settings {
@@ -114,7 +161,7 @@
   gap: 10px;
   width: 210px;
   padding: 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-xl);
   background: var(--layer-1);
   box-shadow: var(--shadow);
@@ -123,25 +170,18 @@
 .popover label {
   display: grid;
   gap: 4px;
-  font-size: 11px;
+  font-size: var(--fs-meta);
   color: var(--muted);
 }
 
 .popover select {
   height: 28px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-l);
   background: var(--layer-2);
   color: var(--text);
   font: inherit;
-  font-size: 12px;
-}
-
-@media (max-width: 560px) {
-  .toggleLabel,
-  .conn[data-state="open"] {
-    display: none;
-  }
+  font-size: var(--fs-small);
 }
 
 .popover label.check {
@@ -149,4 +189,27 @@
   align-items: center;
   gap: 6px;
   color: var(--text);
+}
+
+/* Two columns or fewer: Follow keeps its eye, and the connection shows only when it drops. It
+   stays in the page while hidden, so its status region still announces the drop. */
+@media (max-width: 1199px) {
+  .toggleLabel {
+    display: none;
+  }
+
+  .conn[data-state="open"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .toggle {
+    width: 34px;
+    padding: 0;
+    justify-content: center;
+  }
 }

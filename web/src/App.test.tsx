@@ -7,7 +7,7 @@ import {
   DEMO_SESSION_ID,
 } from '../../src/core/fixtures/demo.js';
 import type { RunState } from '../../src/shared/runs.js';
-import { App } from './App';
+import { App, sidebarMode } from './App';
 import type { RunsClient } from './data/runs';
 import { createStore } from './data/store';
 import { DEMO_NOW, demoStore } from './test/demo';
@@ -207,7 +207,7 @@ describe('App', () => {
     expect(within(banner).getByText('Live viewer research (demo)')).toBeInTheDocument();
     expect(within(banner).getByText('Running')).toBeInTheDocument();
     expect(within(banner).getByText('Connected')).toBeInTheDocument();
-    // The open session's agent, in its colours.
+    // The open session's agent, in its colours, at every width.
     expect(within(banner).getByText('Claude Code')).toHaveAttribute('data-tone', 'claude-code');
 
     const summary = screen.getByRole('region', { name: 'Summary' });
@@ -305,7 +305,9 @@ describe('App', () => {
     const store = createStore();
     store.applyEvent({ type: 'quota', quotas: [createDemoQuota(DEMO_NOW)] });
     render(<App store={store} connect={noConnect} />);
-    expect(within(screen.getByRole('banner')).getByText('Claude 62%')).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('banner')).getByRole('meter', { name: 'Claude' }),
+    ).toHaveTextContent('Claude 62%');
   });
 
   it('says a session does not exist once the list has loaded without it', () => {
@@ -587,5 +589,137 @@ describe('App · permission prompts in the views', () => {
       }),
     );
     expect(screen.getByRole('dialog', { name: 'Grok wants to use Bash' })).toBeInTheDocument();
+  });
+});
+
+describe('sidebarMode', () => {
+  it.each([
+    [1440, true, 'column'],
+    [1440, false, 'column'],
+    [1200, true, 'column'],
+    [1199, true, 'overlay'],
+    [1024, true, 'overlay'],
+    [1024, false, 'column'],
+    [901, true, 'overlay'],
+    [900, true, 'drawer'],
+    [768, false, 'drawer'],
+  ] as const)('%ipx, session open: %s → %s', (width, hasSession, mode) => {
+    expect(sidebarMode(width, hasSession)).toBe(mode);
+  });
+});
+
+describe('App below three columns', () => {
+  const realMatchMedia = window.matchMedia;
+  let width = 1440;
+  const listeners = new Set<() => void>();
+  /** A screen `w` px wide that can be resized: answers the app's max-width queries. */
+  const screenWidth = (w: number) => {
+    width = w;
+    window.matchMedia = ((query: string) => ({
+      get matches() {
+        const max = Number(/max-width:\s*(\d+)px/.exec(query)?.[1] ?? Number.POSITIVE_INFINITY);
+        return width <= max;
+      },
+      media: query,
+      addEventListener: (_: string, fn: () => void) => listeners.add(fn),
+      removeEventListener: (_: string, fn: () => void) => listeners.delete(fn),
+    })) as unknown as typeof window.matchMedia;
+  };
+  const resize = (w: number) =>
+    act(() => {
+      width = w;
+      for (const fn of [...listeners]) fn();
+    });
+  afterEach(() => {
+    window.matchMedia = realMatchMedia;
+    listeners.clear();
+  });
+  const openOverlay = (sessions = false) => {
+    screenWidth(1024);
+    window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}`;
+    const store = demoStore();
+    if (sessions) store.applyEvent({ type: 'sessions', sessions: createDemoSessions(DEMO_NOW) });
+    render(<App store={store} connect={noConnect} />);
+    const menu = within(screen.getByRole('banner')).getByRole('button', { name: 'Sessions' });
+    fireEvent.click(menu);
+    return menu;
+  };
+
+  it('floats the session list over an open session as a modal, closed until the menu opens it', () => {
+    screenWidth(1024);
+    window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}`;
+    render(<App store={demoStore()} connect={noConnect} />);
+    const banner = screen.getByRole('banner');
+    const menu = within(banner).getByRole('button', { name: 'Sessions' });
+    expect(screen.queryByRole('navigation', { name: 'Sessions' })).toBeNull();
+    expect(menu).toHaveAttribute('aria-expanded', 'false');
+    expect(menu).toHaveAttribute('aria-controls', 'session-list');
+    expect(within(banner).getByText('Claude Code')).toBeInTheDocument();
+
+    fireEvent.click(menu);
+    const dialog = screen.getByRole('dialog', { name: 'Sessions' });
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(dialog).toHaveAttribute('id', 'session-list');
+    expect(dialog.closest('[data-sidebar-mode]')).toHaveAttribute('data-sidebar-mode', 'overlay');
+    expect(menu).toHaveAttribute('aria-expanded', 'true');
+    expect(document.activeElement).toBe(within(dialog).getByRole('searchbox'));
+    // Nothing behind the scrim takes focus while it is open.
+    expect(screen.getByRole('main', { hidden: true })).toHaveAttribute('inert');
+    expect(document.getElementById('composer-slot')).toHaveAttribute('inert');
+  });
+
+  it('closes on Escape wherever focus is, and gives focus back to the menu', () => {
+    const menu = openOverlay();
+    act(() => (document.activeElement as HTMLElement).blur());
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Sessions' })).toBeNull();
+    expect(document.activeElement).toBe(menu);
+    expect(screen.getByRole('main')).not.toHaveAttribute('inert');
+  });
+
+  it('closes from the scrim, giving focus back to the menu', () => {
+    const menu = openOverlay();
+    const scrim = document.querySelector(
+      '[data-sidebar-mode] > [aria-hidden="true"]',
+    ) as HTMLElement;
+    fireEvent.click(scrim);
+    expect(screen.queryByRole('dialog', { name: 'Sessions' })).toBeNull();
+    expect(document.activeElement).toBe(menu);
+  });
+
+  it('closes once a session is picked, and carries on in the session just opened', () => {
+    // As a browser does, and jsdom does not: no focus inside an inert subtree.
+    const realFocus = HTMLElement.prototype.focus;
+    HTMLElement.prototype.focus = function (this: HTMLElement, options?: FocusOptions) {
+      if (!this.closest('[inert]')) realFocus.call(this, options);
+    };
+    onTestFinished(() => {
+      HTMLElement.prototype.focus = realFocus;
+    });
+    openOverlay(true);
+    fireEvent.click(screen.getByRole('button', { name: /Fix flaky login test/ }));
+    expect(screen.queryByRole('dialog', { name: 'Sessions' })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('main'));
+  });
+
+  it('closes when the screen crosses a breakpoint, keeping focus on the page', () => {
+    const menu = openOverlay();
+    resize(800);
+    expect(screen.queryByRole('dialog', { name: 'Sessions' })).toBeNull();
+    expect(document.activeElement).toBe(menu);
+    // Wide again: a column, not a dialog, and nothing inert.
+    resize(1300);
+    expect(
+      screen.getByRole('navigation', { name: 'Sessions' }).closest('aside'),
+    ).not.toHaveAttribute('role');
+    expect(screen.getByRole('main')).not.toHaveAttribute('inert');
+  });
+
+  it('keeps the list as a column on Home, which has no third column to protect', () => {
+    screenWidth(1024);
+    window.location.hash = '';
+    render(<App store={demoStore()} connect={noConnect} />);
+    const list = screen.getByRole('navigation', { name: 'Sessions' });
+    expect(list.closest('[data-sidebar-mode]')).toHaveAttribute('data-sidebar-mode', 'column');
   });
 });

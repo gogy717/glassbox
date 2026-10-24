@@ -1,17 +1,28 @@
 .bar {
   display: flex;
   flex: none;
+  min-height: 52px;
   border-bottom: 1px solid var(--border);
   background: var(--layer-1);
+}
+
+/* Figures scroll sideways when they must; the diagnostics popover sits outside, unclipped. */
+.metrics {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 
 .metric {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  gap: 2px;
   flex: none;
-  min-width: 86px;
-  padding: 7px 14px;
+  min-width: 96px;
+  padding: 7px 16px;
   border-left: 1px solid var(--border);
 }
 
@@ -20,22 +31,59 @@
 }
 
 .value {
-  font-size: 14px;
-  font-weight: 700;
+  font-size: var(--fs-readout);
+  font-weight: 500;
+  line-height: 1.25;
   white-space: nowrap;
 }
 
+/* The thinking share, a muted parenthesis. */
+.aside {
+  font-size: var(--fs-small);
+  color: var(--muted);
+}
+
 .label {
-  font-size: 10px;
   color: var(--muted);
   white-space: nowrap;
 }
 
-/* Metrics scroll sideways on narrow screens; the diagnostics popover sits outside so it is not clipped. */
-.metrics {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
+/* Uppercase means nothing to CJK, and 10px CJK is hard to read: one step up. */
+:global(html[lang^="zh"]) .label {
+  font-size: var(--fs-meta);
+  letter-spacing: 0;
+}
+
+.more {
+  display: none;
+  flex: none;
+  align-self: center;
+  margin: 0 8px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: var(--fs-small);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.more:hover {
+  text-decoration: underline;
+}
+
+/* Seven labels in one row is a spreadsheet: keep four, the rest behind the button. */
+@media (max-width: 900px) {
+  .bar:not([data-more]) .metric[data-extra] {
+    display: none;
+  }
+
+  .more {
+    display: block;
+  }
+
+  .metric {
+    min-width: 0;
+    padding: 7px 12px;
+  }
 }

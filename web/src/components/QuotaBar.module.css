@@ -7,7 +7,7 @@
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  height: 30px;
+  min-height: 30px;
   padding: 0 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-l);
@@ -19,24 +19,43 @@
   border-color: var(--border-strong);
 }
 
-.meter[data-stale] {
-  opacity: 0.55;
-  filter: grayscale(1);
-}
-
 .icon {
   color: var(--muted);
 }
 
 .meter {
-  --level: var(--muted);
+  --level: var(--text);
   display: inline-flex;
   flex-direction: column;
-  gap: 2px;
-  font-size: 11px;
-  font-weight: 600;
+  gap: 3px;
+  font-size: var(--fs-meta);
+  font-weight: 500;
   color: var(--text);
   white-space: nowrap;
+}
+
+/* "5h 62%": the name muted, the figure in ink (or the level's colour near a limit). */
+.reading {
+  line-height: 1.2;
+}
+
+.name,
+.age {
+  color: var(--muted);
+}
+
+/* A stale meter's age, a muted line under its track, where the meter stands alone (one
+   provider, or the narrow lead-only button). Beside others, the hatched track says "old" and the
+   tooltip and details say how old. */
+.age {
+  display: none;
+  font-size: var(--fs-label);
+  font-weight: 400;
+  line-height: 1;
+}
+
+.wrap[data-single] .age {
+  display: block;
 }
 
 .meter[data-level="warn"],
@@ -49,8 +68,8 @@
   --level: var(--error);
 }
 
-.meter[data-level="warn"],
-.meter[data-level="danger"] {
+.meter[data-level="warn"] .value,
+.meter[data-level="danger"] .value {
   color: var(--level);
 }
 
@@ -58,8 +77,8 @@
   display: block;
   width: 100%;
   min-width: 40px;
-  height: 3px;
-  border-radius: 2px;
+  height: 2px;
+  border-radius: var(--radius-xs);
   background: var(--layer-3);
   overflow: hidden;
 }
@@ -71,19 +90,13 @@
 .track > span {
   display: block;
   height: 100%;
-  border-radius: 2px;
-  background: var(--level, var(--muted));
-}
-
-.meter[data-level="ok"] .track > span,
-.row[data-level="ok"] .track > span {
-  background: var(--accent);
+  border-radius: var(--radius-xs);
+  background: var(--level, var(--text));
 }
 
 .more {
   display: none;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--fs-meta);
   color: var(--muted);
 }
 
@@ -98,7 +111,7 @@
   max-height: calc(100vh - 64px);
   overflow-y: auto;
   padding: 14px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-xl);
   background: var(--layer-1);
   box-shadow: var(--shadow);
@@ -127,7 +140,7 @@
 }
 
 .row {
-  --level: var(--accent);
+  --level: var(--text);
   display: grid;
   gap: 4px;
 }
@@ -143,12 +156,11 @@
 }
 
 .row .track {
-  height: 5px;
+  height: 4px;
 }
 
-.snapshot[data-stale] .row,
 .snapshot[data-stale] .balance {
-  opacity: 0.55;
+  color: var(--muted);
 }
 
 .reset,
@@ -174,6 +186,10 @@
 
   .more {
     display: inline;
+  }
+
+  .meter[data-top] .age {
+    display: block;
   }
 }
 
@@ -214,9 +230,27 @@
   .wrap[data-many] .more {
     display: inline;
   }
+
+  .wrap[data-many] .meter[data-top] .age {
+    display: block;
+  }
 }
 
-.meter[data-reset] {
+.meter[data-reset] .value {
   color: var(--muted);
-  font-weight: 500;
+}
+
+/* Old figures: a hatched track and a muted fill, and the age beside the figure. */
+.meter[data-stale] .value {
+  color: var(--muted);
+}
+
+.meter[data-stale] .track,
+.snapshot[data-stale] .track {
+  background: repeating-linear-gradient(-45deg, var(--layer-3) 0 2px, transparent 2px 4px);
+}
+
+.meter[data-stale] .track > span,
+.snapshot[data-stale] .track > span {
+  background: var(--faint);
 }

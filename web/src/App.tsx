@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import type { RunState } from '../../src/shared/runs.js';
 import css from './App.module.css';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -28,6 +36,21 @@ export interface AppProps {
 }
 
 const NARROW = '(max-width: 900px)';
+const TWO_COLUMNS = '(max-width: 1199px)';
+/** The session list's element, for the menu button that shows and hides it. */
+const SIDEBAR_ID = 'session-list';
+
+export type SidebarMode = 'column' | 'overlay' | 'drawer';
+
+/**
+ * Three columns only at 1200px and up. Below that a session keeps two (the conversation list and
+ * the stage), so the session list floats over them as an overlay, closed until asked for; Home
+ * has no third column to protect and keeps it. At 900px and below it is the drawer.
+ */
+export function sidebarMode(width: number, hasSession: boolean): SidebarMode {
+  if (width <= 900) return 'drawer';
+  return width < 1200 && hasSession ? 'overlay' : 'column';
+}
 
 function useMediaQuery(query: string): boolean {
   const subscribe = useCallback(
@@ -87,9 +110,34 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
     setFollow(followsLatest);
   }
   const narrow = useMediaQuery(NARROW);
+  const twoColumns = useMediaQuery(TWO_COLUMNS);
+  const mode = sidebarMode(narrow ? 900 : twoColumns ? 1199 : 1200, route.sessionId !== null);
   const mainRef = useRef<HTMLElement>(null);
+  const asideRef = useRef<HTMLElement>(null);
+  const menuRef = useRef<HTMLButtonElement>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  // The overlay and the drawer start closed, and close again whenever the page changes under them.
+  const [floatOpen, setFloatOpen] = useState(false);
+  const [floatKey, setFloatKey] = useState(`${mode}:${route.sessionId}`);
+  if (floatKey !== `${mode}:${route.sessionId}`) {
+    setFloatKey(`${mode}:${route.sessionId}`);
+    setFloatOpen(false);
+  }
+  const floating = mode !== 'column';
+  // Open over the page, the list is a modal dialog: the page behind it is inert.
+  const modal = floating && floatOpen;
+  const closeFloat = useCallback(() => {
+    setFloatOpen(false);
+    menuRef.current?.focus();
+  }, []);
+  useEffect(() => {
+    if (!modal) return;
+    // Opened from the menu button: start in the search field, not behind the scrim.
+    asideRef.current?.querySelector<HTMLElement>('input')?.focus();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && closeFloat();
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [modal, closeFloat]);
   const ui = useMemo(() => ({ follow, setFollow }), [follow]);
 
   useEffect(() => {
@@ -125,7 +173,20 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
 
   const open = state.open;
   const summary = open?.session ?? state.sessions.find((s) => s.id === route.sessionId) ?? null;
-  const sidebarShown = narrow ? drawerOpen : !sidebarCollapsed;
+  const sidebarShown = floating ? floatOpen : !sidebarCollapsed;
+  // A session picked from the overlay: carry on in it once <main> is no longer inert (a browser
+  // refuses focus inside an inert subtree, so not in the click handler).
+  const focusMainOnClose = useRef(false);
+  useLayoutEffect(() => {
+    if (modal || !focusMainOnClose.current) return;
+    focusMainOnClose.current = false;
+    mainRef.current?.focus();
+  }, [modal]);
+  // The list went away with focus inside (a resize past a breakpoint): keep focus on the page.
+  useLayoutEffect(() => {
+    if (!sidebarShown && asideRef.current?.contains(document.activeElement))
+      menuRef.current?.focus();
+  }, [sidebarShown]);
 
   return (
     <UiContext.Provider value={ui}>
@@ -137,8 +198,11 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
             {t('app.skipToContent')}
           </button>
           <TopBar
+            menuRef={menuRef}
+            sidebarId={SIDEBAR_ID}
             title={route.sessionId ? (summary?.title ?? t('sidebar.untitled')) : null}
             agent={route.sessionId ? (summary?.agent ?? null) : null}
+            sidebarOpen={sidebarShown}
             live={summary?.live ?? null}
             connection={state.connection}
             quotas={state.quotas}
@@ -147,25 +211,38 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
             prefs={prefs}
             onPrefs={onPrefs}
             onToggleSidebar={() =>
-              narrow ? setDrawerOpen(!drawerOpen) : setSidebarCollapsed(!sidebarCollapsed)
+              floating ? setFloatOpen(!floatOpen) : setSidebarCollapsed(!sidebarCollapsed)
             }
           />
-          <div className={css.body} data-sidebar={sidebarShown ? 'shown' : 'hidden'}>
-            {narrow && drawerOpen && (
-              <div className={css.scrim} aria-hidden="true" onClick={() => setDrawerOpen(false)} />
-            )}
-            <aside className={css.sidebar} hidden={!sidebarShown}>
+          <div
+            className={css.body}
+            data-sidebar={sidebarShown ? 'shown' : 'hidden'}
+            data-sidebar-mode={mode}
+          >
+            {modal && <div className={css.scrim} aria-hidden="true" onClick={closeFloat} />}
+            <aside
+              ref={asideRef}
+              id={SIDEBAR_ID}
+              className={css.sidebar}
+              hidden={!sidebarShown}
+              {...(modal
+                ? { role: 'dialog', 'aria-modal': true, 'aria-label': t('sidebar.title') }
+                : {})}
+            >
               <SidebarContainer
                 sessions={state.sessions}
                 selectedId={route.sessionId}
                 showProbes={prefs.showProbes}
                 onSelect={(id) => {
-                  setDrawerOpen(false);
                   navigate({ sessionId: id, agentId: 'main', turnId: null, requestId: null });
+                  if (!floating) return;
+                  // The list goes away: carry on in the session just opened.
+                  focusMainOnClose.current = true;
+                  setFloatOpen(false);
                 }}
               />
             </aside>
-            <main ref={mainRef} tabIndex={-1} className={css.main}>
+            <main ref={mainRef} tabIndex={-1} className={css.main} inert={modal}>
               {open ? (
                 <ErrorBoundary key={open.id}>
                   <ApprovalsContext.Provider value={approvals}>
@@ -200,7 +277,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
               )}
             </main>
           </div>
-          <div className={css.footer} id="composer-slot">
+          <div className={css.footer} id="composer-slot" inert={modal}>
             {run && pending && showPrompt && (
               <PermissionDialog
                 key={pending.id}
