@@ -89,10 +89,7 @@ describe('CSS modules', () => {
   // A module's `animation: pulse …` is renamed to the module's own `_pulse_<hash>`, so keyframes
   // declared in global.css never run there: the status dots did not pulse until W1's fix round.
   // Modules not yet fixed (D1 hand-offs; drop each once its wave declares its own keyframes):
-  const KNOWN = [
-    'views/time/TimeView.module.css: pulse',
-    'views/composer/Composer.module.css: pulse',
-  ];
+  const KNOWN = ['views/time/TimeView.module.css: pulse'];
 
   it('animates a module only with keyframes the module declares', () => {
     const missing = moduleFiles(SRC).flatMap((file) => {

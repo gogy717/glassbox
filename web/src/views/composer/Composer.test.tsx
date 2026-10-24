@@ -120,10 +120,13 @@ describe('Composer', () => {
       'aria-checked',
       'true',
     );
-    // Continue stays in view, struck through, with its reason; it is not a choice right now.
+    // Continue stays in view, struck through and reachable, with its reason; it is not a choice
+    // right now, and the reason is also on screen once, as the hint.
     const resume = screen.getByRole('radio', { name: 'Continue' });
-    expect(resume).toBeDisabled();
+    expect(resume).toHaveAttribute('aria-disabled', 'true');
     expect(resume).toHaveAttribute('title', expect.stringMatching(/^Open in a terminal right now/));
+    fireEvent.click(resume);
+    expect(resume).toHaveAttribute('aria-checked', 'false');
     expect(screen.getAllByText(/Open in a terminal right now/)).toHaveLength(1);
     type(box, 'hi');
     fireEvent.keyDown(box, { key: 'Enter' });

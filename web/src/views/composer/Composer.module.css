@@ -78,9 +78,6 @@
   font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
-  transition:
-    background var(--motion),
-    border-color var(--motion);
 }
 
 .button:hover:not(:disabled) {
@@ -224,7 +221,7 @@
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-l);
   background: var(--layer-1);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warning) 35%, transparent);
+  box-shadow: inset 0 0 0 1px var(--warning-tint);
 }
 
 .prompt:focus {
