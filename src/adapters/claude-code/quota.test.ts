@@ -276,11 +276,22 @@ describe('adapter quota()', () => {
     });
     expect(await old.quota?.()).toMatchObject({ source: 'claude-code-cache', plan: 'Max 20x' });
 
-    // A config without a plan of its own leaves the sign-in's.
+    // Signing in again clears the cache, not the account record: its plan still wins.
+    await writeFile(
+      path,
+      JSON.stringify(
+        config({
+          ...account({ organizationRateLimitTier: 'default_claude_max_20x' }),
+          cachedUsageUtilization: undefined,
+        }),
+      ),
+    );
+    expect(await fresh.quota?.()).toMatchObject({ source: 'anthropic-usage-api', plan: 'Max 20x' });
+
+    // Only a config whose account record names no plan leaves the sign-in's.
     await writeFile(path, JSON.stringify(config(account({ organizationType: undefined }))));
     expect(await fresh.quota?.()).toMatchObject({ plan: 'Max 5x' });
-    // So does a cache of another account: nothing ties the config to this sign-in.
-    await writeFile(path, JSON.stringify(config({ oauthAccount: { accountUuid: 'other' } })));
+    await rm(path);
     expect(await fresh.quota?.()).toMatchObject({ plan: 'Max 5x' });
   });
 });

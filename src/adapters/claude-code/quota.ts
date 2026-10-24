@@ -104,6 +104,15 @@ export function planName(type: unknown, tier: unknown): string | null {
   return multiple ? `${name} ${multiple}` : name;
 }
 
+/**
+ * The plan named by the signed-in account's record in a parsed global config, which Claude Code
+ * rewrites on sign-in and account switch; null when it names none.
+ */
+export function planFromConfig(config: unknown): string | null {
+  const account = obj(obj(config)?.oauthAccount);
+  return planName(account?.organizationType, account?.organizationRateLimitTier);
+}
+
 /** Quota from a parsed global config, or null when absent, malformed or for another account. */
 export function quotaFromConfig(config: unknown, now: number = Date.now()): QuotaSnapshot | null {
   const root = obj(config);
@@ -113,13 +122,12 @@ export function quotaFromConfig(config: unknown, now: number = Date.now()): Quot
   if (typeof cached.accountUuid !== 'string' || cached.accountUuid !== account?.accountUuid) {
     return null;
   }
-  const plan = planName(account.organizationType, account.organizationRateLimitTier);
   return quotaFromUtilization(
     cached.utilization,
     cached.fetchedAtMs,
     now,
     'claude-code-cache',
-    plan,
+    planFromConfig(root),
   );
 }
 
@@ -161,7 +169,10 @@ export function quotaFromUtilization(
   };
 }
 
-export type QuotaRead = { kind: 'ok'; quota: QuotaSnapshot | null } | { kind: 'unreadable' };
+/** The cached quota and the account's plan; `unreadable` when the file is mid-write. */
+export type QuotaRead =
+  | { kind: 'ok'; quota: QuotaSnapshot | null; plan: string | null }
+  | { kind: 'unreadable' };
 
 /** Reads the config file. `unreadable` means it exists but is not valid JSON (mid-write). */
 export async function readQuotaFile(path: string, now: number = Date.now()): Promise<QuotaRead> {
@@ -169,7 +180,7 @@ export async function readQuotaFile(path: string, now: number = Date.now()): Pro
   try {
     text = await readFile(path, 'utf8');
   } catch {
-    return { kind: 'ok', quota: null };
+    return { kind: 'ok', quota: null, plan: null };
   }
   let config: unknown;
   try {
@@ -177,5 +188,5 @@ export async function readQuotaFile(path: string, now: number = Date.now()): Pro
   } catch {
     return { kind: 'unreadable' };
   }
-  return { kind: 'ok', quota: quotaFromConfig(config, now) };
+  return { kind: 'ok', quota: quotaFromConfig(config, now), plan: planFromConfig(config) };
 }

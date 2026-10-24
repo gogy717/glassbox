@@ -36,6 +36,7 @@ export function createClaudeCodeAdapter({
       : join(claudeDir, '.claude.json'));
   // Claude Code rewrites the config file in place; keep the last good read across a mid-write.
   let lastQuota: QuotaSnapshot | null = null;
+  let lastPlan: string | null = null;
   const discoveryCache: DiscoveryCache = new Map();
 
   return {
@@ -49,14 +50,20 @@ export function createClaudeCodeAdapter({
     createParser: (source) => new ClaudeSessionParser(source),
     quota: async () => {
       const read = await readQuotaFile(configPath);
-      if (read.kind === 'ok') lastQuota = read.quota;
+      if (read.kind === 'ok') {
+        lastQuota = read.quota;
+        lastPlan = read.plan;
+      }
       const fetched = (await quotaFetcher?.latest()) ?? null;
-      if (!fetched || !lastQuota) return fetched ?? lastQuota;
       const newer =
-        Date.parse(fetched.fetchedAt) >= Date.parse(lastQuota.fetchedAt) ? fetched : lastQuota;
-      // The plan as the config names it (for the account its cache belongs to) wins, whichever
-      // numbers are newer: the sign-in's tier is the one recorded at login and can be outdated.
-      return { ...newer, plan: lastQuota.plan ?? newer.plan };
+        fetched && lastQuota
+          ? Date.parse(fetched.fetchedAt) >= Date.parse(lastQuota.fetchedAt)
+            ? fetched
+            : lastQuota
+          : (fetched ?? lastQuota);
+      // The plan as the config's account record names it wins, cache or not, whichever numbers
+      // are newer: the sign-in's tier is the one recorded at login and can be outdated.
+      return newer && { ...newer, plan: lastPlan ?? newer.plan };
     },
     quotaFiles: () => [configPath],
   };
