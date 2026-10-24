@@ -68,6 +68,21 @@ export function formatRoute(r: Route): string {
   return `#/s/${encodeURIComponent(r.sessionId)}${qs ? `?${qs}` : ''}`;
 }
 
+/** What the open card belongs to: moving any of these elsewhere leaves it behind. */
+const CARD_OWNERS = ['sessionId', 'agentId', 'turnId', 'requestId'] as const;
+
+/**
+ * `next` over `current`. A card is one request's, so a move to another request, turn, agent or
+ * session that does not name a card closes it, rather than opening the same card of a request
+ * nobody asked about (a Response panel left open, then a step clicked in the steps view).
+ */
+export function mergeRoute(current: Route, next: Partial<Route>): Route {
+  const merged = { ...current, ...next };
+  const moved = CARD_OWNERS.some((k) => k in next && next[k] !== current[k]);
+  if (moved && !('card' in next)) delete merged.card;
+  return merged;
+}
+
 const subscribe = (fn: () => void) => {
   window.addEventListener('hashchange', fn);
   return () => window.removeEventListener('hashchange', fn);
@@ -81,7 +96,7 @@ export function useRoute(): [Route, Navigate] {
   const hash = useSyncExternalStore(subscribe, getHash);
   const route = parseRoute(hash);
   const navigate = useCallback<Navigate>((next, opts) => {
-    const target = formatRoute({ ...parseRoute(window.location.hash), ...next });
+    const target = formatRoute(mergeRoute(parseRoute(window.location.hash), next));
     if (target === window.location.hash || (target === '#/' && !window.location.hash)) return;
     if (opts?.replace) {
       history.replaceState(null, '', target);

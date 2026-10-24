@@ -344,7 +344,7 @@ export function toolCategory(name: string, input?: unknown): ToolCategory {
   return 'other';
 }
 
-const basename = (path: string) => path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
+export const basename = (path: string) => path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
 
 const MAX = 80;
 const clip = (s: string) => {
@@ -416,6 +416,20 @@ function stringInput(tool: ToolCall, input: string): string {
   return clip(quotedValue(input) ?? '');
 }
 
+/**
+ * The file a call's summary names by its basename (a read, an edit, a listing), whole, so a view
+ * with room can show more of it; null when the summary is something else (a command, a pattern,
+ * a URL, a glob).
+ */
+export function inputPath(tool: ToolCall): string | null {
+  const input = tool.input;
+  if (!isObj(input) || tool.name === 'glob' || tool.name === 'Workflow') return null;
+  const f = (k: string) => field(input, k);
+  if (shellCommand(input) || f('pattern') || f('query') || f('url')) return null;
+  const path = PATH_KEYS.map(f).find(Boolean);
+  return path && !isUrl(path) ? path : null;
+}
+
 /** One line saying what the call did: the command, the file, the pattern, the host… */
 export function summarizeInput(tool: ToolCall): string {
   const input = tool.input;
@@ -467,4 +481,93 @@ export function summarizeInput(tool: ToolCall): string {
   const scalar = entries.find(([, v]) => typeof v === 'number' || typeof v === 'boolean');
   if (scalar) return `${scalar[0]}: ${scalar[1]}`;
   return clip(entries.map(([k]) => k).join(', '));
+}
+
+/** Adapters cut a tool's result preview at this many characters (`PREVIEW_CHARS`). */
+const PREVIEW_CHARS = 500;
+
+/** What a finished call's result line says: a message key, and a count for it. */
+export interface ResultSummary {
+  key:
+    | 'matches'
+    | 'matchesMore'
+    | 'noMatches'
+    | 'files'
+    | 'filesMore'
+    | 'noFiles'
+    | 'lines'
+    | 'linesMore'
+    | 'read'
+    | 'noOutput'
+    | 'edited'
+    | 'written'
+    | 'launched'
+    | 'delivered'
+    | 'answered'
+    | 'updated'
+    | 'fetched'
+    | 'searched'
+    | 'json'
+    | 'text'
+    | 'done';
+  n?: number;
+}
+
+const SEARCH = new Set(['Grep', 'grep', 'grep_files', 'search', 'ast_grep']);
+const LISTING = new Set(['Glob', 'LS', 'list_dir', 'glob', 'find', 'list', 'ls']);
+const WRITERS = new Set(['Write', 'write', 'write_file']);
+const SENDERS = new Set([
+  'SendMessage',
+  'send_message',
+  'send_input',
+  'send_subagent_message',
+  'followup_task',
+  'vibe_send',
+]);
+const SEARCH_COMMAND = /^\s*(rg|grep|egrep|git grep|ag)\b/;
+const NONE_FOUND = /^No (matches|files) found/i;
+const NO_OUTPUT = /^\(?[\w ]*completed with no output\)?$|^\(no output\)$/i;
+const LAUNCHED = /\blaunched\b|\bin the background\b|\basync(hronously)?\b/i;
+
+/**
+ * A finished call's outcome in a few words, by what kind of work it was: "3 matches",
+ * "212 lines", "no output", "edited", "launched · async", "delivered", else "done". Counts come
+ * from the result preview; a preview cut at its limit gives a lower bound ("22+ lines"), or no
+ * count for a file read, whose length it cannot know. Never the result's own words or quotes.
+ */
+export function summarizeResult(tool: ToolCall): ResultSummary {
+  const raw = tool.resultPreview ?? '';
+  const text = raw.trim();
+  const cut = raw.length >= PREVIEW_CHARS;
+  const lines = text ? text.split('\n').filter((l) => l.trim()).length : 0;
+  const count = (key: 'matches' | 'files' | 'lines'): ResultSummary => ({
+    key: cut ? `${key}More` : key,
+    n: lines,
+  });
+  const name = tool.name;
+  const category = toolCategory(name, tool.input);
+  const command = SHELLS.has(name) ? shellCommand(tool.input) : null;
+
+  if (category === 'explore' || (command !== null && SEARCH_COMMAND.test(command))) {
+    const found = /^Found (\d+) (files?|total occurrences)/.exec(text);
+    if (found)
+      return { key: found[2]?.startsWith('file') ? 'files' : 'matches', n: Number(found[1]) };
+    if (SEARCH.has(name) || (command !== null && SEARCH_COMMAND.test(command)))
+      return !text || NONE_FOUND.test(text) ? { key: 'noMatches' } : count('matches');
+    if (LISTING.has(name))
+      return !text || NONE_FOUND.test(text) ? { key: 'noFiles' } : count('files');
+    if (command === null) return cut || !text ? { key: 'read' } : count('lines');
+  }
+  if (category === 'run' || category === 'explore')
+    return !text || NO_OUTPUT.test(text) ? { key: 'noOutput' } : count('lines');
+  if (category === 'edit') return { key: WRITERS.has(name) ? 'written' : 'edited' };
+  if (category === 'delegate')
+    return SENDERS.has(name)
+      ? { key: 'delivered' }
+      : { key: LAUNCHED.test(text) ? 'launched' : 'done' };
+  if (category === 'ask') return { key: 'answered' };
+  if (category === 'plan') return { key: 'updated' };
+  if (category === 'web') return { key: /search/i.test(name) ? 'searched' : 'fetched' };
+  if (category === 'mcp') return { key: /^[[{]/.test(text) ? 'json' : 'text' };
+  return { key: 'done' };
 }

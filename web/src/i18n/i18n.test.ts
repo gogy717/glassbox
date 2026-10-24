@@ -44,10 +44,8 @@ describe('translateParts', () => {
 
 describe('translate', () => {
   it('fills {placeholders} from params', () => {
-    expect(translate('zh', 'flow.turnTitle', { n: 3, prompt: '修复…' })).toBe('第3轮：修复…');
-    expect(translate('en', 'flow.turnTitle', { n: 3, prompt: 'Fix…' })).toBe(
-      'Conversation 3: Fix…',
-    );
+    expect(translate('zh', 'flow.turnLabel', { n: 3 })).toBe('第 3 轮');
+    expect(translate('en', 'detail.callRef', { n: 3 })).toBe('call #3');
   });
 
   it('picks the singular or plural noun for a count', () => {
@@ -63,7 +61,7 @@ describe('translate', () => {
   });
 
   it('leaves an unknown placeholder visible rather than printing undefined', () => {
-    expect(translate('en', 'flow.turnTitle', { n: 1 })).toBe('Conversation 1: {prompt}');
+    expect(translate('en', 'flow.turnLabel', {})).toBe('Conversation {n}');
   });
 });
 

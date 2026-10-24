@@ -7,6 +7,7 @@ import type { Route } from '../../router';
 import { DEMO_NOW, demoOpen } from '../../test/demo';
 import { clampHeadings, useFakeLayout } from '../../test/layout';
 import { UiContext } from '../../ui';
+import headerCss from '../flow/TurnHeader.module.css';
 import { StepsView } from './StepsView';
 
 function renderSteps(
@@ -89,7 +90,10 @@ describe('StepsView', () => {
       follow: false,
     });
     // In the layout, as in the execution chain: nothing floats over the steps.
-    const bar = screen.getByRole('group', { name: 'Conversation 1' }).nextElementSibling;
+    const header = screen
+      .getByRole('heading', { level: 2, name: /^Conversation 1:/ })
+      .closest(`.${headerCss.header}`);
+    const bar = header?.nextElementSibling;
     if (!(bar instanceof HTMLElement)) throw new Error('no bar after the header');
     expect(bar.nextElementSibling).toBe(container.querySelector('[data-steps-scroll]'));
     expect(within(bar).getByRole('status')).toHaveTextContent(/^Following paused/);
@@ -329,7 +333,7 @@ describe('StepsView', () => {
     fireEvent.change(field, { target: { value: 'nothing like this' } });
     expect(screen.getByText('No conversation matches')).toBeInTheDocument();
     // The conversation on stage stays while the filter hides it.
-    expect(screen.getByRole('group', { name: 'Conversation 1' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: /^Conversation 1:/ })).toBeInTheDocument();
   });
 
   it('follows the newest conversation that passes the filter', () => {
@@ -337,7 +341,7 @@ describe('StepsView', () => {
     fireEvent.change(screen.getByRole('searchbox', { name: 'Filter conversations' }), {
       target: { value: 'sidebar' },
     });
-    expect(screen.getByRole('group', { name: 'Conversation 1' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: /^Conversation 1:/ })).toBeInTheDocument();
   });
 
   it('says a dash, not 0, for tokens that were never reported', () => {

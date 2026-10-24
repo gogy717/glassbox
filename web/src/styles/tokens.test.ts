@@ -317,6 +317,20 @@ describe('tokens.css', () => {
     },
   );
 
+  // cards.module.css: a tool card's label is `color-mix(in srgb, var(--cat) 55%, var(--text))`.
+  it.each(NAMES.map((name, i) => [name, i] as const))(
+    'every tool category label reads at AA on its card (%s)',
+    (_, i) => {
+      const t = tokens(i);
+      const cats = [...t.keys()].filter((k) => k.startsWith('--cat-'));
+      expect(cats.length).toBeGreaterThanOrEqual(10);
+      for (const cat of cats) {
+        const label = over(t.get(cat) as string, 0.55, t.get('--text') as string);
+        expect(contrast(label, t.get('--layer-1') as string), cat).toBeGreaterThanOrEqual(4.5);
+      }
+    },
+  );
+
   it.each(NAMES.map((name, i) => [name, i] as const))(
     'the git and MCP tool categories do not read as a status (%s)',
     (_, i) => {

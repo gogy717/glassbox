@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type JsonShape, plainText, resultLine } from './preview';
+import { plainText } from './preview';
 
 describe('plainText', () => {
   it.each([
@@ -33,30 +33,5 @@ describe('plainText', () => {
     const text = plainText(`**Start** ${'word '.repeat(100_000)}`);
     expect(text.startsWith('Start word')).toBe(true);
     expect(text.length).toBeLessThan(2_100);
-  });
-});
-
-const shapeLabel = (s: JsonShape) =>
-  s.size === null ? 'JSON' : `JSON · ${s.size} ${s.kind === 'object' ? 'keys' : 'items'}`;
-
-describe('resultLine', () => {
-  it.each([
-    ['1\timport { Hono } from "hono";\n2\t…', '1 import { Hono } from "hono";'],
-    ['{"success":true,"message":"Message sent to medaka-f5"}', 'Message sent to medaka-f5'],
-    ['{"error":"File not found"}', 'File not found'],
-    ['{"exitCode":0,"output":"3 passed"}', '3 passed'],
-    ['[{"type":"text","text":"Found 3 files"}]', 'Found 3 files'],
-    // A preview cut short is no longer valid JSON.
-    ['{"success":true,"message":"Sent to \\"medaka\\" and', 'Sent to "medaka" and'],
-    // Data, not a message: say what it is instead of quoting a value out of it (`cat package.json`).
-    ['{\n  "name": "glassbox",\n  "version": "0.2.0"\n}', 'JSON · 2 keys'],
-    ['{"ok":true}', 'JSON · 1 keys'],
-    ['{"result":{"rows":3}}', 'JSON · 1 keys'],
-    ['[1, 2, 3]', 'JSON · 3 items'],
-    ['{"name":"glassbox","dependencies":{"hono', 'JSON'],
-    ['', ''],
-    ['\n\nsecond line', 'second line'],
-  ])('%j → %j', (preview, want) => {
-    expect(resultLine(preview, shapeLabel)).toBe(want);
   });
 });

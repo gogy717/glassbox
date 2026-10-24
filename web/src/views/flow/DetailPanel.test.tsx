@@ -5,8 +5,10 @@ import { SessionAgentContext } from '../../data/session-agent';
 import { I18nContext, makeI18n } from '../../i18n';
 import { demoOpen } from '../../test/demo';
 import { useFakeLayout } from '../../test/layout';
+import { moduleCssValue } from '../../test/module-css';
 import type { CardKey } from './cards';
 import { DetailPanel } from './DetailPanel';
+import panelCss from './DetailPanel.module.css';
 import { resetDetailPrefs } from './detail/prefs';
 
 const open = demoOpen();
@@ -274,6 +276,43 @@ describe('DetailPanel', () => {
       `/api/sessions/${encodeURIComponent(open.id)}/tool-calls/tu_m2b/result`,
       expect.anything(),
     );
+  });
+
+  it('keeps a loaded full result when maximized, and copies it in full', async () => {
+    const fetch = stubFetch({ toolCallId: 'tu_m2b', result: 'FULL RESULT TEXT' });
+    const writeText = vi.fn(async (_text: string) => {});
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+    renderPanel(req('req_m2'), 'tool:tu_m2b');
+    const panel = screen.getByRole('region', { name: 'Tool call details' });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Load full result' }));
+    await within(panel).findByText('FULL RESULT TEXT');
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'Maximize' }));
+    const dialog = screen.getByRole('dialog', { name: 'Tool call details · call #2' });
+    // The same result, not a second fetch behind a second "Load full result".
+    expect(within(dialog).getByText('FULL RESULT TEXT')).toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: 'Load full result' })).toBeNull();
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      fireEvent.click(within(panel).getByRole('button', { name: 'Copy' }));
+    });
+    expect(JSON.parse(writeText.mock.calls[0]?.[0] ?? '')).toMatchObject({
+      name: 'Edit',
+      result: 'FULL RESULT TEXT',
+    });
+  });
+
+  it('wraps its head in a narrow column, so Maximize and Close stay on screen', () => {
+    renderPanel(req('req_m2'), 'tool:tu_m2b');
+    const close = screen.getByRole('button', { name: 'Hide details' });
+    const tools = close.parentElement as HTMLElement;
+    const head = tools.parentElement as HTMLElement;
+    const sheet = `${import.meta.dirname}/DetailPanel.module.css`;
+    expect(moduleCssValue(sheet, panelCss, head, 'flex-wrap')).toBe('wrap');
+    // The buttons move as one, to the right of the next line.
+    expect(moduleCssValue(sheet, panelCss, tools, 'flex-wrap')).toBe('nowrap');
+    expect(moduleCssValue(sheet, panelCss, tools, 'margin-left')).toBe('auto');
   });
 
   it('closes from its header', () => {

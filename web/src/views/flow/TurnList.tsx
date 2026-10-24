@@ -140,14 +140,35 @@ function reveal(list: HTMLElement, el: HTMLElement): void {
   else if (r.right > l.right) list.scrollLeft += r.right - l.right + EDGE_PX;
 }
 
+/** Each item's lowercased label and prompt, made once: items are memoised, typing is not. */
+const haystacks = new WeakMap<TurnItem, string>();
+
+function matcher(query: string): ((it: TurnItem) => boolean) | null {
+  const q = query.trim().toLowerCase();
+  if (!q) return null;
+  return (it) => {
+    let h = haystacks.get(it);
+    if (h === undefined) {
+      h = `${it.label} ${it.prompt}`.toLowerCase();
+      haystacks.set(it, h);
+    }
+    return h.includes(q);
+  };
+}
+
 /**
  * The turns whose heading matches `query` (case-insensitive): the label and the prompt the row
  * shows, never tool output. All of them for an empty query.
  */
 export function filterTurns(items: TurnItem[], query: string): TurnItem[] {
-  const q = query.trim().toLowerCase();
-  if (!q) return items;
-  return items.filter((it) => `${it.label} ${it.prompt}`.toLowerCase().includes(q));
+  const matches = matcher(query);
+  return matches ? items.filter(matches) : items;
+}
+
+/** The newest turn that passes `query`: the newest of all for an empty one. */
+export function newestMatch(items: TurnItem[], query: string): TurnItem | undefined {
+  const matches = matcher(query);
+  return matches ? items.findLast(matches) : items.at(-1);
 }
 
 interface Props {

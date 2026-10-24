@@ -65,6 +65,13 @@ describe('firstSentence', () => {
     ['Use e.g. the store. Then sort.', 'Use e.g. the store.'],
     ['Bump to v2.0 now. Done.', 'Bump to v2.0 now.'],
     ['Read src/app.ts first', 'Read src/app.ts first'],
+    // Abbreviations before a capital or a number do not end one either.
+    ['Use e.g. React here. Then sort.', 'Use e.g. React here.'],
+    ['Keep i.e. The store. Then sort.', 'Keep i.e. The store.'],
+    ['Ask Mr. Smith and Dr. Who. Then sort.', 'Ask Mr. Smith and Dr. Who.'],
+    ['Files, logs, etc. Then sort.', 'Files, logs, etc. Then sort.'],
+    ['Tabs vs. Spaces matter. Then sort.', 'Tabs vs. Spaces matter.'],
+    ['See fig. 2 and No. 5 here. Done.', 'See fig. 2 and No. 5 here.'],
     ['  Spaced   out.  ', 'Spaced out.'],
   ])('%j → %j', (input, want) => {
     expect(firstSentence(input)).toBe(want);
@@ -74,6 +81,12 @@ describe('firstSentence', () => {
     const s = firstSentence('word '.repeat(200));
     expect(s.length).toBeLessThanOrEqual(241);
     expect(s.endsWith('…')).toBe(true);
+  });
+
+  it('cuts between characters, never inside an emoji', () => {
+    const s = firstSentence(`${'a'.repeat(239)}😀😀 and on`);
+    expect([...s]).toHaveLength(241);
+    expect(s).toBe(`${'a'.repeat(239)}😀…`);
   });
 });
 

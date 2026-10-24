@@ -175,9 +175,11 @@
   white-space: nowrap;
 }
 
+/* At the row's right edge: the marks make a column under the clocks. */
 .markSub {
   display: inline-flex;
   flex: none;
+  margin-left: auto;
 }
 
 /* A local slash command (/effort): one slim line in the mono face, not a conversation. */

@@ -1,18 +1,26 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { render, screen, within } from '@testing-library/react';
+import postcss, { type Rule } from 'postcss';
 import { describe, expect, it } from 'vitest';
 import type { ModelRequest, ToolCall } from '../../../../src/core/model.js';
 import { I18nContext, makeI18n } from '../../i18n';
 import { demoOpen } from '../../test/demo';
 import { CallRow } from './CallRow';
 
-function renderRow(requestId: string, blocks?: ModelRequest['blocks']) {
+function renderRow(
+  requestId: string,
+  blocks?: ModelRequest['blocks'],
+  change: { req?: Partial<ModelRequest>; tool?: Partial<ToolCall> } = {},
+) {
   const open = demoOpen();
   const found = open.requests.get(requestId);
   if (!found) throw new Error('fixture');
-  const req = blocks ? { ...found, blocks } : found;
+  const req = { ...found, ...(blocks ? { blocks } : {}), ...change.req };
   const tools = req.toolCallIds
     .map((id) => open.toolCalls.get(id))
-    .filter((t): t is ToolCall => t !== undefined);
+    .filter((t): t is ToolCall => t !== undefined)
+    .map((t) => ({ ...t, ...change.tool }));
   render(
     <I18nContext.Provider value={makeI18n('en')}>
       <CallRow
@@ -72,6 +80,24 @@ describe('CallRow why line', () => {
     expect(within(row).getByRole('group', { name: 'Read' })).toHaveTextContent('store.ts');
   });
 
+  // A call in flight with nothing said: req_m2 has one tool of its own, a Read.
+  const inFlight = (tool: Partial<ToolCall>) =>
+    renderRow('req_m2', [], {
+      req: { status: 'in-flight', endedAt: null },
+      tool: { endedAt: null, durationMs: null, ...tool },
+    });
+
+  it('counts the thinking while the call waits on the model', () => {
+    const row = inFlight({ status: 'complete', endedAt: '2026-10-23T09:00:01.000Z' });
+    expect(why(row)).toHaveTextContent(/^Thinking · /);
+  });
+
+  it('says nothing while one of its own tools runs: the tool card counts that time', () => {
+    const row = inFlight({ status: 'running' });
+    expect(why(row)).toBeNull();
+    expect(within(row).getByRole('group', { name: 'Response' })).not.toHaveTextContent('Thinking');
+  });
+
   it('falls back to what the call thought', () => {
     const row = renderRow('req_m2', [
       {
@@ -84,5 +110,33 @@ describe('CallRow why line', () => {
     expect(
       within(row).getByText('The sort is in store.ts.', { selector: 'p' }),
     ).toBeInTheDocument();
+  });
+});
+
+describe('CallRow styles', () => {
+  const sheet = postcss.parse(
+    readFileSync(join(import.meta.dirname, 'CallRow.module.css'), 'utf8'),
+  );
+  const decls = (selector: string) => {
+    const out: Record<string, string> = {};
+    sheet.walkRules((rule: Rule) => {
+      if (!rule.selectors.includes(selector)) return;
+      rule.walkDecls((d) => {
+        out[d.prop] = d.value;
+      });
+    });
+    return out;
+  };
+
+  // D1 P6: separators are a muted middle dot with spaces, never a pipe or a bordered span.
+  it('separates the call line with muted middle dots, which screen readers skip', () => {
+    sheet.walkDecls(/^border-(left|right)$/, (d) => {
+      throw new Error(`a bordered separator: ${d.toString()}`);
+    });
+    for (const selector of ['.meta::before', '.readings::before', '.reading + .reading::before'])
+      expect(decls(selector), selector).toMatchObject({
+        content: '"·" / ""',
+        color: 'var(--muted)',
+      });
   });
 });

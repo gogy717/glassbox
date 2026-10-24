@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatRoute, parseRoute, type Route } from './router';
+import { formatRoute, mergeRoute, parseRoute, type Route } from './router';
 
 const HOME: Route = {
   sessionId: null,
@@ -88,5 +88,37 @@ describe('the open card (card=)', () => {
     const hash = formatRoute(r);
     expect(hash).toBe('#/s/claude-code%3Aabc?turn=turn_m1&req=req_m1&card=tool%3Atu_m1a');
     expect(parseRoute(hash)).toEqual(r);
+  });
+});
+
+describe('mergeRoute', () => {
+  const open: Route = {
+    ...HOME,
+    sessionId: 's1',
+    turnId: 't1',
+    requestId: 'r1',
+    card: 'response',
+  };
+
+  it.each<[string, Partial<Route>]>([
+    ['another request', { requestId: 'r5' }],
+    [
+      'another request and turn (a step, a token row, a timeline bar)',
+      { turnId: 't3', requestId: 'r5' },
+    ],
+    ['another turn', { turnId: 't3' }],
+    ['another agent', { agentId: 'a1' }],
+    ['another session', { sessionId: 's2' }],
+  ])('closes the card on %s: it belonged to the old request', (_what, next) => {
+    expect(mergeRoute(open, next)).not.toHaveProperty('card');
+  });
+
+  it('keeps the card when the move names it', () => {
+    expect(mergeRoute(open, { requestId: 'r5', card: 'request' }).card).toBe('request');
+  });
+
+  it('keeps the card across a tab switch, or a move to where it already is', () => {
+    expect(mergeRoute(open, { tab: 'steps' }).card).toBe('response');
+    expect(mergeRoute(open, { turnId: 't1', requestId: 'r1' }).card).toBe('response');
   });
 });

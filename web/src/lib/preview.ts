@@ -48,34 +48,6 @@ export function plainText(markdown: string): string {
     .trim();
 }
 
-const oneLine = (s: string) => s.replace(/\s+/g, ' ').trim();
-
-/** Keys under which a JSON result carries a message for people, in order of preference. */
-const MESSAGE_KEYS = ['message', 'text', 'error', 'result', 'output'];
-
-/** What a JSON value holds, when it carries no message: `size` is null when the JSON was cut short. */
-export interface JsonShape {
-  kind: 'object' | 'array';
-  size: number | null;
-}
-
-/** The message a parsed JSON result carries, looking into arrays (`[{ "type", "text" }]`). */
-function messageOf(v: unknown): string | null {
-  if (Array.isArray(v)) {
-    for (const item of v) {
-      const s = messageOf(item);
-      if (s) return s;
-    }
-    return null;
-  }
-  if (v === null || typeof v !== 'object') return null;
-  for (const key of MESSAGE_KEYS) {
-    const x = (v as Record<string, unknown>)[key];
-    if (typeof x === 'string' && x.trim()) return x;
-  }
-  return null;
-}
-
 /**
  * The first string value of JSON cut short (which no longer parses), under one of `keys` or
  * under any key.
@@ -89,34 +61,4 @@ export function quotedValue(json: string, keys?: string[]): string | null {
   } catch {
     return m[1];
   }
-}
-
-/** Starts like a JSON object, or an array of objects or strings (not "[2026-10-24] …"). */
-const LOOKS_JSON = /^(\{\s*("|\})|\[\s*[{["\]])/;
-
-/**
- * A tool result's first line. A JSON result shows its message (`message`, `text`, `error`…), or
- * else only what it is (`describe`): a value picked out of data (`cat package.json`) misleads.
- */
-export function resultLine(preview: string, describe: (shape: JsonShape) => string): string {
-  const trimmed = preview.trim();
-  if (/^[[{]/.test(trimmed)) {
-    const kind = trimmed.startsWith('[') ? 'array' : 'object';
-    let parsed: unknown;
-    let ok = true;
-    try {
-      parsed = JSON.parse(trimmed);
-    } catch {
-      ok = false;
-    }
-    if (ok && parsed !== null && typeof parsed === 'object') {
-      const size = Array.isArray(parsed) ? parsed.length : Object.keys(parsed).length;
-      return oneLine(messageOf(parsed) ?? describe({ kind, size }));
-    }
-    if (!ok && LOOKS_JSON.test(trimmed)) {
-      const message = quotedValue(trimmed, MESSAGE_KEYS);
-      return message ? oneLine(message) : describe({ kind, size: null });
-    }
-  }
-  return oneLine(trimmed.split('\n')[0] ?? '');
 }
