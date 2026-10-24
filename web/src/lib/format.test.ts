@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  compactUnit,
   fitSummary,
   formatClock,
+  formatCompact,
   formatCountdown,
   formatDuration,
   formatElapsed,
@@ -59,6 +61,45 @@ describe('formatNumber / formatPercent', () => {
   it('formats a 0..1 share with one decimal', () => {
     expect(formatPercent(0.86043, 'en')).toBe('86.0%');
     expect(formatPercent(null, 'en')).toBe('—');
+  });
+});
+
+// Final review M5: one way to write a compact figure, so a session row and the rate popover read
+// the same count alike ("1.44M", not "1.4M" in one and "1.44M" in the other).
+describe('formatCompact', () => {
+  it.each([
+    [1_436_000, '1.44M'],
+    [241_234, '241K'],
+    [52_400, '52.4K'],
+    [820, '820'],
+    [820.4, '820'],
+    [0, '0'],
+  ])('reads %d to three significant figures, as an instrument does: %s', (n, out) => {
+    expect(formatCompact(n, 'en')).toBe(out);
+  });
+
+  it('uses the locale’s units, and a dash for a missing value', () => {
+    expect(formatCompact(1_436_000, 'zh')).toBe('144万');
+    expect(formatCompact(null)).toBe('—');
+    expect(formatCompact(Number.NaN)).toBe('—');
+  });
+
+  it('takes a coarser or finer precision', () => {
+    expect(formatCompact(1_436_000, 'en', { significant: 2 })).toBe('1.4M');
+    expect(formatCompact(1_436_000, 'en', { significant: 4 })).toBe('1.436M');
+  });
+
+  it('writes an axis tick in its top tick’s unit, with fixed decimals', () => {
+    expect(formatCompact(500_000, 'en', { decimals: 1, unitOf: 1_500_000 })).toBe('0.5M');
+    expect(formatCompact(1_000_000, 'en', { decimals: 1, unitOf: 1_500_000 })).toBe('1.0M');
+    expect(formatCompact(500_000, 'zh', { decimals: 0, unitOf: 1_500_000 })).toBe('50万');
+  });
+
+  it('names the unit a figure reads in, and what it stands for', () => {
+    expect(compactUnit(1_500_000, 'en')).toEqual({ unit: 'M', divisor: 1_000_000 });
+    expect(compactUnit(1_234_567, 'en')).toEqual({ unit: 'M', divisor: 1_000_000 });
+    expect(compactUnit(1_500_000, 'zh')).toEqual({ unit: '万', divisor: 10_000 });
+    expect(compactUnit(800, 'en')).toEqual({ unit: '', divisor: 1 });
   });
 });
 

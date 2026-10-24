@@ -30,10 +30,47 @@ export function formatNumber(n: number | null | undefined, locale?: string): str
   return typeof n === 'number' && Number.isFinite(n) ? n.toLocaleString(locale) : DASH;
 }
 
-/** Compact token counts for tight spaces: 1.8M, 241k, 820. */
-export function formatCompact(n: number | null | undefined, locale?: string): string {
+/**
+ * How `formatCompact` rounds: to `significant` figures, or, for an axis tick, to `decimals` in
+ * the unit its top tick `unitOf` reads in ("0.5M" under "1.5M", where alone it reads "500K").
+ */
+export type CompactPrecision = { significant: number } | { decimals: number; unitOf: number };
+
+/**
+ * Every compact count, for tight spaces, in the locale's units: "1.44M", "241K", "820", "144万".
+ * Three significant figures unless told otherwise, as an instrument reads. Counts are whole.
+ */
+export function formatCompact(
+  n: number | null | undefined,
+  locale?: string,
+  precision: CompactPrecision = { significant: 3 },
+): string {
   if (typeof n !== 'number' || !Number.isFinite(n)) return DASH;
-  return new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 1 }).format(n);
+  if ('significant' in precision)
+    return new Intl.NumberFormat(locale, {
+      notation: 'compact',
+      maximumSignificantDigits: precision.significant,
+    }).format(Math.round(n));
+  const { unit, divisor } = compactUnit(precision.unitOf, locale);
+  const fixed = new Intl.NumberFormat(locale, {
+    minimumFractionDigits: precision.decimals,
+    maximumFractionDigits: precision.decimals,
+  });
+  return `${fixed.format(n / divisor)}${unit}`;
+}
+
+/** The unit compact notation gives `n` in `locale` ("M", "万"; none below it) and what it stands for. */
+export function compactUnit(n: number, locale?: string): { unit: string; divisor: number } {
+  const parts = new Intl.NumberFormat(locale, { notation: 'compact' }).formatToParts(n);
+  const shown = Number(
+    parts
+      .filter((p) => p.type === 'integer' || p.type === 'decimal' || p.type === 'fraction')
+      .map((p) => (p.type === 'decimal' ? '.' : p.value))
+      .join(''),
+  );
+  const unit = parts.find((p) => p.type === 'compact')?.value ?? '';
+  // Every compact unit is a power of ten; the shown figure is rounded, so snap to it.
+  return { unit, divisor: unit && shown > 0 ? 10 ** Math.round(Math.log10(n / shown)) : 1 };
 }
 
 export function formatPercent(share: number | null | undefined, locale?: string): string {

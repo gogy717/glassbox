@@ -25,19 +25,12 @@ import {
 import { useRate } from '../data/store';
 import { type MessageKey, useI18n } from '../i18n';
 import { AGENT_TONES, agentColors, agentName } from '../lib/agent-names';
-import { DASH } from '../lib/format';
+import { DASH, formatCompact } from '../lib/format';
 import { AgentTag } from './AgentTag';
 import { CompactFigure, UiCjk } from './CompactFigure';
 import { useOnePopover } from './popover';
 import { RateChart, Sparkline } from './RateCharts';
 import css from './TokenRate.module.css';
-
-/** "1.44M", "70K", "47.4M": three significant figures, as an instrument reads. */
-export function formatTokens(n: number, locale?: string): string {
-  return new Intl.NumberFormat(locale, { notation: 'compact', maximumSignificantDigits: 3 }).format(
-    Math.round(n),
-  );
-}
 
 /** "15:22": when counting began, in the viewer's clock. */
 const clockOf = (d: Date, locale: string) =>
@@ -70,7 +63,7 @@ export function rateText(
   const avg = ratePerMinute(rate, { agent });
   if (avg === 0) return DASH;
   const { running, counted } = rateCoverage(rate, agent);
-  return `${counted < running ? '≈' : ''}${formatTokens(avg, locale)}${perMin}`;
+  return `${counted < running ? '≈' : ''}${formatCompact(avg, locale)}${perMin}`;
 }
 
 /** The figures of one scope (every CLI, or one), as the bar and the popover show them. */
@@ -82,7 +75,7 @@ export function useRateFigures(rate: Rate, agent: AgentKind | null) {
   const hour = hourTotal(rate, scope);
   const { running, counted } = rateCoverage(rate, agent);
   const partial = counted < running;
-  const fmt = (n: number) => formatTokens(n, intl);
+  const fmt = (n: number) => formatCompact(n, intl);
   // Counting began within the hour: "the last hour" is only the time since.
   const sinceDate = countedSince(rate);
   const since = sinceDate ? clockOf(sinceDate, intl) : null;

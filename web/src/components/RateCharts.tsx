@@ -1,5 +1,6 @@
 /** The token rate's charts: a line of the last hour, small in the bar and the rows, large in the popover. */
 import { MINUTE_MS, RATE_MINUTES, type TokenRate } from '../../../src/shared/rate.js';
+import { compactUnit, formatCompact } from '../lib/format';
 import { SvgUiCjk } from './CompactFigure';
 
 /** A small line needs this many counted minutes (two whole ones and the current) to say anything. */
@@ -65,23 +66,10 @@ export function niceStep(span: number): number {
  */
 export function axisLabels(step: number, ticks: number, locale?: string): string[] {
   const top = step * ticks;
-  const parts = new Intl.NumberFormat(locale, { notation: 'compact' }).formatToParts(top);
-  const shown = Number(
-    parts
-      .filter((p) => p.type === 'integer' || p.type === 'decimal' || p.type === 'fraction')
-      .map((p) => (p.type === 'decimal' ? '.' : p.value))
-      .join(''),
-  );
-  const unit = parts.find((p) => p.type === 'compact')?.value ?? '';
-  const divisor = shown > 0 ? top / shown : 1;
-  const inUnit = step / divisor;
+  const inUnit = step / compactUnit(top, locale).divisor;
   const decimals = Number.isInteger(inUnit) ? 0 : Number.isInteger(inUnit * 10) ? 1 : 2;
-  const number = new Intl.NumberFormat(locale, {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  });
   return Array.from({ length: ticks + 1 }, (_, k) =>
-    k === 0 ? '0' : `${number.format((k * step) / divisor)}${unit}`,
+    k === 0 ? '0' : formatCompact(k * step, locale, { decimals, unitOf: top }),
   );
 }
 

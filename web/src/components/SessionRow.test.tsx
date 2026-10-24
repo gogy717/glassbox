@@ -56,11 +56,11 @@ describe('SessionRow', () => {
     const parts = [...meta.children].map((c) => c.textContent?.trim());
     expect(parts[0]).toBe('Running');
     // The age as formatRelative words it ("now", "7 seconds ago", or "7 s ago").
-    expect(parts[1]).toMatch(/^· (now|\d+\s?s(econds?)? ago) · 1\.9M1\.9M tokens$/);
+    expect(parts[1]).toMatch(/^· (now|\d+\s?s(econds?)? ago) · 1\.88M1\.88M tokens$/);
     expect(parts.at(-1)).toBe('Claude Code');
     // The figure is mono and silent; the spoken text says what it counts.
     expect(meta.querySelector('.figure')?.closest('[aria-hidden="true"]')).not.toBeNull();
-    expect(meta.querySelector('.visually-hidden')).toHaveTextContent('1.9M tokens');
+    expect(meta.querySelector('.visually-hidden')).toHaveTextContent('1.88M tokens');
   });
 
   it('marks the open session and opens the one clicked', () => {
@@ -75,7 +75,7 @@ describe('SessionRow', () => {
     const meta = renderRow(reading).lastElementChild as HTMLElement;
     expect(meta.firstElementChild).toHaveTextContent(/^Reading tokens\.css$/);
     expect(meta).not.toHaveTextContent(/ago|now/);
-    expect(meta.querySelector('.visually-hidden')).toHaveTextContent('1.9M tokens');
+    expect(meta.querySelector('.visually-hidden')).toHaveTextContent('1.88M tokens');
   });
 
   it('says a failed run failed, then its age', () => {
@@ -99,11 +99,11 @@ describe('SessionRow', () => {
           'Live viewer research (demo)',
         ]);
         // Running with a clock: no age beside it.
-        expect(meta).toHaveTextContent(/^Reading tokens\.css · 0:04 · 1\.9M tokens$/);
+        expect(meta).toHaveTextContent(/^Reading tokens\.css · 0:04 · 1\.88M tokens$/);
         // The figures are mono: the clock and the count, not the words around them.
         expect([...(meta?.querySelectorAll('.figure') ?? [])].map((f) => f.textContent)).toEqual([
           '0:04',
-          '1.9M',
+          '1.88M',
         ]);
       } finally {
         vi.useRealTimers();

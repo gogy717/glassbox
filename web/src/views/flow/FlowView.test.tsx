@@ -430,7 +430,7 @@ describe('FlowView', () => {
     renderFlow({ open, route: { turnId: 'turn_m2' }, follow: false });
     const card = within(row(1)).getByRole('group', { name: 'Agent' });
     // 128,800 own + 1,000,000 from the nested agent.
-    expect(card).toHaveTextContent('1.1M');
+    expect(card).toHaveTextContent('1.13M');
   });
 
   it('does not make screen readers announce a running timer every second', () => {

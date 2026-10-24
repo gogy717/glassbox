@@ -270,10 +270,10 @@ describe('SessionSidebar', () => {
     fireEvent.pointerEnter(row);
     const tip = (row.getAttribute('title') ?? '').split('\n');
     expect(tip[0]).toBe(long.title);
-    expect(tip[1]).toMatch(/^Claude Code · Running · .+ · 1\.9M tokens$/);
+    expect(tip[1]).toMatch(/^Claude Code · Running · .+ · 1\.88M tokens$/);
     expect(tip[2]).toBe(long.cwd);
     // Time and tokens sit in the part that gives way first.
-    expect(row.querySelector(`.${rowCss.when}`)).toHaveTextContent(/1\.9M tokens/);
+    expect(row.querySelector(`.${rowCss.when}`)).toHaveTextContent(/1\.88M tokens/);
   });
 
   it('groups sessions by project with running ones first', () => {
@@ -291,7 +291,7 @@ describe('SessionSidebar', () => {
     const busy = screen.getByRole('button', { name: /Live viewer research/ });
     expect(within(busy).getByText('Running')).toBeInTheDocument();
     expect(within(busy).getByText('now')).toBeInTheDocument();
-    expect(within(busy).getByText('1.9M tokens')).toBeInTheDocument();
+    expect(within(busy).getByText('1.88M tokens')).toBeInTheDocument();
     const untitled = screen.getByRole('button', { name: /Untitled session/ });
     expect(within(untitled).getByText('Closed')).toBeInTheDocument();
     expect(within(untitled).queryByText(/tokens/)).toBeNull();
