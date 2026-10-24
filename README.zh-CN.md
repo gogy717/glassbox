@@ -4,22 +4,25 @@
 
 **把 Claude Code 变成玻璃盒子。** 在它干活的时候，实时看清它正在做什么、调用了哪些工具、token 和时间花在哪里——包括 max effort 和 ultracode（Workflow 多代理）运行；也可以直接在 glassbox 里给它发消息。
 
-> 本地的实时查看器，用来看 Claude Code、Codex、Grok、oh-my-pi 和 OpenCode 的会话：执行链路、代理一步步怎么干活的拆解、token 和时间花在哪里、套餐额度，以及多代理 workflow 运行。
+> 本地的实时查看器，用来看 Claude Code、Codex、Grok、oh-my-pi 和 OpenCode 的会话：每个会话此刻在做什么、执行链路、代理一步步怎么干活的拆解、token 和时间花在哪里、套餐额度和 token 速率，以及多代理 workflow 运行。
 
 ![执行链路：每次模型调用的请求、回复和工具，Agent / Workflow 卡片直接显示子代理的状态与 token](docs/images/zh-CN/flow.png)
 
 **执行链路**：按轮次展开每次模型调用——请求 → 回复 → 工具；Agent / Workflow 卡片直接显示子代理和各阶段的进度，点进去就能看那个代理自己的链路。
 
-|                                     思路拆解                                     |                              Token 去向                               |
-| :------------------------------------------------------------------------------: | :-------------------------------------------------------------------: |
-|                     ![思路拆解](docs/images/zh-CN/steps.png)                     |              ![Token 去向](docs/images/zh-CN/tokens.png)              |
-| 每一步想了什么、说了什么、做了什么，按探索 / 修改 / 执行等阶段归组，失败一眼可见 |     一句话结论、缓存读写与输出的构成、按代理的树和上下文增长曲线      |
-|                                    **时间线**                                    |                             **请求详情**                              |
-|                    ![时间线](docs/images/zh-CN/timeline.png)                     |               ![请求详情](docs/images/zh-CN/detail.png)               |
-| 时间花在思考、生成、工具还是空闲；每个代理一条泳道，并行的 workflow 代理一目了然 | 还原每次请求实际发出的 system、messages、tools，JSON 树可复制、可放大 |
-|                                    **发消息**                                    |                             **实时浮层**                              |
-|                     ![发消息](docs/images/zh-CN/compose.png)                     |                ![实时浮层](docs/images/zh-CN/live.png)                |
-|     在 glassbox 里继续或复制一份会话继续，回复实时流出，权限确认在界面里弹出     |    模型思考时也不再是黑盒：实时显示思考用时、思考 token 和流式输出    |
+|                                     思路拆解                                     |                                     Token 去向                                      |
+| :------------------------------------------------------------------------------: | :---------------------------------------------------------------------------------: |
+|                     ![思路拆解](docs/images/zh-CN/steps.png)                     |                     ![Token 去向](docs/images/zh-CN/tokens.png)                     |
+| 每一步想了什么、说了什么、做了什么，按探索 / 修改 / 执行等阶段归组，失败一眼可见 |            一句话结论、缓存读写与输出的构成、按代理的树和上下文增长曲线             |
+|                                    **时间线**                                    |                                    **请求详情**                                     |
+|                    ![时间线](docs/images/zh-CN/timeline.png)                     |                      ![请求详情](docs/images/zh-CN/detail.png)                      |
+| 时间花在思考、生成、工具还是空闲；每个代理一条泳道，并行的 workflow 代理一目了然 |        还原每次请求实际发出的 system、messages、tools，JSON 树可复制、可放大        |
+|                                    **发消息**                                    |                                    **实时浮层**                                     |
+|                     ![发消息](docs/images/zh-CN/compose.png)                     |                       ![实时浮层](docs/images/zh-CN/live.png)                       |
+|     在 glassbox 里继续或复制一份会话继续，回复实时流出，权限确认在界面里弹出     |           模型思考时也不再是黑盒：实时显示思考用时、思考 token 和流式输出           |
+|                                   **首页看板**                                   |                                   **Token 速率**                                    |
+|                     ![首页看板](docs/images/zh-CN/home.png)                      |                      ![Token 速率](docs/images/zh-CN/rate.png)                      |
+|      正在运行的会话排在前面，每个都写着它此刻在做什么；后面是最近活跃的会话      | 本机各个 CLI 每分钟消耗的 token，最近一小时画成一条线；可以按 CLI 和 token 类型拆开 |
 
 ## 一键运行
 
@@ -58,6 +61,7 @@ npx --yes github:gogy717/glassbox#v0.2.0
 
 ## 能看到什么
 
+- **首页看板**：首页先列出正在运行的会话，每个都写着它此刻在做什么（"正在读取 tokens.css · 0:04"、"思考中 · 1:12"、"等你确认"），再列出最近活跃的会话；侧栏的每一行也这样写。
 - **执行链路**：按用户轮次组织，每次模型调用一行：请求 → 回复 → 工具，失败标红；模型正在思考时显示"思考中 · 已 m:ss"，工具运行中实时计时。
 - **思路拆解**：每一轮按"想了什么 → 说了什么 → 做了什么 → 结果"逐步展开，并归成探索 / 修改 / 执行 / 委派等阶段。
 - **Token 去向**：缓存读、缓存写、未缓存输入、输出（含思考）；按代理、Workflow 阶段汇总；上下文增长曲线（标出压缩点）；最贵的请求。
@@ -69,8 +73,9 @@ npx --yes github:gogy717/glassbox#v0.2.0
   - OpenAI：ChatGPT 套餐的限额，来自 Codex 的会话日志或 oh-my-pi 的缓存。
   - xAI（SuperGrok）和 GitHub Copilot：来自 oh-my-pi 的用量缓存。
   - DeepSeek：账户余额，需加 `--fetch-quota`。
+- **Token 速率**：顶栏显示本机各个 CLI 每分钟消耗多少 token（5 分钟平均，最近一小时画成一条线）；点开可以按 CLI 和 token 类型拆开看。它统计 glassbox 打开着的运行中会话，并写明覆盖了几个（"统计了 3 个运行中会话里的 2 个"）。这一小时的数据只存在内存里，glassbox 每次启动都从头算起。
 - **Grok、Codex、oh-my-pi 和 OpenCode 会话**：本机装了 Grok Build、Codex CLI、oh-my-pi 或 OpenCode 时，它们的会话也会出现在侧栏（只能查看），子代理、token 和时间同样可以拆开看。OpenCode 会话的子会话显示为它的子代理。
-- **诊断**：汇总条右侧的小图标列出这个会话缺了哪些数据、为什么缺。
+- **诊断**：汇总条右侧写着"无缺失"或缺了几项；点开能看到这个会话缺了哪些数据、为什么缺。
 
 ## 在 glassbox 里发消息
 
@@ -97,6 +102,7 @@ glassbox 是独立项目，与 Anthropic 没有关联，也未获其认可。
   - OpenCode 的数据库 `~/.local/share/opencode/opencode.db`：其中的会话、消息和片段。通过正在运行的进程名（Linux 上读 `/proc`，macOS 上用 `ps`）判断 OpenCode 是否在运行。
 - 不修改任何 Claude Code / Grok / Codex / oh-my-pi / OpenCode 文件（用 glassbox 发消息时，记录由 `claude` 自己写入，和在终端里一样），SQLite 数据库有一处例外，见下一条。
 - oh-my-pi 和 OpenCode 把数据存在 SQLite 里，glassbox 以只读方式打开，每次只做一个简短查询。只有当所属应用的预写日志（`-wal`）里还有未合并的页、并且 `-wal` 和 `-shm` 的权限与数据库文件一致时，glassbox 才直接读取它们（`mode=ro`、`readonly_shm=1`：什么都不写，共享内存索引也不写）；否则只把数据库文件当作不可变（immutable）打开，还没合并进去的改动会晚一点才显示。还剩一个罕见的竞态：如果应用恰好在 glassbox 检查之后、打开之前删掉了它的 `-wal`，SQLite 会重新建一个空的 `-wal`（权限与数据库一致，和应用自己建的一样），这一次读取失败。SQLite 没有办法完全避免这种情况。
+- 首页和侧栏里写的"会话正在做什么"，对 shell 命令只显示摘要：程序名和子命令（`git push`），一串命令里后面还有 N 条就记作"+N"。从不显示命令行本身，因为参数和文本里什么都可能有。
 - 只接受本机连接：看的是连接的真实来源地址，`Host` / `Origin` 也会校验；所有写操作需要每次启动随机生成的令牌，其他网页无法借道读取会话或发消息。
 - 默认不把 `ANTHROPIC_API_KEY` 传给启动的 `claude`（避免意外按 API 计费），除非加 `--use-api-key`。
 - glassbox 自己不发起任何外部网络请求，没有遥测；除非加了 `--fetch-quota`。这时它每 5 分钟对你选的每个服务商读取一项凭据，只发给该服务商自己的主机：
@@ -124,6 +130,7 @@ glassbox 是独立项目，与 Anthropic 没有关联，也未获其认可。
 - 只有用 ChatGPT 登录 Codex 时，Codex 才会记录 ChatGPT 套餐的限额；用 API key 登录时没有。
 - Grok CLI 的登录大约 6 小时有效，只有 Grok CLI 自己会续期；过期后 `--fetch-quota` 会跳过 xAI，直到 Grok CLI 再次运行。
 - DeepSeek 余额只显示一种币种：第一个有余额的币种。
+- Token 速率按 glassbox 读到 token 的时间计数，而不是 token 实际花掉的时间：glassbox 刚启动或刚打开一个会话时，晚一些才读到的记录（比如子代理的）会显示成一小段尖峰。
 
 ## 本地开发
 
@@ -143,3 +150,5 @@ npm run build && npm start
 ## 许可证
 
 [MIT](LICENSE)
+
+数字使用随 glassbox 附带的 IBM Plex Mono 字体：© IBM Corp.，SIL Open Font License 1.1（[许可证](web/public/fonts/LICENSE-IBM-Plex-Mono.txt)）。

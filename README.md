@@ -4,7 +4,7 @@
 
 **Turn Claude Code into a glass box.** While it works, see exactly what it is doing, which tools it calls, and where the tokens and the time go, including max effort and ultracode (Workflow multi-agent) runs. You can also message it straight from glassbox.
 
-> A local, live viewer for Claude Code, Codex, Grok, oh-my-pi and OpenCode sessions: the execution chain, a step-by-step breakdown of how the agent worked, where the tokens and the time went, plan quota, and multi-agent workflow runs.
+> A local, live viewer for Claude Code, Codex, Grok, oh-my-pi and OpenCode sessions: what each one is doing right now, the execution chain, a step-by-step breakdown of how the agent worked, where the tokens and the time went, plan quota and the token rate, and multi-agent workflow runs.
 
 ![Execution chain: each model call's request, response and tools; Agent / Workflow cards show their sub-agents' status and tokens](docs/images/flow.png)
 
@@ -20,6 +20,9 @@
 |                                                       **Sending messages**                                                       |                                                  **Live overlay**                                                   |
 |                                           ![Sending messages](docs/images/compose.png)                                           |                                        ![Live overlay](docs/images/live.png)                                        |
 |      Continue a session, or continue in a copy, from glassbox; replies stream in and permission prompts pop up in the page       |          No more black box while the model thinks: live thinking time, thinking tokens and streamed output          |
+|                                                          **Now board**                                                           |                                                   **Token rate**                                                    |
+|                                                ![Now board](docs/images/home.png)                                                |                                         ![Token rate](docs/images/rate.png)                                         |
+|                  What runs now, each session saying what it is doing this second; then the recently active ones                  |         Tokens a minute across this machine's CLIs, the last hour as a line; split by CLI and by token kind         |
 
 ## Run it
 
@@ -58,6 +61,7 @@ To install it for good: `npm install -g github:gogy717/glassbox`, then run `glas
 
 ## What you can see
 
+- **Now board**: the home page lists the running sessions first, each saying what it is doing right now ("Reading tokens.css · 0:04", "Thinking · 1:12", "Waiting for you"), then the recently active ones. The sidebar's rows say the same.
 - **Execution chain**: organised by user turn, one row per model call: request → response → tools, failures in red. While the model thinks it shows "Thinking · m:ss", and running tools count up live.
 - **How it worked**: each turn told step by step as "thought → said → did → outcome", grouped into phases such as explore / edit / run / delegate.
 - **Where tokens went**: cache reads, cache writes, uncached input and output (including thinking); totals per agent and per Workflow phase; the context growth curve (with compaction points); the most expensive requests.
@@ -69,8 +73,9 @@ To install it for good: `npm install -g github:gogy717/glassbox`, then run `glas
   - OpenAI: the ChatGPT plan's limits from Codex's session logs, or from oh-my-pi's cache.
   - xAI (SuperGrok) and GitHub Copilot: from oh-my-pi's usage cache.
   - DeepSeek: the account balance, with `--fetch-quota`.
+- **Token rate**: the top bar shows how many tokens a minute the CLIs on this machine spend (a 5-minute average, with the last hour as a line); click it to split the rate by CLI and by token kind. It counts the running sessions glassbox has open, and says how many of them that is ("Counting 2 of 3 running sessions"). The hour is kept in memory only, so it starts afresh each time glassbox starts.
 - **Grok, Codex, oh-my-pi and OpenCode sessions**: when Grok Build, the Codex CLI, oh-my-pi or OpenCode is installed, their sessions appear in the sidebar too (view only), with sub-agents, tokens and time broken down the same way. An OpenCode session's child sessions show as its sub-agents.
-- **Diagnostics**: the small icon at the right of the summary bar lists what data this session lacks, and why.
+- **Diagnostics**: at the right of the summary bar, "No gaps" or how many there are; click it for what data this session lacks, and why.
 
 ## Sending messages from glassbox
 
@@ -97,6 +102,7 @@ glassbox is an independent project, not affiliated with or endorsed by Anthropic
   - OpenCode's database `~/.local/share/opencode/opencode.db`: its sessions, messages and parts. The names of running processes (`/proc` on Linux, `ps` on macOS) tell whether OpenCode runs.
 - Never changes a Claude Code, Grok, Codex, oh-my-pi or OpenCode file (when you message from glassbox, `claude` writes its own records, just as in a terminal), with one caveat for the SQLite databases below.
 - oh-my-pi and OpenCode keep data in SQLite, which glassbox opens read-only for one short query at a time. While the owning app has pages waiting in its write-ahead log (`-wal`), and only when the `-wal` and `-shm` files have the database's own permissions, glassbox reads them as they are (`mode=ro`, `readonly_shm=1`: nothing is written, not even the shared-memory index); otherwise it opens the database file alone as immutable, and changes not yet checkpointed show up a little later. One rare race remains: if the app deletes its `-wal` between glassbox's check and its open, SQLite creates an empty `-wal` again (with the database's permissions, as the app itself would) and that one read fails. SQLite offers no way to rule this out.
+- On Home and in the sidebar, what a running session is doing shows a shell command only as a summary: the program and its subcommand (`git push`), and "+N" for N more commands in a chain. Never the command line itself, whose flags and text can hold anything.
 - Accepts connections from this machine only: it checks where a connection really comes from, and validates `Host` / `Origin` too. Every write needs a token generated at each start, so other web pages cannot read your sessions or send messages through it.
 - Does not pass `ANTHROPIC_API_KEY` to the `claude` it starts (so you are not billed by the API by accident) unless you add `--use-api-key`.
 - glassbox itself makes no outbound network requests and has no telemetry, unless you add `--fetch-quota`. Then, every 5 minutes, for each provider you selected, it reads one credential and sends it to that provider's own host, and nowhere else:
@@ -124,6 +130,7 @@ glassbox is an independent project, not affiliated with or endorsed by Anthropic
 - Codex records the ChatGPT plan's limits only when you sign in to Codex with ChatGPT, not with an API key.
 - Grok CLI's sign-in lasts about 6 hours, and only Grok CLI renews it; when it has expired, `--fetch-quota` skips xAI until Grok CLI runs again.
 - DeepSeek's balance shows one currency: the first with money on it.
+- The token rate counts tokens when glassbox reads them, not when they were spent: just after glassbox starts or opens a session, a transcript it reads late (a sub-agent's, say) can show as a short burst.
 
 ## Local development
 
@@ -143,3 +150,5 @@ npm run build && npm start
 ## License
 
 [MIT](LICENSE)
+
+The figures are set in IBM Plex Mono, bundled with glassbox: © IBM Corp., SIL Open Font License 1.1 ([license](web/public/fonts/LICENSE-IBM-Plex-Mono.txt)).
