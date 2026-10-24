@@ -410,6 +410,7 @@ export const zh = {
   'error.retry': '重试',
   'error.chunk': '这个视图的代码没能加载：这个页面打开之后，glassbox 可能已经更新或重启过。',
   'error.reload': '重新加载',
+  'md.chunk': '格式没能加载：这个页面打开之后，glassbox 可能已经更新或重启过。',
   'json.expand': '展开',
   'json.collapse': '收起',
   'flow.outsideTurns': '轮次外的调用',

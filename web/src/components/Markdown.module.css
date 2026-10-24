@@ -153,3 +153,19 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* The renderer's chunk did not load: one quiet line under the text as written. */
+.chunkNote {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.reload {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}

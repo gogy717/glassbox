@@ -417,6 +417,8 @@ export const en: Record<MessageKey, string> = {
   'error.chunk':
     'This view’s code could not load: glassbox may have been updated or restarted since this page opened.',
   'error.reload': 'Reload',
+  'md.chunk':
+    'Formatting could not load: glassbox may have been updated or restarted since this page opened.',
   'json.expand': 'Expand',
   'json.collapse': 'Collapse',
   'flow.outsideTurns': 'Calls outside conversations',

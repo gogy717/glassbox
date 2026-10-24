@@ -217,6 +217,7 @@ describe('Markdown', () => {
     // The parser gives up on such nesting; the text shows as written instead.
     expect(container).toHaveTextContent('deep');
     expect(container.querySelector('p')?.textContent).toBe(deep);
+    expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull();
     errors.mockRestore();
   });
 });
@@ -225,6 +226,7 @@ describe('Markdown when its renderer cannot load', () => {
   afterEach(() => {
     vi.doUnmock('./MarkdownRender');
     vi.resetModules();
+    vi.unstubAllGlobals();
   });
 
   it('shows the text as written instead of failing the view', async () => {
@@ -245,4 +247,35 @@ describe('Markdown when its renderer cannot load', () => {
     expect(screen.queryByRole('heading')).toBeNull();
     vi.mocked(console.error).mockRestore();
   });
+
+  // F-md: React.lazy keeps the failed import, so the reply would stay unformatted for good;
+  // after an upgrade only loading the page again brings the renderer back.
+  it.each([
+    ['en', 'Formatting could not load', 'Reload'],
+    ['zh', '格式没能加载', '重新加载'],
+  ] as const)(
+    'says so and offers a page reload, keeping the text (%s)',
+    async (locale, says, reloadName) => {
+      vi.resetModules();
+      vi.doMock('./MarkdownRender', () => {
+        throw new Error('Failed to fetch dynamically imported module');
+      });
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const reload = vi.fn();
+      vi.stubGlobal('location', { ...window.location, reload });
+      const { Markdown: Fresh } = await import('./Markdown');
+      const { I18nContext: Ctx, makeI18n: make } = await import('../i18n');
+      const { container } = render(
+        <Ctx.Provider value={make(locale)}>
+          <Fresh text="As written." label="Content" />
+        </Ctx.Provider>,
+      );
+      const button = await screen.findByRole('button', { name: reloadName });
+      expect(container).toHaveTextContent(says);
+      expect(container.querySelector('p')?.textContent).toBe('As written.');
+      fireEvent.click(button);
+      expect(reload).toHaveBeenCalledOnce();
+      vi.mocked(console.error).mockRestore();
+    },
+  );
 });
