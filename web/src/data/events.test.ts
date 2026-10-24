@@ -91,6 +91,7 @@ describe('connectEvents', () => {
           at: NOW.toISOString(),
           since: NOW.toISOString(),
           agents: {},
+          coverage: { running: 0, counted: 0, agents: {} },
         },
       },
       run: { type: 'run', run: { id: 'run_1' } as unknown as RunState },

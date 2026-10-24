@@ -39,6 +39,7 @@ function stubStore() {
     at: '2026-10-23T02:00:30.000Z',
     since: '2026-10-23T01:00:00.000Z',
     agents: {},
+    coverage: { running: 0, counted: 0, agents: {} },
   };
   const store: AppStore = {
     getRate: () => rate,

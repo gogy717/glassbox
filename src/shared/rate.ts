@@ -14,6 +14,19 @@ export type RateKind = (typeof RATE_KINDS)[number];
 export const RATE_MINUTES = 60;
 export const MINUTE_MS = 60_000;
 
+/**
+ * How much of the running work the rate sees. Only sessions the server has open are counted: it
+ * opens running ones in the background, but at most a few at a time, and a session counts only
+ * once its load has settled. A running session not counted adds nothing to the rate.
+ */
+export interface RateCoverage {
+  /** Sessions busy or waiting for the person right now. */
+  running: number;
+  /** Of those, the ones being counted. */
+  counted: number;
+  agents: Partial<Record<AgentKind, { running: number; counted: number }>>;
+}
+
 export interface TokenRate {
   /** Start of the newest bucket: the minute in progress when this was made. */
   minute: IsoTime;
@@ -26,6 +39,7 @@ export interface TokenRate {
    * agent kind and token kind. An agent with nothing counted in the hour is absent.
    */
   agents: Partial<Record<AgentKind, Record<RateKind, number[]>>>;
+  coverage: RateCoverage;
 }
 
 export interface RateScope {
@@ -72,6 +86,15 @@ export function lastMinute(rate: TokenRate, scope: RateScope = {}): number {
 /** Tokens counted in the whole hour of history. */
 export function hourTotal(rate: TokenRate, scope: RateScope = {}): number {
   return rateSeries(rate, scope).reduce((a, b) => a + b, 0);
+}
+
+/** Running sessions and how many of them are counted, for all agents or one. */
+export function rateCoverage(
+  rate: TokenRate,
+  agent: AgentKind | null = null,
+): { running: number; counted: number } {
+  if (agent === null) return { running: rate.coverage.running, counted: rate.coverage.counted };
+  return rate.coverage.agents[agent] ?? { running: 0, counted: 0 };
 }
 
 /** The agent kinds with anything counted in the hour. */

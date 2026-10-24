@@ -79,13 +79,37 @@ describe('RateTracker', () => {
     expect(hourTotal(t.snapshot())).toBe(0);
   });
 
-  it('counts a transcript parsed late in the minute it was read (the documented caveat)', () => {
+  it('takes a transcript read for the first time as history, not a spike', () => {
     const { t, later } = tracker();
     t.observe('s1', 'claude-code', usage({ cacheRead: 1000 }));
     later(MINUTE_MS);
     // A sub-agent file classified after the session opened brings its whole history at once.
-    t.observe('s1', 'claude-code', usage({ cacheRead: 401_000 }));
-    expect(rateSeries(t.snapshot()).at(-1)).toBe(400_000);
+    t.absorbNext('s1');
+    expect(t.observe('s1', 'claude-code', usage({ cacheRead: 401_000 }))).toBe(false);
+    expect(hourTotal(t.snapshot())).toBe(0);
+    // Only that one observation: what follows is spend.
+    t.observe('s1', 'claude-code', usage({ cacheRead: 402_000 }));
+    expect(hourTotal(t.snapshot())).toBe(1000);
+  });
+
+  it('counts nothing of a session while it settles, and counts it once released', () => {
+    const { t } = tracker();
+    t.hold('s1');
+    t.observe('s1', 'codex', usage({ output: 10 }));
+    expect(t.isCounting('s1')).toBe(false);
+    // Files still arriving while it settles: history too.
+    expect(t.observe('s1', 'codex', usage({ output: 50_010 }))).toBe(false);
+    t.release('s1');
+    expect(t.isCounting('s1')).toBe(true);
+    t.observe('s1', 'codex', usage({ output: 50_030 }));
+    expect(hourTotal(t.snapshot())).toBe(20);
+  });
+
+  it('carries the coverage it is given', () => {
+    const { t } = tracker();
+    const coverage = { running: 2, counted: 1, agents: { codex: { running: 2, counted: 1 } } };
+    expect(t.snapshot(coverage).coverage).toEqual(coverage);
+    expect(t.snapshot().coverage).toEqual({ running: 0, counted: 0, agents: {} });
   });
 
   it('sums sessions per agent kind and keeps the kinds apart', () => {

@@ -8,7 +8,7 @@ import type {
   SessionSummary,
 } from '../core/model.js';
 import type { QuotaSource } from '../core/quota-source.js';
-import { MINUTE_MS, type TokenRate } from '../shared/rate.js';
+import { MINUTE_MS, type RateCoverage, type TokenRate } from '../shared/rate.js';
 import { Coalescer } from './coalescer.js';
 import { errorText, OpenSession } from './open-session.js';
 import { adapterQuotaSources, QuotaWatcher } from './quota.js';
@@ -64,7 +64,7 @@ const QUICK_DISCOVER_MS = 200;
 const MISSES_BEFORE_DROP = 2;
 
 /** What a rate event says, without when it was made. */
-const rateKey = (r: TokenRate) => JSON.stringify([r.minute, r.agents]);
+const rateKey = (r: TokenRate) => JSON.stringify([r.minute, r.agents, r.coverage]);
 
 /** busy and waiting both mean someone is mid-task in that session right now. */
 export function isActive(live: LiveState): boolean {
@@ -110,6 +110,8 @@ export class SessionStore {
   /** The last rate sent, without its timestamp: unchanged windows are not sent again. */
   private lastRateKey = '';
   private minuteTimer: NodeJS.Timeout | null = null;
+  /** Sessions settling after they opened, and when the rate may count them. */
+  private readonly settling = new Map<string, number>();
 
   constructor(opts: SessionStoreOptions) {
     this.opts = {
@@ -144,7 +146,7 @@ export class SessionStore {
     this.lastSessionsJson = JSON.stringify(this.listSessions());
     this.loop('discoverTimer', this.opts.discoverMs, () => this.discoverNow());
     this.loop('liveTimer', this.opts.liveMs, () => this.refreshLive());
-    this.lastRateKey = rateKey(this.rate.snapshot());
+    this.lastRateKey = rateKey(this.getRate());
     this.scheduleMinute();
     this.scheduleAutoOpen();
   }
@@ -168,7 +170,23 @@ export class SessionStore {
 
   /** Tokens per minute bucket over the last hour, by agent and token kind. */
   getRate(): TokenRate {
-    return this.rate.snapshot();
+    return this.rate.snapshot(this.coverage());
+  }
+
+  /** Which running sessions the rate is counting: the open, settled ones. */
+  private coverage(): RateCoverage {
+    const c: RateCoverage = { running: 0, counted: 0, agents: {} };
+    for (const e of this.entries.values()) {
+      if (!isActive(e.live)) continue;
+      const agent = c.agents[e.summary.agent] ?? { running: 0, counted: 0 };
+      c.agents[e.summary.agent] = agent;
+      const counted = e.open !== null && this.rate.isCounting(e.summary.id) ? 1 : 0;
+      c.running++;
+      agent.running++;
+      c.counted += counted;
+      agent.counted += counted;
+    }
+    return c;
   }
 
   /** Called when the rate's window changes, at most once per `rateMs`. */
@@ -285,14 +303,17 @@ export class SessionStore {
 
   private async openEntry(entry: Entry): Promise<OpenSession> {
     const id = entry.summary.id;
-    // Its first summary is a baseline for the token rate: what it spent before is not now.
+    // Its first summary is a baseline for the token rate, and it counts nothing while it settles:
+    // what it spent before is not now.
     this.rate.forget(id);
+    this.rate.hold(id);
     const session = new OpenSession(entry.adapter, entry.source, {
       patchMs: this.opts.patchMs,
       pollMs: this.opts.pollMs,
       chunkBytes: this.opts.chunkBytes,
       live: entry.live,
       log: this.opts.log,
+      onBackfill: () => this.rate.absorbNext(id),
       onSummary: (summary) => {
         if (entry.open !== session && entry.opening === null) return;
         entry.summary = summary;
@@ -312,6 +333,8 @@ export class SessionStore {
       session.close();
       throw err;
     }
+    // Loaded: the rate counts it from the first live tick after one has passed quietly.
+    this.settling.set(id, this.opts.now() + this.opts.liveMs);
     // Stopped, or the entry was dropped while we read: nothing would ever close it.
     if (this.stopped || this.entries.get(id) !== entry) {
       session.close();
@@ -339,6 +362,7 @@ export class SessionStore {
     entry.open?.close();
     entry.open = null;
     this.rate.forget(entry.summary.id);
+    this.settling.delete(entry.summary.id);
   }
 
   // ── Polling ───────────────────────────────────────────────────────────────────────────
@@ -422,6 +446,11 @@ export class SessionStore {
       for (const entry of this.entries.values()) {
         if (entry.adapter !== adapter) continue;
         const live = states.get(entry.source.nativeId) ?? 'closed';
+        const until = this.settling.get(entry.summary.id);
+        if (until !== undefined && until <= this.opts.now()) {
+          this.settling.delete(entry.summary.id);
+          this.rate.release(entry.summary.id);
+        }
         if (live !== entry.live) {
           entry.live = live;
           entry.open?.setLive(live);
@@ -434,6 +463,8 @@ export class SessionStore {
       }
     }
     this.notifySessions();
+    // Running sessions come and go, and settled ones start counting: the coverage moves.
+    this.notifyRate();
     this.scheduleAutoOpen();
   }
 
@@ -518,7 +549,7 @@ export class SessionStore {
 
   private emitRate(): void {
     if (this.stopped) return;
-    const rate = this.rate.snapshot();
+    const rate = this.getRate();
     const key = rateKey(rate);
     if (key === this.lastRateKey) return;
     this.lastRateKey = key;

@@ -20,7 +20,13 @@ import type {
 } from '../core/model.js';
 import { MAIN_AGENT_ID } from '../core/model.js';
 import { emptyUsage, sumUsage } from '../core/usage.js';
-import { MINUTE_MS, RATE_MINUTES, type RateKind, type TokenRate } from '../shared/rate.js';
+import {
+  MINUTE_MS,
+  RATE_MINUTES,
+  type RateCoverage,
+  type RateKind,
+  type TokenRate,
+} from '../shared/rate.js';
 import type { AppStore } from './app.js';
 import { RateTracker } from './rate.js';
 import { compareSessions } from './store.js';
@@ -57,6 +63,11 @@ const DEMO_TRAFFIC: {
     duty: 0.3,
   },
 ];
+const DEMO_COVERAGE: RateCoverage = {
+  running: DEMO_TRAFFIC.length,
+  counted: DEMO_TRAFFIC.length,
+  agents: Object.fromEntries(DEMO_TRAFFIC.map((s) => [s.agent, { running: 1, counted: 1 }])),
+};
 /** How often the simulated sessions report while the past hour is filled in. */
 const HISTORY_STEP_MS = 30_000;
 /** Ticks a main-agent request stays in flight, and a tool stays running. */
@@ -214,9 +225,9 @@ export class DemoStore implements AppStore {
     return structuredClone(this.quotas);
   }
 
-  /** The demo quota never changes. */
+  /** Every simulated session runs and is counted. */
   getRate(): TokenRate {
-    return this.rate.snapshot();
+    return this.rate.snapshot(DEMO_COVERAGE);
   }
 
   onRate(cb: (r: TokenRate) => void): () => void {
@@ -224,6 +235,7 @@ export class DemoStore implements AppStore {
     return () => this.rateCbs.delete(cb);
   }
 
+  /** The demo quota never changes. */
   onQuota(_cb: (q: QuotaSnapshot[]) => void): () => void {
     return () => {};
   }
@@ -282,7 +294,7 @@ export class DemoStore implements AppStore {
     // The rate moves with the clock: the simulated sessions spend another tick's worth.
     this.rateClock = Date.now();
     this.spend(TICK_MS);
-    const rate = this.rate.snapshot();
+    const rate = this.getRate();
     for (const cb of this.rateCbs) cb(rate);
   }
 

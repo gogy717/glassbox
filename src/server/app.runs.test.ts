@@ -37,7 +37,13 @@ function storeWith(sessions: SessionSummary[] = []): AppStore {
     listQuotas: () => [],
     expectSession: async () => false,
     onQuota: () => () => {},
-    getRate: () => ({ minute: '', at: '', since: '', agents: {} }),
+    getRate: () => ({
+      minute: '',
+      at: '',
+      since: '',
+      agents: {},
+      coverage: { running: 0, counted: 0, agents: {} },
+    }),
     onRate: () => () => {},
   };
 }

@@ -46,6 +46,11 @@ export interface OpenSessionOptions {
   chunkBytes: number;
   live: LiveState;
   onSummary: (summary: SessionSummary) => void;
+  /**
+   * The next summary brings content read for the first time (a file classified after the load,
+   * or a rebuild): its usage is history being read, not tokens being spent now.
+   */
+  onBackfill?: () => void;
   onPatch: (patch: SessionPatch) => void;
   onReset: (snapshot: SessionSnapshot) => void;
   log: (msg: string) => void;
@@ -177,6 +182,7 @@ export class OpenSession {
     while (!this.closed && this.dirty.size > 0) {
       const path = this.dirty.values().next().value as string;
       this.dirty.delete(path);
+      const fresh = !this.files.has(path);
       const tracked = this.track(path);
       if (!tracked) continue;
       const result = await this.read(this.parser, tracked, false);
@@ -185,7 +191,9 @@ export class OpenSession {
         await this.rebuild();
         continue;
       }
-      if (result.changes.length > 0) this.queueChanges(mergeChanges(...result.changes));
+      if (result.changes.length === 0) continue;
+      if (fresh) this.opts.onBackfill?.();
+      this.queueChanges(mergeChanges(...result.changes));
     }
   }
 
@@ -221,6 +229,7 @@ export class OpenSession {
     this.pending = null;
     this.flusher.cancel();
     const snapshot = parser.snapshot();
+    this.opts.onBackfill?.();
     this.opts.onSummary(snapshot.session);
     this.opts.onReset(snapshot);
     const ms = Math.round(performance.now() - started);

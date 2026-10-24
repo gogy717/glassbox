@@ -5,6 +5,7 @@ import {
   MINUTE_MS,
   RATE_MINUTES,
   rateAgents,
+  rateCoverage,
   ratePerMinute,
   rateSeries,
   type TokenRate,
@@ -35,6 +36,11 @@ const rate = (o: Partial<TokenRate> = {}): TokenRate => ({
       cacheWrite: flat(0),
       output: flat(0),
     },
+  },
+  coverage: {
+    running: 3,
+    counted: 2,
+    agents: { 'claude-code': { running: 2, counted: 2 }, codex: { running: 1, counted: 0 } },
   },
   ...o,
 });
@@ -68,6 +74,12 @@ describe('rate helpers', () => {
     expect(lastMinute(rate())).toBe(1150);
     expect(hourTotal(rate())).toBe(4830);
     expect(hourTotal(rate(), { agent: 'codex' })).toBe(200);
+  });
+
+  it('says how many running sessions are counted, for all agents or one', () => {
+    expect(rateCoverage(rate())).toEqual({ running: 3, counted: 2 });
+    expect(rateCoverage(rate(), 'codex')).toEqual({ running: 1, counted: 0 });
+    expect(rateCoverage(rate(), 'grok')).toEqual({ running: 0, counted: 0 });
   });
 
   it('lists the agents with anything counted', () => {
