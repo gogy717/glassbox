@@ -7,6 +7,7 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react';
+import type { SessionSummary } from '../../src/core/model.js';
 import type { RunState } from '../../src/shared/runs.js';
 import css from './App.module.css';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -27,14 +28,16 @@ import { SessionAgentContext } from './data/session-agent';
 import { createStore, type Store, StoreContext } from './data/store';
 import { useNow } from './data/useNow';
 import { I18nContext, makeI18n, useI18n } from './i18n';
+import { isListed } from './lib/sessions';
 import { applyTheme, loadPrefs, type Prefs, savePrefs } from './prefs';
-import { useRoute } from './router';
+import { formatRoute, pageOf, parseRoute, sessionLink, useRoute } from './router';
 import { UiContext } from './ui';
 import { Composer } from './views/composer/Composer';
 import { NewSessionDialog } from './views/composer/NewSessionDialog';
 import { PermissionDialog } from './views/composer/PermissionDialog';
 import { Home } from './views/Home';
 import { SessionView } from './views/SessionView';
+import { StatsPage } from './views/stats/StatsPage';
 
 export interface AppProps {
   /** Injected in tests; the real app creates its own. */
@@ -58,6 +61,25 @@ export type SidebarMode = 'column' | 'overlay' | 'drawer';
 export function sidebarMode(width: number, hasSession: boolean): SidebarMode {
   if (width <= 900) return 'drawer';
   return width < 1200 && hasSession ? 'overlay' : 'column';
+}
+
+/**
+ * Where the nav's Session goes (D4): the session page as it was last left (`last`), while that
+ * session is still listed, or the list has not arrived to say it is gone; else the most recently
+ * active session listed, as Home's link to it picks; null when there is none.
+ */
+export function sessionTarget(
+  last: string | null,
+  sessions: SessionSummary[],
+  loaded: boolean,
+  showProbes: boolean,
+): string | null {
+  const lastId = last ? parseRoute(last).sessionId : null;
+  if (last && lastId && (!loaded || sessions.some((s) => s.id === lastId))) return last;
+  const latest = sessions
+    .filter((s) => isListed(s, showProbes))
+    .reduce<SessionSummary | null>((a, b) => (!a || b.updatedAt > a.updatedAt ? b : a), null);
+  return latest ? sessionLink(latest.id) : null;
 }
 
 function useMediaQuery(query: string): boolean {
@@ -107,6 +129,8 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
   const { t } = useI18n();
   const state = useSyncExternalStore(store.subscribe, store.getState);
   const [route, navigate] = useRoute();
+  const page = pageOf(route);
+  const here = formatRoute(route);
   // Pausing follow is about the session being read: opening another one starts it afresh,
   // following its latest turn, unless the link names a turn or a request (a pasted link, Back or
   // Forward), which then stays on screen.
@@ -119,16 +143,18 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
   }
   const narrow = useMediaQuery(NARROW);
   const twoColumns = useMediaQuery(TWO_COLUMNS);
-  const mode = sidebarMode(narrow ? 900 : twoColumns ? 1199 : 1200, route.sessionId !== null);
+  // Stats lays out as Home does: only a session has a third column to protect.
+  const mode = sidebarMode(narrow ? 900 : twoColumns ? 1199 : 1200, page === 'session');
   const mainRef = useRef<HTMLElement>(null);
   const asideRef = useRef<HTMLElement>(null);
   const menuRef = useRef<HTMLButtonElement>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   // The overlay and the drawer start closed, and close again whenever the page changes under them.
   const [floatOpen, setFloatOpen] = useState(false);
-  const [floatKey, setFloatKey] = useState(`${mode}:${route.sessionId}`);
-  if (floatKey !== `${mode}:${route.sessionId}`) {
-    setFloatKey(`${mode}:${route.sessionId}`);
+  const pageKey = `${mode}:${page}:${route.sessionId}`;
+  const [floatKey, setFloatKey] = useState(pageKey);
+  if (floatKey !== pageKey) {
+    setFloatKey(pageKey);
     setFloatOpen(false);
   }
   const floating = mode !== 'column';
@@ -180,11 +206,23 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
   const waiting = useMemo(() => (waitingKey ? waitingKey.split('\n') : []), [waitingKey]);
   const sessions = useMemo(() => withWaiting(state.sessions, waiting), [state.sessions, waiting]);
   const failures = useMemo(() => failedSessions(state.runs), [state.runs]);
-  // The session open last: back on Home, its row keeps the tab stop.
-  const [lastOpened, setLastOpened] = useState<string | null>(null);
+  // The session page as it was last left, agent, tab, turn, request and card: the nav's Session
+  // goes back to it, and back on Home that session's row keeps the tab stop.
+  const [lastSession, setLastSession] = useState<string | null>(null);
   useEffect(() => {
-    if (route.sessionId) setLastOpened(route.sessionId);
-  }, [route.sessionId]);
+    if (page === 'session') setLastSession(here);
+  }, [page, here]);
+  const lastOpened = lastSession ? parseRoute(lastSession).sessionId : null;
+  const target = sessionTarget(lastSession, sessions, state.sessionsLoaded, prefs.showProbes);
+  const targetId = target ? parseRoute(target).sessionId : null;
+  const nav = {
+    page,
+    here,
+    session: target
+      ? { href: target, waiting: sessions.some((s) => s.id === targetId && s.live === 'waiting') }
+      : null,
+    sessionsLoaded: state.sessionsLoaded,
+  };
   // Escape collapses a prompt without answering it; a newer prompt shows itself again.
   const [dismissed, setDismissed] = useState<string | null>(null);
   const showPrompt = !!pending && pending.id !== dismissed;
@@ -217,6 +255,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
             {t('app.skipToContent')}
           </button>
           <TopBar
+            nav={nav}
             menuRef={menuRef}
             sidebarId={SIDEBAR_ID}
             title={route.sessionId ? (summary?.title ?? t('sidebar.untitled')) : null}
@@ -264,7 +303,12 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
               />
             </aside>
             <main ref={mainRef} tabIndex={-1} className={css.main} inert={modal}>
-              {open ? (
+              {route.stats ? (
+                <StatsPage
+                  window={route.stats}
+                  onWindow={(stats) => navigate({ stats }, { replace: true })}
+                />
+              ) : open ? (
                 <ErrorBoundary key={open.id}>
                   <ApprovalsContext.Provider value={approvals}>
                     <SessionView
@@ -315,13 +359,16 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
                 {t('perm.reopen')}
               </button>
             )}
-            <Composer
-              session={summary}
-              run={run}
-              client={runs}
-              onNewSession={() => setNewSession(true)}
-              onRunStarted={onRunStarted}
-            />
+            {/* Stats talks to no one: no composer there. */}
+            {page !== 'stats' && (
+              <Composer
+                session={summary}
+                run={run}
+                client={runs}
+                onNewSession={() => setNewSession(true)}
+                onRunStarted={onRunStarted}
+              />
+            )}
           </div>
           {newSession && (
             <NewSessionDialog

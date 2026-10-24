@@ -60,9 +60,16 @@
   color: var(--faint);
 }
 
-/* Two columns: the figure (and the filter's tag) stay, the line goes. */
-@media (max-width: 1199px) {
+/* One column: the figure (and the filter's tag) stay, the line goes, with the wordmark's word, the
+   last of the top bar to give way (D4); in a session, below 1200, for the title's room. */
+@media (max-width: 900px) {
   .spark {
+    display: none;
+  }
+}
+
+@media (max-width: 1199px) {
+  .wrap[data-session] .spark {
     display: none;
   }
 }

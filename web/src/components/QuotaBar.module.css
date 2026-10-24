@@ -184,8 +184,9 @@
   color: var(--muted);
 }
 
-/* Narrow: only the provider closest to a limit, and how many more there are. */
-@media (max-width: 900px) {
+/* Below 1200, where the page nav keeps only its icons (D4): only the provider closest to a limit,
+   and how many more there are. */
+@media (max-width: 1199px) {
   .meter:not([data-top]) {
     display: none;
   }
@@ -227,8 +228,8 @@
   }
 }
 
-/* Four or five providers need about 1100px beside the session title and the controls. */
-@media (max-width: 1100px) {
+/* Four or more providers need about 1300px beside the page nav and the controls. */
+@media (max-width: 1439px) {
   .wrap[data-many] .meter:not([data-top]) {
     display: none;
   }
@@ -238,6 +239,36 @@
   }
 
   .wrap[data-many] .meter[data-top] .age {
+    display: block;
+  }
+}
+
+/* In a session, below 1600 (four or more providers: 1760), the title keeps at least 240px beside
+   the nav and the controls (D4). */
+@media (max-width: 1599px) {
+  .wrap[data-session] .meter:not([data-top]) {
+    display: none;
+  }
+
+  .wrap[data-session] .more {
+    display: inline;
+  }
+
+  .wrap[data-session] .meter[data-top] .age {
+    display: block;
+  }
+}
+
+@media (max-width: 1759px) {
+  .wrap[data-session][data-many] .meter:not([data-top]) {
+    display: none;
+  }
+
+  .wrap[data-session][data-many] .more {
+    display: inline;
+  }
+
+  .wrap[data-session][data-many] .meter[data-top] .age {
     display: block;
   }
 }

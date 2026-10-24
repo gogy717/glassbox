@@ -934,4 +934,217 @@ describe('App below three columns', () => {
     const list = screen.getByRole('navigation', { name: 'Sessions' });
     expect(list.closest('[data-sidebar-mode]')).toHaveAttribute('data-sidebar-mode', 'column');
   });
+
+  // D4: Stats lays out as Home does; below 901 the list is the drawer, as everywhere.
+  it('keeps the list as a column on Stats too, and the drawer below 901', () => {
+    screenWidth(1024);
+    window.location.hash = '#/stats';
+    render(<App store={demoStore()} connect={noConnect} />);
+    const list = screen.getByRole('navigation', { name: 'Sessions' });
+    expect(list.closest('[data-sidebar-mode]')).toHaveAttribute('data-sidebar-mode', 'column');
+    resize(768);
+    expect(document.querySelector('[data-sidebar-mode]')).toHaveAttribute(
+      'data-sidebar-mode',
+      'drawer',
+    );
+  });
+
+  it('closes the floating list when the page changes under it, Stats included', async () => {
+    screenWidth(768);
+    window.location.hash = '';
+    render(<App store={demoStore()} connect={noConnect} />);
+    fireEvent.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Sessions' }));
+    expect(screen.getByRole('dialog', { name: 'Sessions' })).toBeInTheDocument();
+    act(() => {
+      window.location.hash = '#/stats';
+    });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Sessions' })).toBeNull());
+  });
+});
+
+// D4 part 1 (N1a): the top bar's page nav, Home · Session · Stats, and the routes behind it.
+describe('App pages: Home · Session · Stats', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(DEMO_NOW);
+    window.location.hash = '';
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    window.location.hash = '';
+  });
+
+  const at = (id: string) => `#/s/${encodeURIComponent(id)}`;
+  const pages = () => within(screen.getByRole('banner')).getByRole('navigation', { name: 'Pages' });
+  const page = (name: 'Home' | 'Session' | 'Stats') => within(pages()).getByRole('link', { name });
+  const listed = (sessions = createDemoSessions(DEMO_NOW)) => {
+    const store = createStore();
+    store.applyEvent({ type: 'sessions', sessions });
+    return store;
+  };
+  const [demo, idle] = createDemoSessions(DEMO_NOW);
+  if (!demo || !idle) throw new Error('fixture');
+
+  it('links the three pages after the wordmark, the current one marked; the wordmark goes Home', () => {
+    window.location.hash = '#/stats';
+    render(<App store={listed()} connect={noConnect} runs={fakeRuns()} />);
+    expect(
+      within(pages())
+        .getAllByRole('link')
+        .map((a) => a.textContent),
+    ).toEqual(['Home', 'Session', 'Stats']);
+    expect(page('Stats')).toHaveAttribute('aria-current', 'page');
+    expect(page('Home')).not.toHaveAttribute('aria-current');
+    expect(page('Home')).toHaveAttribute('href', '#/');
+    const wordmark = within(screen.getByRole('banner')).getByRole('link', { name: 'glassbox' });
+    expect(wordmark).toHaveAttribute('href', '#/');
+  });
+
+  it('goes Back and Forward across all three pages', async () => {
+    window.location.hash = at(idle.id);
+    render(<App store={listed()} connect={noConnect} runs={fakeRuns()} />);
+    expect(page('Session')).toHaveAttribute('aria-current', 'page');
+    fireEvent.click(page('Stats'));
+    await waitFor(() => expect(page('Stats')).toHaveAttribute('aria-current', 'page'));
+    expect(screen.getByRole('heading', { name: 'Stats' })).toBeInTheDocument();
+    fireEvent.click(page('Home'));
+    await waitFor(() => expect(page('Home')).toHaveAttribute('aria-current', 'page'));
+    act(() => history.back());
+    await waitFor(() => expect(window.location.hash).toBe('#/stats'));
+    act(() => history.back());
+    await waitFor(() => expect(page('Session')).toHaveAttribute('aria-current', 'page'));
+    expect(window.location.hash).toBe(at(idle.id));
+    act(() => history.forward());
+    await waitFor(() => expect(page('Stats')).toHaveAttribute('aria-current', 'page'));
+  });
+
+  it('switches the window in place: the entry is replaced, so Back leaves the page', async () => {
+    window.location.hash = '#/';
+    window.location.hash = '#/stats';
+    render(<App store={listed()} connect={noConnect} runs={fakeRuns()} />);
+    const windows = screen.getByRole('radiogroup', { name: 'Window' });
+    expect(within(windows).getByRole('radio', { name: 'This week' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    const entries = history.length;
+    fireEvent.click(within(windows).getByRole('radio', { name: 'Last 7 days' }));
+    await waitFor(() => expect(window.location.hash).toBe('#/stats?window=7d'));
+    expect(history.length).toBe(entries);
+    expect(
+      within(screen.getByRole('radiogroup', { name: 'Window' })).getByRole('radio', {
+        name: 'Last 7 days',
+      }),
+    ).toHaveAttribute('aria-checked', 'true');
+    act(() => history.back());
+    await waitFor(() => expect(page('Home')).toHaveAttribute('aria-current', 'page'));
+  });
+
+  it('takes Session back to the session page as it was left: tab, turn, request and card', async () => {
+    const left = `${at(idle.id)}?tab=steps&turn=t1&req=r1&card=response`;
+    window.location.hash = left;
+    render(<App store={listed()} connect={noConnect} runs={fakeRuns()} />);
+    fireEvent.click(page('Home'));
+    await waitFor(() => expect(page('Home')).toHaveAttribute('aria-current', 'page'));
+    expect(page('Session')).toHaveAttribute('href', left);
+    fireEvent.click(page('Stats'));
+    await waitFor(() => expect(page('Stats')).toHaveAttribute('aria-current', 'page'));
+    fireEvent.click(page('Session'));
+    await waitFor(() => expect(window.location.hash).toBe(left));
+  });
+
+  it('opens the most recently active session when none was opened, or the last one is gone', async () => {
+    const all = createDemoSessions(DEMO_NOW);
+    const store = listed(all);
+    window.location.hash = at(idle.id);
+    render(<App store={store} connect={noConnect} runs={fakeRuns()} />);
+    fireEvent.click(page('Home'));
+    await waitFor(() => expect(page('Session')).toHaveAttribute('href', at(idle.id)));
+    act(() =>
+      store.applyEvent({ type: 'sessions', sessions: all.filter((s) => s.id !== idle.id) }),
+    );
+    expect(page('Session')).toHaveAttribute('href', at(demo.id));
+  });
+
+  it('points Session at the most recently active session on a fresh load', () => {
+    render(<App store={listed()} connect={noConnect} runs={fakeRuns()} />);
+    expect(page('Session')).toHaveAttribute('href', at(demo.id));
+    expect(page('Session')).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('carries the amber dot while the session it opens waits for you', () => {
+    const store = listed();
+    render(<App store={store} connect={noConnect} runs={fakeRuns()} />);
+    expect(page('Session')).not.toHaveAccessibleDescription('Waiting for you');
+    expect(page('Session').querySelector('[data-waiting]')).toBeNull();
+    act(() =>
+      store.applyEvent({
+        type: 'run',
+        run: runState({
+          status: 'waiting-permission',
+          pendingPermissions: [
+            {
+              id: 'tu_1',
+              toolName: 'Bash',
+              input: { command: 'ls' },
+              questions: null,
+              requestedAt: DEMO_NOW.toISOString(),
+            },
+          ],
+        }),
+      }),
+    );
+    expect(page('Session')).toHaveAccessibleDescription('Waiting for you');
+    expect(page('Session').querySelector('[data-waiting]')).not.toBeNull();
+  });
+
+  it('makes Session unavailable, saying why, on a machine with no sessions', () => {
+    render(<App store={listed([])} connect={noConnect} runs={fakeRuns()} />);
+    const item = page('Session');
+    expect(item).toHaveAttribute('aria-disabled', 'true');
+    expect(item).toHaveAttribute('title', 'No sessions yet');
+    expect(item).not.toHaveAttribute('href');
+    // Reachable from the keyboard, so the reason is read out as well as shown on hover.
+    expect(item.tabIndex).toBe(0);
+    fireEvent.click(item);
+    expect(window.location.hash).toBe('');
+  });
+
+  it('does not say there are no sessions before the list has arrived', () => {
+    render(<App store={createStore()} connect={noConnect} runs={fakeRuns()} />);
+    expect(page('Session')).toHaveAttribute('aria-disabled', 'true');
+    expect(page('Session')).toHaveAttribute('title', 'Reading local sessions…');
+  });
+
+  it('shows no composer on Stats, and opens a session picked from the list there', async () => {
+    window.location.hash = '#/stats';
+    render(<App store={listed()} connect={noConnect} runs={fakeRuns()} />);
+    expect(screen.queryByRole('textbox', { name: 'Message' })).toBeNull();
+    expect(document.getElementById('composer-slot')).toBeEmptyDOMElement();
+    fireEvent.click(within(sidebar()).getByRole('button', { name: /Fix flaky login test/ }));
+    expect(window.location.hash).toBe(at(idle.id));
+    // Browsers (and jsdom) deliver hashchange asynchronously.
+    await waitFor(() => expect(page('Session')).toHaveAttribute('aria-current', 'page'));
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBeInTheDocument();
+  });
+
+  it('speaks Chinese: 首页 · 会话 · 统计', () => {
+    localStorage.setItem('glassbox.prefs', JSON.stringify({ locale: 'zh' }));
+    onTestFinished(() => localStorage.clear());
+    window.location.hash = '#/stats';
+    render(<App store={listed([])} connect={noConnect} runs={fakeRuns()} />);
+    const nav = within(screen.getByRole('banner')).getByRole('navigation', { name: '页面' });
+    expect(
+      within(nav)
+        .getAllByRole('link')
+        .map((a) => a.textContent),
+    ).toEqual(['首页', '会话', '统计']);
+    expect(within(nav).getByRole('link', { name: '会话' })).toHaveAttribute('title', '还没有会话');
+    const windows = screen.getByRole('radiogroup', { name: '时间范围' });
+    expect(
+      within(windows)
+        .getAllByRole('radio')
+        .map((r) => r.textContent),
+    ).toEqual(['本周', '最近 7 天']);
+  });
 });

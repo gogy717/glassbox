@@ -62,3 +62,55 @@
 .word[aria-disabled="true"][aria-checked="true"] {
   text-decoration-color: var(--ink);
 }
+
+/* Segmented (D4): a page-level choice, 30px high like the top bar's instruments, so it never reads
+   as the underlined view tabs a level down. Bordered segments with hairlines between them, the
+   chosen one filled: aria-checked on a radio, aria-current on a link of the page nav, which is
+   drawn with these classes too. */
+.switch[data-variant="segmented"] {
+  align-items: stretch;
+  gap: 0;
+  height: 30px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-l);
+  background: var(--layer-1);
+  overflow: hidden;
+}
+
+.switch[data-variant="segmented"] > .word {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  text-decoration: none;
+}
+
+.switch[data-variant="segmented"] > .word + .word {
+  border-left: 1px solid var(--border);
+}
+
+.switch[data-variant="segmented"] > .word:hover {
+  background: var(--layer-2);
+}
+
+.switch[data-variant="segmented"] > .word[aria-checked="true"],
+.switch[data-variant="segmented"] > .word[aria-current="page"] {
+  background: var(--layer-3);
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+/* Faint, not struck: a struck segment would cross its icon and padding. */
+.switch[data-variant="segmented"] > .word[aria-disabled="true"] {
+  background: none;
+}
+
+.switch[data-variant="segmented"] > .word[aria-disabled="true"]::after {
+  content: none;
+}
+
+/* The group clips its corners: the focus ring is drawn inside the segment, not cut off. */
+.switch[data-variant="segmented"] > .word:focus-visible {
+  outline-offset: -2px;
+}

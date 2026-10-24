@@ -1,0 +1,64 @@
+/* The page scrolls on its own: the week runs longer than the screen. */
+.stats {
+  height: 100%;
+  min-width: 0;
+  padding: 20px 24px 40px;
+  overflow-y: auto;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin-bottom: 16px;
+}
+
+/* Thirds: the overview across, then two and one, one each, two and one (D4). */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.card {
+  min-height: 220px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  background: var(--layer-1);
+}
+
+.card[data-span="all"] {
+  grid-column: 1 / -1;
+  min-height: 64px;
+}
+
+.card[data-span="2"] {
+  grid-column: span 2;
+}
+
+/* Two columns: the wide cards take the row. */
+@media (max-width: 1199px) {
+  .cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .card[data-span="2"] {
+    grid-column: 1 / -1;
+  }
+}
+
+/* One column, every card across. */
+@media (max-width: 900px) {
+  .stats {
+    padding: 16px 16px 32px;
+  }
+
+  .cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .card[data-span="2"] {
+    grid-column: auto;
+  }
+}

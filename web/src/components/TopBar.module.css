@@ -9,20 +9,46 @@
   background: var(--layer-1);
 }
 
-/* The wordmark shares the instruments' face. */
+/* The wordmark shares the instruments' face. The mark and the word link Home (D4). */
 .logo {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   flex: none;
+  border-radius: var(--radius-m);
+  color: inherit;
   font-family: var(--font-mono);
   font-size: var(--fs-title);
   font-weight: 500;
   letter-spacing: -0.01em;
+  text-decoration: none;
 }
 
 .mark {
   flex: none;
+}
+
+/* The page nav: the Switch's segmented family (its classes), the icons always, the words from
+   1200 up. */
+.pages {
+  flex: none;
+}
+
+.page {
+  position: relative;
+}
+
+.page > svg {
+  flex: none;
+}
+
+/* The session Session opens waits for you: the waiting amber, as the sidebar's mark. */
+.waiting {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warning);
 }
 
 .session {
@@ -191,6 +217,11 @@
   color: var(--text);
 }
 
+/* What gives way as the bar narrows, in order (D4): Connected while it is connected, Follow
+   latest's word, the page nav's words (all below 1200); the quota's full form (its own sheet);
+   the wordmark's word and the rate's line (below 900). Never: the menu, the mark, the three page
+   icons, the rate figure, the quota's first meter, the eye, the settings. */
+
 /* Two columns or fewer: Follow keeps its eye, and the connection shows only when it drops. It
    stays in the page while hidden, so its status region still announces the drop. */
 @media (max-width: 1199px) {
@@ -198,7 +229,8 @@
     display: none;
   }
 
-  .conn[data-state="open"] {
+  .conn[data-state="open"],
+  .pageLabel {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -211,5 +243,53 @@
     width: 34px;
     padding: 0;
     justify-content: center;
+  }
+}
+
+/* In a session the same things give way in the same order, sooner, so the title keeps at least
+   240px (D4): measured with the quota folded (below 1600), the three words take 283px of it below
+   1400, the wordmark's word and the rate's line 145px below 1200. */
+@media (max-width: 1399px) {
+  .bar[data-session] .toggleLabel {
+    display: none;
+  }
+
+  .bar[data-session] .conn[data-state="open"],
+  .bar[data-session] .pageLabel {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .bar[data-session] .toggle {
+    width: 34px;
+    padding: 0;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 1199px) {
+  .bar[data-session] .wordmark {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* One column: the mark alone, still the link Home, still named by its word. */
+@media (max-width: 900px) {
+  .wordmark {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 }

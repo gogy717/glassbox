@@ -1,8 +1,12 @@
 import { useCallback, useSyncExternalStore } from 'react';
 import { MAIN_AGENT_ID } from '../../src/core/model.js';
+import type { WeekWindowKind } from '../../src/shared/week.js';
 
 export const TABS = ['flow', 'steps', 'tokens', 'time'] as const;
 export type Tab = (typeof TABS)[number];
+
+/** The three pages of the top bar's nav. */
+export type Page = 'home' | 'session' | 'stats';
 
 /** Which card of a call is open: its request, its response, or one of its tools (`tool:<id>`). */
 export type CardKey = 'request' | 'response' | `tool:${string}`;
@@ -21,6 +25,8 @@ export interface Route {
   /** The card of `requestId` whose panel is open, so a link opens that tool call; absent when
    *  the panel is closed. Only ever set with `requestId`. */
   card?: CardKey;
+  /** The Stats page, over this window; absent on the other pages. */
+  stats?: WeekWindowKind;
 }
 
 const HOME: Route = {
@@ -31,7 +37,15 @@ const HOME: Route = {
   requestId: null,
 };
 
+/** The page a route shows: Stats, else the session it names, else Home. */
+export const pageOf = (r: Route): Page => (r.stats ? 'stats' : r.sessionId ? 'session' : 'home');
+
 export function parseRoute(hash: string): Route {
+  const stats = /^#\/stats(?:\?(.*))?$/.exec(hash);
+  if (stats) {
+    const kind = new URLSearchParams(stats[1] ?? '').get('window');
+    return { ...HOME, stats: kind === '7d' ? '7d' : 'week' };
+  }
   const m = /^#\/s\/([^?]+)(?:\?(.*))?$/.exec(hash);
   if (!m) return HOME;
   let sessionId: string;
@@ -56,6 +70,8 @@ export function parseRoute(hash: string): Route {
 }
 
 export function formatRoute(r: Route): string {
+  // This week is the page's own default, as the flow tab is a session's.
+  if (r.stats) return r.stats === 'week' ? '#/stats' : `#/stats?window=${r.stats}`;
   if (r.sessionId === null) return '#/';
   const q = new URLSearchParams();
   if (r.agentId !== MAIN_AGENT_ID) q.set('agent', r.agentId);
@@ -68,18 +84,23 @@ export function formatRoute(r: Route): string {
   return `#/s/${encodeURIComponent(r.sessionId)}${qs ? `?${qs}` : ''}`;
 }
 
+/** A link to a session as it opens: its main agent, on the flow tab, following its latest turn. */
+export const sessionLink = (sessionId: string) => formatRoute({ ...HOME, sessionId });
+
 /** What the open card belongs to: moving any of these elsewhere leaves it behind. */
 const CARD_OWNERS = ['sessionId', 'agentId', 'turnId', 'requestId'] as const;
 
 /**
  * `next` over `current`. A card is one request's, so a move to another request, turn, agent or
  * session that does not name a card closes it, rather than opening the same card of a request
- * nobody asked about (a Response panel left open, then a step clicked in the steps view).
+ * nobody asked about (a Response panel left open, then a step clicked in the steps view). A
+ * session named without `stats` is opened: a click on one leaves the Stats page for it.
  */
 export function mergeRoute(current: Route, next: Partial<Route>): Route {
   const merged = { ...current, ...next };
   const moved = CARD_OWNERS.some((k) => k in next && next[k] !== current[k]);
   if (moved && !('card' in next)) delete merged.card;
+  if ('sessionId' in next && !('stats' in next)) delete merged.stats;
   return merged;
 }
 

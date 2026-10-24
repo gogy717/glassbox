@@ -32,6 +32,9 @@ export interface SwitchOption<V extends string> {
  *   one included, so a click on the chosen word can confirm it.
  * - `options`: the words, in order; see `SwitchOption`.
  * - `size`: 'small' (11px, in dense heads) or 'medium' (12px, the default).
+ * - `variant`: 'words' (the default), or 'segmented' for a page-level choice that sits with the
+ *   top bar's instruments: bordered segments 30px high, the chosen one filled (D4), as the page
+ *   nav is drawn.
  */
 export function Switch<V extends string>({
   label,
@@ -40,6 +43,7 @@ export function Switch<V extends string>({
   onChange,
   onChoose,
   size = 'medium',
+  variant = 'words',
 }: {
   label: string;
   value: V;
@@ -47,6 +51,7 @@ export function Switch<V extends string>({
   onChange(value: V): void;
   onChoose?(value: V): void;
   size?: 'small' | 'medium';
+  variant?: 'words' | 'segmented';
 }) {
   const choose = (o: SwitchOption<V>) => {
     if (o.disabled) return;
@@ -77,7 +82,13 @@ export function Switch<V extends string>({
   // The chosen word holds the tab stop, enabled or not; with none chosen, the first word does.
   const stop = options.some((o) => o.value === value) ? value : options[0]?.value;
   return (
-    <div className={css.switch} role="radiogroup" aria-label={label} data-size={size}>
+    <div
+      className={css.switch}
+      role="radiogroup"
+      aria-label={label}
+      data-size={size}
+      data-variant={variant}
+    >
       {options.map((o) => (
         // biome-ignore lint/a11y/useSemanticElements: a two-word switch styled as words, not radios
         <button

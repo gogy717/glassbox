@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatRoute, mergeRoute, parseRoute, type Route } from './router';
+import { formatRoute, mergeRoute, pageOf, parseRoute, type Route } from './router';
 
 const HOME: Route = {
   sessionId: null,
@@ -120,5 +120,58 @@ describe('mergeRoute', () => {
   it('keeps the card across a tab switch, or a move to where it already is', () => {
     expect(mergeRoute(open, { tab: 'steps' }).card).toBe('response');
     expect(mergeRoute(open, { turnId: 't1', requestId: 'r1' }).card).toBe('response');
+  });
+});
+
+describe('the Stats page (#/stats)', () => {
+  it.each([
+    ['#/stats', 'week'],
+    ['#/stats?window=week', 'week'],
+    ['#/stats?window=7d', '7d'],
+    ['#/stats?window=bogus', 'week'],
+    ['#/stats?', 'week'],
+  ] as const)('reads %s as Stats over the window %s', (hash, stats) => {
+    expect(parseRoute(hash)).toEqual({ ...HOME, stats });
+  });
+
+  it.each(['#/statsx', '#/stats/7d', '#/s/'])('does not read %j as Stats', (hash) => {
+    expect(parseRoute(hash)).not.toHaveProperty('stats');
+  });
+
+  it('writes this week as the bare page, and round-trips both windows', () => {
+    expect(formatRoute({ ...HOME, stats: 'week' })).toBe('#/stats');
+    expect(formatRoute({ ...HOME, stats: '7d' })).toBe('#/stats?window=7d');
+    for (const stats of ['week', '7d'] as const)
+      expect(parseRoute(formatRoute({ ...HOME, stats }))).toEqual({ ...HOME, stats });
+  });
+
+  it('switches the window in place', () => {
+    expect(mergeRoute({ ...HOME, stats: 'week' }, { stats: '7d' })).toEqual({
+      ...HOME,
+      stats: '7d',
+    });
+  });
+
+  it('leaves Stats for a session named without it, as a click on a session does', () => {
+    const next = { sessionId: 's1', agentId: 'main', turnId: null, requestId: null };
+    const merged = mergeRoute({ ...HOME, stats: '7d' }, next);
+    expect(merged).not.toHaveProperty('stats');
+    expect(formatRoute(merged)).toBe('#/s/s1');
+  });
+
+  it('opens Stats over a session: the page wins, the session is left behind', () => {
+    const merged = mergeRoute({ ...HOME, sessionId: 's1', tab: 'time' }, { stats: 'week' });
+    expect(formatRoute(merged)).toBe('#/stats');
+  });
+});
+
+describe('pageOf', () => {
+  it.each<[Route, string]>([
+    [HOME, 'home'],
+    [{ ...HOME, sessionId: 's1' }, 'session'],
+    [{ ...HOME, stats: 'week' }, 'stats'],
+    [{ ...HOME, stats: '7d' }, 'stats'],
+  ])('%j is the %s page', (route, page) => {
+    expect(pageOf(route)).toBe(page);
   });
 });

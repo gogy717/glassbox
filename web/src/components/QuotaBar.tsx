@@ -13,6 +13,8 @@ import css from './QuotaBar.module.css';
 interface Props {
   quotas: QuotaSnapshot[];
   now: number;
+  /** A session is open: the meters fold to the top one earlier, so its title keeps its room. */
+  sessionOpen?: boolean;
 }
 
 type Level = 'ok' | 'warn' | 'danger';
@@ -97,7 +99,7 @@ export function formatBalance(balance: { amount: number; currency: string }, int
  * Plan quota at a glance (ClaudeBar-style): one meter per provider, at its window closest to the
  * limit, or its balance when it has no windows. Click for every window and where the data came from.
  */
-export function QuotaBar({ quotas, now }: Props) {
+export function QuotaBar({ quotas, now, sessionOpen = false }: Props) {
   const { t, intl } = useI18n();
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
@@ -155,6 +157,7 @@ export function QuotaBar({ quotas, now }: Props) {
       ref={ref}
       data-many={shown.length >= MANY || undefined}
       data-single={shown.length === 1 || undefined}
+      data-session={sessionOpen || undefined}
     >
       <button
         ref={buttonRef}
