@@ -38,16 +38,27 @@
 }
 
 /* Unavailable: struck through, faint; the title says why. aria-disabled, not disabled, so it
-   stays focusable and the reason reachable from the keyboard. */
+   stays focusable and the reason reachable from the keyboard. The strike is drawn, not a
+   text-decoration: a line-through sits where CJK glyphs have their own horizontal strokes and
+   vanishes into 继续, so this one runs 2px past both ends of the word. */
 .word[aria-disabled="true"] {
+  position: relative;
   color: var(--faint);
-  text-decoration-line: line-through;
-  text-decoration-color: currentColor;
   cursor: default;
+}
+
+.word[aria-disabled="true"]::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: -2px;
+  left: -2px;
+  height: 1px;
+  background: currentColor;
+  pointer-events: none;
 }
 
 /* Chosen, then made unavailable: the ink underline (and the weight) stay under the strike. */
 .word[aria-disabled="true"][aria-checked="true"] {
-  text-decoration-line: underline line-through;
   text-decoration-color: var(--ink);
 }

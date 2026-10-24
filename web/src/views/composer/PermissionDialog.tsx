@@ -1,9 +1,10 @@
-import { ShieldQuestion } from 'lucide-react';
-import { useEffect, useId, useRef, useState } from 'react';
+import { MessageCircleQuestion, Shield } from 'lucide-react';
+import { useContext, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import type { PermissionDecision, PermissionRequest } from '../../../../src/shared/runs.js';
 import { trapTab } from '../../components/focusTrap';
 import { JsonInspector } from '../../components/JsonInspector';
 import { useSessionAgent } from '../../data/session-agent';
+import { StoreContext } from '../../data/store';
 import { useI18n } from '../../i18n';
 import css from './Composer.module.css';
 
@@ -12,6 +13,8 @@ interface Props {
   onDecide(d: PermissionDecision): Promise<void> | void;
   /** Escape collapses the prompt without answering; it stays pending. */
   onDismiss?(): void;
+  /** How long the buttons stay inert after the prompt appears; PROMPT_ARM_MS unless a test says. */
+  armMs?: number;
 }
 
 const field = (input: unknown, key: string) =>
@@ -19,8 +22,38 @@ const field = (input: unknown, key: string) =>
     ? ((input as Record<string, unknown>)[key] as string)
     : null;
 
-/** A pending permission prompt or AskUserQuestion from a glassbox-owned run. No timeout. */
-export function PermissionDialog({ request, onDecide, onDismiss }: Props) {
+const noSubscribe = () => () => {};
+
+/**
+ * How long a prompt that has just appeared ignores its buttons. Answering one prompt mounts the
+ * next queued one in the same place at once, so the second click of a double-click on Allow
+ * would land on the next Allow: browsers guard their own permission prompts the same way.
+ */
+export const PROMPT_ARM_MS = 500;
+
+/**
+ * "Conversation 6 · call #1": where the tool call a prompt is about sits in the open session,
+ * once the session's records hold it (a prompt can arrive before the call is written).
+ */
+function useCallRef(toolUseId: string): string | null {
+  const { t } = useI18n();
+  const store = useContext(StoreContext);
+  const open = useSyncExternalStore(
+    store?.subscribe ?? noSubscribe,
+    () => store?.getState().open ?? null,
+  );
+  const call = open?.toolCalls.get(toolUseId);
+  const request = call ? open?.requests.get(call.requestId) : undefined;
+  const turn = request?.turnId ? open?.turns.get(request.turnId) : undefined;
+  return request && turn ? t('tokens.requestRef', { turn: turn.index, n: request.index }) : null;
+}
+
+/**
+ * A pending permission prompt or AskUserQuestion from a glassbox-owned run, as a quiet panel
+ * above the composer: an amber hairline, no fill, no shadow. No timeout. Enter answers nothing
+ * (focus starts on the panel itself); Escape only hides it, and it stays pending.
+ */
+export function PermissionDialog({ request, onDecide, onDismiss, armMs = PROMPT_ARM_MS }: Props) {
   const { t } = useI18n();
   const agent = useSessionAgent();
   const titleId = useId();
@@ -31,6 +64,13 @@ export function PermissionDialog({ request, onDecide, onDismiss }: Props) {
   }, []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Inert (disabled, and drawn so) until it has been on screen for PROMPT_ARM_MS.
+  const [armed, setArmed] = useState(armMs <= 0);
+  useEffect(() => {
+    if (armMs <= 0) return;
+    const id = setTimeout(() => setArmed(true), armMs);
+    return () => clearTimeout(id);
+  }, [armMs]);
 
   const decide = async (d: PermissionDecision) => {
     setBusy(true);
@@ -45,6 +85,8 @@ export function PermissionDialog({ request, onDecide, onDismiss }: Props) {
   };
 
   const isAsk = request.toolName === 'AskUserQuestion' && request.questions;
+  const where = useCallRef(request.id);
+  const Glyph = isAsk ? MessageCircleQuestion : Shield;
   return (
     <section
       ref={ref}
@@ -61,15 +103,19 @@ export function PermissionDialog({ request, onDecide, onDismiss }: Props) {
       }}
     >
       <div className={css.promptHead}>
-        <ShieldQuestion size={16} aria-hidden="true" />
-        <span id={titleId}>
+        <Glyph size={14} aria-hidden="true" />
+        <span id={titleId} className={css.promptTitle}>
           {isAsk ? t('perm.ask', { agent }) : t('perm.title', { tool: request.toolName, agent })}
+        </span>
+        {where && <span className={`${css.promptWhere} num`}>{where}</span>}
+        <span className={`${css.promptLabel} section-label`}>
+          {t(isAsk ? 'perm.questionLabel' : 'perm.label')}
         </span>
       </div>
       {isAsk ? (
-        <Questions request={request} busy={busy} onDecide={decide} />
+        <Questions request={request} busy={busy || !armed} onDecide={decide} />
       ) : (
-        <ToolPrompt request={request} busy={busy} onDecide={decide} />
+        <ToolPrompt request={request} busy={busy || !armed} onDecide={decide} />
       )}
       {error && <p className={css.error}>{t('perm.error', { msg: error })}</p>}
     </section>
@@ -105,7 +151,7 @@ function ToolPrompt({ request, busy, onDecide }: PartProps) {
           <div className={css.actions}>
             <button
               type="button"
-              className={css.secondary}
+              className={css.button}
               disabled={busy}
               onClick={() => setDenying(false)}
             >
@@ -113,7 +159,8 @@ function ToolPrompt({ request, busy, onDecide }: PartProps) {
             </button>
             <button
               type="button"
-              className={css.danger}
+              className={css.button}
+              data-kind="danger"
               disabled={busy}
               onClick={() =>
                 onDecide(
@@ -129,9 +176,10 @@ function ToolPrompt({ request, busy, onDecide }: PartProps) {
         </div>
       ) : (
         <div className={css.actions}>
+          <span className={css.keys}>{t('perm.keys')}</span>
           <button
             type="button"
-            className={css.secondary}
+            className={css.button}
             disabled={busy}
             onClick={() => setDenying(true)}
           >
@@ -139,7 +187,8 @@ function ToolPrompt({ request, busy, onDecide }: PartProps) {
           </button>
           <button
             type="button"
-            className={css.primary}
+            className={css.button}
+            data-kind="primary"
             disabled={busy}
             onClick={() => onDecide({ decision: 'allow' })}
           >
@@ -201,15 +250,22 @@ function Questions({ request, busy, onDecide }: PartProps) {
         </fieldset>
       ))}
       <div className={css.actions}>
+        <span className={css.keys}>{t('perm.keys')}</span>
         <button
           type="button"
-          className={css.secondary}
+          className={css.button}
           disabled={busy}
           onClick={() => onDecide({ decision: 'deny' })}
         >
           {t('perm.skip')}
         </button>
-        <button type="button" className={css.primary} disabled={busy || !complete} onClick={submit}>
+        <button
+          type="button"
+          className={css.button}
+          data-kind="primary"
+          disabled={busy || !complete}
+          onClick={submit}
+        >
           {t('perm.send')}
         </button>
       </div>

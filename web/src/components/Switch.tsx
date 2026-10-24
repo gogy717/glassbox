@@ -28,6 +28,8 @@ export interface SwitchOption<V extends string> {
  *
  * - `label`: the group's accessible name ("View", "Order").
  * - `value` / `onChange(value)`: controlled; `onChange` fires only for a different, enabled word.
+ * - `onChoose(value)`: optional; fires for every explicit pick of an enabled word, the current
+ *   one included, so a click on the chosen word can confirm it.
  * - `options`: the words, in order; see `SwitchOption`.
  * - `size`: 'small' (11px, in dense heads) or 'medium' (12px, the default).
  */
@@ -36,16 +38,20 @@ export function Switch<V extends string>({
   value,
   options,
   onChange,
+  onChoose,
   size = 'medium',
 }: {
   label: string;
   value: V;
   options: readonly SwitchOption<V>[];
   onChange(value: V): void;
+  onChoose?(value: V): void;
   size?: 'small' | 'medium';
 }) {
   const choose = (o: SwitchOption<V>) => {
-    if (!o.disabled && o.value !== value) onChange(o.value);
+    if (o.disabled) return;
+    onChoose?.(o.value);
+    if (o.value !== value) onChange(o.value);
   };
   const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
     const n = options.length;

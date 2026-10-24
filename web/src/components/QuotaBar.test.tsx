@@ -141,11 +141,11 @@ describe('QuotaBar', () => {
     const [claude, grok] = screen.getAllByRole('meter');
     expect(claude).not.toHaveAttribute('data-stale');
     expect(grok).toHaveAttribute('data-stale');
-    expect(grok).toHaveAttribute('title', expect.stringContaining('Data from 3 hours ago'));
+    expect(grok).toHaveAttribute('title', expect.stringContaining('Data from 3\u202fh ago'));
     const details = openDetails();
     const section = within(details).getByRole('region', { name: 'xAI · SuperGrok' });
     expect(section).toHaveAttribute('data-stale');
-    expect(within(section).getByText('Data from 3 hours ago')).toBeInTheDocument();
+    expect(within(section).getByText('Data from 3 h ago')).toBeInTheDocument();
   });
 
   it('groups the details by provider: plan, windows, resets, extra usage, age and source', () => {
@@ -174,7 +174,7 @@ describe('QuotaBar', () => {
     expect(within(anthropic).getByText('Weekly')).toBeInTheDocument();
     expect(within(anthropic).getByText('Weekly · Opus')).toBeInTheDocument();
     expect(within(anthropic).getByText('62% used')).toBeInTheDocument();
-    expect(within(anthropic).getByText('Updated 4 minutes ago')).toBeInTheDocument();
+    expect(within(anthropic).getByText('Updated 4 m ago')).toBeInTheDocument();
     expect(within(anthropic).getByText("Source: Claude Code's cache")).toBeInTheDocument();
     expect(within(anthropic).getByText(/Extra usage/)).toHaveTextContent(
       'Extra usage 12.5 / 50 USD',

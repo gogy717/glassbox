@@ -88,8 +88,9 @@ describe('CSS modules', () => {
 
   // A module's `animation: pulse …` is renamed to the module's own `_pulse_<hash>`, so keyframes
   // declared in global.css never run there: the status dots did not pulse until W1's fix round.
-  // Modules not yet fixed (D1 hand-offs; drop each once its wave declares its own keyframes):
-  const KNOWN = ['views/composer/Composer.module.css: pulse'];
+  // Modules not yet fixed (D1 hand-offs; drop each once its wave declares its own keyframes).
+  // Empty since I3: W4's TimeView and W5's Composer declare their own.
+  const KNOWN: string[] = [];
 
   it('animates a module only with keyframes the module declares', () => {
     const missing = moduleFiles(SRC).flatMap((file) => {
@@ -108,6 +109,8 @@ describe('CSS modules', () => {
         .map((name) => `${relative(SRC, file)}: ${name}`);
     });
     expect(missing.filter((m) => !KNOWN.includes(m))).toEqual([]);
+    // A listed entry that is fixed (or gone) must leave the list, so it cannot hide a new one.
+    expect(KNOWN.filter((k) => !missing.includes(k))).toEqual([]);
   });
 });
 

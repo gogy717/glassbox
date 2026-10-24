@@ -25,7 +25,7 @@ export const en: Record<MessageKey, string> = {
   'settings.themeDark': 'Dark',
   'sidebar.title': 'Sessions',
   'sidebar.search': 'Search title or folder',
-  'sidebar.empty': 'No sessions found yet',
+  'sidebar.empty': 'No sessions found',
   'sidebar.noMatch': 'No matching sessions',
   'sidebar.untitled': 'Untitled session',
   'sidebar.toggle': 'Sessions',
@@ -334,6 +334,9 @@ export const en: Record<MessageKey, string> = {
   'perm.send': 'Send answers',
   'perm.error': 'Could not send: {msg}',
   'perm.multi': 'Pick any',
+  'perm.label': 'Permission',
+  'perm.questionLabel': 'Question',
+  'perm.keys': 'Esc hides this prompt; it stays pending',
   'newSession.title': 'New session',
   'newSession.dir': 'Working directory',
   'newSession.recent': 'Recent directories',
@@ -357,7 +360,7 @@ export const en: Record<MessageKey, string> = {
   'composer.send': 'Send',
   'composer.stop': 'Stop',
   'composer.busyTerminal':
-    'This session is open in a terminal; pick “Continue in a copy” to carry on safely',
+    'Open in a terminal right now, so “Continue” would fight it; “Continue in a copy” is safe.',
   'composer.viewOnly':
     '{agent} sessions are view-only; start a Claude Code session with “New session”',
   'composer.waiting': 'Waiting for the reply to finish',
@@ -399,7 +402,7 @@ export const en: Record<MessageKey, string> = {
   'diag.superseded': 'Silently re-sent requests filtered out: {n}',
   'diag.ok': 'No problems found',
   'perm.reopen': 'Review pending request',
-  'home.emptyTitle': 'No sessions yet',
+  'home.emptyTitle': 'No sessions on this machine',
   'home.emptyBody1':
     'glassbox shows this machine’s Claude Code and Grok sessions, read-only, and never changes a file. Claude Code: ~/.claude/projects (or the folder given by --claude-dir or CLAUDE_CONFIG_DIR). Grok: ~/.grok (or --grok-dir or GROK_HOME; --no-grok turns it off).',
   'home.emptyBody2':

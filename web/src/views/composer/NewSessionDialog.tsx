@@ -1,11 +1,16 @@
 import { useEffect, useId, useMemo, useState } from 'react';
 import type { RunPermissionMode, RunState } from '../../../../src/shared/runs.js';
 import { Modal } from '../../components/Modal';
+import { Tooltip } from '../../components/Tooltip';
 import type { RunsClient } from '../../data/runs';
 import { useI18n } from '../../i18n';
-import { dirPlaceholder, recentDirChoices, shortPath } from '../../lib/dirs';
+import { dirPlaceholder, recentDirChoices } from '../../lib/dirs';
+import { middleEllipsis } from '../../lib/format';
 import css from './Composer.module.css';
 import { PermissionModeSelect } from './PermissionModeSelect';
+
+/** The longest folder path a chip shows before it cuts the middle out. */
+const DIR_CHARS = 32;
 
 interface Props {
   client: RunsClient;
@@ -56,18 +61,28 @@ export function NewSessionDialog({ client, onStarted, onClose }: Props) {
     }
   };
 
-  const chip = (d: string) => (
-    <button
-      key={d}
-      type="button"
-      title={d}
-      aria-pressed={d === path}
-      className={css.dirChip}
-      onClick={() => setCwd(d)}
-    >
-      {shortPath(d)}
-    </button>
-  );
+  // A folder cut in the middle, root and tail kept; the whole path is its tooltip when cut.
+  const chip = (d: string) => {
+    const shown = middleEllipsis(d, DIR_CHARS);
+    const button = (
+      <button
+        key={d}
+        type="button"
+        aria-pressed={d === path}
+        className={css.dirChip}
+        onClick={() => setCwd(d)}
+      >
+        {shown}
+      </button>
+    );
+    return shown === d ? (
+      button
+    ) : (
+      <Tooltip key={d} label={d} placement="bottom">
+        {button}
+      </Tooltip>
+    );
+  };
 
   return (
     <Modal label={t('newSession.title')} onClose={onClose} size="compact">
@@ -86,7 +101,7 @@ export function NewSessionDialog({ client, onStarted, onClose }: Props) {
             </div>
           </div>
         )}
-        <div className={css.field}>
+        <div className={css.formField}>
           <label htmlFor={dirId} className={css.fieldLabel}>
             {t('newSession.dir')}
           </label>
@@ -105,13 +120,19 @@ export function NewSessionDialog({ client, onStarted, onClose }: Props) {
             </small>
           )}
         </div>
-        <label className={css.field}>
+        <label className={css.formField}>
           <span className={css.fieldLabel}>{t('newSession.prompt')}</span>
           <textarea rows={4} value={prompt} onChange={(e) => setPrompt(e.target.value)} />
         </label>
         <div className={css.actions}>
           <PermissionModeSelect value={mode} onChange={setMode} />
-          <button type="button" className={css.primary} disabled={!ready} onClick={start}>
+          <button
+            type="button"
+            className={css.button}
+            data-kind="primary"
+            disabled={!ready}
+            onClick={start}
+          >
             {t('newSession.start')}
           </button>
         </div>

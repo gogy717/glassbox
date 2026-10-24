@@ -1,164 +1,202 @@
-/* Composer bar, permission prompts and the new-session dialog. */
+/* Composer bar, permission prompts, the live block and the new-session dialog (D1 P5). */
 
 .composer {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 10px 14px 12px;
+  padding: 10px 16px 12px;
   border-top: 1px solid var(--border);
   background: var(--layer-1);
 }
 
-.inputRow {
+/* The message field, with Send (or Stop) inside it at the right. */
+.field {
   display: flex;
   align-items: flex-end;
   gap: 8px;
+  min-height: 40px;
+  padding: 0 5px 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-l);
+  background: var(--layer-1);
+  transition: border-color var(--motion);
+}
+
+.field:has(.textarea:focus-visible) {
+  outline: var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* Nothing to send right now: the placeholder says why, and must stay readable. */
+.field[data-off] {
+  border-style: dashed;
+  background: var(--layer-2);
 }
 
 .textarea {
   flex: 1;
+  min-width: 0;
   min-height: 38px;
   max-height: 200px;
-  padding: 9px 11px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-l);
-  background: var(--bg);
+  padding: 10px 0;
+  border: 0;
+  background: transparent;
   color: var(--text);
   font: inherit;
+  line-height: 18px;
   resize: none;
   /* Grows with what is typed (and with a long placeholder) up to max-height, where supported. */
   field-sizing: content;
 }
 
-.textarea:focus {
+.textarea:focus-visible {
   outline: none;
-  border-color: var(--accent);
+}
+
+.textarea::placeholder {
+  color: var(--faint);
 }
 
 .textarea:disabled {
-  /* Not faded: the placeholder says why sending is blocked and must stay readable. */
-  background: var(--layer-2);
   cursor: not-allowed;
 }
 
-/* The send / stop button lines up with the single-line textarea. */
-.inputRow > button {
-  height: 38px;
+/* Buttons: 28px, radius 6, one weight; primary is the accent. Small ones are 24px. */
+.button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-l);
+  background: var(--layer-1);
+  color: var(--text);
+  font-size: var(--fs-small);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--layer-2);
+}
+
+.button[data-size="small"] {
+  height: 24px;
+  padding: 0 8px;
+  font-size: var(--fs-meta);
+}
+
+.button[data-kind="primary"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.button[data-kind="primary"]:hover:not(:disabled) {
+  background: var(--accent);
+}
+
+/* Stop and Confirm deny: bordered, red words, never a filled red block. */
+.button[data-kind="stop"],
+.button[data-kind="danger"] {
+  color: var(--error);
+}
+
+.button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* A primary that cannot act is drawn as a secondary: the only filled accent on screen is one
+   that works (an empty field's Send, a prompt's Allow while it arms). */
+.button[data-kind="primary"]:disabled {
+  border-color: var(--border-strong);
+  background: var(--layer-1);
+  color: var(--muted);
+  font-weight: 500;
+  opacity: 1;
+}
+
+/* The 28px button stays on the field's last line as the message grows. */
+.field > .button {
+  margin-bottom: 5px;
 }
 
 .controls {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px 10px;
-  font-size: 11px;
+  gap: 8px 18px;
+  font-size: var(--fs-meta);
   color: var(--muted);
 }
 
-.modes {
-  display: flex;
-  padding: 2px;
-  border-radius: 7px;
-  background: var(--layer-2);
-}
-
-.modes button {
-  height: 24px;
-  padding: 0 9px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.modes button[aria-checked="true"] {
-  background: var(--layer-1);
-  color: var(--text);
-  font-weight: 600;
-}
-
-.modes button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
+/* "Permissions · Default (ask each time) ▾": a ghost button over the native select. */
 .select {
   position: relative;
   display: inline-flex;
   align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 4px;
+  border-radius: var(--radius-l);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background var(--motion);
+}
+
+.select:hover {
+  background: var(--layer-2);
+  color: var(--text);
+}
+
+.selectLabel {
+  white-space: nowrap;
 }
 
 .select select {
-  height: 28px;
-  padding: 0 26px 0 9px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--layer-1);
-  color: var(--text);
+  height: 24px;
+  padding: 0 16px 0 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
   font: inherit;
-  font-size: 11px;
   appearance: none;
   cursor: pointer;
 }
 
-.select select:hover {
-  border-color: var(--border-strong);
+.select select:focus-visible {
+  outline: none;
+}
+
+.select:has(select:focus-visible) {
+  outline: var(--focus-ring);
+  outline-offset: 1px;
 }
 
 .select svg {
   position: absolute;
-  right: 9px;
-  color: var(--muted);
+  right: 4px;
   pointer-events: none;
 }
 
-.primary,
-.secondary,
-.danger {
+/* The busy-terminal hint: said once, at the right of the controls row. */
+.hint {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 5px;
-  height: 32px;
-  padding: 0 14px;
-  border-radius: var(--radius-l);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
+  gap: 6px;
+  margin-left: auto;
+  color: var(--muted);
 }
 
-.primary {
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: var(--on-accent);
-}
-
-.secondary {
-  border: 1px solid var(--border);
-  background: var(--layer-1);
-  color: var(--text);
-}
-
-.danger {
-  border: 1px solid var(--error);
-  background: var(--error);
-  color: var(--on-error);
-}
-
-.primary:disabled,
-.secondary:disabled,
-.danger:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-/* Buttons in the controls row match the 28px segmented control and select beside them. */
-.controls .secondary {
-  height: 28px;
-  padding: 0 11px;
-  font-size: 11px;
+.hint svg {
+  flex: none;
+  color: var(--warning);
 }
 
 .actions {
@@ -168,16 +206,19 @@
   gap: 8px;
 }
 
+.keys {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+
 .error {
   margin: 0;
   color: var(--error);
-  font-size: 11px;
+  font-size: var(--fs-meta);
 }
 
-.prompt:focus {
-  outline: none;
-}
-
+/* Permission prompt / question: a quiet panel, an amber hairline inside, no fill, no shadow. */
 .prompt {
   display: flex;
   flex-direction: column;
@@ -185,28 +226,48 @@
   /* A long AskUserQuestion scrolls inside the prompt instead of covering the session. */
   max-height: 55vh;
   overflow-y: auto;
-  margin: 0 14px 10px;
+  margin: 0 16px 10px;
   padding: 12px 14px;
-  border: 1px solid color-mix(in srgb, var(--warning) 55%, var(--border));
-  border-radius: var(--radius-xl);
-  background: color-mix(in srgb, var(--warning) 7%, var(--layer-1));
-  box-shadow: var(--shadow);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-l);
+  background: var(--layer-1);
+  box-shadow: inset 0 0 0 1px var(--warning-tint);
+}
+
+.prompt:focus {
+  outline: none;
 }
 
 .promptHead {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 650;
 }
 
 .promptHead svg {
+  flex: none;
   color: var(--warning);
+}
+
+.promptTitle {
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+
+.promptWhere {
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+
+.promptLabel {
+  margin-left: auto;
+  color: var(--muted);
 }
 
 .promptText {
   margin: 0;
   color: var(--muted);
+  font-size: var(--fs-small);
 }
 
 .command {
@@ -214,10 +275,11 @@
   padding: 8px 10px;
   max-height: 160px;
   overflow: auto;
-  border-radius: 6px;
+  border-radius: var(--radius-m);
   background: var(--layer-2);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-small);
+  line-height: 17px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -231,33 +293,48 @@
 .reason {
   display: grid;
   gap: 4px;
-  font-size: 11px;
+  font-size: var(--fs-meta);
   color: var(--muted);
 }
 
 .reason textarea,
-.field input,
-.field textarea {
+.formField input,
+.formField textarea {
   padding: 7px 9px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-l);
+  background: var(--layer-1);
   color: var(--text);
   font: inherit;
 }
 
+/* Questions are groups in the panel, not boxes in it: a hairline between them, the legend as
+   the group's title (floated, so it does not sit in the hairline). */
 .question {
   display: grid;
   gap: 6px;
   margin: 0;
-  padding: 8px 10px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-l);
+  padding: 0;
+  border: 0;
+}
+
+.question + .question {
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
 }
 
 .question legend {
-  padding: 0 4px;
+  float: left;
+  width: 100%;
+  margin-bottom: 2px;
+  padding: 0;
   font-weight: 600;
+}
+
+/* Checked native inputs in the steel accent, not the browser's data-blue. */
+.prompt input[type="radio"],
+.prompt input[type="checkbox"] {
+  accent-color: var(--accent);
 }
 
 .question small {
@@ -265,11 +342,12 @@
   color: var(--muted);
 }
 
+/* AskUserQuestion's own header ("Next step"): a neutral chip, in the UI face (it may be CJK). */
 .qHeader {
   padding: 1px 6px;
   border-radius: var(--radius-s);
   background: var(--layer-3);
-  font-size: 10px;
+  font-size: var(--fs-label);
   color: var(--muted);
 }
 
@@ -288,86 +366,31 @@
   color: var(--muted);
 }
 
-.newSession {
-  min-width: 0;
+/* The live block: a bordered panel, no dashes, no tint. */
+.live {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 16px;
-}
-
-.field {
-  display: grid;
-  gap: 5px;
-}
-
-.fieldLabel {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--muted);
-}
-
-.recent {
-  display: grid;
   gap: 6px;
-  min-width: 0;
-}
-
-.moreChip {
-  padding: 4px 9px;
-  border: 1px dashed var(--border-strong);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.recentList {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.dirChip,
-.moreChip {
-  display: block;
-  min-width: 0;
-  max-width: 100%;
-  padding: 4px 9px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--layer-2);
-  color: var(--text);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.dirChip[aria-pressed="true"] {
-  border-color: var(--accent);
-  background: var(--accent-tint);
-}
-
-.live {
   margin: 0 0 12px;
-  padding: 10px 12px;
-  border: 1px dashed var(--accent);
-  border-radius: var(--radius-xl);
-  background: var(--accent-tint);
+  padding: 10px 12px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-l);
+  background: var(--layer-1);
 }
 
 .liveHead {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 6px;
-  font-size: 11px;
-  font-weight: 650;
+  gap: 4px 8px;
+  font-size: var(--fs-meta);
+  font-weight: 600;
   color: var(--accent);
+}
+
+.liveMeta {
+  color: var(--muted);
+  font-weight: 400;
 }
 
 .liveText,
@@ -375,7 +398,8 @@
 .liveTool {
   margin: 0;
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: var(--fs-small);
+  line-height: 1.5;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -386,7 +410,19 @@
 }
 
 .liveTool {
+  color: var(--muted);
+}
+
+/* The tool's name carries its kind colour; its input stays neutral. */
+.liveTool b {
   color: var(--card-tool-text);
+  font-weight: 500;
+}
+
+@keyframes caret {
+  50% {
+    opacity: 0;
+  }
 }
 
 .caret {
@@ -396,13 +432,68 @@
   margin-left: 1px;
   vertical-align: text-bottom;
   background: var(--accent);
-  animation: pulse 1s steps(2) infinite;
+  animation: caret var(--caret-period) steps(2) infinite;
 }
 
-.liveThinkingLine {
-  display: block;
-  margin-bottom: 4px;
-  font-size: 12px;
-  color: var(--seg-thinking);
+/* New-session dialog. */
+.newSession {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+}
+
+.formField {
+  display: grid;
+  gap: 5px;
+}
+
+.fieldLabel {
+  font-size: var(--fs-meta);
   font-weight: 600;
+  color: var(--muted);
+}
+
+.recent {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.recentList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Folder chips: mono, neutral, radius 3; the chosen one gets an ink border, not a tint. */
+.dirChip,
+.moreChip {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  background: var(--layer-3);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.moreChip {
+  border-style: dashed;
+  border-color: var(--border-strong);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-ui);
+}
+
+.dirChip[aria-pressed="true"] {
+  border-color: var(--ink);
 }

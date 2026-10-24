@@ -77,16 +77,19 @@ describe('formatClock', () => {
 describe('formatRelative', () => {
   const now = Date.parse('2026-10-23T10:00:00.000Z');
   it.each([
-    ['2026-10-23T09:59:30.000Z', '30 seconds ago'],
-    ['2026-10-23T09:57:00.000Z', '3 minutes ago'],
-    ['2026-10-23T08:25:00.000Z', '2 hours ago'],
-    ['2026-10-20T10:00:00.000Z', '3 days ago'],
+    // D1: narrow units, a narrow no-break space after the figure.
+    ['2026-10-23T09:59:30.000Z', '30\u202fs ago'],
+    ['2026-10-23T09:57:00.000Z', '3\u202fm ago'],
+    ['2026-10-23T08:25:00.000Z', '2\u202fh ago'],
+    ['2026-10-22T10:00:00.000Z', 'yesterday'],
+    ['2026-10-20T10:00:00.000Z', '3\u202fd ago'],
   ])('%s → %s', (iso, want) => {
     expect(formatRelative(iso, now, 'en')).toBe(want);
   });
 
   it('uses the locale', () => {
-    expect(formatRelative('2026-10-23T09:57:00.000Z', now, 'zh')).toMatch(/^3\s?分钟前$/);
+    // No thin space before a CJK unit.
+    expect(formatRelative('2026-10-23T09:57:00.000Z', now, 'zh')).toBe('3分钟前');
   });
 
   it('reads a time a little ahead of this clock as now, never “in 2 seconds”', () => {
