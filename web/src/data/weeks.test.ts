@@ -78,9 +78,41 @@ describe('the week cache', () => {
     reads[1]?.reject(new Error('HTTP 500'));
     await settle();
     expect(weeks.get().week).toEqual({ result: r, reading: null, failed: 'HTTP 500' });
-    // A new read clears the old failure while it goes.
+    // The failure stays said while the week is read again (not taken back and said anew each
+    // minute, M4), and goes once a read succeeds.
     weeks.request('week');
+    expect(weeks.get().week?.failed).toBe('HTTP 500');
+    reads[2]?.resolve(r);
+    await settle();
     expect(weeks.get().week?.failed).toBeNull();
+  });
+
+  it('runs a refresh asked during a read once that read is done, never dropping it (M5)', async () => {
+    const { reads, read } = held();
+    const weeks = createWeekCache(read);
+    weeks.request('week');
+    weeks.request('week', { refresh: true });
+    weeks.request('week');
+    expect(reads).toHaveLength(1);
+    reads[0]?.resolve(demoWeek('week'));
+    await settle();
+    expect(reads.map((x) => x.refresh)).toEqual([false, true]);
+    // Only once: the plain request asked meanwhile is the minute's, and the refresh covers it.
+    reads[1]?.resolve(demoWeek('week'));
+    await settle();
+    expect(reads).toHaveLength(2);
+  });
+
+  it('drops a queued refresh when nothing shows its window any more', async () => {
+    const { reads, read } = held();
+    const weeks = createWeekCache(read);
+    const release = weeks.retain('week');
+    weeks.request('week');
+    weeks.request('week', { refresh: true });
+    release();
+    reads[0]?.resolve(demoWeek('week'));
+    await settle();
+    expect(reads).toHaveLength(1);
   });
 
   it('stops a read once nothing on the page shows its window, and not before', async () => {

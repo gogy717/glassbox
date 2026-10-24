@@ -3,10 +3,15 @@ import { listedOnly, weekReceipt } from '../../components/receipt/week';
 import { demoWeek, WEEK_NOW } from '../../test/week';
 import {
   busiestCell,
+  cellLabels,
   hourOfCell,
+  hourSpan,
+  indexHours,
   isolated,
   longestSessions,
+  sameIsolate,
   statsWeek,
+  timeText,
   topProjects,
 } from './statsData';
 
@@ -85,6 +90,30 @@ describe('the Stats page figures', () => {
     const [project] = topProjects(w);
     if (!project) throw new Error('fixture');
     expect(isolated(w, { project: project.name }).receipt.agentMs).toBe(project.ms);
+  });
+
+  it('tell a CLI from a project of the same name: pins go by what they are (M6)', () => {
+    expect(sameIsolate({ cli: 'codex' }, { cli: 'codex' })).toBe(true);
+    expect(sameIsolate({ project: 'Codex' }, { project: 'Codex' })).toBe(true);
+    expect(sameIsolate({ cli: 'codex' }, { project: 'Codex' })).toBe(false);
+    expect(sameIsolate({ project: 'codex' }, { cli: 'codex' })).toBe(false);
+    expect(sameIsolate(null, { cli: 'codex' })).toBe(false);
+  });
+
+  it('label every cell once, from the hours’ index, as its hour reads (I1)', () => {
+    const labels = cellLabels(w, 'week', 'en');
+    expect(labels.flat()).toHaveLength(168);
+    const at = busiestCell(w);
+    const cell = at && w.receipt.grid[at.row]?.[at.col];
+    if (!at || !cell) throw new Error('fixture');
+    const hour = hourOfCell(w, cell, indexHours(w));
+    expect(hour).toEqual(hourOfCell(w, cell));
+    expect(labels[at.row]?.[at.col]).toEqual({
+      title: hourSpan(hour.start ?? 0, 'week', 'en'),
+      line: expect.stringMatching(
+        new RegExp(`^${timeText(hour.ms, 'en')} · ${hour.sessions.length} sessions? · `),
+      ),
+    });
   });
 
   it('have no busiest hour, and no rows, in a week with no sessions', () => {

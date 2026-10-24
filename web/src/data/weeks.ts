@@ -3,46 +3,14 @@
  * weekly receipt read the same results (R30). A window is read again when asked, never twice at
  * once, and a read stops once nothing on the page shows its window any more.
  */
-import {
-  type WeekLine,
-  type WeekResult,
-  type WeekWindowKind,
-  weekPath,
-} from '../../../src/shared/week.js';
-
-/** `/api/week` read to its result, `onProgress` told how far it got on the way. */
-export async function readWeek(
-  kind: WeekWindowKind,
-  refresh: boolean,
-  onProgress: (done: number, total: number) => void,
-  signal?: AbortSignal,
-): Promise<WeekResult> {
-  const res = await fetch(weekPath(kind, refresh), { signal });
-  if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let result: WeekResult | null = null;
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (value) buffer += decoder.decode(value, { stream: !done });
-    for (let i = buffer.indexOf('\n'); i >= 0; i = buffer.indexOf('\n')) {
-      const text = buffer.slice(0, i).trim();
-      buffer = buffer.slice(i + 1);
-      // A blank line (a keep-alive, or a proxy's) says nothing.
-      if (!text) continue;
-      const line = JSON.parse(text) as WeekLine;
-      if (line.type === 'progress') onProgress(line.done, line.total);
-      else if (line.type === 'result') result = line.result;
-      else throw new Error(line.error);
-    }
-    if (done) break;
-  }
-  if (!result) throw new Error('no result');
-  return result;
-}
+import type { WeekResult, WeekWindowKind } from '../../../src/shared/week.js';
+import type { readWeek } from './readWeek';
 
 export type ReadWeek = typeof readWeek;
+
+/** The reader, loaded with the first read: the first load has no need of it. */
+const readLater: ReadWeek = (kind, refresh, onProgress, signal) =>
+  import('./readWeek').then((m) => m.readWeek(kind, refresh, onProgress, signal));
 
 /** One window: its last result, a read under way (how far), and why the last read failed. */
 export interface WeekEntry {
@@ -69,27 +37,33 @@ export interface WeekCache {
 
 const NONE: WeekEntry = { result: null, reading: null, failed: null };
 
-export function createWeekCache(read: ReadWeek = readWeek): WeekCache {
+export function createWeekCache(read: ReadWeek = readLater): WeekCache {
   let weeks: Weeks = {};
   const listeners = new Set<() => void>();
   const users = new Map<WeekWindowKind, number>();
   const reads = new Map<WeekWindowKind, AbortController>();
+  // A refresh asked while its window was being read: it runs once that read is done (M5).
+  const queued = new Set<WeekWindowKind>();
   const update = (kind: WeekWindowKind, change: Partial<WeekEntry>) => {
     weeks = { ...weeks, [kind]: { ...(weeks[kind] ?? NONE), ...change } };
     for (const fn of [...listeners]) fn();
   };
-  return {
+  const cache: WeekCache = {
     get: () => weeks,
     subscribe(fn) {
       listeners.add(fn);
       return () => listeners.delete(fn);
     },
     request(kind, opts = {}) {
-      if (reads.has(kind)) return;
       const refresh = opts.refresh === true;
+      if (reads.has(kind)) {
+        if (refresh) queued.add(kind);
+        return;
+      }
       const abort = new AbortController();
       reads.set(kind, abort);
-      update(kind, { reading: { done: 0, total: 0, refresh }, failed: null });
+      // A failure stays said while the week is read again, until a read succeeds (M4).
+      update(kind, { reading: { done: 0, total: 0, refresh } });
       const live = () => !abort.signal.aborted;
       read(
         kind,
@@ -97,7 +71,7 @@ export function createWeekCache(read: ReadWeek = readWeek): WeekCache {
         (done, total) => live() && update(kind, { reading: { done, total, refresh } }),
         abort.signal,
       )
-        .then((result) => live() && update(kind, { result, reading: null }))
+        .then((result) => live() && update(kind, { result, reading: null, failed: null }))
         .catch(
           (err: unknown) =>
             live() &&
@@ -108,6 +82,7 @@ export function createWeekCache(read: ReadWeek = readWeek): WeekCache {
         )
         .finally(() => {
           if (reads.get(kind) === abort) reads.delete(kind);
+          if (live() && queued.delete(kind)) cache.request(kind, { refresh: true });
         });
     },
     retain(kind) {
@@ -122,6 +97,7 @@ export function createWeekCache(read: ReadWeek = readWeek): WeekCache {
           return;
         }
         users.delete(kind);
+        queued.delete(kind);
         const abort = reads.get(kind);
         if (!abort) return;
         abort.abort();
@@ -130,4 +106,5 @@ export function createWeekCache(read: ReadWeek = readWeek): WeekCache {
       };
     },
   };
+  return cache;
 }

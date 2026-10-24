@@ -1112,9 +1112,20 @@ describe('App pages: Home · Session · Stats', () => {
     expect(item).toHaveAttribute('title', 'No sessions yet');
     expect(item).not.toHaveAttribute('href');
     // Reachable from the keyboard, so the reason is read out as well as shown on hover.
-    expect(item.tabIndex).toBe(0);
+    // The attribute itself: an <a> reports a tabIndex of 0 without one, and is not focusable then.
+    expect(item).toHaveAttribute('tabindex', '0');
     fireEvent.click(item);
     expect(window.location.hash).toBe('');
+  });
+
+  it('keeps Session on the session left while the list has not arrived to say it is gone', async () => {
+    const left = `${at(idle.id)}?tab=time`;
+    window.location.hash = left;
+    render(<App store={createStore()} connect={noConnect} runs={fakeRuns()} />);
+    fireEvent.click(page('Home'));
+    await waitFor(() => expect(page('Home')).toHaveAttribute('aria-current', 'page'));
+    expect(page('Session')).toHaveAttribute('href', left);
+    expect(page('Session')).not.toHaveAttribute('aria-disabled');
   });
 
   it('does not say there are no sessions before the list has arrived', () => {

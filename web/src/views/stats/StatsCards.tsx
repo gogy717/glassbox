@@ -1,8 +1,10 @@
 /**
  * The Stats page's cards (D4): the hour, by CLI, top projects, longest sessions, tokens and right
- * now. The receipt's words where the slip has them (`rt`), so the two read alike; the app's for
- * the rest. A session is a link only while the session list has it (R32).
+ * now. The receipt's words where the slip has them (`rt`), so the two read alike; the page's own
+ * for the rest (`st`). A session is a link only while the session list has it (R32). Each card
+ * draws again only when its own figures change: a hover in the grid draws none of them.
  */
+import { memo } from 'react';
 import type { QuotaSnapshot, QuotaWindow } from '../../../../src/core/model.js';
 import { firstCountedIndex, ratePerMinute, rateSeries } from '../../../../src/shared/rate.js';
 import type { WeekWindowKind } from '../../../../src/shared/week.js';
@@ -12,7 +14,7 @@ import { Sparkline } from '../../components/RateCharts';
 import { count, partsText } from '../../components/receipt/format';
 import { rt } from '../../components/receipt/strings';
 import { unreportedLine } from '../../components/receipt/week';
-import { cliParts, shareText } from '../../components/receipt/weekSvg';
+import { cliParts, shareText } from '../../components/receipt/weekFigures';
 import { useRate } from '../../data/store';
 import { type Locale, useI18n } from '../../i18n';
 import { agentName } from '../../lib/agent-names';
@@ -22,15 +24,17 @@ import { quotaWindowName } from '../../lib/quota';
 import { sessionLink } from '../../router';
 import css from './StatsPage.module.css';
 import {
+  type HourIndex,
   hourOfCell,
   hourSpan,
   type Isolate,
   longestSessions,
   type SessionLine,
   type StatsWeek,
+  sameIsolate,
   timeText,
-  topProjects,
 } from './statsData';
+import { st } from './strings';
 import type { Cell } from './WeekGrid';
 
 /** A card's head: its name, in capitals, and what its figures are, muted. */
@@ -42,6 +46,9 @@ function Head({ id, name, note }: { id: string; name: string; note?: string }) {
     </h2>
   );
 }
+
+/** A card with nothing to list: one line, a dash (DR4). */
+const None = () => <p className={css.none}>—</p>;
 
 /** Sessions as rows: the title (a link while listed), its project and CLI, and its time. */
 function SessionRows({
@@ -84,24 +91,28 @@ function SessionRows({
 }
 
 /**
- * The hour selected in the grid: when, its agent time, its sessions most minutes first. With no
- * session in the window, says so, and points to the other window when that has some.
+ * The hour selected in the grid: when, its agent time, its sessions most minutes first; with a
+ * CLI or project pinned, only its own (DR3). With no session in the window, says so, and points
+ * to the other window when that has some.
  */
-export function HourCard(p: {
+export const HourCard = memo(function HourCard(p: {
+  /** The week as the cards show it: the window's, or the pinned CLI's or project's alone. */
   w: StatsWeek;
+  index: HourIndex;
   kind: WeekWindowKind;
   cell: Cell | null;
   listed: Set<string>;
   locale: Locale;
+  /** The window holds no session at all. */
+  empty: boolean;
   /** The last 7 days' sessions, when this week has none: the way out. */
   elsewhere: number | null;
   onElsewhere(): void;
 }) {
-  const { t } = useI18n();
   const L = p.locale;
   const gridCell = p.cell && p.w.receipt.grid[p.cell.row]?.[p.cell.col];
-  const hour = gridCell ? hourOfCell(p.w, gridCell) : null;
-  if (p.w.receipt.sessions === 0)
+  const hour = gridCell ? hourOfCell(p.w, gridCell, p.index) : null;
+  if (p.empty)
     return (
       <section className={css.card} data-area="hour" aria-labelledby="stats-hour">
         <h2 id="stats-hour" className={css.hourTitle}>
@@ -109,7 +120,7 @@ export function HourCard(p: {
         </h2>
         {p.elsewhere !== null && p.elsewhere > 0 && (
           <button type="button" className={css.link} onClick={p.onElsewhere}>
-            {t('stats.wayOut', { n: p.elsewhere })}
+            {st(L, 'wayOut', { n: p.elsewhere })}
           </button>
         )}
       </section>
@@ -123,38 +134,32 @@ export function HourCard(p: {
           </h2>
           <p className={css.hourLine}>
             {hour.topCli
-              ? t('stats.hourLine', {
+              ? st(L, 'hourLine', {
                   time: timeText(hour.ms, L),
                   n: hour.sessions.length,
                   cli: agentName(hour.topCli.agent),
                   cliTime: timeText(hour.topCli.ms, L),
                 })
-              : t('stats.hourIdle')}
+              : st(L, 'hourIdle')}
           </p>
           <SessionRows rows={hour.sessions} listed={p.listed} locale={L} />
         </>
       ) : (
         <h2 id="stats-hour" className={css.hourTitle}>
-          {t('stats.noTime')}
+          {st(L, 'noTime')}
         </h2>
       )}
-      <p className={css.hint}>{t('stats.hourHint')}</p>
+      <p className={css.hint}>{st(L, 'hourHint')}</p>
     </section>
   );
-}
+});
 
-/** A row that isolates its CLI or project in the grid: hovered for a look, clicked to pin. */
+/** How a row isolates its CLI or project in the grid: hovered for a look, clicked to pin. */
 interface IsolateProps {
   pinned: Isolate | null;
   onHover(by: Isolate | null): void;
   onPin(by: Isolate): void;
 }
-
-const isPinned = (pinned: Isolate | null, by: Isolate) =>
-  !!pinned &&
-  ('cli' in by
-    ? 'cli' in pinned && pinned.cli === by.cli
-    : 'project' in pinned && pinned.project === by.project);
 
 function BarRow({
   by,
@@ -162,25 +167,25 @@ function BarRow({
   value,
   aside,
   share,
-  iso,
-}: {
+  pinned,
+  onHover,
+  onPin,
+}: IsolateProps & {
   by: Isolate;
   name: string;
   value: string;
   aside?: string;
   share: number;
-  iso: IsolateProps;
 }) {
-  const pinned = isPinned(iso.pinned, by);
   return (
     <li>
       <button
         type="button"
         className={css.barRow}
-        aria-pressed={pinned}
-        onPointerEnter={() => iso.onHover(by)}
-        onPointerLeave={() => iso.onHover(null)}
-        onClick={() => iso.onPin(by)}
+        aria-pressed={sameIsolate(pinned, by)}
+        onPointerEnter={() => onHover(by)}
+        onPointerLeave={() => onHover(null)}
+        onClick={() => onPin(by)}
       >
         <span className={css.barName}>{name}</span>
         <span className={css.barValue}>
@@ -197,65 +202,81 @@ function BarRow({
   );
 }
 
-/** By CLI: each CLI's agent time and share, as the receipt prints them (DR4, DR8, DR10). */
-export function CliCard({ w, locale, iso }: { w: StatsWeek; locale: Locale; iso: IsolateProps }) {
-  const { t } = useI18n();
-  const r = w.receipt;
-  return (
-    <section className={css.card} data-area="cli" aria-labelledby="stats-cli">
-      <Head id="stats-cli" name={rt(locale, 'byCli')} note={t('stats.agentTime')} />
-      <ul className={css.bars}>
-        {r.byCli.map((c) => (
-          <BarRow
-            key={c.agent}
-            by={{ cli: c.agent }}
-            name={agentName(c.agent)}
-            value={partsText(cliParts(c, r.cliUnit, locale))}
-            aside={c.share === null ? undefined : shareText(c.share)}
-            share={c.share === null ? 0 : c.share === '<1' ? 1 : c.share}
-            iso={iso}
-          />
-        ))}
-      </ul>
-      <p className={css.hint}>{t('stats.cliHint')}</p>
-    </section>
-  );
-}
+/** A CLI's time as its By CLI row prints it: its minutes as the receipt shares them out (DR10). */
+export const cliRowText = (w: StatsWeek, row: StatsWeek['receipt']['byCli'][number], L: Locale) =>
+  partsText(cliParts(row, w.receipt.cliUnit, L));
 
-/** Top projects: agent time and sessions, the bar its share of the week's agent time. */
-export function ProjectsCard({
+/** By CLI: each CLI's agent time and share, as the receipt prints them (DR4, DR8, DR10). */
+export const CliCard = memo(function CliCard({
   w,
   locale,
-  iso,
-}: {
-  w: StatsWeek;
-  locale: Locale;
-  iso: IsolateProps;
-}) {
-  const { t } = useI18n();
-  const all = w.receipt.agentMs;
+  ...iso
+}: IsolateProps & { w: StatsWeek; locale: Locale }) {
+  const rows = w.receipt.byCli;
   return (
-    <section className={css.card} data-area="projects" aria-labelledby="stats-projects">
-      <Head id="stats-projects" name={t('stats.projects')} note={t('stats.projectsNote')} />
-      <ul className={css.bars}>
-        {topProjects(w).map((p) => (
-          <BarRow
-            key={p.name}
-            by={{ project: p.name }}
-            name={p.name}
-            value={timeText(p.ms, locale)}
-            aside={count(p.sessions, locale)}
-            share={all > 0 ? (p.ms / all) * 100 : 0}
-            iso={iso}
-          />
-        ))}
-      </ul>
+    <section className={css.card} data-area="cli" aria-labelledby="stats-cli">
+      <Head id="stats-cli" name={rt(locale, 'byCli')} note={st(locale, 'agentTime')} />
+      {rows.length > 0 ? (
+        <>
+          <ul className={css.bars}>
+            {rows.map((c) => (
+              <BarRow
+                key={c.agent}
+                by={{ cli: c.agent }}
+                name={agentName(c.agent)}
+                value={cliRowText(w, c, locale)}
+                aside={c.share === null ? undefined : shareText(c.share)}
+                share={c.share === null ? 0 : c.share === '<1' ? 1 : c.share}
+                {...iso}
+              />
+            ))}
+          </ul>
+          <p className={css.hint}>{st(locale, 'cliHint')}</p>
+        </>
+      ) : (
+        <None />
+      )}
     </section>
   );
-}
+});
+
+/** Top projects: agent time and sessions, the bar its share of the week's agent time. */
+export const ProjectsCard = memo(function ProjectsCard({
+  projects,
+  agentMs,
+  locale,
+  ...iso
+}: IsolateProps & {
+  projects: { name: string; ms: number; sessions: number }[];
+  agentMs: number;
+  locale: Locale;
+}) {
+  return (
+    <section className={css.card} data-area="projects" aria-labelledby="stats-projects">
+      <Head id="stats-projects" name={st(locale, 'projects')} note={st(locale, 'projectsNote')} />
+      {projects.length > 0 ? (
+        <ul className={css.bars}>
+          {projects.map((p) => (
+            <BarRow
+              key={p.name}
+              by={{ project: p.name }}
+              name={p.name}
+              value={timeText(p.ms, locale)}
+              aside={count(p.sessions, locale)}
+              share={agentMs > 0 ? (p.ms / agentMs) * 100 : 0}
+              {...iso}
+            />
+          ))}
+        </ul>
+      ) : (
+        <None />
+      )}
+    </section>
+  );
+});
 
 /** Longest sessions: five, by their own clock (session time, as the slip's LONGEST). */
-export function LongestCard({
+export const LongestCard = memo(function LongestCard({
   w,
   listed,
   locale,
@@ -264,14 +285,14 @@ export function LongestCard({
   listed: Set<string>;
   locale: Locale;
 }) {
-  const { t } = useI18n();
+  const rows = longestSessions(w);
   return (
     <section className={css.card} data-area="longest" aria-labelledby="stats-longest">
-      <Head id="stats-longest" name={t('stats.longest')} note={t('stats.longestNote')} />
-      <SessionRows rows={longestSessions(w)} listed={listed} locale={locale} />
+      <Head id="stats-longest" name={st(locale, 'longest')} note={st(locale, 'longestNote')} />
+      {rows.length > 0 ? <SessionRows rows={rows} listed={listed} locale={locale} /> : <None />}
     </section>
   );
-}
+});
 
 const KINDS = ['cacheRead', 'cacheWrite', 'uncached', 'output'] as const;
 const KIND_COLOUR = {
@@ -282,17 +303,23 @@ const KIND_COLOUR = {
 };
 
 /** Tokens: the four kinds as a tape and as figures, as the receipt counts them. */
-export function TokensCard({ w, locale }: { w: StatsWeek; locale: Locale }) {
-  const { t, intl } = useI18n();
+export const TokensCard = memo(function TokensCard({
+  w,
+  locale,
+}: {
+  w: StatsWeek;
+  locale: Locale;
+}) {
+  const { intl } = useI18n();
   const tk = w.receipt.tokens;
   const fmt = (n: number) => formatCompact(n, intl);
   const sum = tk.cacheRead + tk.cacheWrite + tk.uncached + tk.output;
   const note = unreportedLine(w.receipt, locale, () => true);
   return (
     <section className={css.card} data-area="tokens" aria-labelledby="stats-tokens">
-      <Head id="stats-tokens" name={rt(locale, 'tokens')} note={t('stats.tokensNote')} />
+      <Head id="stats-tokens" name={rt(locale, 'tokens')} note={st(locale, 'tokensNote')} />
       {w.receipt.sessions === 0 ? (
-        <p className={css.hint}>—</p>
+        <None />
       ) : tk.measured ? (
         <>
           <div className={css.tape} aria-hidden="true">
@@ -310,7 +337,7 @@ export function TokensCard({ w, locale }: { w: StatsWeek; locale: Locale }) {
                   {k === 'output' && tk.thinking > 0 && (
                     <span className={css.aside}>
                       {' '}
-                      <UiCjk text={t('stats.thinking', { n: fmt(tk.thinking) })} />
+                      <UiCjk text={st(locale, 'thinking', { n: fmt(tk.thinking) })} />
                     </span>
                   )}
                 </span>
@@ -337,23 +364,41 @@ export function TokensCard({ w, locale }: { w: StatsWeek; locale: Locale }) {
       )}
     </section>
   );
-}
+});
 
 /** Amber from 80%, red from 95%, as the top bar's meters. */
 const levelOf = (pct: number) => (pct >= 95 ? 'danger' : pct >= 80 ? 'warn' : 'ok');
+
+/** A weekday's short name in the app's language, its formatter made once. */
+const weekdays = new Map<string, Intl.DateTimeFormat>();
+const weekdayIn = (intl: string) => {
+  let f = weekdays.get(intl);
+  if (!f) {
+    f = new Intl.DateTimeFormat(intl, { weekday: 'short' });
+    weekdays.set(intl, f);
+  }
+  return f;
+};
 
 /**
  * Right now: the machine's token rate as it moves, and each plan's use, a row a provider as the
  * top bar's meters: the window closest to its limit (one past its reset is history, not use).
  */
-export function NowCard({ quotas, now }: { quotas: QuotaSnapshot[]; now: number }) {
-  const { t, intl } = useI18n();
+export const NowCard = memo(function NowCard({
+  quotas,
+  now,
+}: {
+  quotas: QuotaSnapshot[];
+  now: number;
+}) {
+  const { t, locale, intl } = useI18n();
   const rate = useRate();
   const avg = rate ? ratePerMinute(rate, { agent: null }) : 0;
   const resets = (iso: string) => {
     const { date, clock } = formatResetTime(iso, now, intl);
-    const weekday = new Intl.DateTimeFormat(intl, { weekday: 'short' }).format(Date.parse(iso));
-    return t('stats.resets', { time: date === null ? clock : weekday });
+    return st(locale, 'resets', {
+      time: date === null ? clock : weekdayIn(intl).format(Date.parse(iso)),
+    });
   };
   const rows = quotas.flatMap((q) => {
     const top = q.windows
@@ -367,21 +412,21 @@ export function NowCard({ quotas, now }: { quotas: QuotaSnapshot[]; now: number 
         window: quotaWindowName(top, t),
         pct: Math.round(Math.min(100, Math.max(0, top.usedPercent))),
         stale: q.stale,
-        reset: top.resetsAt ? resets(top.resetsAt) : t('stats.noReset'),
+        reset: top.resetsAt ? resets(top.resetsAt) : st(locale, 'noReset'),
       },
     ];
   });
   return (
     <section className={css.card} data-area="now" aria-labelledby="stats-now">
       <h2 id="stats-now" className={css.cardHead}>
-        <span className="section-label">{t('stats.now')}</span>
-        <span className={css.live}>{t('stats.live')}</span>
+        <span className="section-label">{st(locale, 'now')}</span>
+        <span className={css.live}>{st(locale, 'live')}</span>
       </h2>
       <div className={css.rate}>
         <span className={`${css.rateFigure} figure`}>
           <UiCjk text={avg > 0 ? formatCompact(avg, intl) : '—'} />
         </span>
-        <span className={css.note}>{t('stats.perMin')}</span>
+        <span className={css.note}>{st(locale, 'perMin')}</span>
         {rate && (
           <Sparkline
             className={css.spark}
@@ -412,8 +457,8 @@ export function NowCard({ quotas, now }: { quotas: QuotaSnapshot[]; now: number 
           ))}
         </ul>
       ) : (
-        <p className={css.hint}>{t('stats.noQuota')}</p>
+        <p className={css.hint}>{st(locale, 'noQuota')}</p>
       )}
     </section>
   );
-}
+});

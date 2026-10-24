@@ -44,8 +44,14 @@ const visibility = (to: 'hidden' | 'visible') =>
     document.dispatchEvent(new Event('visibilitychange'));
   });
 
+/** Moves the clock on, letting each read get as far as its fetch (the reader loads on first use). */
+const tick = (ms = 0) =>
+  act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
+
 describe('the week the Stats page shows (R30)', () => {
-  it('is read on every visit, and not again while that read is under way', () => {
+  it('is read on every visit, and not again while that read is under way', async () => {
     const { calls } = held();
     const store = createStore();
     const page = () => (
@@ -54,13 +60,15 @@ describe('the week the Stats page shows (R30)', () => {
       </StoreContext.Provider>
     );
     const first = render(page());
-    expect(calls).toEqual(['/api/week?window=week']);
-    act(() => vi.advanceTimersByTime(POLL_MS));
+    await vi.waitFor(() => expect(calls).toEqual(['/api/week?window=week']));
+    await tick(POLL_MS);
     // The tick found the visit's read still going: no second one.
     expect(calls).toHaveLength(1);
     first.unmount();
     render(page());
-    expect(calls).toEqual(['/api/week?window=week', '/api/week?window=week']);
+    await vi.waitFor(() =>
+      expect(calls).toEqual(['/api/week?window=week', '/api/week?window=week']),
+    );
   });
 
   it('is read every minute while the tab is visible, and not while it is hidden', async () => {
@@ -77,23 +85,21 @@ describe('the week the Stats page shows (R30)', () => {
         <Probe kind="7d" />
       </StoreContext.Provider>,
     );
-    await act(async () => {});
-    expect(calls).toHaveLength(1);
-    await act(async () => vi.advanceTimersByTime(POLL_MS));
-    expect(calls).toHaveLength(2);
+    await vi.waitFor(() => expect(calls).toHaveLength(1));
+    await tick(POLL_MS);
+    await vi.waitFor(() => expect(calls).toHaveLength(2));
     visibility('hidden');
-    await act(async () => vi.advanceTimersByTime(5 * POLL_MS));
+    await tick(5 * POLL_MS);
     expect(calls).toHaveLength(2);
     // Back on the tab: read now, then every minute again.
     visibility('visible');
-    await act(async () => {});
-    expect(calls).toHaveLength(3);
-    await act(async () => vi.advanceTimersByTime(POLL_MS));
-    expect(calls).toHaveLength(4);
+    await vi.waitFor(() => expect(calls).toHaveLength(3));
+    await tick(POLL_MS);
+    await vi.waitFor(() => expect(calls).toHaveLength(4));
     expect(calls.every((c) => c === '/api/week?window=7d')).toBe(true);
   });
 
-  it('stops reading, and stops its clock, when the page goes or shows the other window', () => {
+  it('stops reading, and stops its clock, when the page goes or shows the other window', async () => {
     const { calls, signals } = held();
     const store = createStore();
     const page = (kind: WeekWindowKind) => (
@@ -102,12 +108,13 @@ describe('the week the Stats page shows (R30)', () => {
       </StoreContext.Provider>
     );
     const { rerender, unmount } = render(page('week'));
+    await vi.waitFor(() => expect(calls).toEqual(['/api/week?window=week']));
     rerender(page('7d'));
-    expect(calls).toEqual(['/api/week?window=week', '/api/week?window=7d']);
+    await vi.waitFor(() => expect(calls).toEqual(['/api/week?window=week', '/api/week?window=7d']));
     expect(signals[0]?.aborted).toBe(true);
     unmount();
     expect(signals[1]?.aborted).toBe(true);
-    act(() => vi.advanceTimersByTime(3 * POLL_MS));
+    await tick(3 * POLL_MS);
     expect(calls).toHaveLength(2);
   });
 });

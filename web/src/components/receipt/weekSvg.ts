@@ -12,11 +12,8 @@ import {
   day,
   durationParts,
   hourOf,
-  minuteParts,
-  type Parts,
   partsText,
   shortDay,
-  underOne,
   weekdayMark,
   weekSerial,
 } from './format';
@@ -37,14 +34,11 @@ import {
   wrap,
 } from './slip';
 import type { ReceiptKey } from './strings';
-import {
-  type GridCell,
-  isQuiet,
-  longestLine,
-  unreportedLine,
-  type WeekReceipt,
-  weekAge,
-} from './week';
+import { isQuiet, longestLine, unreportedLine, type WeekReceipt, weekAge } from './week';
+import { cliParts, DASH, inkOf, shareText, timeParts } from './weekFigures';
+
+// Where they were before the Stats page needed them without the slip's drawing.
+export { cliParts, DASH, inkOf, shareText, timeParts };
 
 /** The last 7 days in brief, for the way out of a quiet or empty week. */
 export interface WeekElsewhere {
@@ -56,15 +50,6 @@ export interface WeekElsewhere {
 const CELL = 11;
 const PITCH = 12;
 const GRID_X = LEFT + 24;
-
-/** Agent minutes in an hour as ink: none, under 10, under 40, 40 and up (parallel agents pass 60). */
-export function inkOf(
-  cell: Pick<GridCell, 'ms' | 'state'>,
-): 'future' | 'none' | 'low' | 'mid' | 'high' | 'out' {
-  if (cell.state !== 'past') return cell.state;
-  const min = cell.ms / 60_000;
-  return cell.ms <= 0 ? 'none' : min < 10 ? 'low' : min < 40 ? 'mid' : 'high';
-}
 
 /** "5 minutes", "3 hours", "4 days": how far into the week, for the quiet slip. */
 export function elapsedWords(ms: number, w: (k: ReceiptKey, p: Record<string, number>) => string) {
@@ -87,31 +72,6 @@ export function windowLine(
     return `${w('thisWeek')} · ${day(start, L)}${L === 'zh' ? '' : ','} ${clock(start)} → ${clock(end)}`;
   const time = L === 'zh' ? ` ${clock(end)}` : ` · ${clock(end)}`;
   return `${w('thisWeek')} · ${shortDay(start, L)} → ${shortDay(end, L)}${time}`;
-}
-
-/** The share a CLI's row prints: "76%", or "<1%" for one that did a little (DR4). */
-export const shareText = (share: number | '<1') => `${share}%`;
-
-/** What a figure prints when nothing it comes from was timed (G8). */
-export const DASH: Parts = [{ digits: '—', unit: '' }];
-
-/** A time as printed, "—" when nothing was timed. */
-export const timeParts = (ms: number, L: ReceiptOptions['locale']): Parts =>
-  ms > 0 ? durationParts(ms, L) : DASH;
-
-/**
- * A CLI's time as printed: its share of the hero's minutes (or seconds); "<1m" ("<1s") when it
- * worked but its share comes to none, the unit going to the others so the rows still add up
- * (DR12); "—" when it has no time at all.
- */
-export function cliParts(
-  r: WeekReceipt['byCli'][number],
-  unit: WeekReceipt['cliUnit'],
-  L: ReceiptOptions['locale'],
-): Parts {
-  if (r.ms === 0) return DASH;
-  if (r.units === 0) return underOne(unit, L);
-  return unit === 'min' ? minuteParts(r.units, L) : durationParts(r.units * 1000, L);
 }
 
 type Words = (k: ReceiptKey, p?: Record<string, string | number>) => string;

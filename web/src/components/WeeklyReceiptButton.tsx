@@ -1,7 +1,6 @@
 import { Receipt } from 'lucide-react';
 import { Suspense, useRef, useState } from 'react';
 import type { WeekWindowKind } from '../../../src/shared/week.js';
-import { useI18n } from '../i18n';
 import { lazyView } from '../lib/lazy-view';
 import { ReceiptBoundary, ReceiptLoading } from './ReceiptEntry';
 import css from './WeeklyReceiptButton.module.css';
@@ -19,12 +18,14 @@ const WeeklyReceiptDialog = lazyView(() =>
 export function WeeklyReceiptButton({
   showProbes = false,
   start = 'week',
+  label,
 }: {
   showProbes?: boolean;
   /** The window the dialog opens on. */
   start?: WeekWindowKind;
+  /** Its word, in the page's own strings ("Print weekly receipt"). */
+  label: string;
 }) {
-  const { t } = useI18n();
   const [shown, setShown] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
   return (
@@ -37,7 +38,7 @@ export function WeeklyReceiptButton({
         onClick={() => setShown(true)}
       >
         <Receipt size={14} aria-hidden="true" />
-        {t('stats.print')}
+        {label}
       </button>
       {shown && (
         <ReceiptBoundary onReset={() => setShown(false)}>

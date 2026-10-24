@@ -16,6 +16,8 @@ import {
   weekReceipt,
 } from '../../components/receipt/week';
 import type { Locale } from '../../i18n';
+import { agentName } from '../../lib/agent-names';
+import { st } from './strings';
 
 /** A window's result as the page counts it, and the receipt drawn from it. */
 export interface StatsWeek {
@@ -45,8 +47,6 @@ const lineOf = (s: WeekSession, ms: number): SessionLine => ({
   project: printedProject(s.cwd, s.project),
   ms,
 });
-
-const sum = (ns: number[]) => ns.reduce((a, b) => a + b, 0);
 
 /** The projects by agent time, each with its sessions: Top projects. */
 export function topProjects(w: StatsWeek, n = 5): { name: string; ms: number; sessions: number }[] {
@@ -80,16 +80,29 @@ export function busiestCell(w: StatsWeek): { row: number; col: number } | null {
   return null;
 }
 
+/** For each hour of the window, the sessions that worked in it and for how long: built once. */
+export type HourIndex = { s: WeekSession; ms: number }[][];
+
+export function indexHours(w: StatsWeek): HourIndex {
+  const index: HourIndex = w.result.window.hourStarts.map(() => []);
+  for (const s of w.result.sessions)
+    s.hours.forEach((ms, i) => {
+      if (ms > 0) index[i]?.push({ s, ms });
+    });
+  return index;
+}
+
 /**
  * The hour a cell holds (two, where a change of the clocks repeats one): when it starts, its
- * agent time, its sessions most minutes first, and the CLI that worked most in it.
+ * agent time, its sessions most minutes first, and the CLI that worked most in it. From the
+ * hours' index, so a cell reads only its own sessions.
  */
-export function hourOfCell(w: StatsWeek, cell: GridCell) {
+export function hourOfCell(w: StatsWeek, cell: GridCell, index: HourIndex = indexHours(w)) {
   const { hourStarts } = w.result.window;
-  const sessions = w.result.sessions
-    .map((s) => lineOf(s, sum(cell.hours.map((i) => s.hours[i] ?? 0))))
-    .filter((s) => s.ms > 0)
-    .sort((a, b) => b.ms - a.ms);
+  const worked = new Map<WeekSession, number>();
+  for (const i of cell.hours)
+    for (const x of index[i] ?? []) worked.set(x.s, (worked.get(x.s) ?? 0) + x.ms);
+  const sessions = [...worked].map(([s, ms]) => lineOf(s, ms)).sort((a, b) => b.ms - a.ms);
   const byCli = new Map<AgentKind, number>();
   for (const s of sessions) byCli.set(s.agent, (byCli.get(s.agent) ?? 0) + s.ms);
   const top = [...byCli].sort((a, b) => b[1] - a[1])[0];
@@ -103,6 +116,12 @@ export function hourOfCell(w: StatsWeek, cell: GridCell) {
 
 /** The grid as one CLI's sessions, or one project's, drew it alone: isolate. */
 export type Isolate = { cli: AgentKind } | { project: string };
+
+/** The same CLI, or the same project: by what it is, not by the name it prints. */
+export const sameIsolate = (a: Isolate | null, b: Isolate | null): boolean =>
+  !!a &&
+  !!b &&
+  ('cli' in a ? 'cli' in b && a.cli === b.cli : 'project' in b && a.project === b.project);
 
 export function isolated(w: StatsWeek, by: Isolate): StatsWeek {
   const keep = (s: WeekSession) =>
@@ -127,12 +146,43 @@ export function spanLine(kind: WeekWindowKind, start: number, end: number, L: Lo
   return `${shortDay(start, L)} → ${shortDay(end, L)}${at}`;
 }
 
-const weekday = (t: number, L: Locale) =>
-  new Intl.DateTimeFormat(L === 'zh' ? 'zh-CN' : 'en-US', { weekday: 'short' }).format(t);
+const WEEKDAY: Record<Locale, Intl.DateTimeFormat> = {
+  en: new Intl.DateTimeFormat('en-US', { weekday: 'short' }),
+  zh: new Intl.DateTimeFormat('zh-CN', { weekday: 'short' }),
+};
 
 /**
  * An hour of the grid, from its start to the next: "Thu 23:00 – 00:00". The last 7 days hold
  * today's weekday twice, so there it is dated: "Sat 17 Oct 21:00 – 22:00".
  */
 export const hourSpan = (start: number, kind: WeekWindowKind, L: Locale) =>
-  `${kind === 'week' ? weekday(start, L) : shortDay(start, L)} ${clock(start)} – ${clock(start + 3_600_000)}`;
+  `${kind === 'week' ? WEEKDAY[L].format(start) : shortDay(start, L)} ${clock(start)} – ${clock(start + 3_600_000)}`;
+
+/** What a cell says in its tip and to a screen reader: its hour, then what was done in it. */
+export interface CellLabel {
+  title: string;
+  line: string;
+}
+
+/** Every cell's label, 7 × 24, worked out once for the week drawn (not on each hover). */
+export function cellLabels(w: StatsWeek, kind: WeekWindowKind, L: Locale): CellLabel[][] {
+  const index = indexHours(w);
+  return w.receipt.grid.map((cells) =>
+    cells.map((cell) => {
+      const hour = hourOfCell(w, cell, index);
+      const title = hour.start !== null ? hourSpan(hour.start, kind, L) : '—';
+      if (cell.state === 'out') return { title, line: '—' };
+      if (cell.state === 'future') return { title, line: st(L, 'cellAhead') };
+      if (!hour.topCli) return { title, line: st(L, 'cellIdle') };
+      return {
+        title,
+        line: st(L, 'cell', {
+          time: timeText(hour.ms, L),
+          n: hour.sessions.length,
+          cli: agentName(hour.topCli.agent),
+          cliTime: timeText(hour.topCli.ms, L),
+        }),
+      };
+    }),
+  );
+}

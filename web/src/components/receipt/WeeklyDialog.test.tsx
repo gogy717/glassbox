@@ -60,7 +60,10 @@ function serve(
 async function openWeekly(showProbes = false, locale: 'en' | 'zh' = 'en') {
   render(
     <I18nContext.Provider value={makeI18n(locale)}>
-      <WeeklyReceiptButton showProbes={showProbes} />
+      <WeeklyReceiptButton
+        showProbes={showProbes}
+        label={locale === 'en' ? 'Print weekly receipt' : '打印本周小票'}
+      />
     </I18nContext.Provider>,
   );
   // The Stats page's button (D4), on its default window; the dialog keeps its own title.
@@ -211,7 +214,7 @@ describe('the weekly receipt dialog', () => {
     choose(dialog, 'Last 7 days');
     expect(calls.filter((c) => c.includes('7d'))).toHaveLength(1);
     choose(dialog, 'Night');
-    // The scope is not remembered, the other choices are: Home's button starts on This week.
+    // The scope is not remembered, the other choices are: Print starts on its page's window.
     fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     fireEvent.click(screen.getByRole('button', { name: 'Print weekly receipt' }));

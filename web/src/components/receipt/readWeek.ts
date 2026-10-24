@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { WeekResult, WeekWindowKind } from '../../../../src/shared/week.js';
 import { useWeekCache, useWeeksOf } from '../../data/store';
 
-export { readWeek } from '../../data/weeks';
+export { readWeek } from '../../data/readWeek';
 
 /** One window's data: being read (how far), read, or not readable. */
 export type WeekState =

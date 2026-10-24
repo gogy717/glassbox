@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import type { WeekWindowKind } from '../../../../src/shared/week.js';
-import { useWeekCache, useWeeksOf } from '../../data/store';
+import { useWeekCache } from '../../data/store';
 import type { WeekEntry } from '../../data/weeks';
 
 /** How often the page reads its week again while it is on screen. */
@@ -15,7 +15,8 @@ const NONE: WeekEntry = { result: null, reading: null, failed: null };
  */
 export function useStatsWeek(kind: WeekWindowKind): WeekEntry {
   const cache = useWeekCache();
-  const weeks = useWeeksOf(cache);
+  // Its own window's entry only: the other window's reads (the dialog's) draw nothing here.
+  const entry = useSyncExternalStore(cache.subscribe, () => cache.get()[kind] ?? NONE);
   useEffect(() => {
     const release = cache.retain(kind);
     const read = () => cache.request(kind);
@@ -35,5 +36,5 @@ export function useStatsWeek(kind: WeekWindowKind): WeekEntry {
       release();
     };
   }, [cache, kind]);
-  return weeks[kind] ?? NONE;
+  return entry;
 }

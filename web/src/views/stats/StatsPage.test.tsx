@@ -2,13 +2,26 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionSummary } from '../../../../src/core/model.js';
 import type { WeekLine, WeekResult, WeekWindowKind } from '../../../../src/shared/week.js';
-import { durationParts, partsText } from '../../components/receipt/format';
+import { durationParts, hourOf, partsText } from '../../components/receipt/format';
 import { createStore, type Store, StoreContext } from '../../data/store';
 import { I18nContext, makeI18n } from '../../i18n';
 import { sessionLink } from '../../router';
 import { demoWeek, WEEK_NOW } from '../../test/week';
 import { StatsPage } from './StatsPage';
-import { busiestCell, hourOfCell, hourSpan, statsWeek } from './statsData';
+import { busiestCell, hourOfCell, hourSpan, isolated, statsWeek } from './statsData';
+
+// Each cell drawn asks its ink: counting the asks counts the cells drawn.
+const draws = vi.hoisted(() => ({ cells: 0 }));
+vi.mock('../../components/receipt/weekFigures', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../components/receipt/weekFigures')>();
+  return {
+    ...real,
+    inkOf: (cell: Parameters<typeof real.inkOf>[0]) => {
+      draws.cells++;
+      return real.inkOf(cell);
+    },
+  };
+});
 
 /** A streamed /api/week answer: the result, after a progress line. */
 const answer = (result: WeekResult) => {
@@ -47,6 +60,7 @@ function page(
   kind: WeekWindowKind = 'week',
   sessions: SessionSummary[] = [],
   onWindow = vi.fn(),
+  showProbes = false,
 ) {
   return (
     <StoreContext.Provider value={store}>
@@ -54,7 +68,7 @@ function page(
         <StatsPage
           window={kind}
           onWindow={onWindow}
-          showProbes={false}
+          showProbes={showProbes}
           sessions={sessions}
           quotas={[]}
           now={WEEK_NOW}
@@ -65,6 +79,8 @@ function page(
 }
 
 const overview = () => screen.getByRole('region', { name: 'Summary' });
+const asOf = () => screen.getByText(/^Data as of/);
+const fetchCalls = () => (fetch as unknown as { mock: { calls: unknown[] } }).mock.calls.length;
 const hourTitle = () => document.getElementById('stats-hour')?.textContent;
 const time = (ms: number) => partsText(durationParts(ms, 'en'));
 
@@ -111,7 +127,7 @@ describe('the Stats page (D4)', () => {
     // No empty cards: the figures as they were, while the week is read again.
     expect(overview()).toHaveTextContent(time(statsWeek(week, false).receipt.agentMs));
     expect(await screen.findByText(/Updating…/)).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('Data as of 20:41 · Updating…');
+    expect(asOf()).toHaveTextContent('Data as of 20:41 · Updating…');
   });
 
   it('says how far a first read got, over empty cards', async () => {
@@ -119,7 +135,8 @@ describe('the Stats page (D4)', () => {
     next('hold');
     render(page(createStore()));
     expect(screen.queryByRole('region', { name: 'Summary' })).toBeNull();
-    expect(screen.getByRole('status')).toHaveTextContent(/^Reading 0 of 0 sessions…$/);
+    // Before the server says how many there are, only that it is reading them (DR5).
+    expect(screen.getByRole('status')).toHaveTextContent(/^Reading sessions…$/);
   });
 
   it('selects the busiest hour, then the hour a click or the keyboard picks', async () => {
@@ -172,16 +189,20 @@ describe('the Stats page (D4)', () => {
         .getAllByRole('button')
         .filter((b) => b.dataset.ink !== 'none');
     const all = inked().length;
+    // The time its row prints, the receipt's share of the minutes (DR10): the caption's too (M1).
+    const rowTime = row.querySelector('.figure')?.textContent ?? '';
     fireEvent.pointerEnter(row);
     expect(inked().length).toBeLessThan(all);
-    expect(screen.getByText(`${name} only · ${time(cli.ms)}`)).toBeInTheDocument();
+    expect(screen.getByText(`${name} only · ${rowTime}`)).toBeInTheDocument();
     fireEvent.pointerLeave(row);
     expect(inked()).toHaveLength(all);
     fireEvent.click(row);
     expect(row).toHaveAttribute('aria-pressed', 'true');
     expect(
-      screen.getByText(`${name} only · ${time(cli.ms)} · Esc or click again to unpin`),
+      screen.getByText(`${name} only · ${rowTime} · Esc or click again to unpin`),
     ).toBeInTheDocument();
+    // The overview stays the window's own, whatever is isolated.
+    expect(overview()).toHaveTextContent(time(w.receipt.agentMs));
     fireEvent.keyDown(row, { key: 'Escape' });
     expect(row).toHaveAttribute('aria-pressed', 'false');
     expect(inked()).toHaveLength(all);
@@ -253,9 +274,27 @@ describe('the Stats page (D4)', () => {
   it('says how many sessions it could not read again this time', async () => {
     serve({ week: { ...week, stats: { ...week.stats, failed: 2 } } });
     render(page(createStore()));
-    expect(await screen.findByRole('status')).toHaveTextContent(
+    await screen.findByText(/Data as of 20:41/);
+    expect(asOf()).toHaveTextContent(
       "Data as of 20:41 · 2 sessions couldn't be refreshed · Refresh",
     );
+  });
+
+  it('keeps the minute’s re-read quiet to a screen reader, and a failure said once (M4)', async () => {
+    const { next } = serve({ week });
+    render(page(createStore()));
+    await screen.findByText(/Data as of 20:41/);
+    // When the data is from is shown, not announced: no live region holds it.
+    expect(asOf().closest('[role="status"], [role="alert"], [aria-live]')).toBeNull();
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+    next('fail');
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    const alert = await screen.findByRole('alert');
+    // Read again, and failing again: the same alert, not taken away and said anew.
+    fireEvent.click(within(alert).getByRole('button', { name: 'Refresh' }));
+    await waitFor(() => expect(fetchCalls()).toBe(3));
+    await act(async () => {});
+    expect(screen.getByRole('alert')).toBe(alert);
   });
 
   it('points an empty week to the last 7 days, when they have sessions', async () => {
@@ -268,6 +307,158 @@ describe('the Stats page (D4)', () => {
     });
     fireEvent.click(out);
     expect(onWindow).toHaveBeenCalledWith('7d');
+  });
+
+  it('prints in the caption the time its CLI’s row prints, its share of the minutes (M1)', async () => {
+    // Two CLIs of 10m 40s each: the 21 minutes of the hero share out 11 and 10.
+    const of = (agent: string) => week.sessions.find((s) => s.agent === agent);
+    const tenForty = (s: WeekResult['sessions'][number] | undefined) => {
+      if (!s) throw new Error('fixture');
+      return {
+        ...s,
+        hours: s.hours.map((_, i) => (i === 30 ? 640_000 : 0)),
+        inWindow: { ...s.inWindow, agentMs: 640_000 },
+      };
+    };
+    const two = { ...week, sessions: [tenForty(of('claude-code')), tenForty(of('codex'))] };
+    serve({ week: two });
+    render(page(createStore()));
+    const first = statsWeek(two, false).receipt.byCli[0];
+    if (!first) throw new Error('fixture');
+    const name = agentNameOf(first.agent);
+    const row = await screen.findByRole('button', { name: new RegExp(`^${name}`) });
+    expect(row.querySelector('.figure')?.textContent).toBe('11m');
+    fireEvent.click(row);
+    expect(
+      screen.getByText(`${name} only · 11m · Esc or click again to unpin`),
+    ).toBeInTheDocument();
+  });
+
+  it('draws only the tip as the pointer moves over the hours, no cell again (I1)', async () => {
+    serve({ week });
+    render(page(createStore()));
+    await screen.findByText(/Data as of 20:41/);
+    const cells = [...document.querySelectorAll<HTMLElement>('[data-cell]')];
+    const drawn = draws.cells;
+    for (const cell of cells.slice(0, 40)) fireEvent.pointerOver(cell);
+    expect(draws.cells).toBe(drawn);
+    // The last hour hovered, in its tip: its label's first part, in bold.
+    const last = cells[39]?.getAttribute('aria-label')?.split(' · ')[0] ?? '';
+    expect(screen.getByText(last, { selector: 'strong' })).toBeInTheDocument();
+  });
+
+  it('counts probe sessions only when the sidebar shows them, as the receipt does', async () => {
+    const probed = {
+      ...week,
+      sessions: week.sessions.map((s, i) => (i ? s : { ...s, tags: ['probe'] })),
+    };
+    serve({ week: probed });
+    // The overview's Sessions figure: "52 · 6 projects".
+    const sessions = (k: number) => new RegExp(`(^|\\D)${k} · \\d+ projects?`);
+    const { unmount } = render(page(createStore()));
+    await waitFor(() => expect(overview()).toHaveTextContent(sessions(week.sessions.length - 1)));
+    unmount();
+    render(page(createStore(), 'week', [], vi.fn(), true));
+    await waitFor(() => expect(overview()).toHaveTextContent(sessions(week.sessions.length)));
+  });
+
+  it('says it is updating only when a re-read takes a moment: a quick one never flashes (N7)', async () => {
+    const { next } = serve({ week });
+    const store = createStore();
+    const first = render(page(store));
+    await screen.findByText(/Data as of 20:41/);
+    first.unmount();
+    next('hold');
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      render(page(store));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(150);
+      });
+      expect(asOf()).toHaveTextContent('Data as of 20:41 · Refresh');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+      });
+      expect(asOf()).toHaveTextContent('Data as of 20:41 · Updating…');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('lets a pinned CLI fill the hour card and the busiest hour; a hover previews the grid only (DR3)', async () => {
+    serve({ week });
+    const w = statsWeek(week, false);
+    render(page(createStore()));
+    const cli = w.receipt.byCli[1];
+    const other = w.receipt.byCli[0];
+    if (!cli || !other) throw new Error('fixture');
+    const row = await screen.findByRole('button', {
+      name: new RegExp(`^${agentNameOf(cli.agent)}`),
+    });
+    fireEvent.click(row);
+    const mine = isolated(w, { cli: cli.agent });
+    const at = busiestCell(mine);
+    const cell = at && mine.receipt.grid[at.row]?.[at.col];
+    const hour = cell && hourOfCell(mine, cell);
+    if (!hour || hour.start === null || !mine.receipt.busiest) throw new Error('fixture');
+    const title = hourSpan(hour.start, 'week', 'en');
+    expect(hourTitle()).toBe(title);
+    const card = screen.getByRole('region', { name: title });
+    // Its own sessions only: every row's tag is the pinned CLI's.
+    const tags = within(card).getAllByText(/^(Claude Code|Codex|Grok|oh-my-pi|OpenCode)$/);
+    expect(tags.map((t) => t.textContent)).toEqual(hour.sessions.map(() => agentNameOf(cli.agent)));
+    expect(screen.getByText(/^Busiest hour/)).toHaveTextContent(
+      hourOf(mine.receipt.busiest.at, 'en'),
+    );
+    // A hover over another CLI redraws the grid, and leaves the card as it was.
+    fireEvent.pointerEnter(
+      screen.getByRole('button', { name: new RegExp(`^${agentNameOf(other.agent)}`) }),
+    );
+    expect(hourTitle()).toBe(title);
+  });
+
+  it('keeps all three cards on an empty week, each with a dash and no hint (DR4)', async () => {
+    serve({ week: { ...week, sessions: [] }, d7 });
+    render(page(createStore()));
+    await screen.findByText('No sessions this week.');
+    for (const name of [/^By CLI/, /^Top projects/, /^Longest sessions/])
+      expect(within(screen.getByRole('region', { name })).getByText('—')).toBeInTheDocument();
+    expect(screen.queryByText(/Hover to isolate in the grid/)).toBeNull();
+  });
+
+  it('puts the tab stop back on the selected hour when the week is read again (M6)', async () => {
+    serve({ week });
+    render(page(createStore()));
+    await screen.findByText(/Data as of 20:41/);
+    const grid = screen.getByRole('table', { name: 'When the agents worked' });
+    const selected = within(grid).getByRole('button', { current: true });
+    act(() => selected.focus());
+    fireEvent.keyDown(selected, { key: 'ArrowDown' });
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowDown' });
+    expect(selected).toHaveAttribute('tabindex', '-1');
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    await waitFor(() =>
+      expect(within(grid).getByRole('button', { current: true })).toHaveAttribute('tabindex', '0'),
+    );
+    expect(grid.querySelectorAll('[tabindex="0"]')).toHaveLength(1);
+  });
+
+  it('steps over an hour the window does not have, as on a day that changes the clocks (M6)', async () => {
+    // Monday 05:00 left out of the window: its cell is not drawn, and the keys pass it by.
+    const gap: WeekResult = {
+      ...week,
+      window: { ...week.window, hourStarts: week.window.hourStarts.filter((_, i) => i !== 5) },
+      sessions: week.sessions.map((s) => ({ ...s, hours: s.hours.filter((_, i) => i !== 5) })),
+    };
+    serve({ week: gap });
+    render(page(createStore()));
+    await screen.findByText(/Data as of/);
+    const four = document.querySelector('[data-cell="0:4"]') as HTMLElement;
+    expect(document.querySelector('[data-cell="0:5"]')).toHaveAttribute('data-ink', 'out');
+    fireEvent.click(four);
+    act(() => four.focus());
+    fireEvent.keyDown(four, { key: 'ArrowRight' });
+    expect(document.activeElement).toHaveAttribute('data-cell', '0:6');
   });
 
   it('prints from what it read: the dialog opens on its window with the slip, updating', async () => {
