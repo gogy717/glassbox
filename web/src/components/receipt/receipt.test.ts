@@ -152,6 +152,26 @@ describe('the receipt', () => {
     expect(svgText(svg)).toContain('每一个 token 都有去处。');
   });
 
+  it('leaves out TIME when nothing was timed, and widens the count column for big counts', () => {
+    const { data } = demo();
+    const untimed: ReceiptData = {
+      ...data,
+      segments: [],
+      subAgents: [],
+      time: { thinking: 0, generating: 0, tools: 0, approval: 0, queued: 0, longestThink: 0 },
+    };
+    expect(svgText(receiptSvg(untimed, EN, 'tall').svg)).not.toMatch(/\bTIME\b/);
+    expect(receiptText(untimed, EN)).not.toMatch(/^TIME$/m);
+    const big = { ...data, work: { ...data.work, toolCalls: 12_345 } };
+    const svg = receiptSvg(big, EN, 'tall').svg;
+    // Five digits end at 22 + 5 × 7.2: never past the left margin.
+    const at =
+      /<text x="([\d.]+)" y="[\d.]+" font-size="12" fill="#1c1e22" text-anchor="end"><tspan[^>]*>12345</.exec(
+        svg,
+      );
+    expect(Number(at?.[1])).toBeCloseTo(22 + 5 * 7.2, 1);
+  });
+
   it('says a running session runs on, up to now', () => {
     const { data } = demo();
     const running = { ...data, running: true };

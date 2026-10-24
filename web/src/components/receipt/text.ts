@@ -100,7 +100,6 @@ export function receiptText(d: ReceiptData, o: ReceiptOptions): string {
   count(d.work.compactions, 'compactions');
   out.push(rule);
 
-  out.push(head('time'));
   const parts = (
     [
       ['thinking', d.time.thinking],
@@ -111,13 +110,16 @@ export function receiptText(d: ReceiptData, o: ReceiptOptions): string {
     ] as [ReceiptKey, number][]
   ).filter(([, v]) => v >= 1000);
   const whole = parts.reduce((s, [, v]) => s + v, 0);
+  // Left out when nothing was timed, as on the image (the barcode is the image's alone).
+  const timed = parts.length > 0 || d.time.longestThink >= 1000;
+  if (timed) out.push(head('time'));
   for (const [key, v] of parts)
     out.push(
       `${spreadTo(`${w(key)} `, ` ${dur(v)}`, COLUMNS - 5)}${percent(v / whole).padStart(5)}`,
     );
   if (d.time.longestThink >= 1000)
     out.push(spreadTo(`${w('longestThink')} `, ` ${dur(d.time.longestThink)}`, COLUMNS - 5));
-  out.push(rule);
+  if (timed) out.push(rule);
 
   out.push(head('tokens'));
   const t = d.tokens;

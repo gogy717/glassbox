@@ -271,18 +271,24 @@ export function drawReceipt(d: ReceiptData, o: ReceiptOptions): { body: string; 
   y += 3;
   rule();
 
-  // WORK: counts; a line at zero is left out.
+  // WORK: counts, right-aligned in a column as wide as the longest; a line at zero is left out.
   y += 18;
   label('work');
-  const counts: [number, ReceiptKey, boolean?][] = [
+  const counts: [number, ReceiptKey][] = [
     [d.work.requests, 'modelCalls'],
     [d.work.toolCalls, 'toolCalls'],
   ];
+  const digits = Math.max(
+    ...[d.work.requests, d.work.toolCalls, d.work.subAgents, d.work.turns].map(
+      (n) => String(n).length,
+    ),
+  );
+  const numRight = LEFT + Math.max(30, textWidth('0'.repeat(digits), 12));
   const workRow = (n: number, key: ReceiptKey, fail = false) => {
     y += 19;
     const fill = fail ? c.fail : c.ink;
-    out.push(text(LEFT + 30, y, runs(String(n)), { fill, anchor: 'end' }));
-    out.push(text(LEFT + 38, y, runs(w(key, { n })), { fill }));
+    out.push(text(numRight, y, runs(String(n)), { fill, anchor: 'end' }));
+    out.push(text(numRight + 8, y, runs(w(key, { n })), { fill }));
   };
   for (const [n, key] of counts) {
     if (n <= 0) continue;
@@ -295,7 +301,7 @@ export function drawReceipt(d: ReceiptData, o: ReceiptOptions): { body: string; 
           return `${L === 'en' ? name.toLowerCase() : name} ${count}`;
         })
         .join(' · ');
-      out.push(text(LEFT + 38, y, runs(cats), { size: 11, fill: c.soft }));
+      out.push(text(numRight + 8, y, runs(cats), { size: 11, fill: c.soft }));
     }
   }
   if (d.work.subAgents > 0) workRow(d.work.subAgents, 'subAgents');
@@ -305,9 +311,8 @@ export function drawReceipt(d: ReceiptData, o: ReceiptOptions): { body: string; 
   y += 22;
   rule();
 
-  // TIME: where it went, each line's share of what is printed.
-  y += 18;
-  label('time');
+  // TIME: where it went, each line's share of what is printed, then the barcode; left out when
+  // nothing was timed (a session read without its timings).
   const parts: [ReceiptKey, number][] = (
     [
       ['thinking', d.time.thinking],
@@ -318,6 +323,13 @@ export function drawReceipt(d: ReceiptData, o: ReceiptOptions): { body: string; 
     ] as [ReceiptKey, number][]
   ).filter(([, v]) => v >= 1000);
   const whole = parts.reduce((s, [, v]) => s + v, 0);
+  const code = barcode(d.segments, d.subAgents, d.failedTools, INNER);
+  const drawn = code.bars.length > 0 || code.tracks.length > 0;
+  const timed = parts.length > 0 || d.time.longestThink >= 1000 || drawn;
+  if (timed) {
+    y += 18;
+    label('time');
+  }
   for (const [key, v] of parts) {
     y += 19;
     row(w(key), durationParts(v, L), { valueRight: RIGHT - 42, share: percent(v / whole) });
@@ -332,8 +344,7 @@ export function drawReceipt(d: ReceiptData, o: ReceiptOptions): { body: string; 
   }
 
   // The barcode: the session's own timeline.
-  const code = barcode(d.segments, d.subAgents, d.failedTools, INNER);
-  if (code.bars.length > 0 || code.tracks.length > 0) {
+  if (drawn) {
     const bottom = y + 12 + 42;
     const ink = (k: BarKind) => (k === 'fail' ? c.fail : k === 'approval' ? c.soft : c.ink);
     for (const b of code.bars) {
@@ -378,8 +389,10 @@ export function drawReceipt(d: ReceiptData, o: ReceiptOptions): { body: string; 
       }),
     );
   }
-  y += 18;
-  rule();
+  if (timed) {
+    y += 18;
+    rule();
+  }
 
   // TOKENS: what the session read and wrote, unless no call reported usage.
   y += 18;
