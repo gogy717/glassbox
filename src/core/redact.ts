@@ -43,55 +43,98 @@ const awsSecret = (v: string) =>
   /\d/.test(v) &&
   ((v.match(/\d+/g)?.length ?? 0) >= 3 || v.split(/[/+]/).filter(flips).length >= 2);
 
-/**
- * A compiler toolchain's name, its target triplet first: `x86_64-w64-mingw32-gcc`,
- * `i686-w64-mingw32-g++`, `aarch64-linux-gnu-gcc`, a Rust target `x86_64-unknown-linux-gnu`.
- */
-const TARGET_TRIPLET =
-  /^(?:x86_64|amd64|i[3-6]86|aarch64|arm64|armv?\d{0,2}[a-z]{0,3}|riscv(?:32|64)[a-z]{0,8}|ppc64(?:le)?|powerpc64(?:le)?|s390x|mips(?:64)?(?:el)?|wasm(?:32|64)|loongarch64)(?:-[a-z]{1,10}\d{0,2}){2,3}(?:-(?:gcc|g\+\+|c\+\+|cc|clang\+?\+?|ld|as|ar|nm|strip|objcopy|objdump|ranlib|windres|gdb|gfortran)(?:-\d+)?)?(?:\.exe)?$/;
+/** The parts of a target triplet: architectures, then vendors, systems and ABIs, then tools. */
+const ARCH =
+  'x86_64|amd64|i[3-6]86|aarch64(?:_be)?|arm64e?|arm(?:v[5-8](?:te|a|l|hf)?)?|armeb|thumbv[678]m|thumbv7em(?:hf)?|riscv(?:32|64)(?:gc|imac|imc|i)?|powerpc(?:64(?:le)?)?|ppc(?:64(?:le)?)?|s390x|mips(?:64)?(?:el)?|sparc(?:v9|64)?|wasm(?:32|64)|loongarch64';
+const SYSTEMS = [
+  'pc',
+  'unknown',
+  'apple',
+  'w64',
+  'none',
+  'linux',
+  'gnu',
+  'gnueabi',
+  'gnueabihf',
+  'gnux32',
+  'gnuabi64',
+  'musl',
+  'musleabi',
+  'musleabihf',
+  'darwin',
+  'macos',
+  'ios',
+  'windows',
+  'msvc',
+  'mingw32',
+  'mingw64',
+  'eabi',
+  'eabihf',
+  'elf',
+  'android',
+  'androideabi',
+  'freebsd',
+  'netbsd',
+  'openbsd',
+  'wasi',
+  'wasip1',
+  'wasip2',
+  'emscripten',
+  'cygwin',
+  'uclibc',
+  'nvidia',
+  'cuda',
+  'redhat',
+  'suse',
+  'alpine',
+  'solaris',
+  'illumos',
+  'fuchsia',
+];
+const TOOLS = [
+  'gcc',
+  'g++',
+  'c++',
+  'cc',
+  'cpp',
+  'clang',
+  'clang++',
+  'ld',
+  'as',
+  'ar',
+  'nm',
+  'strip',
+  'objcopy',
+  'objdump',
+  'ranlib',
+  'readelf',
+  'windres',
+  'dlltool',
+  'gdb',
+  'gfortran',
+  'pkg-config',
+];
+const words = (list: string[]) => list.map((w) => w.replace(/[+.]/g, '\\$&')).join('|');
 
-/** Words a person builds a password on, with a year or a count after them. */
-const PASSWORD_WORD =
-  /^(?:pass(?:word|wd)?|pwd|secret|welcome|letmein|qwerty|changeme|admin|summer|winter|spring|autumn)$/i;
-
 /**
- * A name with version or model numbers in it: `ResNet50`, `Exercise1.py`, `ES2020`, `UE4Editor`,
- * `OAuth2Client`, `Win32_Process`. It has a capital, and every part is words (capitalised, short
- * acronyms of up to five letters, or small letters of three or more after the first piece) with
- * at most three short digit runs, each after letters. Keys break this: `Kx9mQ2pLvR7` has lone
- * small letters, `Tr0ub4dor` a two-letter fragment, `Summer_2024_Pass` a part of digits alone,
- * `AKIAIOSFODNN7EXAMPLE` a long capital run, a lower-cased key or base32 no capital at all, and
- * a word people build passwords on (`Welcome1`, `MyPassword123`, `Summer2024Pass`) keeps a word
- * with digits a key.
+ * A compiler toolchain's name, every part of it a known word: `x86_64-w64-mingw32-gcc`,
+ * `aarch64-linux-gnu-gcc-12`, a Rust target `x86_64-unknown-linux-gnu`. Any other word in it
+ * (`x86_64-w64-hunter2-gcc`) leaves the name to the key test.
  */
-function versionedName(word: string, parts: string[]): boolean {
-  if (!/[A-Z]/.test(word)) return false;
-  let runs = 0;
-  for (const part of parts) {
-    const pieces = part.match(/[A-Z]{2,}(?![a-z])|[A-Z]?[a-z]+|[A-Z]|\d+/g) ?? [];
-    if (pieces.join('') !== part) return false;
-    for (const [k, piece] of pieces.entries()) {
-      if (/^\d/.test(piece)) {
-        if (k === 0 || piece.length > 4) return false;
-        runs++;
-      } else if (/^[A-Z]+$/.test(piece) && piece.length > 5) return false;
-      else if (PASSWORD_WORD.test(piece)) return false;
-      else if (k > 0 && /^[a-z]+$/.test(piece) && piece.length < 3) return false;
-    }
-  }
-  return runs > 0 && runs <= 3;
-}
+const TARGET_TRIPLET = new RegExp(
+  `^(?:${ARCH})(?:-(?:${words(SYSTEMS)})){1,3}(?:-(?:${words(TOOLS)})(?:-\\d+(?:\\.\\d+)*)?)?(?:\\.exe)?$`,
+);
 
 /**
  * Whether a word is shaped like a key, a token or a password rather than a name: what a summary
  * must not show in a slot meant for a program, a subcommand, a script or a host label. Names are
- * lowercase-ish words, CamelCase (`SetEnvironmentVariable`), CamelCase with version numbers
- * (`ResNet50`) and toolchain names (`x86_64-w64-mingw32-gcc`).
+ * lowercase-ish words, CamelCase without digits (`SetEnvironmentVariable`) and toolchain names
+ * (`x86_64-w64-mingw32-gcc`). CamelCase with digits (`ResNet50`, `Exercise1.py`) cannot be told
+ * from a key such as `Hunter2` or `Zq8Xw3Rt5Y` by its shape, so it is hidden too.
  */
 export function secretShaped(word: string): boolean {
   if (TARGET_TRIPLET.test(word)) return false;
   const parts = word.split(/[-_.:@/+\\]+/).filter(Boolean);
-  if (versionedName(word, parts)) return false;
   // Kx9mQ2pLvR7: capitals, small letters and digits in one part.
   if (parts.some((p) => p.length >= 6 && /[A-Z]/.test(p) && /[a-z]/.test(p) && /\d/.test(p)))
     return true;

@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { activityTarget, sessionActivity } from './activity.js';
 import type { ToolCall } from './model.js';
-import { homeMatcher, tildeHome } from './redact.js';
+import { homeMatcher, secretShaped, tildeHome } from './redact.js';
 
 let seed = 1234567;
 const rnd = () => {
@@ -560,6 +560,67 @@ const IN_TEXT: Hostile[] = [
     ),
   ),
 ];
+
+/**
+ * The W6-A review's hunt: words that read as names to a looser test (a capital, small letters
+ * and a few digits) and are passwords or keys. Each is hidden in every kept slot.
+ */
+const NAME_LIKE = `
+  Zq8Xw3Rt5Y Xy7Pq2Lm9 CorrectHorse1 Hunter2 Fluffy123 MyDog2019 Dragon99 Monkey1 ResNet50Kx9
+  Abc123 Abcd1234 Abcdefgh1 Ab1Cd2 Ab1Cd2Ef3 JohnSmith1985 Zebra1 Tiger7 Purple88 Orange42
+  Blue2Sky Red5Fox Sun1Moon TheCat2 PetName2 Acme2024 AcmeCorp1 Acme1Corp Hotel5 Delta3
+  Foxtrot9 Mike4Tango Gh2Xk9 Ab12Cd34 Zx9Cv8Bn7 Qaz1Wsx2 Pa55Word Trustno1 Iloveyou1 Dolphin3
+  Master1 Shadow12 Sunshine1 Princess1 Football1 Baseball1 Charlie1 Donald2020 Jennifer1
+  Hannah12 Liam2010 Emma2015 Noah2020 FooBar9 Foo2Bar FooBar99 FooBarBaz9 MixedCase1
+  TeamAlpha7 ProjectX9 ProjectAtlas2 Mercury7 Jupiter8 Saturn9 Apollo11 Gemini12 Skylab3
+  Voyager2 Galileo1 Hubble2 Kepler22 c2VjcmV0MQ QWxpY2VTZWNyZXQx x86_64-w64-hunter2-gcc
+  x86_64-a1-b2-gcc i686-pw12-mingw32-g++ x86_64-pass12-w64-gcc x86_64-tok12-pw34-gcc
+  Exercise1.py train_Xk2Pq.py Aq7Zx.py deploy_Zq8.sh run_HuNtEr2.sh Hunter2.py Bearer7.py
+  ApiKey2.py ApiKey2Prod.sh Token9.sh MyToken9.py GhpAbc9.py Root123.sh Toor1.sh AbcDef7
+  AbcDef77 AbcDef777 AbcDef7777 Abc1Def2Ghi3 OAuth2Client Win32_Process UE4Editor HunterTwo2
+  Swordfish1 Opensesame1 Bananas77 Mustang1 Cheese99 Cookie12 Coffee77 Whisky42 Rabbit13
+  Turtle88 Penguin1 Octopus3 Giraffe5 Hippo11 Tk9999 AbCdE9 AbCdEf9 AbCdEfG9 AbCdEfGh9
+  Ab9CdEfGhIj Ab9Cd8EfGhIj Ab9CdEfGhIj7
+`
+  .trim()
+  .split(/\s+/);
+const SLOTS = [
+  'npm run S',
+  'git S',
+  'make S',
+  'python S',
+  'python -m S',
+  'S --help',
+  './S',
+  'kubectl S get',
+];
+
+describe('a word with a capital, small letters and digits never shows as a name', () => {
+  it.each(NAME_LIKE)('%s', (word) => {
+    for (const slot of SLOTS) {
+      const target = listed('Bash', { command: slot.replace('S', word) }) ?? '';
+      expect(target.toLowerCase()).not.toContain(word.toLowerCase());
+    }
+  });
+
+  it('holds for random tokens and base64, seeded', () => {
+    const FULL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    const mixed = (w: string) => /[A-Z]/.test(w) && /[a-z]/.test(w) && /\d/.test(w);
+    const tokens: string[] = [];
+    while (tokens.length < 5000) {
+      const w = gen(8 + (rnd() % 25), FULL);
+      if (mixed(w)) tokens.push(w);
+    }
+    while (tokens.length < 9000) {
+      const bytes = Array.from({ length: 6 + (rnd() % 19) }, () => rnd() & 255);
+      // As sent: with + and /, or base64url's - and _, and no padding.
+      const b64 = btoa(String.fromCharCode(...bytes)).replace(/=+$/, '');
+      const w = tokens.length % 2 ? b64 : b64.replace(/\+/g, '-').replace(/\//g, '_');
+      if (mixed(w)) tokens.push(w);
+    }
+    expect(tokens.filter((w) => !secretShaped(w))).toEqual([]);
+  });
+});
 
 describe('the masker guards the text that still shows', () => {
   it.each(IN_TEXT)('%s', (_label, text, secrets) => {
