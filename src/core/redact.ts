@@ -19,9 +19,55 @@ const STRONG = String.raw`[\w-]*(?:password|passwd|passphrase|secret|token|api[-
  * single quoted, or bare up to a separator. A quote left open runs to the end, so a value the
  * cut split is still masked whole.
  */
-const VALUE = String.raw`\\"(?:[^"\\]|\\[^"])*(?:\\"|$)|\$'[^']*'?|"[^"]*"?|'[^']*'?|[^\s"'&;|]+`;
+const VALUE = String.raw`\\"(?:[^"\\]|\\[^"])*(?:\\"|$)|\$'(?:[^'\\]|\\.)*'?|"[^"]*"?|'[^']*'?|[^\s"'&;|]+`;
 
 const unquote = (v: string) => v.replace(/^\\?\$?["']|\\?["']$/g, '').trim();
+const quoted = (v: string) => /^\\?\$?["']/.test(v);
+
+// ── Shapes ────────────────────────────────────────────────────────────────────────────────
+
+/** bPxRfiCYEXAMPLEKEY: a run whose case flips back and forth, unlike CamelCase. */
+const flips = (p: string) =>
+  p.length >= 10 &&
+  (p.match(/[a-z][A-Z]/g)?.length ?? 0) >= 3 &&
+  (p.match(/[A-Z]{2}/g)?.length ?? 0) >= 2;
+
+/**
+ * 40 base64 characters that read as an AWS secret key: digits in three runs, or case flipping
+ * in two of its parts. A 40-character path such as `src/components/Header2/HeaderViewTestXYZ`
+ * is neither.
+ */
+const awsSecret = (v: string) =>
+  /[A-Z]/.test(v) &&
+  /[a-z]/.test(v) &&
+  /\d/.test(v) &&
+  ((v.match(/\d+/g)?.length ?? 0) >= 3 || v.split(/[/+]/).filter(flips).length >= 2);
+
+/**
+ * Whether a word is shaped like a key, a token or a password rather than a name: what a summary
+ * must not show in a slot meant for a program, a subcommand, a script or a host label. Names are
+ * lowercase-ish words, or CamelCase without digits (`SetEnvironmentVariable`).
+ */
+export function secretShaped(word: string): boolean {
+  const parts = word.split(/[-_.:@/+\\]+/).filter(Boolean);
+  // Kx9mQ2pLvR7: capitals, small letters and digits in one part.
+  if (parts.some((p) => p.length >= 6 && /[A-Z]/.test(p) && /[a-z]/.test(p) && /\d/.test(p)))
+    return true;
+  // Summer_2024_Pass, K7QPM-9XRT2-HVB4W: capitals and digits in a word of 8 or more.
+  if (word.length >= 8 && /[A-Z]/.test(word) && /\d/.test(word)) return true;
+  for (const p of parts) {
+    // jbswy3dpehpk3pxp (base32), akiaiosfodnn7example: a long part with a digit; long hex.
+    if (p.length >= 12 && /\d/.test(p)) return true;
+    if (p.length >= 16 && /^[a-f]+$/i.test(p)) return true;
+    // a1b2c3d4: digits in two runs or more.
+    if (p.length >= 8 && (p.match(/\d+/g)?.length ?? 0) >= 2) return true;
+    if (flips(p)) return true;
+  }
+  // k7qpm-9xrt2-hvb4w: three groups or more that mix letters and digits.
+  if (parts.filter((p) => /\d/.test(p) && /\D/.test(p)).length >= 3) return true;
+  // correct-horse-battery-staple: four long words or more.
+  return parts.length >= 4 && parts.every((p) => /^\p{L}{5,}$/u.test(p));
+}
 
 /** Whether a value can be a credential: not a reference, a pattern, a number or a switch. */
 export function secretish(raw: string): boolean {
@@ -78,6 +124,23 @@ const knownToken = (t: string) =>
 const RULES: [RegExp, Replacer][] = [
   // A private key: everything from its header on.
   [/(-----BEGIN [A-Z ]*PRIVATE KEY-----)([\s\S]*)/g, (_m, pre) => `${pre}${MASK}`],
+  // SQL, before `NAME = value` reads `PASSWORD(` as a value: IDENTIFIED BY '…',
+  // SET PASSWORD … = '…', PASSWORD('…').
+  [
+    new RegExp(
+      String.raw`(\bidentified\s+(?:with\s+[\w$]+\s+)?(?:by|as)\s+(?:password\s*)?)(${VALUE})`,
+      'gi',
+    ),
+    maskIf(secretish),
+  ],
+  [
+    new RegExp(
+      String.raw`(\bset\s+password\b[^=;\n]{0,80}=\s*(?:password\s*\(\s*)?)(${VALUE})`,
+      'gi',
+    ),
+    maskIf(secretish),
+  ],
+  [new RegExp(String.raw`(\bpassword\s*\(\s*)(${VALUE})`, 'gi'), maskIf(secretish)],
   // GITHUB_TOKEN=…, --db-password=…, ?api_key=…, const apiKey = "…", $env:API_KEY = "…".
   [new RegExp(String.raw`(\b${NAME}\s*=\s*)(?!=)(${VALUE})`, 'gi'), maskIf(secretish)],
   // "password": "…", {\"token\":\"…\"}, {'key': '…'}, 'password' => '…'.
@@ -106,8 +169,14 @@ const RULES: [RegExp, Replacer][] = [
   [/(\bcurl\b[^|;&\n]*?\s(?:-u|--user)[\s=]+["']?)([^\s"']+)/g, maskUser],
   // curl -b "sid=…".
   [new RegExp(String.raw`(\bcurl\b[^|;&\n]*?\s-b[\s=]*)(${VALUE})`, 'g'), maskIf(secretish)],
-  // mysql -p… (psql's -p is the port).
-  [/(\b(?:mysql|mysqldump|mysqladmin|mariadb)\b[^|;&\n]*?\s-p)([^\s"']+)/g, maskIf(secretish)],
+  // mysql -p…, -p'…', -p"…" (psql's -p is the port).
+  [
+    new RegExp(
+      String.raw`(\b(?:mysql|mysqldump|mysqladmin|mariadb)\b[^|;&\n]*?\s-p)(${VALUE})`,
+      'g',
+    ),
+    maskIf(secretish),
+  ],
   // docker login -p …, sshpass -p …, redis-cli -a …, openssl -pass pass:….
   [
     new RegExp(
@@ -118,7 +187,12 @@ const RULES: [RegExp, Replacer][] = [
   ],
   [new RegExp(String.raw`(\bsshpass\s+-p\s*)(${VALUE})`, 'g'), maskIf(secretish)],
   [new RegExp(String.raw`(\bredis-cli\b[^|;&\n]*?\s-a\s+)(${VALUE})`, 'g'), maskIf(secretish)],
-  [/(\s-pass(?:in|out)?\s+pass:)([^\s"']+)/g, maskIf(secretish)],
+  [/(\s-pass(?:in|out)?\s+["']?pass:)([^\s"']+)/g, maskIf(secretish)],
+  // keytool -storepass …, -keypass ….
+  [
+    new RegExp(String.raw`(\s-(?:src|dest)?(?:store|key)pass\s+)(${VALUE})`, 'g'),
+    maskIf(secretish),
+  ],
   // https://user:pass@host and redis://:pass@host, up to the last @ before the path.
   [/(\b[a-z][a-z0-9+.-]*:\/\/[^/\s:@"']*:)([^/\s"']+)(?=@)/gi, maskIf(secretish)],
   // https://<token>@host.
@@ -128,13 +202,33 @@ const RULES: [RegExp, Replacer][] = [
     /(\b(?:aws_secret_access_key|aws_session_token|secret_access_key|secretaccesskey)["']?(?:\s*[=:]\s*|\s+)["']?)([A-Za-z0-9/+=]{16,})/gi,
     maskIf(() => true),
   ],
-  // .netrc's "password …", and prose that hands one over.
-  [/(\b(?:password|passwd|passphrase)\s+)([^\s"']{8,})/gi, maskIf(tokenLike)],
+  // .netrc's "password …", SQL's PASSWORD '…', and prose that hands one over: a quoted value,
+  // or a bare word that reads as a token ("password reset flow" stays).
+  [
+    new RegExp(String.raw`(\b(?:password|passwd|passphrase)\s+)(${VALUE})`, 'gi'),
+    maskIf((v) => (quoted(v) ? secretish(v) : tokenLike(v))),
+  ],
+  // A bare random token: 20 letters and digits or more in one run (no - or _: file names have
+  // them), with capitals, small letters and digits in 3 runs.
+  [
+    /(^|[^A-Za-z0-9])([A-Za-z0-9]{20,})(?![A-Za-z0-9])/g,
+    maskIf((v) => /[A-Z]/.test(v) && /[a-z]/.test(v) && (v.match(/\d+/g)?.length ?? 0) >= 3),
+  ],
+  // A bare AWS secret key: 40 base64 characters that read as random.
+  [/(^|[^A-Za-z0-9/+=])([A-Za-z0-9/+]{40})(?![A-Za-z0-9/+=])/g, maskIf(awsSecret)],
+  // E-mail addresses: the domain stays, the person does not (G3).
+  [
+    /(^|[^\w.%+-])([\w.%+-]+)(?=@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}(?![\w-]))/g,
+    (_m, pre) => `${pre}${MASK}`,
+  ],
 ];
 
-/** `s` with every credential the rules know masked whole, as "•••". */
+/** Invisible characters that would split a token past the rules: zero-width and soft hyphen. */
+const INVISIBLE = /[​-‍⁠﻿­]/g;
+
+/** `s` with every credential the rules know masked whole, as "•••", and e-mails' persons. */
 export function redact(s: string): string {
-  let out = s.replace(KNOWN, knownToken);
+  let out = s.replace(INVISIBLE, '').replace(KNOWN, knownToken);
   for (const [re, to] of RULES) out = out.replace(re, to as (m: string, ...g: string[]) => string);
   return out;
 }

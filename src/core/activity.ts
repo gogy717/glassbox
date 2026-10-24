@@ -203,9 +203,10 @@ const fileName = (path: string) => clip(basename(tildeHome(path.trim())));
  */
 function commandTarget(name: string, input: Obj): string | null | undefined {
   const v = input.command ?? input.cmd;
-  let line: string | string[] | null = null;
+  let line: string | unknown[] | null = null;
   if (typeof v === 'string' && v.trim() !== '') line = v;
-  else if (Array.isArray(v) && v.length > 0 && v.every((a) => typeof a === 'string')) line = v;
+  // An argv is read only as far as the summary reads it, however long.
+  else if (Array.isArray(v) && typeof v[0] === 'string') line = v;
   if (line === null) return undefined;
   const summary = summarizeCommand(line, { powershell: /powershell|pwsh/i.test(name) });
   return summary === null ? null : clip(summary, COMMAND_MAX);

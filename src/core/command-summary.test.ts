@@ -118,10 +118,114 @@ describe('summarizeCommand', () => {
     expect(summarizeCommand(argv)).toBe(expected);
   });
 
-  it('never runs past 60 characters as a target', () => {
+  it('never runs past 60 characters, and leaves slots out whole rather than cut them', () => {
     const long = `node ${'a'.repeat(30)}/${'b'.repeat(40)}.mjs && ${'x '.repeat(10)}`;
     const target = activityTarget('Bash', { command: long }) ?? '';
-    expect(target.length).toBeLessThanOrEqual(61);
+    expect(target.length).toBeLessThanOrEqual(60);
+    expect(target).toBe('node +1');
+    expect(summarizeCommand(`npm run ${'build-'.repeat(5)}x`)).toBe(
+      'npm run build-build-build-build-build-x',
+    );
+  });
+
+  it.each([
+    // +N: the review's chains, pipelines, loops, cases and heredocs.
+    ['a && b || c', 'a +2'],
+    ['a | b | c', 'a +2'],
+    ['a & b', 'a +1'],
+    ['npm test 2>&1 | tail -20', 'npm test +1'],
+    ['a |& b', 'a +1'],
+    ['a &>/dev/null; b', 'a +1'],
+    ['if x; then y; else z; fi', 'x +2'],
+    ['for f in *.ts; do a "$f"; b; done', 'a +1'],
+    ['while read l; do echo "$l"; done < f.txt', 'echo'],
+    ['(cd x && make) && git status', 'make +1'],
+    ['echo "a && b; c | d"', 'echo'],
+    ["echo 'a;b' ; c", 'echo +1'],
+    ['x=$(git rev-parse HEAD) && echo "$x"', 'echo'],
+    ['cat <<EOF > f && npm test\nline; one\nEOF', 'cat +1'],
+    ['git commit -m "$(cat <<\'EOF\'\nFix the 5" display\nand more\nEOF\n)"', 'git commit'],
+    [
+      'git commit -m "$(cat <<\'EOF\'\nFix (a) and b)\nmore; stuff\nEOF\n)" && git push',
+      'git commit +1',
+    ],
+    ['X=$(cat <<EOF\n1) first\n2) second\nEOF\n)\ngh pr create --body "$X"', 'gh pr'],
+    ["git commit -m $'Don\\'t break; fix x'", 'git commit'],
+    ['case "$1" in a) run_a;; b) run_b;; esac', 'run_a +1'],
+    ['case "$1" in\n  a) run_a ;;\n  b) (cd y && make) ;;\nesac', 'run_a +1'],
+    ['case $x in a) (cd y && make) ;; esac', 'make'],
+    ['a \\\n  --flag && b', 'a +1'],
+    ['a \\\r\n  --flag && b', 'a +1'],
+    ['a # comment; b\nc', 'a +1'],
+    ['echo a#b; c', 'echo +1'],
+    ['{ a; b; } > log', 'a +1'],
+    ['! grep -q x f && echo missing', 'grep +1'],
+    ['cat <<"E"OF\nnot a command\nEOF\nnpm test', 'cat +1'],
+    ['gh auth login --with-token <<< "$T"', 'gh auth'],
+    ['<<<"$T" gh auth login --with-token', 'gh auth'],
+    // Option values never pass for a subcommand or a script.
+    ['node --stack-size 2000 scripts/build.mjs', 'node build.mjs'],
+    ['node --some-flag 2000 scripts/build.mjs', 'node build.mjs'],
+    ['node --inspect app.js', 'node app.js'],
+    ['aws --cli-binary-format raw-in-base64-out lambda invoke', 'aws lambda'],
+    ['kubectl --username alice get pods', 'kubectl get'],
+    ['npm --otp 493817 publish', 'npm publish'],
+    ['sudo -r role make', 'make'],
+    ['sudo --unknown value make', 'sudo'],
+    ['git --exec-path /x status', 'git'],
+    ['git --no-pager diff HEAD', 'git diff'],
+    ['docker --tlscacert ca.pem --tlsverify ps', 'docker ps'],
+    ['az --only-show-errors vm list', 'az vm'],
+    ['cargo --locked build', 'cargo build'],
+    ['npm --unlisted 493817 publish', 'npm'],
+    ['git --frobnicate value status', 'git'],
+    ['kubectl --unlisted alice get pods', 'kubectl'],
+    ['make -j8 test', 'make test'],
+    ['claude -p hello', 'claude'],
+    ['claude mcp list', 'claude mcp'],
+    ['codex "fix the bug"', 'codex'],
+    ['codex exec "fix the bug"', 'codex exec'],
+    // Names stay whole, in any script, or do not show.
+    ['./构建.sh --fast', '构建.sh'],
+    ['python 脚本.py', 'python 脚本.py'],
+    ['npm run 构建', 'npm run 构建'],
+    ['café --version', 'café'],
+    ['node ./scripts/ビルド.mjs', 'node ビルド.mjs'],
+    [`${'a'.repeat(49)} --x`, null],
+    ['./gradlew :app:assembleDebug', 'gradlew :app:assembleDebug'],
+    ['sha256sum f', 'sha256sum'],
+    ['x86_64-linux-gnu-gcc -c x.c', 'x86_64-linux-gnu-gcc'],
+    ['python3.12 -m venv .venv', 'python3.12 -m venv'],
+    ['docker-credential-desktop list', 'docker-credential-desktop'],
+    ['watch -n 2 "kubectl get pods"', 'kubectl get'],
+    ['timeout --preserve-status 10 npm test', 'npm test'],
+    ['command -v git', 'git'],
+  ])('%j → %j', (command, expected) => {
+    expect(summarizeCommand(command)).toBe(expected);
+  });
+
+  it.each([
+    ['$pw = ConvertTo-SecureString `\r\n  "abc" -AsPlainText -Force', null],
+    ['$pw = ConvertTo-SecureString `\n  "abc" -AsPlainText -Force', null],
+    ['$b = @"\nline\nnot a command\n"@\nnpm test', 'npm test'],
+    [
+      '[System.Environment]::SetEnvironmentVariable("TOKEN","abc","User")',
+      '[System.Environment]::SetEnvironmentVariable',
+    ],
+    [
+      'powershell -NoProfile -ExecutionPolicy Bypass -File .\\deploy.ps1 -Token abc',
+      'powershell deploy.ps1',
+    ],
+  ])('PowerShell %j → %j', (command, expected) => {
+    expect(summarizeCommand(command, { powershell: true })).toBe(expected);
+  });
+
+  it('reads at most 8000 characters of an argv, whole words only', () => {
+    expect(summarizeCommand(['a'.repeat(1_000_000)])).toBeNull();
+    expect(summarizeCommand(['git', 'a'.repeat(1_000_000)])).toBe('git');
+    expect(summarizeCommand(['curl', ...Array(100_000).fill('a://b:c')])).toBe('curl');
+    // The script crosses the limit, so it is not read: the shell and its flag only.
+    expect(summarizeCommand(['bash', '-lc', `npm test; ${'x'.repeat(9000)}`])).toBe('bash -lc');
   });
 });
 

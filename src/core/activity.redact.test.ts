@@ -49,12 +49,16 @@ function listed(name: string, input: unknown): string | null {
   return target;
 }
 
-/** Every 6-character piece of a secret that shows in the target. */
+/**
+ * Every secret with a 6-character piece in the target, in any case: a host is lower-cased, so
+ * an upper-case key in it would still show.
+ */
 function leaks(target: string | null, secrets: string[]): string[] {
-  const out = target ?? '';
+  const out = (target ?? '').toLowerCase();
   const found: string[] = [];
   for (const s of secrets)
-    for (let i = 0; i + 6 <= s.length; i++) if (out.includes(s.slice(i, i + 6))) found.push(s);
+    for (let i = 0; i + 6 <= s.length; i++)
+      if (out.includes(s.slice(i, i + 6).toLowerCase())) found.push(s);
   return [...new Set(found)];
 }
 
@@ -296,6 +300,101 @@ const HOSTILE: Hostile[] = [
   ),
 ];
 
+/**
+ * The fix-round-2 review's attacks on the summary itself, with its own secrets: shaped to slip
+ * past a "random" test (short, lowercase, word-like, split by `_` or `-`), or to land in a
+ * subcommand, script, module, package or host slot, or to reach the program slot through a
+ * mis-read line. One AWS-shaped host moves from example.com to x.io: its key ends in EXAMPLE.
+ */
+const R = {
+  short: 'Kx9mQ2pLvR7',
+  pw: 'Summer_2024_Pass',
+  dice: 'correct-horse-battery-staple',
+  grouped: 'K7QPM-9XRT2-HVB4W-3JDNY',
+  awsSecret: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+  sym: 'Tr0ub4dor!xq9Zk2Lm',
+  otp: '493817',
+  b32: 'jbswy3dpehpk3pxp',
+  mixedHost: 'Ab1cDe2fGh3iJkLm',
+  akid: 'AKIAIOSFODNN7EXAMPLE',
+  ghp: 'ghp_aB3dE6gH9jK2mN5pQ8sT1vW4yZ7bC0eF3h',
+  ant: 'sk-ant-api03-Zq8Xw2Lk9Pm4Nv7Rt1Ys6Ub3Hc5Jd0Fg',
+  zw: 'aB3dE6gH9j​K2mN5pQ8sT​1vW4yZ7bC0',
+  rand24: 'Qz7RkW2mXp9LvT4nHc8JbF5d',
+};
+const REVIEW: Hostile[] = [
+  ['npm --otp <otp> publish', `npm --otp ${R.otp} publish`, [R.otp]],
+  ['pnpm --otp <otp> publish', `pnpm --otp ${R.otp} publish`, [R.otp]],
+  ['git <short> status', `git ${R.short} status`, [R.short]],
+  ['vault <pw>', `vault ${R.pw}`, [R.pw]],
+  ['claude -p <short> (a prompt)', `claude -p ${R.short}`, [R.short]],
+  ['npm exec -- <pw>', `npm exec -- ${R.pw}`, [R.pw]],
+  ['npx <grouped key>', `npx ${R.grouped}`, [R.grouped]],
+  ['npx pkg@<rand24>', `npx left-pad@${R.rand24}`, [R.rand24]],
+  ['npx @scope/pkg@<ghp>', `npx @acme/cli@${R.ghp} run`, [R.ghp]],
+  ['./sk-ant-….sh', `./${R.ant}.sh --go`, [R.ant.slice(13)]],
+  ['python <pw>.py', `python ${R.pw}.py`, [R.pw]],
+  ['bash /tmp/<aws secret>.sh', `bash /tmp/${R.awsSecret}.sh`, ['bPxRfiCYEXAMPLEKEY']],
+  ['an AWS secret as the program', `${R.awsSecret} --help`, ['bPxRfiCYEXAMPLEKEY']],
+  ['java -jar <short>.jar', `java -jar ${R.short}.jar`, [R.short]],
+  ['curl https://<AKIA>@host', `curl https://${R.akid}@api.x.io/v1`, [R.akid]],
+  ['curl ghp_….example.com', `curl ${R.ghp}.example.com`, [R.ghp.slice(4)]],
+  ['curl https://<AKIA>.x.io (lower-cased)', `curl https://${R.akid}.x.io/x`, [R.akid]],
+  ['curl https://<mixed>.x.io (lower-cased)', `curl https://${R.mixedHost}.x.io/`, [R.mixedHost]],
+  ['curl https://<base32>.example.com', `curl https://${R.b32}.example.com`, [R.b32]],
+  ['wget ftp://u:<rand24>@host', `wget ftp://u:${R.rand24}@files.x.io/f`, [R.rand24]],
+  ['curl --url=https://<rand24>@host', `curl --url=https://${R.rand24}@h.io`, [R.rand24]],
+  ['curl h.io:<otp>@evil.io', `curl h.io:${R.otp}@evil.io`, [R.otp]],
+  ['curl http://admin:<rand24>@[::1]', `curl "http://admin:${R.rand24}@[::1]:8080/"`, [R.rand24]],
+  ['python -m <pw>', `python -m ${R.pw}`, [R.pw]],
+  ['python3 -m <short>', `python3 -m ${R.short}`, [R.short]],
+  ['<short> | docker login', `${R.short} | docker login --password-stdin`, [R.short]],
+  ['export X=1; <pw>', `export X=1; ${R.pw}`, [R.pw]],
+  ["export DB_PASS=$'it\\'s; <pw>'", `export DB_PASS=$'it\\'s; ${R.pw}'`, [R.pw]],
+  ["PGPASSWORD=$'x\\'; <short>' psql", `PGPASSWORD=$'x\\'; ${R.short}' psql`, [R.short]],
+  ['<sym> as the program', `${R.sym} --version`, [R.sym.slice(0, 9)]],
+  [
+    'sudo -E env … time nohup node',
+    `sudo -E env API_KEY=${R.rand24} PASS=${R.pw} time nohup node srv.js`,
+    [R.rand24, R.pw],
+  ],
+  ['sudo -r <pw> make', `sudo -r ${R.pw} make`, [R.pw]],
+  ['watch -n 1 "<short> --x"', `watch -n 1 "${R.short} --x"`, [R.short]],
+  ['timeout --preserve-status 10 <pw>', `timeout --preserve-status 10 ${R.pw}`, [R.pw]],
+  ['ls | xargs -J % <pw> %', `ls | xargs -J % ${R.pw} %`, [R.pw]],
+  ['docker run image:<rand24>', `docker run --rm registry.x.io/app:${R.rand24}`, [R.rand24]],
+  ['docker -H tcp://u:<rand24>@h', `docker -H tcp://u:${R.rand24}@h:2376 ps`, [R.rand24]],
+  ['git push https://<ghp>@github.com', `git push https://${R.ghp}@github.com/o/r main`, [R.ghp]],
+  ['git -c remote url with <pw>', `git -c remote.origin.url=https://x:${R.pw}@h/r fetch`, [R.pw]],
+  ['gh auth login <<< <ghp>', `gh auth login --with-token <<< ${R.ghp}`, [R.ghp]],
+  ['<<<<pw> first', `<<<${R.pw} gh auth login --with-token`, [R.pw]],
+  ['a zero-width split secret as the program', `${R.zw} --help`, ['aB3dE6gH9j', 'K2mN5pQ8sT']],
+  [
+    'a zero-width split ghp_ as a subcommand',
+    `gh ${R.ghp.slice(0, 14)}​${R.ghp.slice(14)}`,
+    [R.ghp.slice(4, 14)],
+  ],
+  ['a homoglyph pаssword= (Cyrillic а)', `pаssword=${R.short} run`, [R.short]],
+  ['backquotes', `\`echo ${R.pw}\` --x`, [R.pw]],
+  ['$(…) as the program', `$(printf ${R.pw}) run`, [R.pw]],
+  ['$(…) with an escaped quote', `X="$(echo "a\\"b)" ; ${R.pw} )"`, [R.pw]],
+  ['a quoted program', `"${R.short}" --x`, [R.short]],
+  ['a CRLF continuation, then a secret line', `export A=1 \\\r\n${R.pw} --go`, [R.pw]],
+  ['heredoc delimiter <<"E"OF', `cat <<"E"OF\n${R.pw} x\nEOF\n`, [R.pw]],
+  ['a heredoc in $( ) with ) in its body', `X=$(cat <<EOF\n)\n${R.pw} run\nEOF\n)`, [R.pw]],
+  ['a PowerShell here-string', `$b = @"\n{"note": "5' 11""}\n${R.pw} --x\n"@`, [R.pw]],
+  ['a PowerShell & { … } block', `& { ${R.short} --x }`, [R.short]],
+  ['cmd /c "set X=…&& run.cmd"', `cmd /c "set PASSWORD=${R.pw}&& run.cmd"`, [R.pw]],
+  ['a secret across the 8000 read', `${'true; '.repeat(1333)}x${R.pw}${R.short}`, [R.pw]],
+  ['a program longer than a name', `${R.dice}-and-more-words-here-too --x`, ['words-here']],
+  ['a passphrase as the program', R.dice, [R.dice]],
+  [
+    'PowerShell: ConvertTo-SecureString after a CRLF backquote',
+    `$pw = ConvertTo-SecureString \`\r\n  "${R.pw}" -AsPlainText -Force`,
+    [R.pw],
+  ],
+];
+
 /** Each shell tool's input shape for a command line. */
 const FORMS: [string, (c: string) => [string, unknown]][] = [
   ['Claude Code Bash', (c) => ['Bash', { command: c }]],
@@ -311,10 +410,28 @@ const FORMS: [string, (c: string) => [string, unknown]][] = [
 
 describe('no secret survives in a command target', () => {
   for (const [form, shape] of FORMS)
-    it.each(HOSTILE)(`${form}: %s`, (_label, command, secrets) => {
+    it.each([...HOSTILE, ...REVIEW])(`${form}: %s`, (_label, command, secrets) => {
       const [name, input] = shape(command);
       expect(leaks(listed(name, input), secrets)).toEqual([]);
     });
+});
+
+describe('a key-shaped program leaves the command unnamed; other slots drop out', () => {
+  it.each([
+    [`${R.short} | docker login --password-stdin`, null],
+    [`export X=1; ${R.pw}`, null],
+    [`npm test; ${R.short}`, 'npm test +1'],
+    [`bash -c "${R.short} --x"`, null],
+    [`git ${R.short} status`, 'git'],
+    [`npx ${R.grouped}`, 'npx'],
+    [`python ${R.pw}.py`, 'python'],
+    [`python3 -m ${R.short}`, 'python3 -m'],
+    [`java -jar ${R.short}.jar`, 'java'],
+    [`npm exec -- ${R.pw}`, 'npm exec'],
+    [`curl https://${R.b32}.example.com`, 'curl ….example.com'],
+  ])('%j → %j', (command, expected) => {
+    expect(listed('Bash', { command })).toBe(expected);
+  });
 });
 
 describe('no secret survives in the other inputs', () => {
@@ -397,6 +514,41 @@ const IN_TEXT: Hostile[] = [
     gen(12),
   ),
   hostile('ghp_ at the 120 shown', (s) => `${'x'.repeat(112)} ghp_${s[0]}`, gen(36)),
+  // Round 3: quoted values after a bare keyword, SQL, more flags, bare randoms, invisibles.
+  hostile("password '…'", (s) => `password '${s[0]}'`, gen(16)),
+  hostile('password "…"', (s) => `password "${s[0]}"`, gen(16)),
+  hostile("CREATE ROLE … PASSWORD '…'", (s) => `CREATE ROLE app LOGIN PASSWORD '${s[0]}'`, gen(16)),
+  hostile(
+    "with encrypted password '…'",
+    (s) => `create user app with encrypted password '${s[0]}'`,
+    gen(16),
+  ),
+  hostile("IDENTIFIED BY '…'", (s) => `ALTER USER root IDENTIFIED BY '${s[0]}'`, gen(16)),
+  hostile(
+    "IDENTIFIED WITH plugin BY '…'",
+    (s) => `CREATE USER u IDENTIFIED WITH mysql_native_password BY '${s[0]}'`,
+    gen(16),
+  ),
+  hostile("SET PASSWORD FOR … = '…'", (s) => `SET PASSWORD FOR 'u'@'%' = '${s[0]}'`, gen(16)),
+  hostile("PASSWORD('…')", (s) => `SET PASSWORD = PASSWORD('${s[0]}')`, gen(16)),
+  hostile("mysql -p'…'", (s) => `mysql -u root -p'${s[0]}' shop`, gen(16)),
+  hostile('mysql -p"…"', (s) => `mysql -u root -p"${s[0]}" shop`, gen(16)),
+  hostile("openssl -pass 'pass:…'", (s) => `openssl enc -pass 'pass:${s[0]}'`, gen(16)),
+  hostile(
+    'keytool -storepass',
+    (s) => `keytool -storepass ${s[0]} -keypass ${s[1]}`,
+    gen(16),
+    gen(16),
+  ),
+  hostile(
+    "UPDATE … SET api_key='…'",
+    (s) => `UPDATE users SET api_key='${s[0]}' WHERE id=1`,
+    gen(16),
+  ),
+  hostile('a bare random token', () => R.rand24, R.rand24),
+  hostile('a zero-width split ghp_', () => `gh​p_${R.ghp.slice(4)}`, R.ghp.slice(4)),
+  hostile('a bare AWS key pair', () => `is ${R.akid} ${R.awsSecret} valid`, R.akid, R.awsSecret),
+  hostile("ANSI-C SECRET=$'…\\'…'", (s) => `SECRET=$'a\\'${s[0]}' run`, gen(16)),
 ];
 
 describe('the masker guards the text that still shows', () => {
@@ -443,10 +595,32 @@ describe('ordinary text stays as it is', () => {
     'secret_notes.md',
     'password reset flow',
     'key == value',
-    'git config --global user.email me@example.com',
     'export PATH=$HOME/bin:$PATH',
+    'SELECT * FROM users WHERE password IS NULL',
+    'IDENTIFIED BY',
+    'npx @biomejs/biome@2.0 check',
+    'getUserById2 and parseV2Config',
+    'src/components/Header2/HeaderViewTestXYZ.tsx',
+    '0123456789abcdef0123456789abcdef01234567',
+    'W6a-2-auto-continuation-turn-en-light-1440.png',
+    'IMG_20240101_123456_HDR2.jpg',
   ])('%s', (text) => {
     expect(listed('Grep', { pattern: text })).toBe(text);
+  });
+
+  it.each([
+    ['alice.smith@example.com', '•••@example.com'],
+    [
+      'git config --global user.email me@example.com',
+      'git config --global user.email •••@example.com',
+    ],
+    ["WHERE email = 'bob+tag@corp.example.org'", "WHERE email = '•••@corp.example.org'"],
+    ['Email bob.jones@corp.example about it', 'Email •••@corp.example about it'],
+    // An ssh user reads the same way, and is identity too.
+    ['ssh git@github.com', 'ssh •••@github.com'],
+  ])('an e-mail keeps its domain, not its person: %j', (text, expected) => {
+    expect(listed('Grep', { pattern: text })).toBe(expected);
+    expect(listed('Agent', { description: text })).toBe(expected);
   });
 
   it.each([

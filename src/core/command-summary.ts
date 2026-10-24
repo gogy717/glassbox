@@ -4,31 +4,60 @@
  * a fetch and its host (`curl api.x.io`), or an interpreter's inline-code flag (`python -c`).
  * Further commands in a chain or pipeline count as "+N" (`git add +1`). Flag values and free
  * text never show: a command line can carry anything, and the summary goes to every client.
+ * A name that shows must read as a name: a slot whose word is shaped like a key is left out,
+ * and a command whose program is shaped like one has no summary at all.
  *
  * Pure, and free of Node built-ins: the web bundle imports the activity module too.
  */
+import { secretShaped } from './redact.js';
 
-/** Past this, a command line is not read further; the summary counts what was read. */
+/** Past this, a command line or an argv is not read further; the summary counts what was read. */
 const SCAN_MAX = 8000;
-/** How deep `bash -lc "…"` and the like are unwrapped. */
+/** How deep `bash -lc "…"` and the like are unwrapped, and `$(…)` inside quotes is followed. */
 const DEPTH_MAX = 3;
+const NEST_MAX = 32;
+/** The longest summary, "+N" included; slots are left out whole to fit, never cut. */
+const SUMMARY_MAX = 60;
+/** The longest program, script or package name that shows. */
+const NAME_MAX = 48;
 
 export interface SummaryOptions {
   /** PowerShell: a backslash is a path separator, and the backquote escapes. */
   powershell?: boolean;
 }
 
-/** The summary of a command line or an argv; null when it runs nothing that can be named. */
+/**
+ * The summary of a command line or an argv; null when it runs nothing that can be named, or
+ * when an argv's words read so far are not all strings.
+ */
 export function summarizeCommand(
-  command: string | readonly string[],
+  command: string | readonly unknown[],
   options: SummaryOptions = {},
 ): string | null {
   const ps = options.powershell ?? false;
   if (typeof command === 'string') return render(summarize(command, 0, ps));
-  const [bin = ''] = command;
+  const argv = capped(command);
+  if (argv === null || argv.length === 0) return null;
+  const [bin = ''] = argv;
   // ["git status && npm test"]: one word that is a whole command line.
-  if (command.length === 1 && /\s/.test(bin)) return render(summarize(bin, 0, ps));
-  return render(combine([describe([...command], 0)]));
+  if (argv.length === 1 && /\s/.test(bin)) return render(summarize(bin, 0, ps));
+  return render(combine([describe(argv, 0, true)]));
+}
+
+/**
+ * An argv's leading words, whole, up to SCAN_MAX characters in all: the rest is never looked
+ * at, however long the array. Null when a word read is not a string.
+ */
+function capped(argv: readonly unknown[]): string[] | null {
+  const out: string[] = [];
+  let total = 0;
+  for (const w of argv) {
+    if (typeof w !== 'string') return null;
+    total += w.length + 1;
+    if (total > SCAN_MAX) break;
+    out.push(w);
+  }
+  return out;
 }
 
 /** A JavaScript call to a tool with a command (`tools.exec_command({ cmd: "…" })`). */
@@ -49,9 +78,9 @@ export function summarizeCode(code: string): string | null {
       continue;
     }
     try {
-      const argv: unknown = JSON.parse(m[4] ?? '');
-      if (Array.isArray(argv) && argv.length > 0 && argv.every((a) => typeof a === 'string'))
-        parts.push(describe(argv, 0));
+      const parsed: unknown = JSON.parse(m[4] ?? '');
+      const argv = Array.isArray(parsed) ? capped(parsed) : null;
+      if (argv && argv.length > 0) parts.push(describe(argv, 0, true));
     } catch {
       // Not a literal argv: nothing to name.
     }
@@ -60,17 +89,23 @@ export function summarizeCode(code: string): string | null {
 }
 
 /**
- * One command, or a chain as one: what it shows, how many commands follow it (an unwrapped
- * `bash -c "a && b"` is `a` and one more), and whether it is set-up (`cd`, `export`) that shows
- * only when nothing else runs.
+ * One command, or a chain as one: the words it shows (the program first, then slots that may be
+ * left out to fit), how many commands follow it (an unwrapped `bash -c "a && b"` is `a` and one
+ * more), whether it is set-up (`cd`, `export`) that shows only when nothing else runs, and
+ * whether its program is shaped like a key, which leaves the whole command unnamed.
  */
 interface Part {
-  text: string;
+  slots: string[];
   more: number;
   setup?: boolean;
+  secret?: boolean;
 }
 
-const part = (text: string): Part => ({ text, more: 0 });
+const part = (...slots: (string | null | undefined)[]): Part => ({
+  slots: slots.filter((s): s is string => typeof s === 'string' && s !== ''),
+  more: 0,
+});
+const SECRET: Part = { slots: [], more: 0, secret: true };
 
 function summarize(line: string, depth: number, ps: boolean): Part | null {
   return combine(segments(line, ps).map((words) => describe(words, depth)));
@@ -85,15 +120,22 @@ function combine(parts: (Part | null)[]): Part | null {
     if (p === null) continue;
     if (p.setup) setup ??= p;
     else if (first === null) {
+      if (p.secret) return SECRET;
       first = p;
       more += p.more;
     } else more += 1 + p.more;
   }
-  return first === null ? setup : { text: first.text, more };
+  return first === null ? setup : { ...first, more };
 }
 
-const render = (p: Part | null) =>
-  p === null ? null : p.more > 0 ? `${p.text} +${p.more}` : p.text;
+function render(p: Part | null): string | null {
+  if (p === null || p.secret || p.slots.length === 0) return null;
+  const suffix = p.more > 0 ? ` +${p.more}` : '';
+  const slots = [...p.slots];
+  while (slots.length > 1 && slots.join(' ').length + suffix.length > SUMMARY_MAX) slots.pop();
+  const text = `${slots.join(' ')}${suffix}`;
+  return text.length > SUMMARY_MAX ? null : text;
+}
 
 // ── Reading a command line ───────────────────────────────────────────────────────────────────
 
@@ -102,41 +144,114 @@ const ESCAPABLE = new Set([...' \t"\'\\$`;&|()<>*?[]#~=%!{}\n']);
 
 /**
  * The simple commands of a line, split at `;`, `&&`, `||`, `|`, `&`, newlines and subshell
- * parentheses, each as its words with quotes removed. Comments and heredoc bodies are skipped.
- * `$(…)`, backquotes, `${…}` and `@{…}` stay inside their word. Linear in the line.
+ * parentheses, each as its words with quotes removed. Comments, heredoc bodies and a `case`'s
+ * patterns are skipped. `$(…)`, backquotes, `${…}` and `@{…}` stay inside their word, heredocs
+ * inside them included. Reads at most SCAN_MAX characters, plus heredoc bodies.
  */
 function segments(line: string, ps: boolean): string[][] {
   const n = Math.min(line.length, SCAN_MAX);
   const segs: string[][] = [];
-  const heredocs: string[] = [];
+  let heredocs: string[] = [];
   let words: string[] = [];
   let word: string | null = null;
+  /** After `case … in` or `;;`: the words up to `)` are a pattern, not a command. */
+  let pattern = false;
   const endWord = () => {
     if (word !== null) words.push(word);
     word = null;
   };
-  const endSegment = () => {
+  /** Ends the command; `case x in a)` has its first pattern in it already. */
+  const endSegment = (closer = '') => {
     endWord();
+    const first = words[0];
     if (words.length > 0) segs.push(words);
     words = [];
+    if (first === 'case') pattern = closer !== ')';
+    else if (first === 'esac') pattern = false;
   };
   const add = (s: string) => {
     word = (word ?? '') + s;
   };
-  /** The index just past the bracket that closes the one at `i`, quotes skipped. */
-  const closing = (i: number, open: string, close: string) => {
-    let depth = 0;
-    let j = i;
-    while (j < n) {
-      const c = line[j];
+
+  /** A heredoc's delimiter after `<<` or `<<-` at `j`: the word with quotes removed, and its end. */
+  const delimiterAt = (from: number) => {
+    let j = from;
+    if (line[j] === '-') j++;
+    while (line[j] === ' ' || line[j] === '\t') j++;
+    let d = '';
+    while (j < n && !/[\s;&|<>()]/.test(line[j] as string)) {
+      const c = line[j] as string;
       if (c === "'" || c === '"') {
         const e = line.indexOf(c, j + 1);
-        j = e === -1 ? n : e + 1;
-        continue;
+        if (e === -1 || e >= n) return { word: '', end: n };
+        d += line.slice(j + 1, e);
+        j = e + 1;
+      } else if (c === '\\') {
+        d += line[j + 1] ?? '';
+        j += 2;
+      } else {
+        d += c;
+        j++;
       }
-      if (c === open) depth++;
-      else if (c === close && --depth === 0) return j + 1;
-      j++;
+    }
+    return { word: d, end: j };
+  };
+  /** The index after the heredoc bodies that start at `from`, one per delimiter, in order. */
+  const afterBodies = (from: number, delimiters: string[]) => {
+    let j = from;
+    for (const d of delimiters) {
+      while (j < line.length) {
+        const e = line.indexOf('\n', j);
+        const stop = e === -1 ? line.length : e;
+        const body = line.slice(j, stop);
+        j = stop + 1;
+        if (body.trim() === d) break;
+      }
+    }
+    return j;
+  };
+  /** The index after the double-quoted string that opens at `i`, `$(…)` inside it followed. */
+  const doubleEnd = (i: number, nest: number): number => {
+    let j = i + 1;
+    while (j < n && line[j] !== '"') {
+      const x = line[j];
+      if ((x === '\\' && !ps) || (x === '`' && ps)) j += 2;
+      else if (x === '$' && line[j + 1] === '(' && nest < NEST_MAX)
+        j = closing(j + 1, '(', ')', nest + 1);
+      else if (x === '`' && !ps) {
+        const e = line.indexOf('`', j + 1);
+        j = e === -1 ? n : e + 1;
+      } else j++;
+    }
+    return j + 1;
+  };
+  /** The index just past the bracket that closes the one at `i`: quotes, heredocs, comments. */
+  const closing = (i: number, open: string, close: string, nest = 0): number => {
+    let depth = 0;
+    let j = i;
+    const pending: string[] = [];
+    while (j < n) {
+      const c = line[j];
+      if (c === '\n') {
+        j = pending.length > 0 ? afterBodies(j + 1, pending.splice(0)) : j + 1;
+      } else if ((c === '\\' && !ps) || (c === '`' && ps)) j += 2;
+      else if (c === "'") {
+        const e = line.indexOf("'", j + 1);
+        j = e === -1 ? n : e + 1;
+      } else if (c === '"') j = nest < NEST_MAX ? doubleEnd(j, nest + 1) : j + 1;
+      else if (c === '<' && line[j + 1] === '<' && line[j + 2] === '<') j += 3;
+      else if (c === '<' && line[j + 1] === '<') {
+        const d = delimiterAt(j + 2);
+        if (d.word) pending.push(d.word);
+        j = Math.max(d.end, j + 2);
+      } else if (c === '#' && /[\s;&|(]/.test(line[j - 1] ?? ' ')) {
+        const e = line.indexOf('\n', j);
+        j = e === -1 ? n : e;
+      } else {
+        if (c === open) depth++;
+        else if (c === close && --depth === 0) return j + 1;
+        j++;
+      }
     }
     return n;
   };
@@ -147,63 +262,58 @@ function segments(line: string, ps: boolean): string[][] {
     const next = line[i + 1];
     if (c === '\n') {
       endSegment();
-      i++;
-      // Heredoc bodies start on the next line and end at their delimiter's line.
-      for (const delimiter of heredocs.splice(0)) {
-        while (i < line.length) {
-          const e = line.indexOf('\n', i);
-          const stop = e === -1 ? line.length : e;
-          const body = line.slice(i, stop);
-          i = stop + 1;
-          if (body.trim() === delimiter) break;
-        }
-      }
+      i = heredocs.length > 0 ? afterBodies(i + 1, heredocs) : i + 1;
+      heredocs = [];
     } else if (c === ' ' || c === '\t' || c === '\r') {
       endWord();
       i++;
-    } else if (c === '\\' && !ps) {
+    } else if ((c === '\\' && !ps) || (c === '`' && ps)) {
+      // A line continuation, LF or CRLF, joins the next line.
       if (next === '\n') i += 2;
-      else if (next !== undefined && ESCAPABLE.has(next)) {
-        add(next);
+      else if (next === '\r' && line[i + 2] === '\n') i += 3;
+      else if (ps || (next !== undefined && ESCAPABLE.has(next))) {
+        add(next ?? '');
         i += 2;
       } else {
         add(c);
         i++;
       }
-    } else if (c === '`' && ps) {
-      if (next !== '\n') add(next ?? '');
-      i += 2;
     } else if (c === "'") {
       const e = line.indexOf("'", i + 1);
       const stop = e === -1 || e > n ? n : e;
       add(line.slice(i + 1, stop));
       i = stop + 1;
     } else if (c === '"') {
-      let j = i + 1;
-      let s = '';
-      while (j < n && line[j] !== '"') {
-        const x = line[j] as string;
-        if (((x === '\\' && !ps) || (x === '`' && ps)) && j + 1 < n) {
-          const y = line[j + 1] as string;
-          s += ps || '"\\$`\n'.includes(y) ? y : `\\${y}`;
-          j += 2;
-        } else {
-          s += x;
-          j++;
-        }
-      }
-      add(s);
-      i = j + 1;
+      const end = doubleEnd(i, 0);
+      const body = line.slice(i + 1, Math.min(end - 1, n));
+      add(ps ? body.replace(/`(.)/g, '$1') : body.replace(/\\(["\\$`\n])/g, '$1'));
+      i = end;
     } else if (c === '`') {
       const e = line.indexOf('`', i + 1);
       const stop = e === -1 || e >= n ? n : e + 1;
       add(line.slice(i, stop));
       i = stop;
     } else if (c === '$' && next === "'" && !ps) {
-      const e = line.indexOf("'", i + 2);
-      const stop = e === -1 || e > n ? n : e;
-      add(line.slice(i + 2, stop));
-      i = stop + 1;
+      // $'…', where \' does not close it.
+      let j = i + 2;
+      let s = '';
+      while (j < n && line[j] !== "'") {
+        s += line[j] === '\\' ? (line[j + 1] ?? '') : line[j];
+        j += line[j] === '\\' ? 2 : 1;
+      }
+      add(s);
+      i = j + 1;
+    } else if (
+      ps &&
+      c === '@' &&
+      (next === '"' || next === "'") &&
+      /^\r?\n/.test(line.slice(i + 2, i + 4))
+    ) {
+      // A PowerShell here-string, @"…"@, to its closing line.
+      const end = line.indexOf(`\n${next}@`, i + 2);
+      const stop = end === -1 || end >= n ? n : end + 3;
+      add('@…');
+      i = stop;
     } else if ((c === '$' || c === '@') && (next === '(' || next === '{')) {
       const stop = closing(i + 1, next, next === '(' ? ')' : '}');
       add(line.slice(i, stop));
@@ -211,7 +321,22 @@ function segments(line: string, ps: boolean): string[][] {
     } else if (c === '#' && word === null) {
       const e = line.indexOf('\n', i);
       i = e === -1 ? n : e;
-    } else if (c === ';' || c === '|' || c === ')') {
+    } else if (c === ';') {
+      endSegment();
+      if (next === ';' || next === '&') {
+        // ;; ;& ;;& end a case branch: a pattern comes next.
+        i += line[i + 2] === '&' ? 3 : 2;
+        pattern = true;
+      } else i++;
+    } else if (c === ')') {
+      if (pattern) {
+        // A case pattern: not a command.
+        words = [];
+        word = null;
+        pattern = false;
+      } else endSegment(')');
+      i++;
+    } else if (c === '|') {
       endSegment();
       i++;
     } else if (c === '&') {
@@ -231,18 +356,15 @@ function segments(line: string, ps: boolean): string[][] {
         add(line.slice(i, stop));
         i = stop;
       }
-    } else if (c === '<' && next === '<' && line[i + 2] !== '<') {
-      // <<EOF, <<-'EOF': the body is skipped at the next newline.
+    } else if (c === '<' && next === '<' && line[i + 2] === '<') {
+      add('<<<'); // a here-string: a redirection, dropped with its word
+      i += 3;
+    } else if (c === '<' && next === '<') {
+      // <<EOF, <<-'EOF', <<"E"OF: the body is skipped at the next newline.
       endWord();
-      let j = i + 2;
-      if (line[j] === '-') j++;
-      while (line[j] === ' ' || line[j] === '\t') j++;
-      const m = /^(?:'([^'\n]*)'|"([^"\n]*)"|\\?([^\s;&|<>()]+))/.exec(line.slice(j, j + 256));
-      if (m) {
-        heredocs.push(m[1] ?? m[2] ?? m[3] ?? '');
-        j += m[0].length;
-      }
-      i = j;
+      const d = delimiterAt(i + 2);
+      if (d.word) heredocs.push(d.word);
+      i = Math.max(d.end, i + 2);
     } else {
       add(c);
       i++;
@@ -273,7 +395,6 @@ const KEYWORDS = new Set([
   'esac',
   'nohup',
   'exec',
-  'command',
   'builtin',
   'noglob',
   '&',
@@ -318,33 +439,225 @@ const SETUP = new Set([
   'read',
 ]);
 
-/** Programs that run another, with their options that take a value. Their values never show. */
-const WRAPPERS: Record<string, { values: string[]; positional?: number }> = {
-  env: { values: ['-u', '--unset', '-C', '--chdir', '-S', '--split-string'] },
-  sudo: {
-    values: ['-u', '--user', '-g', '--group', '-C', '-D', '--chdir', '-h', '--host', '-p'],
+/** Which options of a program take the next word as their value, and which take none. */
+interface Options {
+  values?: readonly string[];
+  switches?: readonly string[];
+}
+
+/** Programs that run another. Their options' values never show. */
+const WRAPPERS: Record<string, Options & { positional?: number }> = {
+  env: {
+    values: ['-u', '--unset', '-C', '--chdir', '-S', '--split-string'],
+    switches: ['-i', '--ignore-environment', '-0', '--null', '-v', '--debug'],
   },
-  doas: { values: ['-u', '-C'] },
-  time: { values: ['-f', '--format', '-o', '--output'] },
+  sudo: {
+    values: [
+      '-u',
+      '--user',
+      '-g',
+      '--group',
+      '-C',
+      '--close-from',
+      '-D',
+      '--chdir',
+      '-h',
+      '--host',
+      '-p',
+      '--prompt',
+      '-r',
+      '--role',
+      '-t',
+      '--type',
+      '-T',
+      '--command-timeout',
+      '-U',
+      '--other-user',
+      '-R',
+      '--chroot',
+    ],
+    switches: [
+      '-A',
+      '--askpass',
+      '-b',
+      '--background',
+      '-E',
+      '--preserve-env',
+      '-e',
+      '--edit',
+      '-H',
+      '--set-home',
+      '-i',
+      '--login',
+      '-K',
+      '-k',
+      '--reset-timestamp',
+      '-l',
+      '--list',
+      '-n',
+      '--non-interactive',
+      '-P',
+      '--preserve-groups',
+      '-S',
+      '--stdin',
+      '-s',
+      '--shell',
+      '-V',
+      '-v',
+      '--validate',
+      '-B',
+      '--bell',
+      '-N',
+      '--no-update',
+    ],
+  },
+  doas: { values: ['-u', '-C'], switches: ['-n', '-s', '-L'] },
+  command: { switches: ['-v', '-V', '-p'] },
+  time: {
+    values: ['-f', '--format', '-o', '--output'],
+    switches: ['-p', '--portability', '-v', '--verbose', '-a', '--append', '-q', '--quiet'],
+  },
   nice: { values: ['-n', '--adjustment'] },
-  ionice: { values: ['-c', '-n', '-p'] },
-  timeout: { values: ['-s', '--signal', '-k', '--kill-after'], positional: 1 },
+  ionice: { values: ['-c', '--class', '-n', '--classdata', '-p', '-P', '-u'], switches: ['-t'] },
+  timeout: {
+    values: ['-s', '--signal', '-k', '--kill-after'],
+    switches: ['--preserve-status', '--foreground', '-v', '--verbose'],
+    positional: 1,
+  },
   stdbuf: { values: ['-i', '-o', '-e'] },
-  watch: { values: ['-n', '--interval', '-d'] },
-  xargs: { values: ['-I', '-n', '-P', '-L', '-s', '-d', '-E', '-a'] },
+  watch: {
+    values: ['-n', '--interval'],
+    switches: [
+      '-d',
+      '--differences',
+      '-t',
+      '--no-title',
+      '-b',
+      '--beep',
+      '-e',
+      '--errexit',
+      '-g',
+      '--chgexit',
+      '-c',
+      '--color',
+      '-x',
+      '--exec',
+      '-p',
+      '--precise',
+    ],
+  },
+  xargs: {
+    values: [
+      '-I',
+      '-J',
+      '-n',
+      '--max-args',
+      '-P',
+      '--max-procs',
+      '-L',
+      '-s',
+      '-d',
+      '--delimiter',
+      '-E',
+      '-a',
+      '--arg-file',
+    ],
+    switches: ['-0', '--null', '-r', '--no-run-if-empty', '-t', '--verbose', '-p', '-x', '-o'],
+  },
 };
+
+/** Switches common enough to read as switches for any program. */
+const COMMON_SWITCHES = new Set([
+  '-v',
+  '-vv',
+  '-vvv',
+  '-q',
+  '-s',
+  '-y',
+  '-h',
+  '-V',
+  '-g',
+  '-f',
+  '-a',
+  '-i',
+  '-t',
+  '-x',
+  '--verbose',
+  '--quiet',
+  '--silent',
+  '--debug',
+  '--version',
+  '--help',
+  '--yes',
+  '--no-color',
+  '--json',
+  '--dry-run',
+  '--force',
+  '--all',
+  '--recursive',
+  '--global',
+  '--locked',
+  '--frozen',
+  '--offline',
+  '--no-pager',
+  '--paginate',
+  '--insecure',
+  '--no-cache',
+  '--watch',
+]);
+
+/**
+ * Option names that carry a credential: their value is skipped even when not listed, so it
+ * cannot pass for a subcommand or a script.
+ */
+const SECRET_OPTION = /token|secret|key|pass|pwd|auth(?!or)|credential|cookie|session|otp/i;
+
+/**
+ * Whether an option takes the next word as its value. `--x=y`, `-j8` and `-la` hold their own;
+ * unknown is an option no list names, whose next word could be either.
+ */
+function optionKind(w: string, spec: Options): 'value' | 'switch' | 'unknown' {
+  if (w.includes('=')) return 'switch';
+  if (spec.values?.includes(w) || SECRET_OPTION.test(w)) return 'value';
+  if (spec.switches?.includes(w) || COMMON_SWITCHES.has(w)) return 'switch';
+  if (/^-[^-]./.test(w)) return 'switch';
+  return 'unknown';
+}
+
+/**
+ * The first word at or after `i` that is not an option or an option's value. Ambiguous when an
+ * unknown option comes right before it: that word may be the option's value, so it never
+ * passes for a subcommand.
+ */
+function scanOptions(words: string[], i: number, spec: Options) {
+  let j = i;
+  while (j < words.length) {
+    const w = words[j] as string;
+    if (w === '--') return { index: j + 1, ambiguous: false };
+    if (!w.startsWith('-') || w === '-') return { index: j, ambiguous: false };
+    const kind = optionKind(w, spec);
+    if (kind === 'value') j += 2;
+    else if (kind === 'unknown' && words[j + 1] !== undefined && !words[j + 1]?.startsWith('-'))
+      return { index: j + 1, ambiguous: true };
+    else j++;
+  }
+  return { index: j, ambiguous: false };
+}
 
 const SHELLS = /^(?:(?:ba|z|da|k|a|fi)?sh|pwsh|powershell|cmd)$/;
 
-interface Interpreter {
+interface Interpreter extends Options {
   /** Flags whose next word is code: shown as the flag alone. */
   code: RegExp;
-  /** Options whose next word is a value, not the script. */
-  values?: string[];
   /** A flag that names a module to run (`python -m pytest`). */
   module?: string;
 }
-const PYTHON: Interpreter = { code: /^-c$/, values: ['-W', '-X', '-Q'], module: '-m' };
+const PYTHON: Interpreter = {
+  code: /^-c$/,
+  module: '-m',
+  values: ['-W', '-X', '-Q'],
+  switches: ['-u', '-O', '-OO', '-B', '-E', '-s', '-S', '-I', '-q', '-v', '-b', '-bb', '-d'],
+};
 const NODE: Interpreter = {
   code: /^(?:-e|--eval|-p|--print|-pe)$/,
   values: [
@@ -358,6 +671,30 @@ const NODE: Interpreter = {
     '--env-file',
     '--title',
     '--inspect-port',
+    '--stack-size',
+    '--max-old-space-size',
+    '--stack-trace-limit',
+    '--redirect-warnings',
+    '--diagnostic-dir',
+    '--report-dir',
+  ],
+  switches: [
+    '--inspect',
+    '--inspect-brk',
+    '--test',
+    '--trace-warnings',
+    '--trace-deprecation',
+    '--trace-uncaught',
+    '--enable-source-maps',
+    '--no-warnings',
+    '--no-deprecation',
+    '--expose-gc',
+    '--preserve-symlinks',
+    '--abort-on-uncaught-exception',
+    '--harmony',
+    '-c',
+    '--check',
+    '--interactive',
   ],
 };
 const INTERPRETERS: Record<string, Interpreter> = {
@@ -477,6 +814,7 @@ const SUBCOMMANDS: Record<string, string[]> = {
     '-s',
     '--server',
     '--user',
+    '--username',
     '--as',
     '--as-group',
     '--certificate-authority',
@@ -486,7 +824,14 @@ const SUBCOMMANDS: Record<string, string[]> = {
     '--request-timeout',
   ],
   oc: ['-n', '--namespace', '--context', '--server', '--kubeconfig', '--user'],
-  helm: ['-n', '--namespace', '--kube-context', '--kubeconfig', '--registry-config'],
+  helm: [
+    '-n',
+    '--namespace',
+    '--kube-context',
+    '--kubeconfig',
+    '--registry-config',
+    '--kube-apiserver',
+  ],
   minikube: ['-p', '--profile'],
   kind: [],
   aws: [
@@ -499,8 +844,16 @@ const SUBCOMMANDS: Record<string, string[]> = {
     '--color',
     '--cli-read-timeout',
     '--cli-connect-timeout',
+    '--cli-binary-format',
   ],
-  gcloud: ['--project', '--account', '--configuration', '--verbosity', '--format'],
+  gcloud: [
+    '--project',
+    '--account',
+    '--configuration',
+    '--verbosity',
+    '--format',
+    '--impersonate-service-account',
+  ],
   gsutil: ['-o', '-h'],
   az: ['--subscription', '-o', '--output', '--query'],
   terraform: [],
@@ -570,8 +923,9 @@ const SUBCOMMANDS: Record<string, string[]> = {
   pm2: [],
   tmux: ['-L', '-S', '-f'],
   codex: ['-c', '--config', '-m', '--model', '-p', '--profile', '-C', '--cd'],
-  claude: ['--model', '--agents', '--settings'],
-  opencode: [],
+  claude: ['--model', '--agents', '--settings', '--resume', '-r', '--session-id'],
+  opencode: ['-m', '--model', '-s', '--session'],
+  gemini: ['-m', '--model'],
   openssl: [],
   rclone: ['--config'],
   restic: ['-r', '--repo'],
@@ -599,6 +953,80 @@ const SUBCOMMANDS: Record<string, string[]> = {
   cloudflared: [],
 };
 
+/** Switches of a program with subcommands, beyond the common ones. */
+const SUBCOMMAND_SWITCHES: Record<string, string[]> = {
+  git: ['-p', '-P', '--bare', '--no-replace-objects', '--literal-pathspecs', '--no-optional-locks'],
+  npm: ['-ws', '--workspaces', '--if-present', '-w'],
+  pnpm: ['-r', '-w', '--workspace-root', '--if-present', '--parallel'],
+  yarn: ['--immutable', '--frozen-lockfile'],
+  docker: ['--tls', '--tlsverify', '-D'],
+  kubectl: ['--insecure-skip-tls-verify'],
+  cargo: ['--frozen', '--offline'],
+  az: ['--only-show-errors'],
+  aws: ['--no-paginate', '--no-verify-ssl', '--no-sign-request', '--no-cli-pager'],
+  make: ['-k', '-B', '-n', '-e', '-r', '-R'],
+  npx: ['--yes', '--no'],
+  claude: ['-p', '--print', '-c', '--continue', '--dangerously-skip-permissions'],
+};
+
+/**
+ * Agent CLIs whose first word may be a prompt rather than a subcommand: only these names count
+ * as subcommands (`claude mcp`, `codex exec`); anything else is free text and never shows.
+ */
+const CLOSED_SUBCOMMANDS: Record<string, Set<string>> = {
+  claude: new Set([
+    'mcp',
+    'config',
+    'update',
+    'doctor',
+    'install',
+    'setup-token',
+    'plugin',
+    'agents',
+  ]),
+  codex: new Set([
+    'exec',
+    'e',
+    'login',
+    'logout',
+    'mcp',
+    'mcp-server',
+    'app-server',
+    'completion',
+    'sandbox',
+    'debug',
+    'apply',
+    'a',
+    'resume',
+    'cloud',
+    'review',
+    'features',
+    'update',
+    'upgrade',
+    'doctor',
+    'version',
+    'help',
+  ]),
+  opencode: new Set([
+    'run',
+    'serve',
+    'auth',
+    'agent',
+    'upgrade',
+    'models',
+    'export',
+    'import',
+    'github',
+    'mcp',
+    'web',
+    'stats',
+    'acp',
+    'debug',
+    'session',
+  ]),
+  gemini: new Set(['mcp', 'extensions']),
+};
+
 /** Subcommands that run something named next: `npm run build`, `uv run pytest`. */
 const RUNNERS: Record<string, string[]> = {
   npm: ['run', 'run-script', 'exec', 'x'],
@@ -624,12 +1052,6 @@ const RUNNER_VALUES = ['-n', '--name', '-p', '--prefix', '-e', '--env', '--with'
 /** Programs that take a package name where others take a subcommand. */
 const PACKAGE_RUNNERS = new Set(['npx', 'pnpx', 'bunx', 'uvx']);
 
-/**
- * Option names that carry a credential: their value is skipped even when not listed, so it
- * cannot pass for a subcommand or a script.
- */
-const SECRET_OPTION = /token|secret|key|pass|pwd|auth(?!or)|credential|cookie|session/i;
-
 const isAssignment = (w: string) => /^[A-Za-z_]\w*(?:\[[^\]]*\])?\+?=/.test(w);
 /** PowerShell's `$x = …` or `$env:X="…"`, in either shell's command line. */
 const isVariableSet = (w: string, next: string | undefined) =>
@@ -639,27 +1061,22 @@ const isRedirect = (w: string) => /^(?:\d*|&)(?:>>?|<)/.test(w);
 /** A redirection with its target in the next word. */
 const isBareRedirect = (w: string) => /^(?:\d*|&)(?:>>?|<)&?$|^<<<$/.test(w);
 
-/**
- * A run of 12 letters and digits or more that mixes in digits, with capitals or many digits:
- * a key, a hash or a password, not a name. `x86_64-linux-gcc` and `python3.12` are names.
- * A name (`strict`) has no run of 16 or more with any digit, or of hex, either:
- * `deadbeefcafebabe` is a key, `SetEnvironmentVariable` a name.
- */
-const RANDOM = /[A-Za-z0-9]{12,}/g;
-function looksRandom(word: string, strict = true): boolean {
-  for (const [run] of word.matchAll(RANDOM)) {
-    if (strict && run.length >= 16 && /\d|^[a-f]+$/i.test(run)) return true;
-    if (/\d/.test(run) && (/[A-Z]/.test(run) || /(?:\D*\d){4}/.test(run))) return true;
-  }
-  return false;
-}
+const basename = (path: string) => path.split(/[\\/]/).filter(Boolean).at(-1) ?? '';
 
-function describe(all: string[], depth: number): Part | null {
-  // Redirections and their targets say nothing about what runs.
+/** A name as programs, scripts and packages are named: letters in any script, digits, `._+-`. */
+const isName = (w: string, max = NAME_MAX) =>
+  w.length > 0 &&
+  w.length <= max &&
+  /^[\p{L}\p{N}_][\p{L}\p{M}\p{N}._+-]*$/u.test(w) &&
+  !secretShaped(w);
+
+/** One command, from a parsed line's words or (`argv`) words no shell has read. */
+function describe(all: string[], depth: number, argv = false): Part | null {
+  // Redirections and their targets say nothing about what runs; an argv has none.
   const words: string[] = [];
   for (let j = 0; j < all.length; j++) {
     const w = all[j] as string;
-    if (isRedirect(w) || w === '<<<') {
+    if (!argv && (isRedirect(w) || w === '<<<')) {
       if (isBareRedirect(w)) j++;
       continue;
     }
@@ -675,20 +1092,30 @@ function describe(all: string[], depth: number): Part | null {
       continue;
     }
     if (isVariableSet(w, words[i + 1])) return null;
-    const wrapper = WRAPPERS[basename(w)];
+    const name = basename(w);
+    const wrapper = WRAPPERS[name];
     if (!wrapper) break;
-    i = skipOptions(words, i + 1, wrapper.values) + (wrapper.positional ?? 0);
-    // `env` alone lists the environment; `sudo -v` refreshes a ticket.
-    if (i >= words.length) return part(basename(w));
+    const scan = scanOptions(words, i + 1, wrapper);
+    // sudo --unknown x make: x may be the option's value or the program; the wrapper alone.
+    if (scan.ambiguous) return part(name);
+    i = scan.index + (wrapper.positional ?? 0);
+    if (i >= words.length) return part(name);
+    // watch "make test": one word that is a whole command line.
+    const only = words[i] as string;
+    if (i === words.length - 1 && /\s/.test(only))
+      return depth < DEPTH_MAX ? summarize(only, depth + 1, false) : part(name);
   }
 
-  const prog = programName(words[i] as string);
-  if (prog === null) return null;
+  const word = words[i] as string;
+  if (SETUP.has(word.toLowerCase())) return { ...part(word), setup: true };
+  // An option where a program should be (`exec -a name …`): nothing to name.
+  if (word.startsWith('-')) return null;
+  const prog = programName(word);
+  if (prog === null) return SECRET;
   const key = prog.toLowerCase();
   const rest = words.slice(i + 1);
   // A function's definition (`shoot() {`) runs nothing yet.
-  if (SETUP.has(key) || /^[\w.:-]+\(\)$/.test(words[i] as string))
-    return { text: prog, more: 0, setup: true };
+  if (SETUP.has(key) || /\(\)$/.test(word)) return { ...part(prog), setup: true };
   if (SHELLS.test(key)) return shell(prog, key, rest, depth);
   if (isPython(key) || INTERPRETERS[key]) return interpreter(prog, key, rest);
   if (FETCHERS.has(key)) return fetch(prog, key, rest);
@@ -696,63 +1123,54 @@ function describe(all: string[], depth: number): Part | null {
   return part(prog);
 }
 
-/** The index of the first word at or after `i` that is not an option or an option's value. */
-function skipOptions(words: string[], i: number, values: string[] = []): number {
-  let j = i;
-  while (j < words.length) {
-    const w = words[j] as string;
-    if (w === '--') return j + 1;
-    if (!w.startsWith('-') || w === '-') return j;
-    const named = !w.includes('=') && (values.includes(w) || SECRET_OPTION.test(w));
-    j += named ? 2 : 1;
-  }
-  return j;
-}
-
-const basename = (path: string) => path.split(/[\\/]/).filter(Boolean).at(-1) ?? '';
-
 /**
- * A program as it shows: the name of what runs, not its path (`./scripts/x.sh` is `x.sh`,
- * `C:\Program Files\nodejs\node.exe` is `node`), cut before anything that is not part of a name
- * (`[IO.File]::Write(…)` is `[IO.File]::Write`). A command substitution shows as `$(…)`; a
- * word that looks like a key, or an option, shows as nothing.
+ * A program as it shows: the whole name of what runs, not its path (`./scripts/x.sh` is `x.sh`,
+ * `C:\Program Files\nodejs\node.exe` is `node`, a name in any script stays whole), a PowerShell method
+ * (`[IO.File]::WriteAllText`), `$VAR`, or `$(…)` for a substitution. Null for anything else,
+ * a word shaped like a key included: never a part of a word.
  */
 function programName(word: string): string | null {
   if (/^(?:\$\(|`)/.test(word)) return '$(…)';
-  const windows = /^[A-Za-z]:[\\/]/.test(word);
-  const path = (windows ? /^[\w.+@:%~\-[\] /\\()]+/ : /^[\w.+@:%~$\-[\]/\\]+/).exec(word)?.[0];
-  const name = basename((path ?? '').trim())
-    .replace(/\.exe$/i, '')
-    .slice(0, 40);
-  // `user:pass@host` is not a program; `[IO.File]::Write` is.
-  if (name === '' || name.startsWith('-') || /@|(?:^|[^:]):(?:[^:]|$)/.test(name)) return null;
-  if (looksRandom(name)) return null;
-  return name;
+  if (/^\$\{?[A-Za-z_]\w*\}?$/.test(word)) return word.length <= NAME_MAX ? word : null;
+  const method = /^(\[[\w.]+\]::\w+)(?:\(|$)/.exec(word)?.[1];
+  if (method) return method.length <= NAME_MAX && !secretShaped(method) ? method : null;
+  const fn = /^([\w.:-]+)\(\)$/.exec(word)?.[1];
+  if (fn) return isName(fn) ? fn : null;
+  const name = basename(word).replace(/\.exe$/i, '');
+  return isName(name) ? name : null;
 }
 
 /** A script's file name, when it reads as one: `scripts/build.py` is `build.py`. */
 function scriptName(word: string | undefined): string | null {
   const name = basename(word ?? '');
-  return /^[\w.@+][\w.@+-]{0,47}$/.test(name) && !looksRandom(name) ? name : null;
+  return isName(name) ? name : null;
 }
 
-/** A word as a subcommand or script name: short and plain, not a value that slipped in. */
+/** A word as a subcommand or a script's name in package.json: short and plain. */
 function subword(word: string | undefined): string | null {
-  if (word === undefined || word.length > 32 || !/^[a-z0-9][\w.:-]*$/i.test(word)) return null;
-  return looksRandom(word) ? null : word;
+  if (word === undefined || word.length > 32) return null;
+  // :app:assembleDebug (Gradle), test:unit (npm).
+  if (!/^[\p{L}\p{N}:][\p{L}\p{M}\p{N}._:-]*$/u.test(word) || secretShaped(word)) return null;
+  return word;
 }
 
 /** A package as npx and friends name it, without its version: `@biomejs/biome`, `vitest`. */
 function packageName(word: string | undefined): string | null {
-  const m = /^(@[a-z0-9._-]+\/)?[a-z0-9._-]+/i.exec(word ?? '');
-  if (!m || m[0].length > 48 || looksRandom(m[0])) return null;
-  return m[1] ? m[0] : subword(m[0]);
+  const m = /^(?:@([\p{L}\p{N}._-]+)\/)?([\p{L}\p{N}._-]+)/u.exec(word ?? '');
+  if (!m || m[0].length > NAME_MAX) return null;
+  const [, scope, name = ''] = m;
+  if (scope !== undefined && (!isName(scope) || !isName(name))) return null;
+  return scope === undefined ? subword(name) : m[0];
 }
 
-function withScript(prog: string, word: string | undefined): Part {
-  const script = scriptName(word);
-  return part(script ? `${prog} ${script}` : prog);
-}
+/** A Python module's dotted name. */
+const moduleName = (word: string | undefined) =>
+  word !== undefined && /^[\p{L}_][\p{L}\p{N}_.]{0,39}$/u.test(word) && !secretShaped(word)
+    ? word
+    : null;
+
+/** A word that reads as a file to run: a path or a name with an extension. */
+const fileLike = (w: string) => /[\\/]/.test(w) || /\.[\p{L}\p{N}]{1,8}$/u.test(w);
 
 /** PowerShell switches that take no value. */
 const NO_VALUE = /^-(?:nologo|noprofile|nop|noninteractive|noni|noexit|mta|sta|nol)$/i;
@@ -772,11 +1190,11 @@ function shell(prog: string, key: string, rest: string[], depth: number): Part {
       const code = cmd ? rest.slice(j + 1).join(' ') : rest[j + 1];
       const unwrapped =
         code === undefined || depth >= DEPTH_MAX ? null : summarize(code, depth + 1, pwsh || cmd);
-      return unwrapped ?? part(`${prog} ${a}`);
+      return unwrapped ?? part(prog, a);
     }
-    if (pwsh && /^-(?:e|ec|enc|encodedcommand)$/i.test(a)) return part(`${prog} -EncodedCommand`);
-    if (pwsh && /^-(?:f|file)$/i.test(a)) return withScript(prog, rest[j + 1]);
-    if (cmd ? !a.startsWith('/') : !a.startsWith('-')) return withScript(prog, a);
+    if (pwsh && /^-(?:e|ec|enc|encodedcommand)$/i.test(a)) return part(prog, '-EncodedCommand');
+    if (pwsh && /^-(?:f|file)$/i.test(a)) return part(prog, scriptName(rest[j + 1]));
+    if (cmd ? !a.startsWith('/') : !a.startsWith('-')) return part(prog, scriptName(a));
     // bash -o pipefail, --rcfile f, pwsh -ExecutionPolicy Bypass: a value, not the script.
     if (/^(?:[-+]o|-O|--rcfile|--init-file)$/.test(a) || (pwsh && !NO_VALUE.test(a))) j++;
   }
@@ -788,16 +1206,19 @@ function interpreter(prog: string, key: string, rest: string[]): Part {
   const spec = INTERPRETERS[key] ?? PYTHON;
   for (let j = 0; j < rest.length; j++) {
     const a = rest[j] as string;
-    if (spec.code.test(a)) return part(`${prog} ${a}`);
-    if (spec.module && a === spec.module) {
-      const module = rest[j + 1];
-      const name = module && /^[\w.]{1,40}$/.test(module) && !looksRandom(module) ? module : null;
-      return part(name ? `${prog} -m ${name}` : `${prog} -m`);
-    }
-    if (a === '-') return part(`${prog} -`);
-    if (a === '--' || (key === 'java' && a === '-jar')) return withScript(prog, rest[j + 1]);
-    if (!a.startsWith('-')) return withScript(prog, a);
-    if (!a.includes('=') && (spec.values?.includes(a) || SECRET_OPTION.test(a))) j++;
+    if (spec.code.test(a)) return part(prog, a);
+    if (spec.module && a === spec.module) return part(prog, '-m', moduleName(rest[j + 1]));
+    if (a === '-') return part(prog, '-');
+    if (a === '--' || (key === 'java' && a === '-jar')) return part(prog, scriptName(rest[j + 1]));
+    if (!a.startsWith('-')) return part(prog, scriptName(a));
+    const kind = optionKind(a, spec);
+    const next = rest[j + 1];
+    // An unknown option's next word: the script when it reads as a file, else its value.
+    if (
+      kind === 'value' ||
+      (kind === 'unknown' && next !== undefined && !next.startsWith('-') && !fileLike(next))
+    )
+      j++;
   }
   return part(prog);
 }
@@ -805,6 +1226,7 @@ function interpreter(prog: string, key: string, rest: string[]): Part {
 /** A fetch: the host of its first URL that is not an option's value. */
 function fetch(prog: string, key: string, rest: string[]): Part {
   let bare: string | null = null;
+  let afterUnknown = false;
   for (let j = 0; j < rest.length; j++) {
     const a = rest[j] as string;
     if (a.startsWith('-')) {
@@ -812,33 +1234,42 @@ function fetch(prog: string, key: string, rest: string[]): Part {
       // Short options by case (curl's -O takes no value, wget's does); long ones and
       // PowerShell's in any case.
       const known = name.length > 2 ? FETCH_VALUES.has(name.toLowerCase()) : FETCH_VALUES.has(name);
+      afterUnknown = false;
       if (/^--?(?:url|uri)$/i.test(name)) {
         const host = hostOf(a.includes('=') ? a.slice(a.indexOf('=') + 1) : (rest[++j] ?? ''));
-        if (host) return part(`${prog} ${host}`);
+        if (host) return part(prog, host);
       } else if (
         !a.includes('=') &&
         (known || (name === '-O' && key === 'wget') || SECRET_OPTION.test(name))
       )
         j++;
+      else afterUnknown = /^--[^-]/.test(a) && !a.includes('=');
       continue;
     }
     if (/^[a-z][a-z0-9+.-]*:\/\//i.test(a)) {
       const host = hostOf(a);
-      if (host) return part(`${prog} ${host}`);
-    } else if (bare === null && HOST_LIKE.test(a)) bare = hostOf(`http://${a}`);
-    else if (bare === null && /^:\d+(?:[/?#]|$)/.test(a))
-      bare = `localhost${/^:\d+/.exec(a)?.[0] ?? ''}`; // httpie's :8080/x
+      if (host) return part(prog, host);
+    } else if (bare === null && !afterUnknown) {
+      if (HOST_LIKE.test(a)) bare = hostOf(`http://${a}`);
+      else if (/^:\d+(?:[/?#]|$)/.test(a)) bare = `localhost${/^:\d+/.exec(a)?.[0] ?? ''}`; // httpie's :8080/x
+    }
+    afterUnknown = false;
   }
-  return part(bare ? `${prog} ${bare}` : prog);
+  return part(prog, bare);
 }
 const HOST_LIKE =
   /^(?:[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}|localhost|\d{1,3}(?:\.\d{1,3}){3})(?::\d+)?(?:[/?#]|$)/;
 
+/** A URL with a host in it, checked before it is parsed, so a bad one costs no exception. */
+const AUTHORITY =
+  /^[a-z][a-z0-9+.-]*:\/\/(?:[^/?#\s@]*@)?(?:\[[0-9a-f:.]+\]|[^\s:/?#@[\]]+)(?::\d*)?(?:[/?#]|$)/i;
+
 /**
- * A URL's host and port, without its user or path; null when it has none. A label that looks
- * like a key (a tunnel's or a capability URL's random name) shows as "…".
+ * A URL's host and port, without its user or path; null when it has none. A label shaped like a
+ * key (a tunnel's or a capability URL's random name) shows as "…".
  */
 export function hostOf(url: string): string | null {
+  if (url.length > 2048 || !AUTHORITY.test(url)) return null;
   let host: string;
   try {
     host = new URL(url).host;
@@ -848,33 +1279,37 @@ export function hostOf(url: string): string | null {
   if (!/^(?:[a-z0-9.-]+|\[[0-9a-f:.]+\])(?::\d+)?$/i.test(host)) return null;
   return host
     .split('.')
-    .map((label) => (looksRandom(label, false) ? '…' : label))
+    .map((label) => (secretShaped(label.replace(/:\d+$/, '')) ? '…' : label))
     .join('.');
 }
 
 /** A program with subcommands: the subcommand, and what a runner subcommand runs. */
 function subcommand(prog: string, key: string, rest: string[]): Part {
-  const values = SUBCOMMANDS[key];
+  const spec = { values: SUBCOMMANDS[key], switches: SUBCOMMAND_SWITCHES[key] };
+  let scan = scanOptions(rest, 0, spec);
   // cargo +nightly test, make VAR=x test: neither is the subcommand.
-  let j = skipOptions(rest, 0, values);
-  while (j < rest.length && /^\+|^[A-Za-z_]\w*=/.test(rest[j] as string))
-    j = skipOptions(rest, j + 1, values);
-  const word = rest[j];
-  const sub = PACKAGE_RUNNERS.has(key)
-    ? packageName(word)
-    : word && /[\\/]/.test(word) && /\.\w+$/.test(word)
-      ? scriptName(word) // bun ./scripts/x.ts
-      : subword(word);
+  while (!scan.ambiguous && /^\+|^[A-Za-z_]\w*=/.test(rest[scan.index] ?? ''))
+    scan = scanOptions(rest, scan.index + 1, spec);
+  // npm --otp 493817 publish: the word after an unknown option may be its value.
+  if (scan.ambiguous) return part(prog);
+  const word = rest[scan.index];
+  const closed = CLOSED_SUBCOMMANDS[key];
+  let sub: string | null;
+  if (closed) sub = word !== undefined && closed.has(word) ? word : null;
+  else if (PACKAGE_RUNNERS.has(key)) sub = packageName(word);
+  else if (word && /[\\/]/.test(word) && /\.\w+$/.test(word))
+    sub = scriptName(word); // bun ./scripts/x.ts
+  else sub = subword(word);
   if (sub === null) return part(prog);
-  const run = RUNNERS[key]?.includes(sub) ? runs(rest, j + 1) : null;
-  return part(run ? `${prog} ${sub} ${run}` : `${prog} ${sub}`);
+  const run = RUNNERS[key]?.includes(sub) ? runs(rest, scan.index + 1) : null;
+  return part(prog, sub, run);
 }
 
 /** What a runner subcommand runs: a script, a package or a program, by name. */
 function runs(rest: string[], from: number): string | null {
-  const j = skipOptions(rest, from, RUNNER_VALUES);
-  const word = rest[j];
-  if (word === undefined) return null;
+  const scan = scanOptions(rest, from, { values: RUNNER_VALUES });
+  const word = rest[scan.index];
+  if (scan.ambiguous || word === undefined) return null;
   if (word.startsWith('@')) return packageName(word);
   return /[\\/]/.test(word) ? scriptName(word) : subword(word);
 }
