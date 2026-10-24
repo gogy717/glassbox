@@ -1,6 +1,6 @@
 /** Client for glassbox-owned runs (B-lite): start, message, interrupt, end, answer prompts. */
 
-import type { SessionSummary } from '../../../src/core/model.js';
+import type { LiveState, SessionSummary } from '../../../src/core/model.js';
 import {
   type ApiErrorResponse,
   api,
@@ -119,13 +119,18 @@ export function waitingSessionIds(runs: Map<string, RunState>): string[] {
   return [...ids].sort();
 }
 
-/** `sessions` with those in `waiting` live as 'waiting' ("Waiting for you"); the same list else. */
+/** A session's live state, 'waiting' ("Waiting for you") when it is one of `waiting`. */
+export function waitingLive(s: SessionSummary, waiting: readonly string[]): LiveState {
+  return waiting.includes(s.id) ? 'waiting' : s.live;
+}
+
+/** `sessions` with those in `waiting` live as 'waiting'; the same list when none is. */
 export function withWaiting(
   sessions: SessionSummary[],
   waiting: readonly string[],
 ): SessionSummary[] {
   if (waiting.length === 0) return sessions;
   return sessions.map((s) =>
-    waiting.includes(s.id) && s.live !== 'waiting' ? { ...s, live: 'waiting' } : s,
+    waitingLive(s, waiting) !== s.live ? { ...s, live: waitingLive(s, waiting) } : s,
   );
 }

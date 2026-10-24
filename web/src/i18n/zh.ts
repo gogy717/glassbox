@@ -24,6 +24,7 @@ export const zh = {
   'settings.themeDark': '深色',
   'sidebar.title': '会话',
   'sidebar.search': '搜索标题或目录',
+  'sidebar.connecting': '连接中…',
   'sidebar.empty': '没有发现会话',
   'sidebar.noMatch': '没有匹配的会话',
   'sidebar.untitled': '未命名会话',

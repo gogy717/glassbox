@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { AgentKind, QuotaSnapshot } from '../../../../src/core/model.js';
@@ -325,6 +327,35 @@ describe('ContextChart', () => {
         />
       </I18nContext.Provider>,
     );
+
+  // I3b F3: zh ticks read "2万"; the digits stay in the axis's mono face, the unit is set apart
+  // in the UI face (CJK never in mono), rather than the whole axis leaving mono in zh.
+  it('sets a Chinese tick’s unit apart from its digits', () => {
+    const { container } = render(
+      <I18nContext.Provider value={makeI18n('zh')}>
+        <ContextChart
+          agent="主会话"
+          points={Array.from({ length: 30 }, (_, i) => point(i))}
+          onPick={vi.fn()}
+        />
+      </I18nContext.Provider>,
+    );
+    const ticks = [...container.querySelectorAll('text')].filter((t) =>
+      /万/.test(t.textContent ?? ''),
+    );
+    expect(ticks.length).toBeGreaterThan(0);
+    for (const tick of ticks) {
+      const own = [...tick.childNodes]
+        .filter((n) => n.nodeType === 3)
+        .map((n) => n.textContent)
+        .join('');
+      expect(own).toMatch(/^[\d.]+$/);
+      expect(tick.querySelector('tspan')).toHaveTextContent(/^万$/);
+    }
+    const sheet = readFileSync(join(import.meta.dirname, 'TokensView.module.css'), 'utf8');
+    expect(sheet).not.toMatch(/\.axis:lang\(zh\)/);
+    expect(/\n\.axisUnit \{([^}]*)\}/.exec(sheet)?.[1]).toMatch(/font-family: var\(--font-ui\);/);
+  });
 
   it('draws a dot per request while they are far enough apart', () => {
     const { container } = renderChart(12);

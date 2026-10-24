@@ -19,7 +19,7 @@ interface Props {
   selectedId: string | null;
   now: number;
   showProbes?: boolean;
-  /** False until the first session list arrives: "no sessions" is not said before it. */
+  /** False until the first session list arrives: until then the list says it is connecting. */
   loaded?: boolean;
   onSelect(id: string): void;
 }
@@ -181,8 +181,12 @@ export function SessionSidebar({
         )}
       </div>
       <div ref={listRef} className={css.list}>
-        {groups.length === 0 && (loaded || sessions.length > 0) && (
-          <p className={css.empty}>{t(sessions.length ? 'sidebar.noMatch' : 'sidebar.empty')}</p>
+        {groups.length === 0 && (
+          <p className={css.empty}>
+            {t(
+              sessions.length ? 'sidebar.noMatch' : loaded ? 'sidebar.empty' : 'sidebar.connecting',
+            )}
+          </p>
         )}
         {groups.map((g) => (
           <ul key={g.project} aria-label={g.project} className={css.group}>

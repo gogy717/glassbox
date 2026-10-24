@@ -25,8 +25,9 @@ function renderSidebar(onSelect = vi.fn()) {
 }
 
 describe('SessionSidebar', () => {
-  // I3: "No sessions found" is a claim about the list, so it waits for the list to arrive.
-  it('says nothing about an empty list until the first one has loaded', () => {
+  // I3 / I3b F1: "No sessions found" is a claim about the list, so it waits for the list to
+  // arrive; until then a quiet "Connecting…" says why the list is empty.
+  it('says it is connecting until the first list has loaded, then that there are none', () => {
     const empty = (loaded: boolean) => (
       <I18nContext.Provider value={makeI18n('en')}>
         <SessionSidebar
@@ -40,8 +41,10 @@ describe('SessionSidebar', () => {
     );
     const { rerender } = render(empty(false));
     expect(screen.queryByText('No sessions found')).toBeNull();
+    expect(screen.getByText('Connecting…')).toBeInTheDocument();
     rerender(empty(true));
     expect(screen.getByText('No sessions found')).toBeInTheDocument();
+    expect(screen.queryByText('Connecting…')).toBeNull();
   });
 
   it('marks every session with its agent, in that agent’s colours, even with one agent', () => {

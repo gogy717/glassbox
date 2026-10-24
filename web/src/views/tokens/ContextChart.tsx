@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
+import { splitCompact } from '../../components/CompactFigure';
 import { useElementWidth } from '../../data/useElementWidth';
 import { useI18n } from '../../i18n';
 import { formatCompact, formatNumber } from '../../lib/format';
@@ -116,7 +117,7 @@ export function ContextChart({ agent, points, onPick }: Props) {
                 y2={geo.y(v)}
               />
               <text className={css.axis} x={PAD.l - 6} y={geo.y(v)} textAnchor="end" dy="0.32em">
-                {formatCompact(v, intl)}
+                <AxisFigure value={formatCompact(v, intl)} />
               </text>
             </g>
           ))}
@@ -217,5 +218,16 @@ export function ContextChart({ agent, points, onPick }: Props) {
         </tbody>
       </table>
     </section>
+  );
+}
+
+/** A y-axis tick: its digits in the axis's mono face, a Chinese unit ("万") in the UI face. */
+function AxisFigure({ value }: { value: string }) {
+  const [digits, unit] = splitCompact(value);
+  return (
+    <>
+      {digits}
+      {unit && <tspan className={css.axisUnit}>{unit}</tspan>}
+    </>
   );
 }

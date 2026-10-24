@@ -112,6 +112,15 @@ describe('CallRow why line', () => {
     expect(row).toHaveTextContent(/已 ?\d+:\d\d/);
   });
 
+  // I3b F3: the context chip in zh ("上下文 3.5万"): the digits a figure, 万 out of mono.
+  it('keeps the context chip’s Chinese unit out of its figure', () => {
+    const row = renderRow('req_m2', undefined, {}, 'zh');
+    const chip = within(within(row).getByRole('group', { name: '请求' })).getByText(/上下文/);
+    expect(chip).toHaveTextContent(/^上下文 [\d.]+万$/);
+    const figure = chip.querySelector('.figure');
+    expect(figure?.textContent).toMatch(/^[\d.]+$/);
+  });
+
   it('falls back to what the call thought', () => {
     const row = renderRow('req_m2', [
       {

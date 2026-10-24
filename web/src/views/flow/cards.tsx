@@ -150,7 +150,10 @@ export function RequestCard({ req, selected, onSelect }: CardProps) {
         {req.effort && <span className={css.chip}>{req.effort}</span>}
         {req.usage && (
           <span className={css.chip}>
-            {t('flow.chipContext', { n: formatCompact(contextSize(req.usage), intl) })}
+            <ChipFigure
+              text={t('flow.chipContext', { n: SLOT })}
+              value={formatCompact(contextSize(req.usage), intl)}
+            />
           </span>
         )}
       </span>
@@ -249,6 +252,24 @@ function ResultStrip({ tool }: { tool: ToolCall }) {
         <span className={`${css.resultTime} figure`}>{formatDuration(tool.durationMs)}</span>
       ) : null}
     </span>
+  );
+}
+
+/** Stands for a chip's figure while its words are translated. */
+const SLOT = '\u0000';
+
+/**
+ * A chip's words around its compact figure ("上下文 3.5万"): in Chinese the chip is in the UI
+ * face, so the digits are set as a figure and 万 stays out of mono.
+ */
+function ChipFigure({ text, value }: { text: string; value: string }) {
+  const [before, after = ''] = text.split(SLOT);
+  return (
+    <>
+      {before}
+      <CompactFigure value={value} />
+      {after}
+    </>
   );
 }
 

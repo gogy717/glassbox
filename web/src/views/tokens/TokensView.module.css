@@ -294,9 +294,13 @@
   font-size: 11px;
 }
 
-/* CJK never goes into the mono face. */
-.axis:lang(zh),
+/* CJK never goes into the mono face: a label in the UI face; a tick's unit ("万") set apart from
+   its digits, which stay mono (ContextChart's AxisFigure). */
 .compactionLabel:lang(zh) {
+  font-family: var(--font-ui);
+}
+
+.axisUnit {
   font-family: var(--font-ui);
 }
 

@@ -397,6 +397,36 @@ describe('App', () => {
     expect(row()).not.toHaveTextContent('Waiting for you');
   });
 
+  // I3b F2: one derivation (waitingSessionIds) for the top bar and the list, so they agree even
+  // when the prompt is on an older run than the one the composer follows.
+  it('says waiting in the top bar and the row alike when an older run holds the prompt', () => {
+    window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}`;
+    const store = demoStore();
+    store.applyEvent({ type: 'sessions', sessions: createDemoSessions(DEMO_NOW) });
+    store.applyEvent({
+      type: 'run',
+      run: runState({
+        id: 'run_old',
+        status: 'waiting-permission',
+        updatedAt: '2026-10-23T09:00:00.000Z',
+        pendingPermissions: [
+          {
+            id: 'tu_old',
+            toolName: 'Bash',
+            input: { command: 'ls' },
+            questions: null,
+            requestedAt: DEMO_NOW.toISOString(),
+          },
+        ],
+      }),
+    });
+    store.applyEvent({ type: 'run', run: runState({ id: 'run_new', status: 'running' }) });
+    render(<App store={store} connect={noConnect} runs={fakeRuns()} />);
+    const row = within(sidebar()).getByRole('button', { name: /Live viewer research/ });
+    expect(row).toHaveTextContent('Waiting for you');
+    expect(screen.getByRole('banner')).toHaveTextContent('Waiting for you');
+  });
+
   it('collapses a permission prompt on Escape and reopens it from the composer', () => {
     window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}`;
     const store = demoStore();

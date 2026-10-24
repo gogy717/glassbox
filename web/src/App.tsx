@@ -18,6 +18,7 @@ import {
   createRunsClient,
   type RunsClient,
   runForSession,
+  waitingLive,
   waitingSessionIds,
   withWaiting,
 } from './data/runs';
@@ -175,10 +176,8 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
   // A session with a prompt open is waiting for you, in the top bar and the list: the composer's
   // prompt says so, while its process only knows it is busy.
   const waitingKey = waitingSessionIds(state.runs).join('\n');
-  const sessions = useMemo(
-    () => withWaiting(state.sessions, waitingKey ? waitingKey.split('\n') : []),
-    [state.sessions, waitingKey],
-  );
+  const waiting = useMemo(() => (waitingKey ? waitingKey.split('\n') : []), [waitingKey]);
+  const sessions = useMemo(() => withWaiting(state.sessions, waiting), [state.sessions, waiting]);
   // Escape collapses a prompt without answering it; a newer prompt shows itself again.
   const [dismissed, setDismissed] = useState<string | null>(null);
   const showPrompt = !!pending && pending.id !== dismissed;
@@ -216,7 +215,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
             title={route.sessionId ? (summary?.title ?? t('sidebar.untitled')) : null}
             agent={route.sessionId ? (summary?.agent ?? null) : null}
             sidebarOpen={sidebarShown}
-            live={pending ? 'waiting' : (summary?.live ?? null)}
+            live={summary ? waitingLive(summary, waiting) : null}
             connection={state.connection}
             quotas={state.quotas}
             follow={follow}

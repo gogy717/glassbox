@@ -25,6 +25,7 @@ export const en: Record<MessageKey, string> = {
   'settings.themeDark': 'Dark',
   'sidebar.title': 'Sessions',
   'sidebar.search': 'Search title or folder',
+  'sidebar.connecting': 'Connecting…',
   'sidebar.empty': 'No sessions found',
   'sidebar.noMatch': 'No matching sessions',
   'sidebar.untitled': 'Untitled session',
