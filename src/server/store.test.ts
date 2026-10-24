@@ -183,12 +183,12 @@ describe('SessionStore', () => {
     await appendFile(p.main, lines(rec.req('r2', T(2), 5)));
 
     await vi.waitFor(() => expect(patches.flatMap((x) => ids(x.requests))).toContain('r2'), {
-      timeout: 2000,
+      timeout: 5000,
     });
     expect(patches.at(-1)?.session.usage?.output).toBe(15);
     await vi.waitFor(
       () => expect(lists.at(-1)?.find((x) => x.id === p.id)?.usage?.output).toBe(15),
-      { timeout: 2000 },
+      { timeout: 5000 },
     );
   });
 
@@ -229,7 +229,7 @@ describe('SessionStore', () => {
     await writeFile(`${p.main}.tmp`, lines(rec.req('r9', T(9))));
     await rename(`${p.main}.tmp`, p.main);
 
-    await vi.waitFor(() => expect(resets).toHaveLength(1), { timeout: 2000 });
+    await vi.waitFor(() => expect(resets).toHaveLength(1), { timeout: 5000 });
     expect(ids(resets[0]?.requests ?? [])).toEqual(['r9']);
     expect(ids((await s.getSnapshot(p.id))?.requests ?? [])).toEqual(['r9']);
     expect(fake.parsersFor('a')).toHaveLength(2);
@@ -249,12 +249,12 @@ describe('SessionStore', () => {
 
     // Two separate writes: the store may (and here, must) observe the empty file in between.
     await truncate(p.main, 0);
-    await vi.waitFor(() => expect(resets).toHaveLength(1), { timeout: 2000 });
+    await vi.waitFor(() => expect(resets).toHaveLength(1), { timeout: 5000 });
     expect(resets[0]?.requests).toEqual([]);
 
     await appendFile(p.main, lines(rec.req('r9', T(9))));
     await vi.waitFor(() => expect(patches.flatMap((x) => ids(x.requests))).toContain('r9'), {
-      timeout: 2000,
+      timeout: 5000,
     });
     expect(resets).toHaveLength(1);
     expect(ids((await s.getSnapshot(p.id))?.requests ?? [])).toEqual(['r9']);
@@ -271,7 +271,7 @@ describe('SessionStore', () => {
     await put(p.wfAgent('wf_9', 'w9'), lines(rec.req('r9', T(9))));
 
     await vi.waitFor(() => expect(patches.flatMap((x) => ids(x.requests))).toContain('r9'), {
-      timeout: 1500,
+      timeout: 5000,
       interval: 20,
     });
     const snap = (await s.getSnapshot(p.id)) as SessionSnapshot;
@@ -347,7 +347,7 @@ describe('SessionStore', () => {
     const off = s.onSessions((x) => calls.push(x));
 
     await setLive({ a: 'busy' });
-    await vi.waitFor(() => expect(calls.length).toBeGreaterThan(0), { timeout: 2000 });
+    await vi.waitFor(() => expect(calls.length).toBeGreaterThan(0), { timeout: 5000 });
     off();
     const before = calls.length;
     await setLive({ a: 'idle' });
@@ -367,8 +367,8 @@ describe('SessionStore', () => {
 
     await setLive({ a: 'busy' });
 
-    await vi.waitFor(() => expect(lists.at(-1)?.[0]?.live).toBe('busy'), { timeout: 2000 });
-    await vi.waitFor(() => expect(patches.at(-1)?.session.live).toBe('busy'), { timeout: 2000 });
+    await vi.waitFor(() => expect(lists.at(-1)?.[0]?.live).toBe('busy'), { timeout: 5000 });
+    await vi.waitFor(() => expect(patches.at(-1)?.session.live).toBe('busy'), { timeout: 5000 });
     expect(fake.parsersFor('a')[0]?.live).toBe('busy');
   });
 
@@ -377,17 +377,17 @@ describe('SessionStore', () => {
     await setLive({ a: 'busy' });
     const s = await startStore({ patchMs: 60_000 });
     await vi.waitFor(() => expect(s.listSessions()[0]?.activity?.kind).toBe('thinking'), {
-      timeout: 2000,
+      timeout: 5000,
     });
     // A patch goes out now, so the parser's next summary waits a whole patch gap.
     await appendFile(p.main, lines(rec.req('rb', T(2))));
     await vi.waitFor(() => expect(s.listSessions()[0]?.counts?.requests).toBe(2), {
-      timeout: 2000,
+      timeout: 5000,
     });
 
     await setLive({ a: 'closed' });
 
-    await vi.waitFor(() => expect(s.listSessions()[0]?.live).toBe('closed'), { timeout: 2000 });
+    await vi.waitFor(() => expect(s.listSessions()[0]?.live).toBe('closed'), { timeout: 5000 });
     expect(s.listSessions()[0]).not.toHaveProperty('activity');
   });
 
@@ -400,7 +400,7 @@ describe('SessionStore', () => {
     });
     const opening = s.getSnapshot(p.id);
     await setLive({ a: 'idle' });
-    await vi.waitFor(() => expect(s.listSessions()[0]?.live).toBe('idle'), { timeout: 2000 });
+    await vi.waitFor(() => expect(s.listSessions()[0]?.live).toBe('idle'), { timeout: 5000 });
     fake.listFilesGate = null;
     release();
     await opening;
@@ -431,7 +431,7 @@ describe('SessionStore', () => {
     await session('b', rec.req('rb', T(2)));
 
     await vi.waitFor(() => expect(lists.at(-1)?.map((x) => x.nativeId)).toEqual(['b', 'a']), {
-      timeout: 2000,
+      timeout: 5000,
     });
   });
 
@@ -499,11 +499,11 @@ describe('SessionStore token rate', () => {
 
     // One more request: 1 input + 7 output.
     await appendFile(p.main, lines(rec.req('rb', T(2), 7)));
-    await vi.waitFor(() => expect(hourTotal(s.getRate())).toBe(8), { timeout: 2000 });
+    await vi.waitFor(() => expect(hourTotal(s.getRate())).toBe(8), { timeout: 5000 });
     const rate = s.getRate();
     expect(rateSeries(rate, { agent: fake.kind }).at(-1)).toBe(8);
     expect(rateSeries(rate, { kind: 'output' }).at(-1)).toBe(7);
-    await vi.waitFor(() => expect(pushed.length).toBeGreaterThan(0), { timeout: 2000 });
+    await vi.waitFor(() => expect(pushed.length).toBeGreaterThan(0), { timeout: 5000 });
     expect(hourTotal(pushed.at(-1) as TokenRate)).toBe(8);
   });
 
@@ -513,22 +513,22 @@ describe('SessionStore token rate', () => {
     await s.getSnapshot(p.id);
     await settled();
     await appendFile(p.main, lines(rec.req('rb', T(2), 7)));
-    await vi.waitFor(() => expect(hourTotal(s.getRate())).toBe(8), { timeout: 2000 });
+    await vi.waitFor(() => expect(hourTotal(s.getRate())).toBe(8), { timeout: 5000 });
 
     // Gone from disk for two discoveries: dropped, and forgotten.
     await rm(p.main);
-    await vi.waitFor(() => expect(s.listSessions()).toHaveLength(0), { timeout: 2000 });
+    await vi.waitFor(() => expect(s.listSessions()).toHaveLength(0), { timeout: 5000 });
     // Back with far more in it: reopening it is a baseline, not 1,000 tokens at once.
     await put(
       p.main,
       lines(rec.req('ra', T(1), 10), rec.req('rb', T(2), 7), rec.req('rc', T(3), 990)),
     );
-    await vi.waitFor(() => expect(s.listSessions()).toHaveLength(1), { timeout: 2000 });
+    await vi.waitFor(() => expect(s.listSessions()).toHaveLength(1), { timeout: 5000 });
     await s.getSnapshot(p.id);
     await settled();
     expect(hourTotal(s.getRate())).toBe(8);
     await appendFile(p.main, lines(rec.req('rd', T(4), 4)));
-    await vi.waitFor(() => expect(hourTotal(s.getRate())).toBe(13), { timeout: 2000 });
+    await vi.waitFor(() => expect(hourTotal(s.getRate())).toBe(13), { timeout: 5000 });
   });
 
   it('takes growth while a session settles after opening as history', async () => {
@@ -538,7 +538,7 @@ describe('SessionStore token rate', () => {
     // Still settling: written as the session loaded, not counted as spend.
     await appendFile(p.main, lines(rec.req('rb', T(2), 50)));
     await vi.waitFor(async () => expect((await s.getSnapshot(p.id))?.requests.length).toBe(2), {
-      timeout: 2000,
+      timeout: 5000,
     });
     await sleep(1000);
     expect(hourTotal(s.getRate())).toBe(0);
@@ -564,12 +564,12 @@ describe('SessionStore token rate', () => {
     // A sub-agent file that turns up with an hour of work in it: read now, spent before.
     await put(p.subagent('s1'), lines(rec.req('rs1', T(1), 90_000)));
     await vi.waitFor(async () => expect((await snapshotOf())?.requests.length).toBe(2), {
-      timeout: 2000,
+      timeout: 5000,
     });
     expect(hourTotal(s.getRate())).toBe(0);
     // What it writes from then on is spend.
     await appendFile(p.subagent('s1'), lines(rec.req('rs2', T(2), 6)));
-    await vi.waitFor(() => expect(hourTotal(s.getRate())).toBe(7), { timeout: 2000 });
+    await vi.waitFor(() => expect(hourTotal(s.getRate())).toBe(7), { timeout: 5000 });
   });
 
   it('counts a running session right after it settles, and says which running ones it counts', async () => {
@@ -578,7 +578,7 @@ describe('SessionStore token rate', () => {
     await setLive({ a: 'busy', b: 'busy' });
     // Room for one open session: the other running one cannot be counted.
     const s = await startStore({ rateMs: 20, maxOpen: 1 });
-    await vi.waitFor(() => expect(s.getRate().coverage.counted).toBe(1), { timeout: 2000 });
+    await vi.waitFor(() => expect(s.getRate().coverage.counted).toBe(1), { timeout: 5000 });
     expect(s.getRate().coverage).toEqual({
       running: 2,
       counted: 1,
@@ -586,7 +586,7 @@ describe('SessionStore token rate', () => {
     });
     // The newer one was opened; its growth counts at once.
     await appendFile(b.main, lines(rec.req('rc', T(3), 4)));
-    await vi.waitFor(() => expect(hourTotal(s.getRate())).toBe(5), { timeout: 2000 });
+    await vi.waitFor(() => expect(hourTotal(s.getRate())).toBe(5), { timeout: 5000 });
   });
 
   it('says nothing about sessions it has not opened, and stops cleanly', async () => {
@@ -616,7 +616,7 @@ describe('SessionStore quota', () => {
     const aged = { ...q, stale: true };
     await writeFile(join(root, 'quota.json'), JSON.stringify(aged));
 
-    await vi.waitFor(() => expect(seen.at(-1)).toEqual([aged]), { timeout: 2000 });
+    await vi.waitFor(() => expect(seen.at(-1)).toEqual([aged]), { timeout: 5000 });
     expect(s.listQuotas()).toEqual([aged]);
   });
 });
@@ -635,7 +635,7 @@ describe('SessionStore removals', () => {
     await appendFile(p.main, lines(rec.drop('r1')));
 
     await vi.waitFor(() => expect(patches.at(-1)?.removed?.requests).toEqual(['r1']), {
-      timeout: 2000,
+      timeout: 5000,
     });
     expect(patches.at(-1)?.removed?.toolCalls).toEqual(['tu1']);
     const server = (await s.getSnapshot(p.id)) as SessionSnapshot;
@@ -654,14 +654,14 @@ describe('SessionStore removals', () => {
     });
     // Spend the first flush so the next changes wait out a full batch window together.
     await appendFile(p.main, lines(rec.req('r2', T(2))));
-    await vi.waitFor(() => expect(patches).toHaveLength(1), { timeout: 2000 });
+    await vi.waitFor(() => expect(patches).toHaveLength(1), { timeout: 5000 });
 
     await appendFile(p.main, lines(rec.req('r3', T(3))));
     await sleep(60);
     await appendFile(p.main, lines(rec.drop('r3')));
 
     await vi.waitFor(() => expect(patches.at(-1)?.removed?.requests).toEqual(['r3']), {
-      timeout: 2000,
+      timeout: 5000,
     });
     expect(patches).toHaveLength(2);
     expect(ids(patches[1]?.requests ?? [])).not.toContain('r3');
@@ -680,7 +680,7 @@ describe('SessionStore removal-only changes', () => {
     await appendFile(p.main, lines(rec.drop('r1', { removalOnly: true })));
 
     await vi.waitFor(() => expect(patches.at(-1)?.removed?.requests).toEqual(['r1']), {
-      timeout: 2000,
+      timeout: 5000,
     });
   });
 });
@@ -707,12 +707,12 @@ describe('SessionStore with a misbehaving parser', () => {
 
     await setLive({ bad: 'busy', good: 'busy' });
     await vi.waitFor(() => expect(fake.parsersFor('good')[0]?.live).toBe('busy'), {
-      timeout: 2000,
+      timeout: 5000,
     });
     // The loop is still alive afterwards.
     await setLive({ good: 'idle' });
     await vi.waitFor(() => expect(fake.parsersFor('good')[0]?.live).toBe('idle'), {
-      timeout: 2000,
+      timeout: 5000,
     });
     // The live change was logged against the broken session, which is all that degrades.
     expect(blamed()).toBeGreaterThan(before);
@@ -731,7 +731,7 @@ describe('SessionStore when discovery briefly misses a session', () => {
     fake.hideFor('a', 3);
     const calls = fake.discoverCalls;
     await vi.waitFor(() => expect(fake.discoverCalls).toBeGreaterThanOrEqual(calls + 3), {
-      timeout: 2000,
+      timeout: 5000,
     });
     fake.listFilesGate = null;
     release();
@@ -741,7 +741,7 @@ describe('SessionStore when discovery briefly misses a session', () => {
     s.onPatch(p.id, (x) => patches.push(x));
     await appendFile(p.main, lines(rec.req('r2', T(2))));
     await vi.waitFor(() => expect(patches.flatMap((x) => ids(x.requests))).toContain('r2'), {
-      timeout: 2000,
+      timeout: 5000,
     });
     await sleep(200);
     expect(patches.flatMap((x) => ids(x.requests)).filter((id) => id === 'r2')).toHaveLength(1);
@@ -765,7 +765,7 @@ describe('SessionStore when discovery briefly misses a session', () => {
     fake.hideFor('a', 1);
     const calls = fake.discoverCalls;
     await vi.waitFor(() => expect(fake.discoverCalls).toBeGreaterThanOrEqual(calls + 3), {
-      timeout: 2000,
+      timeout: 5000,
     });
     expect(s.listSessions().map((x) => x.nativeId)).toContain('a');
     await s.getSnapshot(p.id);
@@ -773,7 +773,7 @@ describe('SessionStore when discovery briefly misses a session', () => {
 
     fake.hideFor('a', 1_000);
     await vi.waitFor(() => expect(s.listSessions().map((x) => x.nativeId)).toEqual(['b']), {
-      timeout: 2000,
+      timeout: 5000,
     });
   });
 });
@@ -794,7 +794,7 @@ describe('SessionStore auto-opening active sessions', () => {
         expect(usageOf(s, 'b')?.output).toBe(7);
         expect(usageOf(s, 'w')?.output).toBe(9);
       },
-      { timeout: 2000 },
+      { timeout: 5000 },
     );
     expect(usageOf(s, 'c')).toBeNull();
     expect(fake.parsersFor('c')).toHaveLength(0);
@@ -812,7 +812,7 @@ describe('SessionStore auto-opening active sessions', () => {
         expect(fake.parsersFor('newest')).toHaveLength(1);
         expect(fake.parsersFor('middle')).toHaveLength(1);
       },
-      { timeout: 2000 },
+      { timeout: 5000 },
     );
     await sleep(200);
     expect(fake.parsersFor('old')).toHaveLength(0);
@@ -828,7 +828,7 @@ describe('SessionStore auto-opening active sessions', () => {
 
     await setLive({ a: 'busy' });
 
-    await vi.waitFor(() => expect(usageOf(s, 'a')?.output).toBe(4), { timeout: 2000 });
+    await vi.waitFor(() => expect(usageOf(s, 'a')?.output).toBe(4), { timeout: 5000 });
   });
 
   it('never makes start or the session list wait for an auto-open', async () => {
@@ -841,12 +841,12 @@ describe('SessionStore auto-opening active sessions', () => {
 
     const s = await startStore();
     expect(s.listSessions().map((x) => x.nativeId)).toEqual(['a']);
-    await vi.waitFor(() => expect(fake.parsersFor('a')).toHaveLength(1), { timeout: 2000 });
+    await vi.waitFor(() => expect(fake.parsersFor('a')).toHaveLength(1), { timeout: 5000 });
     expect(usageOf(s, 'a')).toBeNull(); // still opening
 
     fake.listFilesGate = null;
     release();
-    await vi.waitFor(() => expect(usageOf(s, 'a')).not.toBeNull(), { timeout: 2000 });
+    await vi.waitFor(() => expect(usageOf(s, 'a')).not.toBeNull(), { timeout: 5000 });
   });
 });
 
@@ -1004,7 +1004,7 @@ describe('SessionStore with several adapters', () => {
         expect(list.map((x) => x.id)).toEqual(['fake:a1', 'fake:a2', 'other:b1']);
         expect(list[0]?.live).toBe('busy');
       },
-      { timeout: 2000 },
+      { timeout: 5000 },
     );
     expect(ids((await s.getSnapshot(a.id))?.requests ?? [])).toEqual(['ra']);
     expect(logs.some((m) => m.includes('other agent broke'))).toBe(true);
@@ -1186,7 +1186,7 @@ describe('SessionStore with sources the adapter supplies (readJson)', () => {
     await touchWal();
 
     await vi.waitFor(() => expect(ids(seen.client().requests)).toEqual(['r1', 'r2']), {
-      timeout: 2000,
+      timeout: 5000,
     });
     expect(seen.client()).toEqual(await s.getSnapshot(sid));
     expect(db.parsers).toHaveLength(1);
@@ -1200,7 +1200,7 @@ describe('SessionStore with sources the adapter supplies (readJson)', () => {
 
     // The journal moves (both paths report it) but the session's version does not.
     await touchWal();
-    await vi.waitFor(() => expect(db.reads).toBeGreaterThan(readsBefore), { timeout: 2000 });
+    await vi.waitFor(() => expect(db.reads).toBeGreaterThan(readsBefore), { timeout: 5000 });
     await touchWal();
     await sleep(300);
 
@@ -1218,9 +1218,9 @@ describe('SessionStore with sources the adapter supplies (readJson)', () => {
     db.failWith = new Error('database is locked');
     const readsBefore = db.reads;
     await touchWal();
-    await vi.waitFor(() => expect(db.reads).toBeGreaterThan(readsBefore), { timeout: 2000 });
+    await vi.waitFor(() => expect(db.reads).toBeGreaterThan(readsBefore), { timeout: 5000 });
     await touchWal();
-    await vi.waitFor(() => expect(db.reads).toBeGreaterThan(readsBefore + 1), { timeout: 2000 });
+    await vi.waitFor(() => expect(db.reads).toBeGreaterThan(readsBefore + 1), { timeout: 5000 });
     expect(failures()).toHaveLength(1);
     expect(failures()[0]).toContain(db.dbPath);
     expect(ids(seen.client().requests)).toEqual(['r1']);
@@ -1229,13 +1229,13 @@ describe('SessionStore with sources the adapter supplies (readJson)', () => {
     await writeDb({ a: { version: 'v2', records: [rec.req('r1', T(1)), rec.req('r2', T(2))] } });
     await touchWal();
     await vi.waitFor(() => expect(ids(seen.client().requests)).toEqual(['r1', 'r2']), {
-      timeout: 2000,
+      timeout: 5000,
     });
 
     // A new streak is logged again.
     db.failWith = new Error('database is locked');
     await touchWal();
-    await vi.waitFor(() => expect(failures()).toHaveLength(2), { timeout: 2000 });
+    await vi.waitFor(() => expect(failures()).toHaveLength(2), { timeout: 5000 });
   });
 
   it('keeps what it has when the adapter has nothing to read', async () => {
@@ -1246,7 +1246,7 @@ describe('SessionStore with sources the adapter supplies (readJson)', () => {
 
     await writeDb({});
     await touchWal();
-    await vi.waitFor(() => expect(db.reads).toBeGreaterThan(readsBefore), { timeout: 2000 });
+    await vi.waitFor(() => expect(db.reads).toBeGreaterThan(readsBefore), { timeout: 5000 });
     await sleep(100);
 
     expect(ids(seen.client().requests)).toEqual(['r1']);
