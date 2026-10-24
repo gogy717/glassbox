@@ -128,35 +128,59 @@
   font-family: inherit;
 }
 
-/* The result as a mark and words ("✓ 3 matches · 400ms"), not a filled pill. */
+/* The result as a mark and words ("✓ 3 matches · 400ms"), not a filled pill. The words give
+   way first; the duration stays. */
 .result {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
   color: var(--muted);
   font-size: var(--fs-meta);
+  white-space: nowrap;
 }
 
-.result[data-state="running"] {
-  color: var(--accent);
-}
-
-.result[data-state="approval"] {
-  color: var(--warning);
-  font-weight: 600;
-}
-
-.result[data-state="error"] {
-  color: var(--error);
-  font-weight: 600;
+.resultMark {
+  display: inline-flex;
+  flex: none;
 }
 
 .resultLabel {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.resultTime {
+  flex: none;
+}
+
+.resultTime::before {
+  content: "·" / "";
+  margin-right: 6px;
+  color: var(--muted);
+}
+
+/* An Agent or Workflow card: the agent's name in words, its errand muted under it. */
+.name,
+.detail {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.name {
+  color: var(--text);
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+
+.detail {
+  margin-top: -4px;
+  color: var(--muted);
+  font-size: var(--fs-meta);
 }
 
 .arrow {

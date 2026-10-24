@@ -74,9 +74,10 @@ describe('a request removed by a patch', () => {
     expect(screen.getByRole('button', { name: /Conversation 3/ })).toHaveTextContent(
       '1 call · 0 tools',
     );
-    expect(screen.getByRole('group', { name: 'Conversation 3' })).toHaveTextContent(
-      '1 model call · 0 tools',
-    );
+    // The turn header's top line: its label, clock, duration, counts and status.
+    expect(
+      screen.getByText('Conversation 3', { selector: '.section-label' }).parentElement,
+    ).toHaveTextContent('1 model call · 0 tools');
     expect(screen.queryByText('2 model calls · 0 tools')).toBeNull();
   });
 

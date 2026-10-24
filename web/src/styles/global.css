@@ -110,12 +110,20 @@ input {
   text-transform: uppercase;
 }
 
+/* Read, not seen. Pinned to its box's corner rather than left where the text would run, so a
+   long row's hidden words cannot stretch the scroller around it. */
 .visually-hidden {
   position: absolute;
+  top: 0;
+  left: 0;
   width: 1px;
   height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
   overflow: hidden;
   clip: rect(0 0 0 0);
+  clip-path: inset(50%);
   white-space: nowrap;
 }
 

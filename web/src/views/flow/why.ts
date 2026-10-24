@@ -6,17 +6,42 @@ import { plainText } from '../../lib/preview';
 const MAX = 240;
 
 /**
- * Where a sentence ends: `.` `!` `?` before a space and a capital, a digit or a quote, or at the
- * end; or a CJK full stop. So "e.g. the store", "v2.0" and "src/app.ts" do not end one.
+ * Where a sentence may end: `.` `!` `?` before a space and a capital, a digit or a quote, or at
+ * the end; or a CJK full stop. So "e.g. the store", "v2.0" and "src/app.ts" do not end one.
  */
-const END = /[.!?](?=\s+[\p{Lu}\p{N}"'“‘(]|\s*$)|[。！？]/u;
+const END = /[.!?](?=\s+[\p{Lu}\p{N}"'“‘(]|\s*$)|[。！？]/gu;
+
+/** Words whose own full stop ends no sentence, even before a capital: "e.g. React", "Dr. Who". */
+const ABBREVIATIONS = new Set([
+  'e.g',
+  'i.e',
+  'etc',
+  'vs',
+  'cf',
+  'mr',
+  'mrs',
+  'ms',
+  'dr',
+  'st',
+  'no',
+  'fig',
+  'approx',
+]);
+const WORD_BEFORE = /[\p{L}.]+$/u;
 
 /** The first sentence of plain text, on one line, cut at `MAX` characters if it runs on. */
 export function firstSentence(text: string): string {
   const s = text.replace(/\s+/g, ' ').trim();
-  const m = END.exec(s);
-  const sentence = m ? s.slice(0, m.index + 1) : s;
-  return sentence.length > MAX ? `${sentence.slice(0, MAX)}…` : sentence;
+  let end = s.length;
+  for (const m of s.matchAll(END)) {
+    const word = WORD_BEFORE.exec(s.slice(0, m.index))?.[0].toLowerCase();
+    if (m[0] === '.' && word && ABBREVIATIONS.has(word)) continue;
+    end = m.index + 1;
+    break;
+  }
+  // By code point, so the cut never splits an emoji or another astral character in two.
+  const chars = [...s.slice(0, end)];
+  return chars.length > MAX ? `${chars.slice(0, MAX).join('')}…` : chars.join('');
 }
 
 /**
@@ -68,4 +93,16 @@ export function thinkingSince(call: ModelRequest, tools: Iterable<ToolCall>): Is
   for (const t of tools)
     if (own.has(t.id) && t.endedAt !== null && ms(t.endedAt) > ms(since)) since = t.endedAt;
   return since;
+}
+
+/**
+ * The thinking clock's start for a call in flight that is waiting on the model; null while one
+ * of its own tools runs (that is the tool's time, on its card, as `sessionActivity` has it), or
+ * once the call has ended.
+ */
+export function thinkingClock(call: ModelRequest, tools: Iterable<ToolCall>): IsoTime | null {
+  if (call.status !== 'in-flight') return null;
+  const own = new Set(call.toolCallIds);
+  for (const t of tools) if (own.has(t.id) && t.status === 'running') return null;
+  return thinkingSince(call, tools);
 }

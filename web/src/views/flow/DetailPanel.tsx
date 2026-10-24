@@ -1,6 +1,7 @@
 import { ChevronUp, Maximize2 } from 'lucide-react';
 import { type ReactNode, useId, useMemo, useRef, useState } from 'react';
 import type { ModelRequest, RequestDetail, ToolCall } from '../../../../src/core/model.js';
+import type { ToolResultResponse } from '../../../../src/shared/protocol.js';
 import { CopyButton } from '../../components/CodeBlock';
 import { FigureText } from '../../components/FigureText';
 import { JsonInspector } from '../../components/JsonInspector';
@@ -57,6 +58,14 @@ export function DetailPanel({ sessionId, req, tools, card, onClose }: Props) {
   const key = card === 'request' && req.hasDetail ? `${sessionId}\n${req.id}\n${req.status}` : null;
   const [state, retry] = useFetch(key, (signal) => fetchRequestDetail(sessionId, req.id, signal));
   const detail = state.status === 'ok' ? state.data : null;
+  // A tool's full result, fetched once on request and shared by the panel, its maximized
+  // dialog and Copy.
+  const [fullFor, setFullFor] = useState<string | null>(null);
+  const fullKey = tool && fullFor === tool.id ? `${sessionId}\n${tool.id}` : null;
+  const [full, retryFull] = useFetch(fullKey, (signal) =>
+    fetchToolResult(sessionId, tool?.id ?? '', signal),
+  );
+  const fullResult = full.status === 'ok' ? full.data.result : undefined;
   const title =
     card === 'request'
       ? t('detail.request')
@@ -70,7 +79,7 @@ export function DetailPanel({ sessionId, req, tools, card, onClose }: Props) {
       card === 'request'
         ? detail
         : tool
-          ? { name: tool.name, input: tool.input, result: tool.resultPreview }
+          ? { name: tool.name, input: tool.input, result: fullResult ?? tool.resultPreview }
           : { model: req.model, stopReason: req.stopReason, blocks: req.blocks, usage: req.usage },
       null,
       2,
@@ -81,7 +90,12 @@ export function DetailPanel({ sessionId, req, tools, card, onClose }: Props) {
     ) : card === 'response' ? (
       <ResponseBody req={req} />
     ) : tool ? (
-      <ToolBody sessionId={sessionId} tool={tool} />
+      <ToolBody
+        tool={tool}
+        full={full}
+        retryFull={retryFull}
+        loadFull={() => setFullFor(tool.id)}
+      />
     ) : null;
   const canCopy = card !== 'request' || detail !== null;
   return (
@@ -321,14 +335,21 @@ function ResponseBody({ req }: { req: ModelRequest }) {
   );
 }
 
-function ToolBody({ sessionId, tool }: { sessionId: string; tool: ToolCall }) {
+function ToolBody({
+  tool,
+  full,
+  retryFull,
+  loadFull,
+}: {
+  tool: ToolCall;
+  /** The full result, once asked for: the panel's, so its dialog shows it too. */
+  full: FetchState<ToolResultResponse>;
+  retryFull(): void;
+  loadFull(): void;
+}) {
   const { t } = useI18n();
   const approvals = useApprovalsContext();
   const [prefs] = useDetailPrefs();
-  const [wantFull, setWantFull] = useState(false);
-  const [state, retry] = useFetch(wantFull ? `${sessionId}\n${tool.id}` : null, (signal) =>
-    fetchToolResult(sessionId, tool.id, signal),
-  );
   const asText = (v: unknown) => (typeof v === 'string' ? v : JSON.stringify(v, null, 2));
   const args = useMemo(
     () =>
@@ -345,17 +366,17 @@ function ToolBody({ sessionId, tool }: { sessionId: string; tool: ToolCall }) {
         )}
       </Cell>
       <Cell title={t('detail.result')}>
-        {state.status === 'idle' ? (
+        {full.status === 'idle' ? (
           <>
             <TextBlock label={t('detail.result')} text={tool.resultPreview} />
             {tool.hasFullResult && (
-              <button type="button" className={css.link} onClick={() => setWantFull(true)}>
+              <button type="button" className={css.link} onClick={loadFull}>
                 {t('detail.loadFull')}
               </button>
             )}
           </>
         ) : (
-          <Loading state={state} retry={retry}>
+          <Loading state={full} retry={retryFull}>
             {(r) => <TextBlock label={t('detail.result')} text={asText(r.result)} />}
           </Loading>
         )}

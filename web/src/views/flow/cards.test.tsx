@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { ToolCall } from '../../../../src/core/model.js';
@@ -37,11 +39,17 @@ function renderCard(t: ToolCall, locale: Locale = 'en') {
 
 describe('ToolCard', () => {
   it.each([
-    ['Claude Code', 'Read', { file_path: '/repo/src/server/app.ts' }, 'Explore', 'app.ts'],
+    [
+      'Claude Code',
+      'Read',
+      { file_path: '/repo/src/server/app.ts' },
+      'Explore',
+      '/repo/src/server/app.ts',
+    ],
     ['Claude Code', 'Bash', { command: 'git commit -m "Ship"' }, 'Git', 'git commit -m "Ship"'],
     ['Codex', 'exec_command', { cmd: 'npm test', workdir: '/repo' }, 'Run', 'npm test'],
     ['Codex', 'apply_patch', '*** Begin Patch\n*** Update File: src/a.ts\n', 'Edit', 'a.ts'],
-    ['Grok', 'read_file', { target_file: 'src/app.ts' }, 'Explore', 'app.ts'],
+    ['Grok', 'read_file', { target_file: 'src/app.ts' }, 'Explore', 'src/app.ts'],
     ['Grok', 'spawn_subagent', { description: 'Review the diff' }, 'Delegate', 'Review the diff'],
     ['oh-my-pi', 'web_search', { i: 'Checking', query: 'omp tools' }, 'Web', 'omp tools'],
     ['oh-my-pi', 'task', { i: 'Spawn sleep probe', tasks: [] }, 'Delegate', 'Spawn sleep probe'],
@@ -67,6 +75,24 @@ describe('ToolCard', () => {
     },
   );
 
+  // The demo session's cwd is /Users/demo/Dev/glassbox.
+  it.each([
+    [
+      { file_path: '/Users/demo/Dev/glassbox/web/src/views/flow/cards.tsx' },
+      'web/…/flow/cards.tsx',
+    ],
+    [{ file_path: '/Users/demo/Dev/glassbox/src/server/store.ts' }, 'src/server/store.ts'],
+    [
+      { file_path: '/Users/demo/Dev/glassbox/web/src/views/flow/cards.tsx', offset: 10, limit: 5 },
+      'web/…/cards.tsx:10-14',
+    ],
+    [{ file_path: '/elsewhere/very/deep/tree/of/dirs/notes.md' }, '/…/tree/of/dirs/notes.md'],
+  ])('shows a file by its path in the project, cut in the middle: %j', (input, shown) => {
+    const card = renderCard(tool('Read', input));
+    const summary = within(card).getByText(shown);
+    expect(summary).toHaveAttribute('title', input.file_path);
+  });
+
   it('names an MCP tool by its server and tool', () => {
     const card = renderCard(tool('mcp__github__create_issue', { title: 'Flaky test' }));
     expect(within(card).getByRole('img', { name: 'MCP' })).toBeInTheDocument();
@@ -88,31 +114,60 @@ describe('ToolCard', () => {
     expect(card).not.toHaveTextContent('{');
   });
 
-  it('shows a JSON result as its message', () => {
-    const card = renderCard({
-      ...tool('SendMessage', { to: 'medaka-f5', message: 'Hi' }),
-      resultPreview: '{"success":true,"message":"Message sent to medaka-f5"}',
-    });
-    expect(within(card).getByText('Message sent to medaka-f5')).toBeInTheDocument();
-  });
+  // The line under the summary: a mark, a few words for the outcome, the duration.
+  const resultOf = (card: HTMLElement) =>
+    card.querySelector('[data-state]:not([data-state] [data-state])') as HTMLElement;
 
-  it('says what a JSON result is, instead of quoting a value out of data', () => {
-    const json = '{"name":"glassbox","version":"0.2.0","private":true}';
-    const card = renderCard({
-      ...tool('Bash', { command: 'cat package.json' }),
-      resultPreview: json,
-    });
-    expect(within(card).getByText('JSON · 3 keys')).toBeInTheDocument();
-    expect(card).not.toHaveTextContent('glassbox');
+  it.each([
+    ['SendMessage', { to: 'medaka-f5' }, '{"success":true,"message":"Message sent"}', 'delivered'],
+    ['Bash', { command: 'cat package.json' }, '{"name":"glassbox","private":true}', '1 line'],
+    ['Bash', { command: 'npm test' }, '(Bash completed with no output)', 'no output'],
+    ['Grep', { pattern: 'x' }, 'a.ts:1:x\nb.ts:2:x\nc.ts:3:x', '3 matches'],
+    ['Agent', { description: 'Explore' }, 'Async agent launched successfully.', 'launched · async'],
+    ['SomethingNew', {}, 'whatever it said', 'done'],
+  ])('%s: says what came of it in a few words, never its text', (name, input, preview, words) => {
+    const card = renderCard({ ...tool(name, input), resultPreview: preview });
+    const result = resultOf(card);
+    expect(result).toHaveAttribute('data-state', 'complete');
+    expect(result).toHaveTextContent(words);
+    expect(within(result).getByText('1.2s')).toHaveClass('figure');
+    expect(result.textContent).not.toMatch(/["“(]/);
   });
 
   it('says it in Chinese too', () => {
-    const preview = '[1, 2]';
     const card = renderCard(
-      { ...tool('Bash', { command: 'jq .ids f' }), resultPreview: preview },
+      { ...tool('Bash', { command: 'jq .ids f' }), resultPreview: '[1, 2]' },
       'zh',
     );
-    expect(within(card).getByText('JSON · 2 项')).toBeInTheDocument();
+    expect(resultOf(card)).toHaveTextContent('1 行');
+  });
+
+  it("marks a failed call with W1's mark and word", () => {
+    const card = renderCard({ ...tool('Edit', { file_path: '/r/a.ts' }), status: 'error' });
+    const result = resultOf(card);
+    expect(result).toHaveAttribute('data-state', 'error');
+    expect(within(result).getByText('Failed', { selector: '[data-status-label]' })).toBeVisible();
+  });
+
+  it('names a sub-agent in words, with its errand under it', () => {
+    const card = renderCard(
+      tool('Agent', {
+        description: 'Explore transcript format',
+        prompt: 'Read **parser.ts** and list the record types.',
+        subagent_type: 'Explore',
+      }),
+    );
+    const name = within(card).getByText('Explore transcript format');
+    expect(name.className).not.toMatch(/mono/);
+    expect(name.className).toMatch(/name/);
+    expect(within(card).getByText('Read parser.ts and list the record types.').className).toMatch(
+      /detail/,
+    );
+  });
+
+  it('keeps the mono summary for a tool card', () => {
+    const card = renderCard(tool('Bash', { command: 'npm test' }));
+    expect(within(card).getByText('npm test').className).toMatch(/mono/);
   });
 
   it('says "Run tool" for a call without input', () => {
@@ -143,5 +198,15 @@ describe('ResponseCard', () => {
     expect(
       screen.getByText('Spec Compliance Spec compliant: yes, see cards.tsx'),
     ).toBeInTheDocument();
+  });
+});
+
+describe('card styles', () => {
+  const sheet = readFileSync(join(import.meta.dirname, 'cards.module.css'), 'utf8');
+
+  it('puts the duration after a muted middle dot: "3 matches · 400ms"', () => {
+    const dot = /\n\.resultTime::before \{([^}]*)\}/.exec(sheet)?.[1];
+    expect(dot).toMatch(/content: "·" \/ "";/);
+    expect(dot).toMatch(/color: var\(--muted\);/);
   });
 });

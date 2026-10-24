@@ -8,8 +8,11 @@ import { I18nContext, makeI18n } from '../../i18n';
 import type { Route } from '../../router';
 import { DEMO_NOW, demoOpen } from '../../test/demo';
 import { clampHeadings, useFakeLayout } from '../../test/layout';
+import { moduleCssValue } from '../../test/module-css';
 import { UiContext } from '../../ui';
 import { FlowView } from './FlowView';
+import css from './FlowView.module.css';
+import headerCss from './TurnHeader.module.css';
 
 const EXPLORE = 'a1b2c3d4e5f60718';
 
@@ -115,6 +118,17 @@ const callScroller = (container: HTMLElement) =>
   container.querySelector('[data-index]')?.parentElement?.parentElement as HTMLElement;
 
 describe('FlowView', () => {
+  it('gives the turn list a fixed column, so the calls keep the width for their cards', () => {
+    renderFlow({ route: { turnId: 'turn_m1' } });
+    const flow = document.querySelector(`.${css.flow}`) as HTMLElement;
+    const sheet = `${import.meta.dirname}/FlowView.module.css`;
+    // The board's list is 248 of a 1,180 px panel; under a 1,000 px panel it is 200 px (a rule
+    // in a container query, which the matcher leaves out).
+    expect(moduleCssValue(sheet, css, flow, 'grid-template-columns')).toBe(
+      'minmax(240px, 264px) minmax(0, 1fr)',
+    );
+  });
+
   useFakeLayout();
   afterEach(() => vi.useRealTimers());
 
@@ -345,12 +359,12 @@ describe('FlowView', () => {
     expect(within(first).getByText('14s')).toHaveClass('figure');
 
     const second = row(2);
-    expect(
-      within(second).getByText('Failed', { selector: '[data-status-label]' }),
-    ).toBeInTheDocument();
+    // The call's mark, and the Edit card's result line.
+    expect(within(second).getAllByText('Failed', { selector: '[data-status-label]' })).toHaveLength(
+      2,
+    );
     const edit = within(second).getByRole('button', { name: /^Edit/ });
-    expect(edit).toHaveTextContent('Failed');
-    expect(within(second).getAllByText('Failed').length).toBeGreaterThanOrEqual(2);
+    expect(within(edit).getByText('Failed', { selector: '[data-status-label]' })).toBeVisible();
 
     expect(within(row(3)).getByText('Final reply')).toBeInTheDocument();
   });
@@ -405,7 +419,9 @@ describe('FlowView', () => {
     vi.setSystemTime(DEMO_NOW);
     renderFlow({ route: { agentId: 'af00000000000002' } });
     const bash = within(row(9)).getByRole('button', { name: /^Bash/ });
-    expect(bash).toHaveTextContent('Running · 26:22');
+    // W1's running mark and word, then the clock in mono where a finished call has its duration.
+    expect(within(bash).getByText('Running', { selector: '[data-status-label]' })).toBeVisible();
+    expect(within(bash).getByText('26:22')).toHaveClass('figure');
   });
 
   it('opens one detail panel at a time inside the row of the clicked card', () => {
@@ -485,7 +501,8 @@ describe('FlowView', () => {
   it('says following is paused, in a bar under the turn header, with the way back', () => {
     const { navigate, setFollow } = renderFlow({ route: { turnId: 'turn_m1' }, follow: false });
     // In the layout between the header and the calls, not floating over them.
-    const bar = screen.getByRole('group', { name: 'Conversation 1' }).nextElementSibling;
+    const header = screen.getByRole('heading', { level: 2 }).closest(`.${headerCss.header}`);
+    const bar = header?.nextElementSibling;
     if (!(bar instanceof HTMLElement)) throw new Error('no bar after the header');
     // The newest conversation (3) is still running in the demo.
     expect(within(bar).getByRole('status')).toHaveTextContent(
@@ -544,9 +561,12 @@ describe('FlowView', () => {
     const list = screen.getByRole('list', { name: 'Conversations' });
     expect(within(list).getAllByRole('button')).toHaveLength(1);
     expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Conversation 1: Busy/);
-    fireEvent.change(field, { target: { value: 'no such words' } });
+    fireEvent.change(field, { target: { value: 'busy sessionsx' } });
     expect(screen.getByText('No conversation matches')).toBeInTheDocument();
-    // Nothing to follow in the list: the newest conversation stays on stage.
+    // Nothing in the list to follow: the conversation on stage stays, rather than the newest
+    // one the filter has just ruled out.
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Conversation 1: Busy/);
+    fireEvent.change(field, { target: { value: '' } });
     expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Conversation 3: /);
   });
 

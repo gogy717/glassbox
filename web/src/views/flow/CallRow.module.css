@@ -17,13 +17,13 @@
   border-bottom: 1px solid var(--border);
 }
 
-/* #1 · clock · duration │ in 52,400 · uncached 6 · … · out 3,900 (3,100 thinking) · status.
+/* #1 · clock · duration · in 52,400 · uncached 6 · … · out 3,900 (3,100 thinking), status.
    The readings wrap inside their own column; the status mark stays at the top right. */
 .line {
   display: grid;
   grid-template-columns: auto auto auto minmax(0, 1fr) auto;
   align-items: baseline;
-  column-gap: 14px;
+  column-gap: 6px;
   min-height: 36px;
   padding-top: 10px;
   color: var(--muted);
@@ -42,13 +42,20 @@
   white-space: nowrap;
 }
 
-/* The readings, after a hairline. */
+/* The readings, in the line's run of middle dots. */
 .readings {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: 2px 12px;
-  padding-left: 14px;
-  border-left: 1px solid var(--border);
+  gap: 2px 6px;
+}
+
+/* A middle dot with spaces between the parts, muted; screen readers skip it. */
+.meta::before,
+.readings::before,
+.reading + .reading::before {
+  content: "·" / "";
+  margin-right: 6px;
+  color: var(--muted);
 }
 
 .reading {

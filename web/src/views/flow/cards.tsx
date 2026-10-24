@@ -1,26 +1,24 @@
-import {
-  ArrowRight,
-  ArrowUpRight,
-  Check,
-  ChevronDown,
-  Clock3,
-  CornerDownLeft,
-  ShieldQuestion,
-  Workflow,
-  X,
-} from 'lucide-react';
+import { ArrowRight, ArrowUpRight, ChevronDown, CornerDownLeft, Workflow } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 import type { AgentNode, ModelRequest, ToolCall, WorkflowRun } from '../../../../src/core/model.js';
 import { contextSize, totalTokens } from '../../../../src/core/usage.js';
 import { CategoryIcon } from '../../components/CategoryIcon';
-import { LiveDot, Ticking } from '../../components/Status';
+import { FigureText } from '../../components/FigureText';
+import { LiveDot, StatusMark, Ticking } from '../../components/Status';
 import { useApprovalsContext } from '../../data/approvals';
 import type { OpenSession } from '../../data/store';
 import { useI18n } from '../../i18n';
 import { subtreeIds } from '../../lib/agents';
-import { formatCompact, formatDuration } from '../../lib/format';
-import { plainText, resultLine } from '../../lib/preview';
-import { mcpTool, summarizeInput, toolCategory } from '../../lib/tool-category';
+import { formatCompact, formatDuration, middleEllipsis } from '../../lib/format';
+import { plainText } from '../../lib/preview';
+import {
+  basename,
+  inputPath,
+  mcpTool,
+  summarizeInput,
+  summarizeResult,
+  toolCategory,
+} from '../../lib/tool-category';
 import css from './cards.module.css';
 import { toolStatus } from './flow-model';
 
@@ -127,7 +125,10 @@ interface CardProps {
 }
 
 interface ResponseCardProps extends CardProps {
-  /** Where an in-flight call's thinking clock starts (`thinkingSince`); its start by default. */
+  /**
+   * Where an in-flight call's thinking clock starts (`thinkingClock`); its start by default.
+   * Null while one of its tools runs: the card then says what the call has so far.
+   */
   thinkingSince?: string | null;
 }
 
@@ -167,8 +168,8 @@ export function ResponseCard({ req, selected, onSelect, thinkingSince }: Respons
   const inFlight = req.status === 'in-flight';
 
   let preview: ReactNode;
-  if (inFlight && req.startedAt)
-    preview = <Ticking since={thinkingSince ?? req.startedAt} labelKey="flow.thinkingNow" />;
+  const clock = thinkingSince === undefined ? req.startedAt : thinkingSince;
+  if (inFlight && clock) preview = <Ticking since={clock} labelKey="flow.thinkingNow" />;
   else if (req.error) preview = <span className={css.errorText}>{req.error.message}</span>;
   else if (text) preview = plainText(text);
   else if (thinking?.kind === 'thinking' && thinking.text) preview = plainText(thinking.text);
@@ -209,52 +210,84 @@ export function ResponseCard({ req, selected, onSelect, thinkingSince }: Respons
   );
 }
 
+/**
+ * A tool's outcome as a mark and a few words: "✓ 3 matches 400ms", "× Failed 50ms", "● Running
+ * 0:12", the amber ringed "Waiting for you". Never the result's own text.
+ */
 function ResultStrip({ tool }: { tool: ToolCall }) {
   const { t } = useI18n();
   const status = toolStatus(tool, useApprovalsContext());
-  let icon: ReactNode;
-  let label: ReactNode;
-  if (status === 'approval') {
-    // Not running yet: the agent is blocked until the person answers the permission prompt.
-    icon = <ShieldQuestion size={12} aria-hidden="true" />;
-    label = t('status.approval');
-  } else if (status === 'running') {
-    icon = <LiveDot kind="status" state="running" />;
-    label = tool.startedAt ? (
-      <Ticking since={tool.startedAt} labelKey="flow.runningFor" />
-    ) : (
-      t('status.running')
-    );
-  } else if (status === 'error') {
-    icon = <X size={12} aria-hidden="true" />;
-    label = t('status.error');
-  } else if (status === 'complete') {
-    icon = <Check size={12} aria-hidden="true" />;
-    label =
-      (tool.resultPreview &&
-        resultLine(tool.resultPreview, (s) =>
-          s.size === null
-            ? t('flow.json')
-            : t(s.kind === 'object' ? 'flow.jsonKeys' : 'flow.jsonItems', { n: s.size }),
-        )) ||
-      t('status.complete');
-  } else {
-    icon = <Clock3 size={12} aria-hidden="true" />;
-    label = t('status.unknownEnd');
-  }
+  const summary = status === 'complete' ? summarizeResult(tool) : null;
   return (
     <span className={css.result} data-state={status}>
       {/* Announce state changes only; the ticking timer must not be read out every second. */}
       <span className="visually-hidden" aria-live="polite">
         {t(status === 'waiting' ? 'status.unknownEnd' : `status.${status}`)}
       </span>
-      {icon}
-      <span className={css.resultLabel}>{label}</span>
-      {status !== 'running' && status !== 'approval' && (
-        <span className="figure">{formatDuration(tool.durationMs)}</span>
+      {/* The word is announced above; the mark is what the eye reads. */}
+      <span className={css.resultMark} aria-hidden="true">
+        {summary ? (
+          <StatusMark status="complete" compact />
+        ) : (
+          <StatusMark
+            status={status}
+            label={status === 'waiting' ? t('status.unknownEnd') : undefined}
+          />
+        )}
+      </span>
+      {summary && (
+        <span className={css.resultLabel}>
+          <FigureText k={`result.${summary.key}`} params={{ n: summary.n ?? 0 }} />
+        </span>
       )}
+      {status === 'running' && tool.startedAt ? (
+        <span className={css.resultTime}>
+          <Ticking since={tool.startedAt} labelKey="flow.elapsed" />
+        </span>
+      ) : status !== 'approval' && status !== 'running' ? (
+        <span className={`${css.resultTime} figure`}>{formatDuration(tool.durationMs)}</span>
+      ) : null}
     </span>
   );
+}
+
+/** What a 200 px card's mono summary holds on one line. */
+const SUMMARY_CHARS = 24;
+
+/**
+ * A tool card's summary: a file as its path in the project, cut in the middle
+ * ("web/…/flow/cards.tsx:10-14"), with the whole path on hover; anything else as summarized.
+ */
+function ToolSummary({ tool, cwd }: { tool: ToolCall; cwd: string | null }) {
+  const { t } = useI18n();
+  const summary = summarizeInput(tool);
+  const path = inputPath(tool);
+  const name = path && basename(path);
+  if (!path || !name || !summary.startsWith(name))
+    return <span className={`${css.preview} ${css.mono}`}>{summary || t('flow.runTool')}</span>;
+  // Whatever follows the basename in the summary: the lines read (":10-14").
+  const lines = summary.slice(name.length);
+  const inProject = cwd && path.startsWith(`${cwd}/`) ? path.slice(cwd.length + 1) : path;
+  return (
+    <span className={`${css.preview} ${css.mono}`} title={path}>
+      {middleEllipsis(inProject, SUMMARY_CHARS - lines.length)}
+      {lines}
+    </span>
+  );
+}
+
+const DETAIL_KEYS = ['prompt', 'message', 'task'];
+
+/** What a delegating call asked for, on one line: its prompt or message, else its first task's. */
+function delegateDetail(input: unknown): string | null {
+  if (input === null || typeof input !== 'object') return null;
+  const o = input as Record<string, unknown>;
+  const tasks = Array.isArray(o.tasks)
+    ? (o.tasks[0] as Record<string, unknown> | undefined)
+    : undefined;
+  for (const v of [...DETAIL_KEYS.map((k) => o[k]), tasks?.task, tasks?.description])
+    if (typeof v === 'string' && v.trim()) return plainText(v);
+  return null;
 }
 
 interface ToolCardProps {
@@ -279,6 +312,7 @@ export function ToolCard({ tool, open, selected, onSelect, onEnterAgent }: ToolC
   const category = toolCategory(tool.name, tool.input);
   const mcp = mcpTool(tool.name);
   const categoryName = t(`steps.cat.${category}`);
+  const detail = category === 'delegate' ? delegateDetail(tool.input) : null;
   return (
     <Card
       kind="tool"
@@ -292,9 +326,17 @@ export function ToolCard({ tool, open, selected, onSelect, onEnterAgent }: ToolC
       footer={footer}
       label={tool.name}
     >
-      <span className={`${css.preview} ${css.mono}`}>
-        {summarizeInput(tool) || t('flow.runTool')}
-      </span>
+      {category === 'delegate' ? (
+        // An agent's name and its errand, in words: a name is not code.
+        <>
+          <span className={css.name}>{summarizeInput(tool) || tool.name}</span>
+          {detail && detail !== summarizeInput(tool) && (
+            <span className={css.detail}>{detail}</span>
+          )}
+        </>
+      ) : (
+        <ToolSummary tool={tool} cwd={open.session.cwd} />
+      )}
       <ResultStrip tool={tool} />
     </Card>
   );

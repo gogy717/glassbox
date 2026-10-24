@@ -8,6 +8,25 @@ const sheet = postcss.parse(readFileSync(join(import.meta.dirname, 'global.css')
 const WEB = join(import.meta.dirname, '../..');
 
 describe('global.css', () => {
+  it('pins visually hidden text inside its box, so it cannot stretch a scroller it sits in', () => {
+    const decls: Record<string, string> = {};
+    sheet.walkRules('.visually-hidden', (rule: Rule) => {
+      rule.walkDecls((d) => {
+        decls[d.prop] = d.value;
+      });
+    });
+    expect(decls).toMatchObject({
+      position: 'absolute',
+      top: '0',
+      left: '0',
+      width: '1px',
+      height: '1px',
+      overflow: 'hidden',
+      'clip-path': 'inset(50%)',
+      'white-space': 'nowrap',
+    });
+  });
+
   it('eases hover and selection on every control in --motion, and reduced motion cancels it', () => {
     const transitions: Record<string, string> = {};
     sheet.walkRules((rule: Rule) => {

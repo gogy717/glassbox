@@ -11,7 +11,7 @@ import css from './CallRow.module.css';
 import { Arrow, type CardKey, FinalReply, RequestCard, ResponseCard, ToolCard } from './cards';
 import { DetailPanel } from './DetailPanel';
 import { callStatus, requestDurationMs, startUnknown, tokenHeader } from './flow-model';
-import { thinkingSince, whyLine } from './why';
+import { thinkingClock, whyLine } from './why';
 
 interface Props {
   req: ModelRequest;
@@ -34,11 +34,12 @@ function Reading({ word, n, children }: { word: string; n: string; children?: Re
 
 /**
  * The call's reason, on the line under its readings: what it said, else what it thought. While
- * it is still thinking with nothing to show, how long it has been at it.
+ * it is still thinking with nothing to show, how long it has been at it; nothing while one of
+ * its tools runs, whose card counts that time.
  */
 function WhyLine({ req, tools }: { req: ModelRequest; tools: ToolCall[] }) {
   const why = whyLine(req);
-  const since = req.status === 'in-flight' ? thinkingSince(req, tools) : null;
+  const since = thinkingClock(req, tools);
   if (!why && !since) return null;
   return (
     <p className={css.why}>
@@ -114,7 +115,7 @@ export const CallRow = memo(function CallRow(p: Props) {
             req={req}
             selected={p.selected === 'response'}
             onSelect={() => select('response')}
-            thinkingSince={req.status === 'in-flight' ? thinkingSince(req, tools) : null}
+            thinkingSince={thinkingClock(req, tools)}
           />
         </div>
         {tools.map((tool) => (

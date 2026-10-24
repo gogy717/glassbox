@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Turn } from '../../../../src/core/model.js';
 import { I18nContext, makeI18n } from '../../i18n';
-import { type TurnItem, TurnList } from './TurnList';
+import { newestMatch, type TurnItem, TurnList } from './TurnList';
 
 function item(n: number): TurnItem {
   const turn = {
@@ -251,12 +251,33 @@ describe('TurnList filter', () => {
   });
 });
 
+describe('newestMatch', () => {
+  const items = [item(1), item(2), item(12)];
+
+  it('is the newest turn whose label or prompt has the words, any case', () => {
+    expect(newestMatch(items, 'PROMPT 1')?.turn.index).toBe(12);
+    expect(newestMatch(items, 'conversation 2')?.turn.index).toBe(2);
+  });
+
+  it('is the newest of all for no words, and nothing when none matches', () => {
+    expect(newestMatch(items, '  ')?.turn.index).toBe(12);
+    expect(newestMatch(items, 'nothing like it')).toBeUndefined();
+  });
+});
+
 describe('TurnList styles', () => {
-  // jsdom has no layout: this pins the one rule that keeps the narrow list from widening the page.
+  // jsdom has no layout. The utility is safe on its own (global.test.ts); the row also holds its
+  // hidden words, so a screen reader's cursor lands on the row it reads.
   it('contains each row’s visually hidden text, so the scrolling list cannot widen the page', () => {
     const sheet = readFileSync(join(import.meta.dirname, 'TurnList.module.css'), 'utf8');
     const row = /\n\.row \{([^}]*)\}/.exec(sheet)?.[1] ?? '';
     expect(row).toMatch(/position: relative;/);
+  });
+
+  it("pushes a row's mark to its right edge, so the marks make a column under the clocks", () => {
+    const sheet = readFileSync(join(import.meta.dirname, 'TurnList.module.css'), 'utf8');
+    const mark = /\n\.markSub \{([^}]*)\}/.exec(sheet)?.[1];
+    expect(mark).toMatch(/margin-left: auto;/);
   });
 
   it('keeps the "local command" note (本地命令) out of the mono face', () => {

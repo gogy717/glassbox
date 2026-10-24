@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { ToolCall } from '../../../src/core/model.js';
-import { mcpTool, summarizeInput, type ToolCategory, toolCategory } from './tool-category';
+import {
+  mcpTool,
+  summarizeInput,
+  summarizeResult,
+  type ToolCategory,
+  toolCategory,
+} from './tool-category';
 
 describe('toolCategory', () => {
   // Names as each agent's sessions record them (read from the adapters, their fixtures and the
@@ -513,6 +519,75 @@ describe('summarizeInput of a string that is JSON', () => {
 describe('summarizeInput of huge input', () => {
   it('only reads as far as the line it shows', () => {
     const summary = summarizeInput(tool('Odd', 'a  b\n'.repeat(2_000_000)));
-    expect(summary).toBe(`${'a b '.repeat(20)}`.slice(0, 80) + '…');
+    expect(summary).toBe(`${'a b '.repeat(20).slice(0, 80)}…`);
+  });
+});
+
+describe('summarizeResult', () => {
+  const done = (name: string, input: unknown, resultPreview: string | null): ToolCall => ({
+    ...tool(name, input),
+    resultPreview,
+  });
+  const long = (line: string, n: number) =>
+    Array.from({ length: n }, () => line)
+      .join('\n')
+      .slice(0, 500);
+
+  it.each([
+    // Search: a count of matches, or none.
+    [
+      'Grep',
+      { pattern: 'x' },
+      'src/a.ts:3:x\nsrc/b.ts:9:x\nsrc/c.ts:1:x',
+      { key: 'matches', n: 3 },
+    ],
+    ['Grep', { pattern: 'x' }, 'Found 4 files\nsrc/a.ts\nsrc/b.ts', { key: 'files', n: 4 }],
+    [
+      'Grep',
+      { pattern: 'x' },
+      'Found 12 total occurrences across 3 files.',
+      { key: 'matches', n: 12 },
+    ],
+    ['grep', { pattern: 'x' }, 'No matches found', { key: 'noMatches' }],
+    ['Bash', { command: 'rg -n "sortSessions" src' }, 'a:1\nb:2\nc:3', { key: 'matches', n: 3 }],
+    // Listing: files.
+    ['Glob', { pattern: '**/*.ts' }, 'a.ts\nb.ts', { key: 'files', n: 2 }],
+    ['list_dir', { path: '.' }, 'No files found', { key: 'noFiles' }],
+    // Reading: the lines, when the whole text is there.
+    ['Read', { file_path: '/r/a.ts' }, '1\ta\n2\tb\n3\tc', { key: 'lines', n: 3 }],
+    ['Read', { file_path: '/r/a.ts' }, long('1\tconst x = 1;', 80), { key: 'read' }],
+    // Running: no output, or how much.
+    ['Bash', { command: 'npm test' }, '(Bash completed with no output)', { key: 'noOutput' }],
+    ['Bash', { command: 'npm test' }, '', { key: 'noOutput' }],
+    ['exec_command', { cmd: 'npm test' }, 'ok\n89 passed', { key: 'lines', n: 2 }],
+    [
+      'Bash',
+      { command: 'npm test' },
+      long('PASS web/src/a.test.ts', 60),
+      { key: 'linesMore', n: 22 },
+    ],
+    // Changing files.
+    ['Edit', { file_path: '/r/a.ts' }, 'The file /r/a.ts has been updated.', { key: 'edited' }],
+    ['apply_patch', '*** Begin Patch', 'Done!', { key: 'edited' }],
+    ['Write', { file_path: '/r/a.ts' }, 'File created successfully', { key: 'written' }],
+    // Delegating.
+    [
+      'Agent',
+      { description: 'Explore' },
+      'Async agent launched successfully. agentId: a1',
+      { key: 'launched' },
+    ],
+    ['SendMessage', { to: 'x' }, '{"success":true,"message":"Message sent"}', { key: 'delivered' }],
+    ['Agent', { description: 'Explore' }, 'The transcript has four record types.', { key: 'done' }],
+    // The rest.
+    ['AskUserQuestion', { questions: [] }, 'User answered: yes', { key: 'answered' }],
+    ['TodoWrite', { todos: [] }, 'Todos have been modified successfully.', { key: 'updated' }],
+    ['WebFetch', { url: 'https://a.dev' }, '# Title\nBody', { key: 'fetched' }],
+    ['WebSearch', { query: 'x' }, 'Web search results for query', { key: 'searched' }],
+    ['mcp__github__create_issue', { title: 'x' }, '{"id":12}', { key: 'json' }],
+    ['mcp__github__search', { q: 'x' }, 'Issue #12: flaky test', { key: 'text' }],
+    ['SomethingNew', {}, 'whatever it said', { key: 'done' }],
+  ])('%s %j: %j → %j', (name, input, preview, want) => {
+    expect(summarizeResult(done(name, input, preview))).toEqual(want);
   });
 });
