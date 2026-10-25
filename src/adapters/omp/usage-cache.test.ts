@@ -367,12 +367,15 @@ describe('oh-my-pi cache source', () => {
 
   const now = Date.now();
   const nowSec = Math.floor(now / 1000);
+  /** A row oh-my-pi still serves: `read` filters on the real clock, so retention runs from it. */
+  const liveRow = (value: Record<string, unknown> | null, baseUrl = 'default') =>
+    cacheRow(value, baseUrl, Math.floor((now + DAY) / 1000));
 
   it('reads the usage reports in <agent dir>/agent.db and watches it', async () => {
     writeDb([
-      cacheRow(xaiReport(now - 60_000)),
-      cacheRow(copilotReport(now - 60_000), 'https://api.example.invalid'),
-      cacheRow(copilotReport(now - 120_000), 'https://copilot.example.invalid'),
+      liveRow(xaiReport(now - 60_000)),
+      liveRow(copilotReport(now - 60_000), 'https://api.example.invalid'),
+      liveRow(copilotReport(now - 120_000), 'https://copilot.example.invalid'),
       { key: 'session:sticky', value: cacheValue(xaiReport(now)), expires_at: nowSec + 60 },
       { key: 'usage_cache:failure:report:x', value: cacheValue(null), expires_at: nowSec + 60 },
     ]);
@@ -404,7 +407,7 @@ describe('oh-my-pi cache source', () => {
   });
 
   it('leaves no files behind in the agent dir', async () => {
-    writeDb([cacheRow(xaiReport(now - 60_000))]);
+    writeDb([liveRow(xaiReport(now - 60_000))]);
     // oh-my-pi is not running: closing it checkpointed the WAL away.
     expect(existsSync(`${db}-wal`)).toBe(false);
     const before = (await readdir(join(dir, 'agent'))).sort();
@@ -419,10 +422,10 @@ describe('oh-my-pi cache source', () => {
    * All three files get `mode`, unless one is given for -wal or -shm.
    */
   function runningOmp(mode = 0o600, files: { wal?: number; shm?: number } = {}): DatabaseSync {
-    writeDb([cacheRow(xaiReport(now - 60_000))]);
+    writeDb([liveRow(xaiReport(now - 60_000))]);
     const writer = new DatabaseSync(db);
     writer.exec('PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0');
-    const r = cacheRow(openaiReport(now - 60_000));
+    const r = liveRow(openaiReport(now - 60_000));
     writer
       .prepare('INSERT INTO cache (key, value, expires_at) VALUES (?, ?, ?)')
       .run(r.key, r.value, r.expires_at);
@@ -455,10 +458,10 @@ describe('oh-my-pi cache source', () => {
    * writable mapping. Each line written to it is a command, answered once done.
    */
   async function ompProcess(): Promise<{ run(cmd: string): Promise<void>; stop(): Promise<void> }> {
-    writeDb([cacheRow(xaiReport(now - 60_000))]);
+    writeDb([liveRow(xaiReport(now - 60_000))]);
     const child = spawn(
       process.execPath,
-      ['-e', OMP_WRITER, db, JSON.stringify(cacheRow(openaiReport(now - 60_000)))],
+      ['-e', OMP_WRITER, db, JSON.stringify(liveRow(openaiReport(now - 60_000)))],
       {
         stdio: ['pipe', 'pipe', 'inherit'],
       },
@@ -561,7 +564,7 @@ describe('oh-my-pi cache source', () => {
   });
 
   it('leaves an empty WAL alone: SQLite would give it the database file mode', async () => {
-    writeDb([cacheRow(xaiReport(now - 60_000))]);
+    writeDb([liveRow(xaiReport(now - 60_000))]);
     const writer = new DatabaseSync(db);
     try {
       writer.exec('PRAGMA journal_mode=WAL');
