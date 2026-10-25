@@ -221,9 +221,14 @@ describe('OpenCode adapter in the store', () => {
       parts: b.parts.filter((p) => p.message_id === u2),
     });
 
-    await vi.waitFor(() => expect(client.requests.map((r) => r.id)).toEqual([a, a2]), {
-      timeout: 3000,
-    });
+    // Each row commits on its own, as OpenCode writes them: wait for the last one, the prompt's part.
+    await vi.waitFor(
+      () => {
+        expect(client.requests.map((r) => r.id)).toEqual([a, a2]);
+        expect(client.turns.at(-1)?.prompt).toBe('again');
+      },
+      { timeout: 3000 },
+    );
     expect(client).toEqual(await store.getSnapshot(id));
     expect(client.session.usage).toMatchObject({ input: 12, output: 5 });
     expect(patches.length).toBeGreaterThan(0);
