@@ -1,7 +1,8 @@
 /**
  * The session receipt, byte for byte: every image and text the demo sessions make, at each size,
  * paper and language, names shown and hidden, hashed in one time zone. The hash is what the
- * receipt drew before its pen was shared with the weekly receipt (78cb423). Changing how the
+ * receipt drew before its pen was shared with the weekly receipt (78cb423), then with WORK's
+ * turns line saying "Prompts", not "Conversations" (the UX pass's words). Changing how the
  * session receipt looks changes it on purpose: then the hash changes in the same commit, which
  * says why.
  */
@@ -44,6 +45,6 @@ function receipts(): string {
 
 it('draws the session receipt exactly as it did before the weekly receipt shared its pen', () => {
   expect(createHash('sha256').update(receipts()).digest('hex')).toBe(
-    'cc53a5c7ff14fe86cd6c03d431f84d97a6a32f17cc3e4cbb748fb798aab5869a',
+    '72424e095021b4e7073af16f53fc6fa9764372877bfee591612760b0415c12ec',
   );
 });

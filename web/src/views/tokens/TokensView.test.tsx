@@ -243,15 +243,15 @@ describe('TokensView', () => {
     ).toBeInTheDocument();
     const rows = within(chart).getAllByRole('row').slice(1);
     expect(rows.map((r) => r.textContent)).toEqual([
-      'Conversation 1 · call #131,250820',
-      'Conversation 1 · call #234,9001,540',
-      'Conversation 1 · call #337,800420',
-      'Conversation 2 · call #152,4003,900',
-      'Conversation 2 · call #256,500260',
+      'Prompt 1 · call #131,250820',
+      'Prompt 1 · call #234,9001,540',
+      'Prompt 1 · call #337,800420',
+      'Prompt 2 · call #152,4003,900',
+      'Prompt 2 · call #256,500260',
     ]);
     const hits = chart.querySelectorAll('rect');
     fireEvent.mouseEnter(hits[3] as Element);
-    expect(within(chart).getByRole('tooltip')).toHaveTextContent('Conversation 2 · call #1');
+    expect(within(chart).getByRole('tooltip')).toHaveTextContent('Prompt 2 · call #1');
   });
 
   it('gives each chart point its own non-overlapping click area, so clicks land on the right request', () => {
@@ -285,7 +285,7 @@ describe('TokensView', () => {
     const items = within(top).getAllByRole('button');
     expect(items).toHaveLength(5);
     expect(items[0]).toHaveTextContent('recon:prior-art');
-    expect(items[0]).toHaveTextContent('Conversation 1 · call #9');
+    expect(items[0]).toHaveTextContent('Prompt 1 · call #9');
     expect(items[0]).toHaveTextContent('193,900');
     fireEvent.click(items[0] as HTMLElement);
     expect(setFollow).toHaveBeenCalledWith(false);

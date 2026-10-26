@@ -25,7 +25,7 @@ function item(n: number, status: UiStatus = 'complete', prompt = `Research ${n}`
   } as Turn;
   return {
     turn,
-    label: `Conversation ${n}`,
+    label: `Prompt ${n}`,
     title: prompt,
     prompt,
     calls: 2,
@@ -43,7 +43,7 @@ const header = () =>
   screen.getByRole('heading', { level: 2 }).closest(`.${headerCss.header}`) as HTMLElement;
 
 describe('TurnHeader', () => {
-  it('labels the conversation, then its clock, duration, counts and status', () => {
+  it('labels the prompt, then its clock, duration, counts and status', () => {
     wrap(<TurnHeader item={item(2)} />);
     const head = header();
     expect(within(head).getByText(formatClock(STARTED))).toHaveClass('figure');
@@ -52,13 +52,13 @@ describe('TurnHeader', () => {
     expect(within(head).getByText('Complete')).toBeInTheDocument();
   });
 
-  // The visible label is a section label; the heading itself names the conversation once.
-  it('heads with the prompt alone on screen, the conversation named for screen readers', () => {
+  // The visible label is a section label; the heading itself names the prompt once.
+  it('heads with the prompt alone on screen, the prompt named for screen readers', () => {
     wrap(<TurnHeader item={item(2, 'complete', 'Research how a live viewer works')} />);
     const heading = screen.getByRole('heading', { level: 2 });
-    expect(heading).toHaveAccessibleName('Conversation 2: Research how a live viewer works');
-    expect(heading.querySelector('.visually-hidden')).toHaveTextContent('Conversation 2:');
-    expect(screen.getByText('Conversation 2', { selector: '.section-label' })).toHaveAttribute(
+    expect(heading).toHaveAccessibleName('Prompt 2: Research how a live viewer works');
+    expect(heading.querySelector('.visually-hidden')).toHaveTextContent('Prompt 2:');
+    expect(screen.getByText('Prompt 2', { selector: '.section-label' })).toHaveAttribute(
       'aria-hidden',
       'true',
     );
@@ -66,10 +66,10 @@ describe('TurnHeader', () => {
     expect(screen.queryByRole('group')).toBeNull();
   });
 
-  it('does not name a conversation twice when its heading is the label', () => {
-    const it2 = { ...item(3, 'complete', ''), prompt: 'Conversation 3' };
+  it('does not name a prompt twice when its heading is the label', () => {
+    const it2 = { ...item(3, 'complete', ''), prompt: 'Prompt 3' };
     wrap(<TurnHeader item={it2} />);
-    expect(screen.getByRole('heading', { level: 2 })).toHaveAccessibleName('Conversation 3');
+    expect(screen.getByRole('heading', { level: 2 })).toHaveAccessibleName('Prompt 3');
   });
 
   it('takes what a view shows under the prompt (the Steps view’s phase shares)', () => {
@@ -89,17 +89,15 @@ describe('TurnHeader', () => {
 });
 
 describe('FollowPausedBar', () => {
-  it('says following is paused, and which conversation is still running', () => {
+  it('says following is paused, and which prompt is still running', () => {
     wrap(<FollowPausedBar newest={item(5, 'running')} onBack={() => {}} />);
-    expect(screen.getByRole('status')).toHaveTextContent(
-      'Following paused · Conversation 5 is running',
-    );
+    expect(screen.getByRole('status')).toHaveTextContent('Following paused · Prompt 5 is running');
   });
 
-  it('says when the newest conversation waits for you', () => {
+  it('says when the newest prompt waits for you', () => {
     wrap(<FollowPausedBar newest={item(5, 'approval')} onBack={() => {}} />);
     expect(screen.getByRole('status')).toHaveTextContent(
-      'Following paused · Conversation 5 is waiting for you',
+      'Following paused · Prompt 5 is waiting for you',
     );
   });
 

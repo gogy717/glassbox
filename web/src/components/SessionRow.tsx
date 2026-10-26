@@ -1,6 +1,5 @@
 import { type PointerEvent, useState } from 'react';
 import type { SessionSummary } from '../../../src/core/model.js';
-import { totalTokens } from '../../../src/core/usage.js';
 import type { RovingItemProps } from '../data/useRovingFocus';
 import { translateParts, useI18n } from '../i18n';
 import { agentName } from '../lib/agent-names';
@@ -26,10 +25,12 @@ interface Props {
 /**
  * One session as a row. Flush, a hairline under it, an ink bar when it is the one open; its
  * lines cut with an ellipsis inside the row, so its focus ring frames it.
- * - `compact`: the title, then what it is doing (or its state and age), its tokens and its agent
- *   tag at the right edge.
+ * - `compact`: the title, then what it is doing (or its state and age), its output tokens and
+ *   its agent tag at the right edge.
  * - `card`: the agent tag, its project and the title, then what it is doing with its clock (or
- *   its state and age) and its tokens.
+ *   its state and age) and its output tokens.
+ * The figure is the output ("1.2M out"): a total would be mostly cache reads, which say little.
+ * Nothing is shown while it is zero.
  */
 export function SessionRow({
   session: s,
@@ -51,8 +52,9 @@ export function SessionRow({
     ? [t('status.error'), failure].filter(Boolean).join(': ')
     : t(`live.${s.live}`);
   const when = formatRelative(s.updatedAt, now, intl);
-  const figure = s.usage ? formatCompact(totalTokens(s.usage), intl) : null;
-  const tokens = figure ? t('common.tokens', { n: figure }) : null;
+  const figure = s.usage && s.usage.output > 0 ? formatCompact(s.usage.output, intl) : null;
+  // Said in full ("42K output tokens"): the tooltip, and what a screen reader hears.
+  const tokens = figure ? t('session.outputTokens', { n: figure }) : null;
   const tip = clipped
     ? [title, [agentName(s.agent), state, when, tokens].filter(Boolean).join(' · '), s.cwd]
         .filter(Boolean)
@@ -103,11 +105,12 @@ export function SessionRow({
           {figure && (
             <>
               <span className={css.sep}> · </span>
-              <span className={css.tokens}>
-                {translateParts(locale, 'common.tokens', { n: figure }, ['n']).map((p) =>
+              <span className={css.tokens} aria-hidden="true">
+                {translateParts(locale, 'session.out', { n: figure }, ['n']).map((p) =>
                   typeof p === 'string' ? p : <CompactFigure key="n" value={p.value} />,
                 )}
               </span>
+              <span className="visually-hidden">{tokens}</span>
             </>
           )}
         </span>
@@ -132,7 +135,9 @@ export function SessionRow({
               {' '}
               <span className={css.sep}>·</span>{' '}
               <span aria-hidden="true">
-                <CompactFigure value={figure} />
+                {translateParts(locale, 'session.out', { n: figure }, ['n']).map((p) =>
+                  typeof p === 'string' ? p : <CompactFigure key="n" value={p.value} />,
+                )}
               </span>
               <span className="visually-hidden">{tokens}</span>
             </>

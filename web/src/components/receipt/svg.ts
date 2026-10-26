@@ -135,7 +135,7 @@ export function drawReceipt(d: ReceiptData, o: ReceiptOptions): { body: string; 
     }
   }
   if (d.work.subAgents > 0) workRow(d.work.subAgents, 'subAgents');
-  if (d.work.turns > 0) workRow(d.work.turns, 'conversations');
+  if (d.work.turns > 0) workRow(d.work.turns, 'prompts');
   if (d.work.failures > 0) workRow(d.work.failures, 'failures', true);
   if (d.work.compactions > 0) workRow(d.work.compactions, 'compactions');
   p.y += 22;

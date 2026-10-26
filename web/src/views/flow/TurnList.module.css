@@ -83,6 +83,13 @@
   border-bottom: 1px solid var(--border);
 }
 
+/* A day's heading where the day changes ("Today", "Oct 23"): the list spans more than a day. */
+.list > .day {
+  padding: 10px 12px 3px;
+  border-bottom: 0;
+  color: var(--muted);
+}
+
 /* Number · title · clock, then the counts and the status mark under the title. */
 .row {
   /* Holds its visually hidden text: in the narrow, horizontally scrolling list, text placed
@@ -182,8 +189,10 @@
   margin-left: auto;
 }
 
-/* A local slash command (/effort): one slim line in the mono face, not a conversation. */
+/* A local slash command (/effort): one slim line in the mono face, not a prompt to the model.
+   Its note ("local command", "3 commands") and its clock share the line with the command. */
 .row[data-command] {
+  grid-template-columns: 14px minmax(0, 1fr) auto auto;
   padding-top: 6px;
   padding-bottom: 6px;
 }
@@ -195,11 +204,21 @@
   font-weight: 400;
 }
 
+.row[data-command] .clock {
+  grid-column: 4;
+}
+
+/* A command listed under its opened run: set in from the run's line. */
+.row[data-folded] {
+  padding-left: 24px;
+}
+
 .command {
-  grid-column: 2 / -1;
-  justify-self: start;
+  grid-column: 3;
+  grid-row: 1;
   color: var(--faint);
   font-size: var(--fs-meta);
+  white-space: nowrap;
 }
 
 /* Read out with the row; seen only when the row is hovered or focused. */
@@ -272,6 +291,15 @@
     min-width: 0;
     border-right: 1px solid var(--border);
     border-bottom: 0;
+  }
+
+  /* In the strip a day's heading stands on its side, a slim column between the days. */
+  .list > .day {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    padding: 6px 4px;
+    writing-mode: vertical-rl;
   }
 
   .row[aria-current="true"] {

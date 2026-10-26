@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { Turn } from '../../../src/core/model.js';
 import { demoOpen, DEMO_NOW as NOW } from '../test/demo';
 import { agentPath, agentTree, mayStillRun, subtreeIds, summarize } from './agents';
 
@@ -58,6 +59,8 @@ describe('summarize', () => {
       requests: 28,
       toolCalls: 24,
       activeMs: 184_000,
+      // From the first prompt (two seconds into the demo's 40 minutes) to now: turn 3 runs.
+      span: { start: NOW.getTime() - 40 * 60_000 + 2_000, end: NOW.getTime() },
       input: 1_838_850,
       cacheHitRate: 1_582_194 / 1_838_850,
       output: 42_040,
@@ -77,6 +80,36 @@ describe('summarize', () => {
       input: 0,
       output: 0,
     });
+  });
+
+  // A local command (/model) the model never saw: the parser ends its turn at its own start.
+  it('adds no active time for a turn that ended at its own start, and counts a running one to now', () => {
+    const open = demoOpen();
+    const base = summarize(open, 'main', NOW.getTime());
+    const started = new Date(NOW.getTime() - 50 * 60_000).toISOString();
+    const command: Turn = {
+      id: 'turn_m0',
+      agentId: 'main',
+      index: 0,
+      origin: 'human',
+      prompt: '/model',
+      startedAt: started,
+      endedAt: started,
+      status: 'complete',
+      requestIds: [],
+    };
+    const withCommand = { ...open, turns: new Map(open.turns).set(command.id, command) };
+    expect(summarize(withCommand, 'main', NOW.getTime())).toEqual({
+      ...base,
+      turns: base.turns + 1,
+      // It is the first thing the agent did, so the span starts there: 0 ms of it active.
+      span: { start: Date.parse(started), end: NOW.getTime() },
+    });
+    // A prompt whose first call is not on record yet (the process is busy): its time runs.
+    const typing = new Date(NOW.getTime() - 10_000).toISOString();
+    const running: Turn = { ...command, startedAt: typing, endedAt: null, status: 'running' };
+    const withRunning = { ...open, turns: new Map(open.turns).set(running.id, running) };
+    expect(summarize(withRunning, 'main', NOW.getTime()).activeMs).toBe(base.activeMs + 10_000);
   });
 
   it('covers only the agent itself for a leaf sub-agent', () => {

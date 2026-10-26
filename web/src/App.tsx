@@ -82,7 +82,7 @@ const SIDEBAR_ID = 'session-list';
 export type SidebarMode = 'column' | 'overlay' | 'drawer';
 
 /**
- * Three columns only at 1200px and up. Below that a session keeps two (the conversation list and
+ * Three columns only at 1200px and up. Below that a session keeps two (the prompt list and
  * the stage), so the session list floats over them as an overlay, closed until asked for; Home
  * has no third column to protect and keeps it. At 900px and below it is the drawer.
  */

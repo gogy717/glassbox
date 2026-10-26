@@ -612,6 +612,45 @@ describe('turn status', () => {
     expect(p.snapshot().turns.map((t) => t.status)).toEqual(['complete', 'complete']);
     p.setLive('busy');
     expect(p.snapshot().turns.map((t) => t.status)).toEqual(['complete', 'running']);
+    p.setLive('waiting');
+    expect(p.snapshot().turns.map((t) => t.status)).toEqual(['complete', 'complete']);
+  });
+
+  // Four fresh sessions that had only run /model each showed minutes of agent time, growing by
+  // the minute, with 0 tokens: Claude Code's registry says "waiting" for a process blocked on
+  // the person, idle at its prompt included, and the turn stayed open until the next prompt.
+  it('a local command with no call ends at its own time while the process waits at the prompt', () => {
+    const p = parseMain(userPrompt({ text: '/model', ts: at(0) }));
+    p.setLive('waiting');
+    expect(p.snapshot().turns[0]).toMatchObject({ status: 'complete', endedAt: at(0) });
+    expect(p.snapshot().agents[0]).toMatchObject({ status: 'complete', endedAt: at(0) });
+    for (const live of ['idle', 'closed', 'unknown'] as const) {
+      p.setLive(live);
+      expect(p.snapshot().turns[0], live).toMatchObject({ status: 'complete', endedAt: at(0) });
+    }
+    // Busy is the one state that means a call is coming: the prompt's first call is not yet
+    // on record, so the turn runs.
+    p.setLive('busy');
+    expect(p.snapshot().turns[0]).toMatchObject({ status: 'running', endedAt: null });
+    expect(p.snapshot().agents[0]).toMatchObject({ status: 'running', endedAt: null });
+  });
+
+  it('a command turn minutes before a real prompt adds no time; each turn ends at its last event', () => {
+    const p = parseMain(
+      userPrompt({ text: '/model', ts: at(0) }),
+      userPrompt({ text: 'fix the bug', ts: at(300) }),
+      assistantBlocks({ requestId: 'r1', blocks: ['text'], blockTs: [at(306)] }),
+    );
+    p.setLive('waiting');
+    expect(p.snapshot().turns.map((t) => [t.status, t.startedAt, t.endedAt])).toEqual([
+      ['complete', at(0), at(0)],
+      ['complete', at(300), at(306)],
+    ]);
+    // The whole session, as the Summary bar adds it up: the real turn's six seconds alone.
+    const active = p
+      .snapshot()
+      .turns.reduce((n, t) => n + (Date.parse(t.endedAt ?? '') - Date.parse(t.startedAt)), 0);
+    expect(active).toBe(6_000);
   });
 
   it('gives the main agent the status and times of its turns', () => {

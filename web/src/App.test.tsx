@@ -235,7 +235,7 @@ describe('App', () => {
     render(<App store={createStore()} connect={connect} />);
     window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}?turn=turn_m1`;
     await waitFor(() =>
-      expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Conversation 1: /),
+      expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Prompt 1: /),
     );
     const follow = within(screen.getByRole('banner')).getByRole('button', { name: /Follow/ });
     expect(follow).toHaveAttribute('aria-pressed', 'false');
@@ -244,7 +244,7 @@ describe('App', () => {
   it('loads a link to a turn on that turn, paused', () => {
     window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}?turn=turn_m1`;
     render(<App store={demoStore()} connect={noConnect} />);
-    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Conversation 1: /);
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Prompt 1: /);
     expect(
       within(screen.getByRole('banner')).getByRole('button', { name: /Follow/ }),
     ).toHaveAttribute('aria-pressed', 'false');
@@ -276,13 +276,13 @@ describe('App', () => {
     const summary = screen.getByRole('region', { name: 'Summary' });
     const value = (label: string) =>
       within(summary).getByText(label).parentElement?.querySelector('[data-value]')?.textContent;
-    expect(value('Conversations')).toBe('3');
+    expect(value('Prompts')).toBe('3');
     expect(value('Model calls')).toBe('28');
     expect(value('Tool calls')).toBe('24');
-    expect(value('Duration')).toBe('3m4s');
-    expect(value('Input')).toBe('1,838,850');
+    expect(value('Active time')).toBe('3m4s');
+    expect(value('Input')).toBe('1.84M');
     expect(value('Cache hit')).toBe('86.0%');
-    expect(value('Output (thinking)')).toBe('42,040 (27,050)');
+    expect(value('Output (thinking)')).toBe('42K (27.1K)');
 
     expect(screen.getByRole('navigation', { name: 'Agent' })).toHaveTextContent('Main');
     expect(within(summary).getByRole('button', { name: /^Data diagnostics/ })).toBeInTheDocument();
@@ -293,7 +293,7 @@ describe('App', () => {
       'Timeline',
     ]);
     expect(screen.getByRole('tabpanel')).toContainElement(
-      screen.getByRole('list', { name: 'Conversations' }),
+      screen.getByRole('list', { name: 'Prompts' }),
     );
   });
 

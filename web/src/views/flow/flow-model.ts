@@ -206,13 +206,16 @@ export function turnStatus(turn: Turn, calls: UiStatus[]): UiStatus {
 }
 
 export interface TokenHeader {
+  /** The whole context the call read: uncached + cache read + cache write. */
   input: number;
   uncached: number;
   cacheRead: number;
   cacheWrite: number;
+  /** What the model read anew, not from the cache: uncached + cache write. The row leads with it. */
+  fresh: number;
   output: number;
   thinking: number;
-  /** DSH shows "uncached" only when the cache was involved; otherwise it equals input. */
+  /** The cache split is shown only when the cache was involved; otherwise fresh equals input. */
   showUncached: boolean;
 }
 
@@ -223,6 +226,7 @@ export function tokenHeader(u: TokenUsage | null): TokenHeader | null {
     uncached: u.input,
     cacheRead: u.cacheRead,
     cacheWrite: u.cacheWrite,
+    fresh: u.input + u.cacheWrite,
     output: u.output,
     thinking: u.thinking,
     showUncached: u.cacheRead > 0 || u.cacheWrite > 0,

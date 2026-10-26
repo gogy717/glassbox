@@ -203,12 +203,13 @@ describe('statuses, as in the DSH workflow plugin', () => {
 });
 
 describe('tokenHeader', () => {
-  it('splits input into uncached, cache hit and cache write', () => {
+  it('splits input into uncached, cache hit and cache write, and sums what was new to the cache', () => {
     expect(tokenHeader(req(demoOpen(), 'req_m1').usage)).toEqual({
       input: 31_250,
       uncached: 6,
       cacheRead: 244,
       cacheWrite: 31_000,
+      fresh: 31_006,
       output: 820,
       thinking: 610,
       showUncached: true,
@@ -246,7 +247,7 @@ describe('isLocalCommand', () => {
     ['/add-dir /home/user/other', 0, 'complete', true],
     ['/superpowers:brainstorm', 0, 'interrupted', true],
     ['  /clear', 0, 'complete', true],
-    // Answered by the model (a skill, a custom command): a conversation like any other.
+    // Answered by the model (a skill, a custom command): a prompt like any other.
     ['/review', 2, 'complete', false],
     // Still starting: its first call may be on the way.
     ['/review', 0, 'running', false],

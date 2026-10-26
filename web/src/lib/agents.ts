@@ -113,6 +113,11 @@ export interface Summary {
   toolCalls: number;
   /** Sum of the agent's own turn durations; idle time between turns is excluded. */
   activeMs: number;
+  /**
+   * From the agent's first turn to the end of its last (now while one runs), epoch ms: the span
+   * the active time is spread over. Null before any turn.
+   */
+  span: { start: number; end: number } | null;
   /** Context tokens read: uncached + cache read + cache write. */
   input: number;
   cacheHitRate: number | null;
@@ -130,6 +135,7 @@ export function summarize(open: OpenSession, agentId: string, now: number): Summ
     requests: 0,
     toolCalls: 0,
     activeMs: 0,
+    span: null,
     input: 0,
     cacheHitRate: null,
     output: 0,
@@ -140,8 +146,15 @@ export function summarize(open: OpenSession, agentId: string, now: number): Summ
   for (const t of open.turns.values()) {
     if (t.agentId !== agentId) continue;
     s.turns++;
+    const start = Date.parse(t.startedAt);
     const end = t.endedAt ? Date.parse(t.endedAt) : t.status === 'running' ? now : null;
-    if (end !== null) s.activeMs += Math.max(0, end - Date.parse(t.startedAt));
+    if (end !== null) s.activeMs += Math.max(0, end - start);
+    if (Number.isFinite(start)) {
+      const last = Math.max(start, end ?? start);
+      s.span = s.span
+        ? { start: Math.min(s.span.start, start), end: Math.max(s.span.end, last) }
+        : { start, end: last };
+    }
   }
   for (const r of open.requests.values()) {
     if (!ids.has(r.agentId)) continue;

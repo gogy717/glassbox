@@ -82,6 +82,58 @@ export function formatPercent(share: number | null | undefined, locale?: string)
   }).format(share);
 }
 
+const dayFormats = new Map<string, Intl.DateTimeFormat>();
+
+/**
+ * The local calendar day `ms` falls on, counted in days from the epoch: equal for two instants on
+ * the same day, one apart across midnight, however the clocks moved between them. `timeZone` is
+ * for tests.
+ */
+export function localDayIndex(ms: number, timeZone?: string): number {
+  if (!Number.isFinite(ms)) return Number.NaN;
+  const key = timeZone ?? '';
+  let fmt = dayFormats.get(key);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat('en-CA', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      timeZone,
+    });
+    dayFormats.set(key, fmt);
+  }
+  // en-CA writes the date as YYYY-MM-DD: a civil day, read as one of UTC's for the count.
+  const [y, m, d] = fmt.format(ms).split('-').map(Number);
+  return Math.floor(Date.UTC(y ?? 1970, (m ?? 1) - 1, d ?? 1) / 86_400_000);
+}
+
+/** How many local calendar days [start, end] touches: 1 within a day, 2 across one midnight. */
+export function calendarDays(startMs: number, endMs: number, timeZone?: string): number {
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return 1;
+  return Math.max(
+    1,
+    localDayIndex(Math.max(startMs, endMs), timeZone) -
+      localDayIndex(Math.min(startMs, endMs), timeZone) +
+      1,
+  );
+}
+
+/**
+ * A day as a list heading, in the UI language: "Oct 23" / "10月23日" in this year, with the year
+ * in any other ("Dec 31, 2025" / "2025年12月31日"). `timeZone` is for tests.
+ */
+export function formatDay(ms: number, now: number, locale: string, timeZone?: string): string {
+  if (!Number.isFinite(ms)) return DASH;
+  const year = (t: number) =>
+    new Intl.DateTimeFormat('en-CA', { year: 'numeric', timeZone }).format(t);
+  return new Intl.DateTimeFormat(locale, {
+    month: 'short',
+    day: 'numeric',
+    ...(year(ms) === year(now) ? {} : { year: 'numeric' }),
+    timeZone,
+  }).format(ms);
+}
+
 const clockFormats = new Map<string, Intl.DateTimeFormat>();
 
 export function formatClock(iso: string | null | undefined, timeZone?: string): string {

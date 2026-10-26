@@ -30,7 +30,7 @@ export function StepsView({ open, agentId, route, navigate }: Props) {
   const { t } = useI18n();
   const { follow, setFollow } = useUi();
   const items = useTurnItems(open, agentId);
-  // The conversation filter, as in the execution chain: follow picks the newest match.
+  // The prompt filter, as in the execution chain: follow picks the newest match.
   const [query, setQuery] = useState('');
   const latest = filterTurns(items, query).at(-1) ?? items.at(-1);
   const current = useSelectedTurn(items, open, agentId, route, follow, latest);

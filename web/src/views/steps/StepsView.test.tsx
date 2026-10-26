@@ -42,19 +42,19 @@ describe('StepsView', () => {
   useFakeLayout();
   afterEach(() => vi.useRealTimers());
 
-  it('says “yet” of an empty agent or conversation only while more may still arrive', () => {
+  it('says “yet” of an empty agent or prompt only while more may still arrive', () => {
     const base = demoOpen();
     renderSteps({
       open: { ...base, session: { ...base.session, live: 'closed' } },
       route: { agentId: 'nobody' },
     });
-    expect(screen.getByText('No conversations for this agent')).toBeInTheDocument();
+    expect(screen.getByText('No prompts for this agent')).toBeInTheDocument();
     cleanup();
     renderSteps({
       open: { ...base, session: { ...base.session, live: 'busy' } },
       route: { agentId: 'nobody' },
     });
-    expect(screen.getByText('No conversations for this agent yet')).toBeInTheDocument();
+    expect(screen.getByText('No prompts for this agent yet')).toBeInTheDocument();
     cleanup();
 
     const first = base.turns.get('turn_m1');
@@ -65,21 +65,19 @@ describe('StepsView', () => {
       requests: new Map([...base.requests].filter(([, r]) => r.turnId !== first.id)),
     });
     renderSteps({ open: emptyTurn('complete'), route: { turnId: first.id }, follow: false });
-    expect(screen.getByText('No steps in this conversation')).toBeInTheDocument();
+    expect(screen.getByText('No steps for this prompt')).toBeInTheDocument();
     cleanup();
     renderSteps({ open: emptyTurn('running'), route: { turnId: first.id }, follow: false });
-    expect(screen.getByText('No steps in this conversation yet')).toBeInTheDocument();
+    expect(screen.getByText('No steps for this prompt yet')).toBeInTheDocument();
   });
 
   it('lists the turns newest first, like the flow tab, with the followed turn on top', () => {
     renderSteps();
-    const items = within(screen.getByRole('list', { name: 'Conversations' })).getAllByRole(
-      'button',
-    );
-    expect(items.map((b) => b.textContent?.match(/^Conversation \d+/)?.[0])).toEqual([
-      'Conversation 3',
-      'Conversation 2',
-      'Conversation 1',
+    const items = within(screen.getByRole('list', { name: 'Prompts' })).getAllByRole('button');
+    expect(items.map((b) => b.textContent?.match(/^Prompt \d+/)?.[0])).toEqual([
+      'Prompt 3',
+      'Prompt 2',
+      'Prompt 1',
     ]);
     expect(items[0]).toHaveAttribute('aria-current', 'true');
   });
@@ -91,7 +89,7 @@ describe('StepsView', () => {
     });
     // In the layout, as in the execution chain: nothing floats over the steps.
     const header = screen
-      .getByRole('heading', { level: 2, name: /^Conversation 1:/ })
+      .getByRole('heading', { level: 2, name: /^Prompt 1:/ })
       .closest(`.${headerCss.header}`);
     const bar = header?.nextElementSibling;
     if (!(bar instanceof HTMLElement)) throw new Error('no bar after the header');
@@ -258,9 +256,9 @@ describe('StepsView', () => {
       </I18nContext.Provider>
     );
     const { rerender } = render(tree(before));
-    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/Conversation 2/);
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/Prompt 2/);
     act(() => rerender(tree(full)));
-    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/Conversation 2/);
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/Prompt 2/);
   });
 
   it('follows the newest step as steps arrive, like the execution chain', () => {
@@ -323,25 +321,25 @@ describe('StepsView', () => {
     expect(heading).toHaveAttribute('data-expanded', 'true');
   });
 
-  it('filters the conversations, as the execution chain does, and says when none match', () => {
+  it('filters the prompts, as the execution chain does, and says when none match', () => {
     renderSteps({ follow: false, route: { turnId: 'turn_m1' } });
-    const list = () => screen.getByRole('list', { name: 'Conversations' });
-    const field = screen.getByRole('searchbox', { name: 'Filter conversations' });
+    const list = () => screen.getByRole('list', { name: 'Prompts' });
+    const field = screen.getByRole('searchbox', { name: 'Filter prompts' });
     fireEvent.change(field, { target: { value: 'design document' } });
     expect(within(list()).getAllByRole('button')).toHaveLength(1);
     expect(list()).toHaveTextContent('Now write the design document');
     fireEvent.change(field, { target: { value: 'nothing like this' } });
-    expect(screen.getByText('No conversation matches')).toBeInTheDocument();
-    // The conversation on stage stays while the filter hides it.
-    expect(screen.getByRole('heading', { level: 2, name: /^Conversation 1:/ })).toBeInTheDocument();
+    expect(screen.getByText('No prompt matches')).toBeInTheDocument();
+    // The prompt on stage stays while the filter hides it.
+    expect(screen.getByRole('heading', { level: 2, name: /^Prompt 1:/ })).toBeInTheDocument();
   });
 
-  it('follows the newest conversation that passes the filter', () => {
+  it('follows the newest prompt that passes the filter', () => {
     renderSteps();
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Filter conversations' }), {
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Filter prompts' }), {
       target: { value: 'sidebar' },
     });
-    expect(screen.getByRole('heading', { level: 2, name: /^Conversation 1:/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: /^Prompt 1:/ })).toBeInTheDocument();
   });
 
   it('says a dash, not 0, for tokens that were never reported', () => {
@@ -374,7 +372,7 @@ describe('StepsView', () => {
 
   it('picks a turn from the turn list and pauses follow', () => {
     const { navigate, setFollow } = renderSteps();
-    fireEvent.click(screen.getByRole('button', { name: /Conversation 2/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Prompt 2/ }));
     expect(setFollow).toHaveBeenLastCalledWith(false);
     expect(navigate).toHaveBeenLastCalledWith({ turnId: 'turn_m2', requestId: null });
   });

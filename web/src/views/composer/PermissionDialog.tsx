@@ -32,7 +32,7 @@ const noSubscribe = () => () => {};
 export const PROMPT_ARM_MS = 500;
 
 /**
- * "Conversation 6 · call #1": where the tool call a prompt is about sits in the open session,
+ * "Prompt 6 · call #1": where the tool call a prompt is about sits in the open session,
  * once the session's records hold it (a prompt can arrive before the call is written).
  */
 function useCallRef(toolUseId: string): string | null {

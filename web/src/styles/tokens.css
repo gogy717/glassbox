@@ -152,7 +152,7 @@
   --fs-meta: 11px; /* meta, legends, chips */
   --fs-small: 12px; /* secondary: card previews, step lines, detail rows */
   --fs-body: 13px;
-  --fs-title: 14px; /* 600: conversation and dialog titles */
+  --fs-title: 14px; /* 600: prompt and dialog titles */
   --fs-readout: 15px; /* 500: readout values, the tokens lede */
   --fs-total: 22px; /* 500: a section total */
   --lh: 1.45;

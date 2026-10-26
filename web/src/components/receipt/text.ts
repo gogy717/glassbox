@@ -140,7 +140,7 @@ export function receiptText(d: ReceiptData, o: ReceiptOptions): string {
   if (d.work.toolCalls > 0 && d.work.categories.length > 0)
     out.push(`       ${categoryLine(d.work.categories, L, (line) => cols(line) <= COLUMNS - 7)}`);
   work(d.work.subAgents, 'subAgents');
-  work(d.work.turns, 'conversations');
+  work(d.work.turns, 'prompts');
   work(d.work.failures, 'failures');
   work(d.work.compactions, 'compactions');
   out.push(rule);

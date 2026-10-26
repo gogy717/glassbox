@@ -63,6 +63,61 @@ describe('CallRow strip', () => {
   });
 });
 
+describe('CallRow readings', () => {
+  const readings = (row: HTMLElement) =>
+    row.querySelector('[title^="in "], [title^="输入 "]') as HTMLElement;
+
+  it('leads with the context, what was new to the cache and the output, compact', () => {
+    const row = renderRow('req_m1');
+    const line = readings(row);
+    expect(line).toHaveTextContent(/^context 31\.3K\s*new 31K\s*out 820 \(610 thinking\)$/);
+    expect(line).toHaveAttribute(
+      'title',
+      'in 31,250 · uncached 6 · cache hit 244 · cache write 31,000 · out 820 (610 thinking)',
+    );
+    // Each figure is mono; the words that name them are not.
+    expect([...line.querySelectorAll('.figure')].map((f) => f.textContent)).toEqual([
+      '31.3K',
+      '31K',
+      '820',
+      '610',
+    ]);
+  });
+
+  it('leaves out "new" when nothing came from or went to the cache: it would repeat the context', () => {
+    const row = renderRow('req_m1', undefined, {
+      req: {
+        usage: {
+          input: 1_200,
+          cacheRead: 0,
+          cacheWrite: 0,
+          cacheWrite5m: 0,
+          cacheWrite1h: 0,
+          output: 90,
+          thinking: 0,
+          webSearch: 0,
+          webFetch: 0,
+        },
+      },
+    });
+    const line = readings(row);
+    expect(line).toHaveTextContent(/^context 1\.2K\s*out 90$/);
+    expect(line).toHaveAttribute('title', 'in 1,200 · out 90');
+  });
+
+  // I3: zh compact counts end in 万; the unit leaves the mono face, the digits stay in it.
+  it('keeps a Chinese unit out of the mono face', () => {
+    const row = renderRow('req_m1', undefined, {}, 'zh');
+    const line = readings(row);
+    expect(line).toHaveTextContent(/^上下文 3\.13万\s*新输入 3\.1万\s*输出 820 \(思考 610\)$/);
+    for (const f of line.querySelectorAll('.figure')) expect(f.textContent).not.toMatch(/万/);
+    expect(line).toHaveAttribute(
+      'title',
+      '输入 31,250 · 未缓存 6 · 缓存命中 244 · 缓存写入 31,000 · 输出 820 (思考 610)',
+    );
+  });
+});
+
 describe('CallRow why line', () => {
   const why = (row: HTMLElement) => row.querySelector('p');
 

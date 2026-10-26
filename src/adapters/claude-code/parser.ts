@@ -834,11 +834,14 @@ export class ClaudeSessionParser implements SessionParser {
     if (t.interruptedAt) return { status: 'interrupted', endedAt: t.interruptedAt };
     if (t.endMarkAt) return { status: 'complete', endedAt: t.endMarkAt };
     const isLatest = this.agents.get(t.agentId)?.turnIds.at(-1) === t.id;
-    const active = this.live === 'busy' || this.live === 'waiting';
     const reqs = t.requestIds.flatMap((id) => this.requests.get(id) ?? []);
     const last = reqs.at(-1);
+    // No call on record. Only busy means one is coming (the prompt's first call is not yet
+    // written): the turn runs. Claude Code's registry says "waiting" for a process blocked on
+    // the person, idle at its prompt after a local command (/model) included, so under waiting,
+    // idle or closed the turn ended with what it did, at its own time: no active time.
     if (!last)
-      return isLatest && active
+      return isLatest && this.live === 'busy'
         ? { status: 'running', endedAt: null }
         : { status: 'complete', endedAt: t.startedAt };
     const view = this.requestView(last);
