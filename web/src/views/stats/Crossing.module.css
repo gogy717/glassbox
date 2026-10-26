@@ -1,0 +1,223 @@
+/* Crossing (A): the card's lines, and the panel's tables of files changed from two worktrees. */
+
+.repos {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-body);
+}
+
+/* The files both trees changed on the same lines: the error tone, as a conflict would be. */
+.same {
+  color: var(--error);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 16px 20px 20px;
+}
+
+.repo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.repoName {
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+
+/* A repository with many worktrees scrolls sideways inside the panel, never the page. */
+.scroll {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-small);
+}
+
+.head {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.main {
+  color: var(--faint);
+}
+
+.row {
+  border-bottom: 1px solid var(--border);
+}
+
+.fileCell {
+  padding: 6px 10px 6px 4px;
+  font-weight: 400;
+  text-align: left;
+  vertical-align: top;
+}
+
+.file {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: var(--radius-m);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.file:hover {
+  background: var(--layer-2);
+}
+
+.chevron {
+  flex: none;
+  color: var(--muted);
+  transition: transform var(--motion);
+}
+
+.file[aria-expanded="true"] .chevron {
+  transform: rotate(90deg);
+}
+
+.path {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.verdict {
+  display: block;
+  padding-left: 22px;
+  color: var(--muted);
+}
+
+.verdict[data-overlap="true"] {
+  color: var(--error);
+}
+
+.cell {
+  padding: 6px 10px;
+  color: var(--muted);
+  vertical-align: top;
+}
+
+.span[data-hot] {
+  color: var(--error);
+  font-weight: 600;
+}
+
+.detailCell {
+  padding: 8px 4px 16px;
+}
+
+/* One column a tree, side by side however many trees changed the file. */
+.sides {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 16px;
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sideHead {
+  margin: 0;
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+
+.session {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.sessionHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--muted);
+}
+
+.title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.changes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.call {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-height: 26px;
+  padding: 2px 8px 2px 6px;
+  border-radius: var(--radius-m);
+  color: var(--muted);
+  font-size: var(--fs-small);
+  text-decoration: none;
+}
+
+.call:hover {
+  background: var(--layer-2);
+  color: var(--text);
+}
+
+.arrow {
+  flex: none;
+}
+
+.note,
+.hint {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--muted);
+}
+
+.hint {
+  line-height: 1.5;
+}
+
+@media (max-width: 720px) {
+  .sides {
+    grid-auto-flow: row;
+  }
+}

@@ -490,6 +490,16 @@ describe('the Stats page (D4)', () => {
     expect(tip()).toHaveTextContent(label.replace(' · ', ''));
   });
 
+  it('puts Crossing under By CLI and Top projects, above Tokens, when worktrees crossed', async () => {
+    serve({ week });
+    render(page(createStore()));
+    const crossing = await screen.findByRole('region', { name: /^Crossing/ });
+    const main = crossing.closest('[data-column="main"]') as HTMLElement;
+    const order = [...main.querySelectorAll('[data-area]')].map((c) => c.getAttribute('data-area'));
+    expect(order).toEqual(['grid', 'cli', 'projects', 'crossing', 'tokens']);
+    expect(crossing).toHaveTextContent('3 files changed from more than one worktree of glassbox');
+  });
+
   it('keeps all three cards on an empty week, each with a dash and no hint (DR4)', async () => {
     serve({ week: { ...week, sessions: [] }, d7 });
     render(page(createStore()));
