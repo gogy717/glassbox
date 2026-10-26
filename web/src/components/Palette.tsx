@@ -114,6 +114,8 @@ export function Palette({ items, onClose }: Props) {
     item.run();
   };
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    // An input method composing (Chinese, Japanese) owns Enter, Esc and the arrows.
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     const n = shown.length;
     const toggle =
       (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'k';
@@ -132,7 +134,15 @@ export function Palette({ items, onClose }: Props) {
 
   return createPortal(
     <div className={css.overlay} onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={css.palette} role="dialog" aria-modal="true" aria-label={t('palette.title')}>
+      <div
+        className={css.palette}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('palette.title')}
+        // Focus stays in the field, and so do its keys, whatever else inside is pressed: an
+        // option, the list's edge, "Nothing matches".
+        onMouseDown={(e) => e.target !== field.current && e.preventDefault()}
+      >
         <input
           ref={field}
           className={css.field}
@@ -166,12 +176,11 @@ export function Palette({ items, onClose }: Props) {
               key={item.id}
               id={optionId(i)}
               role="option"
-              // Never focused: the field keeps focus, a press on an option included.
+              // Never focused: the field keeps focus (the dialog's mousedown).
               tabIndex={-1}
               aria-selected={i === active}
               className={css.option}
               onPointerMove={() => setActive(i)}
-              onMouseDown={(e) => e.preventDefault()}
               onClick={() => choose(item)}
             >
               {item.live && <LiveDot state={item.live} label={t(`live.${item.live}`)} />}

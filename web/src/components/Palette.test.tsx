@@ -162,6 +162,27 @@ describe('Palette', () => {
     expect(items[1]?.run).toHaveBeenCalledOnce();
   });
 
+  it('keeps focus in its field, and so its keys, when pressed anywhere else inside it', () => {
+    const { field } = renderPalette([item('One')]);
+    fireEvent.change(field, { target: { value: 'nothing like it' } });
+    expect(fireEvent.mouseDown(screen.getByRole('status'))).toBe(false);
+    expect(fireEvent.mouseDown(screen.getByRole('dialog'))).toBe(false);
+    // The field itself takes the press: its caret moves.
+    expect(fireEvent.mouseDown(field)).toBe(true);
+  });
+
+  it('leaves Enter, Esc and the arrows to an input method while it composes', () => {
+    const items = [item('One'), item('Two')];
+    const { field, onClose } = renderPalette(items);
+    for (const key of ['ArrowDown', 'ArrowUp', 'Enter', 'Escape']) {
+      fireEvent.keyDown(field, { key, isComposing: true });
+      fireEvent.keyDown(field, { key, keyCode: 229 });
+    }
+    expect(items[0]?.run).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole('option', { selected: true })).toHaveTextContent('One');
+  });
+
   it('closes on Esc and on ⌘K or Ctrl+K, and keeps Tab in its field', () => {
     const { field, onClose } = renderPalette([item('One')]);
     expect(fireEvent.keyDown(field, { key: 'Tab' })).toBe(false);
