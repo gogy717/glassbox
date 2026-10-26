@@ -93,6 +93,8 @@ export const en: Record<MessageKey, string> = {
   'flow.callsToolsShort': '{calls} {calls|call|calls} · {tools} {tools|tool|tools}',
   'flow.callTitle': 'Model call #{n}',
   'flow.input': 'in',
+  'flow.context': 'context',
+  'flow.fresh': 'new',
   'flow.uncached': 'uncached',
   'flow.cacheRead': 'cache hit',
   'flow.cacheWrite': 'cache write',

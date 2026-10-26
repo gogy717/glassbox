@@ -203,12 +203,13 @@ describe('statuses, as in the DSH workflow plugin', () => {
 });
 
 describe('tokenHeader', () => {
-  it('splits input into uncached, cache hit and cache write', () => {
+  it('splits input into uncached, cache hit and cache write, and sums what was new to the cache', () => {
     expect(tokenHeader(req(demoOpen(), 'req_m1').usage)).toEqual({
       input: 31_250,
       uncached: 6,
       cacheRead: 244,
       cacheWrite: 31_000,
+      fresh: 31_006,
       output: 820,
       thinking: 610,
       showUncached: true,

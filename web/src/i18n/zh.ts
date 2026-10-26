@@ -92,6 +92,8 @@ export const zh = {
   'flow.callsToolsShort': '{calls} 次调用 · {tools} 个工具',
   'flow.callTitle': '模型调用 #{n}',
   'flow.input': '输入',
+  'flow.context': '上下文',
+  'flow.fresh': '新输入',
   'flow.uncached': '未缓存',
   'flow.cacheRead': '缓存命中',
   'flow.cacheWrite': '缓存写入',

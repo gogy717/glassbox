@@ -370,14 +370,18 @@ describe('FlowView', () => {
   it('shows token headers, the failed Edit and the final reply in turn 1', () => {
     renderFlow({ route: { turnId: 'turn_m1' }, follow: false });
     const first = row(1);
-    // One line of readings: the words muted, the figures mono.
+    // One line of readings: the words muted, the figures mono and compact; the whole split is
+    // the line's tooltip.
     expect(within(first).getByRole('heading', { level: 3 })).toHaveTextContent('#1');
     expect(within(first).getByRole('heading', { level: 3 })).toHaveAccessibleName('Model call #1');
-    const line = within(first).getByText('in').parentElement?.parentElement as HTMLElement;
-    expect(line).toHaveTextContent(
-      'in 31,250uncached 6cache hit 244cache write 31,000out 820 (610 thinking)',
+    // (The request card's chip says "context 31.3K" too: the line is the one with the tooltip.)
+    const line = first.querySelector('[title^="in "]') as HTMLElement;
+    expect(line).toHaveTextContent('context 31.3Knew 31Kout 820 (610 thinking)');
+    expect(line).toHaveAttribute(
+      'title',
+      'in 31,250 · uncached 6 · cache hit 244 · cache write 31,000 · out 820 (610 thinking)',
     );
-    expect(within(first).getByText('31,250')).toHaveClass('figure');
+    expect(within(line).getByText('31.3K')).toHaveClass('figure');
     expect(within(first).getByText('14s')).toHaveClass('figure');
 
     const second = row(2);

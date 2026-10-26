@@ -1,12 +1,13 @@
 import { memo, type ReactNode, useId } from 'react';
 import type { ModelRequest, ToolCall } from '../../../../src/core/model.js';
+import { CompactFigure } from '../../components/CompactFigure';
 import { FigureText } from '../../components/FigureText';
 import { StatusMark, Ticking } from '../../components/Status';
 import { useApprovalsContext } from '../../data/approvals';
 import { useSessionAgent } from '../../data/session-agent';
 import type { OpenSession } from '../../data/store';
 import { useI18n } from '../../i18n';
-import { DASH, formatClock, formatDuration, formatNumber } from '../../lib/format';
+import { DASH, formatClock, formatCompact, formatDuration, formatNumber } from '../../lib/format';
 import css from './CallRow.module.css';
 import { Arrow, type CardKey, FinalReply, RequestCard, ResponseCard, ToolCard } from './cards';
 import { DetailPanel } from './DetailPanel';
@@ -23,10 +24,11 @@ interface Props {
   onEnterAgent(agentId: string): void;
 }
 
+/** A word and its compact figure ("context 195K", "上下文 19.5万"): a CJK unit out of the mono face. */
 function Reading({ word, n, children }: { word: string; n: string; children?: ReactNode }) {
   return (
     <span className={css.reading}>
-      <span className={css.word}>{word}</span> <span className="figure">{n}</span>
+      <span className={css.word}>{word}</span> <CompactFigure value={n} />
       {children}
     </span>
   );
@@ -55,8 +57,24 @@ export const CallRow = memo(function CallRow(p: Props) {
   const status = callStatus(req, tools, useApprovalsContext());
   const tok = tokenHeader(req.usage);
   const n = (v: number) => formatNumber(v, intl);
+  const compact = (v: number) => formatCompact(v, intl);
   const select = (card: CardKey) => p.onSelect(req, card);
   const panelId = useId();
+  // The line leads with what matters: the context read, what of it was new to the cache, and the
+  // output. The whole split is the line's tooltip, and the request panel's "Usage & timing".
+  const breakdown =
+    tok &&
+    [
+      `${t('flow.input')} ${n(tok.input)}`,
+      tok.showUncached ? `${t('flow.uncached')} ${n(tok.uncached)}` : null,
+      tok.cacheRead > 0 ? `${t('flow.cacheRead')} ${n(tok.cacheRead)}` : null,
+      tok.cacheWrite > 0 ? `${t('flow.cacheWrite')} ${n(tok.cacheWrite)}` : null,
+      `${t('flow.output')} ${n(tok.output)}${
+        tok.thinking > 0 ? ` (${t('flow.thinkingOf', { n: n(tok.thinking) })})` : ''
+      }`,
+    ]
+      .filter((part) => part !== null)
+      .join(' · ');
 
   return (
     <article
@@ -84,16 +102,15 @@ export const CallRow = memo(function CallRow(p: Props) {
             )}
           </span>
           {tok && (
-            <span className={css.readings}>
-              <Reading word={t('flow.input')} n={n(tok.input)} />
-              {tok.showUncached && <Reading word={t('flow.uncached')} n={n(tok.uncached)} />}
-              {tok.cacheRead > 0 && <Reading word={t('flow.cacheRead')} n={n(tok.cacheRead)} />}
-              {tok.cacheWrite > 0 && <Reading word={t('flow.cacheWrite')} n={n(tok.cacheWrite)} />}
-              <Reading word={t('flow.output')} n={n(tok.output)}>
+            <span className={css.readings} title={breakdown ?? undefined}>
+              <Reading word={t('flow.context')} n={compact(tok.input)} />
+              {/* With no cache in play every token was new: the context figure says it all. */}
+              {tok.showUncached && <Reading word={t('flow.fresh')} n={compact(tok.fresh)} />}
+              <Reading word={t('flow.output')} n={compact(tok.output)}>
                 {tok.thinking > 0 && (
                   <span className={css.word}>
                     {' ('}
-                    <FigureText k="flow.thinkingOf" params={{ n: n(tok.thinking) }} />)
+                    <FigureText k="flow.thinkingOf" params={{ n: compact(tok.thinking) }} />)
                   </span>
                 )}
               </Reading>
