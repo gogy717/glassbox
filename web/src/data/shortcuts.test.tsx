@@ -102,6 +102,14 @@ describe('useShortcuts', () => {
     expect(ran).toEqual(['allowItem', 'denyItem', 'openItem', 'goInbox']);
   });
 
+  it('answers once for a key held down, while a held j goes on down the list', () => {
+    const ran = setup();
+    for (const key of ['y', 'n', 'o']) press(key, { repeat: true });
+    press('j', { repeat: true });
+    press('j', { repeat: true });
+    expect(ran).toEqual(['nextPrompt', 'nextPrompt']);
+  });
+
   it('does nothing while typing in a field, a text area or an editable element', () => {
     const ran = setup();
     for (const name of ['Search', 'Message', 'Editor']) {

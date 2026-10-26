@@ -318,6 +318,10 @@ describe('Inbox', () => {
       expect(fireEvent.keyDown(first, { key: 'Enter', ...held })).toBe(true);
     await act(async () => {});
     expect(onDecide).not.toHaveBeenCalled();
+    // Held down, Enter presses once: the repeats do not answer each next item as it arms.
+    fireEvent.keyDown(first, { key: 'Enter', repeat: true });
+    await act(async () => {});
+    expect(onDecide).not.toHaveBeenCalled();
     // Alone, the keys are the list's.
     expect(fireEvent.keyDown(first, { key: 'ArrowDown' })).toBe(false);
   });

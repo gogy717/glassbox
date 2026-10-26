@@ -238,7 +238,8 @@ export function Inbox({
     // Inside an item its controls keep their keys: a question's options move with the arrows.
     if (target !== item) return;
     if (e.key === 'Enter') {
-      if (e.shiftKey) return;
+      // Held down, it presses once: its repeats would answer each next item as it arms.
+      if (e.shiftKey || e.repeat) return;
       e.preventDefault();
       item.querySelector<HTMLButtonElement>('button[data-kind="primary"]')?.click();
       return;

@@ -30,6 +30,11 @@ export interface Binding {
   keys: readonly string[];
   /** Null for a key each overlay handles itself (Esc closes it). */
   command: Command | null;
+  /**
+   * Held down, the key does it once: an answer, which the repeats would otherwise give each next
+   * item as it arms.
+   */
+  once?: boolean;
 }
 
 /** A line of the ? overlay: what its keys do. */
@@ -57,11 +62,11 @@ export const KEYMAP: readonly KeyRow[] = [
   {
     label: 'keys.answer',
     bindings: [
-      { keys: ['y'], command: 'allowItem' },
-      { keys: ['n'], command: 'denyItem' },
+      { keys: ['y'], command: 'allowItem', once: true },
+      { keys: ['n'], command: 'denyItem', once: true },
     ],
   },
-  { label: 'keys.openItem', bindings: [{ keys: ['o'], command: 'openItem' }] },
+  { label: 'keys.openItem', bindings: [{ keys: ['o'], command: 'openItem', once: true }] },
   { label: 'keys.home', bindings: [{ keys: ['g', 'h'], command: 'goHome' }] },
   { label: 'keys.session', bindings: [{ keys: ['g', 's'], command: 'goSession' }] },
   { label: 'keys.stats', bindings: [{ keys: ['g', 't'], command: 'goStats' }] },
@@ -171,7 +176,9 @@ export function useShortcuts(): void {
         pending = { key, at: now };
         return;
       }
-      send(e, BINDINGS.find((b) => b.keys.length === 1 && b.keys[0] === key)?.command ?? null);
+      const single = BINDINGS.find((b) => b.keys.length === 1 && b.keys[0] === key);
+      if (single?.once && e.repeat) return;
+      send(e, single?.command ?? null);
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
