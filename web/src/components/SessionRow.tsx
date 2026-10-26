@@ -73,8 +73,9 @@ export function SessionRow({
       ),
     onClick: () => onSelect(s.id),
   };
-  // A running session says what it is doing, which is newer than any age.
-  const showAge = !(running && s.activity);
+  // A running session says what it is doing, which is newer than any age; on a card, a waiting
+  // one says since when it waits.
+  const showAge = !(running && (s.activity || (density === 'card' && s.live === 'waiting')));
 
   if (density === 'card')
     return (

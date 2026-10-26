@@ -1,8 +1,6 @@
 import type { MessageKey } from './zh';
 
 export const en: Record<MessageKey, string> = {
-  'app.emptyTitle': 'Pick a session',
-  'app.emptyBody': 'Every session on this machine is listed on the left, running ones first.',
   'app.loading': 'Loading session…',
   'conn.connecting': 'Connecting',
   'conn.open': 'Connected',
@@ -474,11 +472,11 @@ export const en: Record<MessageKey, string> = {
   'home.emptyBody2':
     'Run one of them in a terminal and its session appears here by itself, or start a Claude Code session right here.',
   'home.connecting': 'Reading local sessions…',
-  'home.running': 'Running',
+  'home.needsYou': 'Needs you',
+  'home.working': 'Working',
   'home.recent': 'Recent',
-  'home.openLatest': 'Open the most recently active session',
-  'home.runningOf': '{n} of {m} {m|session|sessions}',
-  'home.nothingRunning': 'Nothing is running.',
+  'home.nothingWaiting': 'Nothing needs you.',
+  'home.nothingWorking': 'Nothing is working.',
   'activity.reading': 'Reading {x}',
   'activity.searching': 'Searching {x}',
   'activity.editing': 'Editing {x}',

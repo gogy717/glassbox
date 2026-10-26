@@ -1,4 +1,4 @@
-/* The board: two flat lists of the sidebar's rows, with no boxes around them. */
+/* The board: three flat lists of the sidebar's rows, with no boxes around them. */
 .home {
   min-width: 0;
   padding: 26px 32px 48px;
@@ -31,6 +31,12 @@
   color: var(--muted);
 }
 
+/* Sessions need you: the count in the waiting amber, as their rows are. */
+.count[data-attention] {
+  color: var(--warning);
+  font-weight: 600;
+}
+
 /* The next section starts under a hairline of its own, its header then stands free. */
 .section + .section {
   margin-top: 22px;
@@ -43,23 +49,6 @@
   border-bottom: 0;
 }
 
-.openLatest {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: auto;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--accent);
-  font-size: var(--fs-body);
-  cursor: pointer;
-}
-
-.openLatest:hover {
-  text-decoration: underline;
-}
-
 /* One column, wide enough for a long title, at any width. */
 .rows {
   max-width: 720px;
@@ -68,7 +57,7 @@
   list-style: none;
 }
 
-/* Nothing running: the section stays, and says so. */
+/* Nothing needs you, nothing is working: the section stays, and says so. */
 .none {
   max-width: 720px;
   margin: 0;
@@ -143,6 +132,12 @@
 
 .newSession:hover {
   background: var(--layer-3);
+}
+
+/* On the board, New session sits at the right of the first header, where the eye lands first. */
+.header .newSession {
+  align-self: center;
+  margin-left: auto;
 }
 
 /* Narrow: each agent on its own line, its folder and options under it. */

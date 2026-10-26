@@ -380,9 +380,11 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
                   showProbes={prefs.showProbes}
                   failures={failures}
                   lastOpened={lastOpened}
-                  onOpen={(id) =>
-                    navigate({ sessionId: id, agentId: 'main', turnId: null, requestId: null })
-                  }
+                  onOpen={(id) => {
+                    // From the board, straight onto the prompt, even one hidden with Escape.
+                    setDismissed(null);
+                    navigate({ sessionId: id, agentId: 'main', turnId: null, requestId: null });
+                  }}
                   onNewSession={() => setNewSession(true)}
                 />
               )}

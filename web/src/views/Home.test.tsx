@@ -53,6 +53,13 @@ const thinking = (s: number): SessionActivity => ({
   agentId: 'main',
   since: ago(s),
 });
+const waitingFor = (tool: string | null, s: number): SessionActivity => ({
+  kind: 'waiting',
+  tool,
+  target: null,
+  agentId: 'main',
+  since: ago(s),
+});
 
 function renderHome(
   sessions: SessionSummary[],
@@ -80,6 +87,7 @@ function renderHome(
 
 const rows = (el: HTMLElement) => within(el).getAllByRole('listitem');
 const titles = (el: HTMLElement) => rows(el).map((r) => r.textContent?.match(/Session \d+/)?.[0]);
+const region = (name: string) => screen.getByRole('region', { name });
 
 describe('Home', () => {
   beforeEach(() => {
@@ -89,23 +97,42 @@ describe('Home', () => {
   });
   afterEach(() => vi.useRealTimers());
 
-  it('lists running sessions, then recent ones, each flat and most recently active first', () => {
+  it('lists the sessions that need you, then the working ones, then the recent, each flat', () => {
     const sessions = [
       session('shopfront', 'idle', 120),
       session('glassbox', 'busy', 0, { activity: thinking(72) }),
-      session('shopfront', 'waiting', 1),
+      session('shopfront', 'waiting', 0, { activity: waitingFor('Bash', 20) }),
       session('lantern', 'closed', 18),
       session('glassbox', 'idle', 5),
+      session('lantern', 'waiting', 1, { activity: waitingFor('AskUserQuestion', 62) }),
+      // No tool is blocked: the turn finished, since the last write.
+      session('mill', 'waiting', 0, { updatedAt: ago(220) }),
     ];
     renderHome(sessions);
-    const running = screen.getByRole('region', { name: 'Running' });
-    expect(running).toHaveTextContent('2 of 5 sessions');
-    expect(titles(running)).toEqual(['Session 2', 'Session 3']);
-    expect(rows(running).map((r) => r.textContent)).toEqual([
-      expect.stringContaining('glassbox /Session 2Thinking · 1:12'),
-      expect.stringContaining('shopfront /Session 3Your turn'),
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      'Needs you',
+      'Working',
+      'Recent',
     ]);
-    const recent = screen.getByRole('region', { name: 'Recent' });
+
+    // Each says what it waits for, the longest wait first; the clock replaces the age.
+    const needsYou = region('Needs you');
+    expect(titles(needsYou)).toEqual(['Session 7', 'Session 6', 'Session 3']);
+    expect(rows(needsYou).map((r) => r.textContent)).toEqual([
+      expect.stringMatching(/mill \/Session 7Your turn · 3:40$/),
+      expect.stringMatching(/lantern \/Session 6Question · 1:02$/),
+      expect.stringMatching(/shopfront \/Session 3Permission · Bash · 0:20$/),
+    ]);
+    expect(within(needsYou).getByText('3')).toHaveClass('figure');
+    expect(within(needsYou).getByText('3')).toHaveAttribute('data-attention');
+
+    const working = region('Working');
+    expect(rows(working).map((r) => r.textContent)).toEqual([
+      expect.stringContaining('glassbox /Session 2Thinking · 1:12'),
+    ]);
+    expect(within(working).getByText('1')).not.toHaveAttribute('data-attention');
+
+    const recent = region('Recent');
     expect(titles(recent)).toEqual(['Session 5', 'Session 4', 'Session 1']);
     expect(within(recent).getByText('3')).toHaveClass('figure');
     // No project headings: the project leads each row instead.
@@ -118,48 +145,44 @@ describe('Home', () => {
     expect(meta).toHaveTextContent(/^Idle · 4 ?m(in)?( ago)?$/);
   });
 
-  it('keeps Running when nothing runs, and says so', () => {
-    const sessions = [session('a', 'idle', 3), session('b', 'closed', 9)];
-    const { onOpen } = renderHome(sessions);
-    const running = screen.getByRole('region', { name: 'Running' });
-    expect(running).toHaveTextContent('0 of 2 sessions');
-    expect(within(running).getByText('Nothing is running.')).toBeInTheDocument();
-    expect(within(running).queryByRole('listitem')).toBeNull();
-    fireEvent.click(within(running).getByRole('button', { name: /most recently active/ }));
-    expect(onOpen).toHaveBeenCalledWith(sessions[0]?.id);
+  it('keeps Needs you and Working when they are empty, and says so', () => {
+    renderHome([session('a', 'idle', 3), session('b', 'closed', 9)]);
+    const needsYou = region('Needs you');
+    expect(within(needsYou).getByText('Nothing needs you.')).toBeInTheDocument();
+    expect(within(needsYou).getByText('0')).not.toHaveAttribute('data-attention');
+    expect(within(needsYou).queryByRole('listitem')).toBeNull();
+    const working = region('Working');
+    expect(within(working).getByText('Nothing is working.')).toBeInTheDocument();
+    expect(within(working).queryByRole('listitem')).toBeNull();
+    expect(titles(region('Recent'))).toEqual(['Session 1', 'Session 2']);
+  });
+
+  // The Session page opens the most recently active session: the header keeps one action.
+  it('offers a new session from the header, and no link to the latest session', () => {
+    const { onNewSession } = renderHome([session('a', 'idle', 3)]);
+    const needsYou = region('Needs you');
+    expect(
+      within(needsYou)
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['New session']);
+    fireEvent.click(within(needsYou).getByRole('button', { name: 'New session' }));
+    expect(onNewSession).toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /most recently active/ })).toBeNull();
   });
 
   it('shows the six newest recent sessions, and hides probes unless asked', () => {
     const sessions = Array.from({ length: 9 }, (_, i) => session(`p${i}`, 'closed', i + 1));
     sessions.push(session('probe', 'closed', 0, { tags: ['probe'] }));
+    sessions.push(session('probe', 'waiting', 0, { tags: ['probe'] }));
     renderHome(sessions);
-    const recent = screen.getByRole('region', { name: 'Recent' });
-    expect(titles(recent)).toEqual([1, 2, 3, 4, 5, 6].map((i) => `Session ${i}`));
+    expect(titles(region('Recent'))).toEqual([1, 2, 3, 4, 5, 6].map((i) => `Session ${i}`));
+    expect(within(region('Needs you')).queryByRole('listitem')).toBeNull();
   });
 
-  it('opens the most recently active session of all, running or not', () => {
-    // The idle one moved 3 minutes ago, the running one 9 minutes ago.
-    const sessions = [session('a', 'idle', 3), session('b', 'busy', 9)];
-    const { onOpen } = renderHome(sessions);
-    const running = screen.getByRole('region', { name: 'Running' });
-    fireEvent.click(within(running).getByRole('button', { name: /most recently active/ }));
-    expect(onOpen).toHaveBeenCalledWith(sessions[0]?.id);
-  });
-
-  // R31: the Stats page is the weekly receipt's home now; the header keeps the latest session.
-  it('offers no weekly receipt, only the way into the latest session', () => {
-    renderHome([session('a', 'idle', 3)]);
-    const running = screen.getByRole('region', { name: 'Running' });
-    expect(
-      within(running)
-        .getAllByRole('button')
-        .map((b) => b.textContent),
-    ).toEqual(['Open the most recently active session']);
-  });
-
-  it('is one tab stop: the arrows move between rows, across groups and sections', () => {
+  it('is one tab stop: the arrows move between rows, across sections', () => {
     const sessions = [
-      session('a', 'busy', 0),
+      session('a', 'waiting', 0),
       session('b', 'busy', 1),
       session('a', 'idle', 2),
       session('c', 'closed', 3),
@@ -201,6 +224,7 @@ describe('Home', () => {
     vi.stubGlobal('fetch', fetch);
     try {
       renderHome([
+        session('w', 'waiting', 0, { activity: waitingFor('Bash', 30) }),
         session('a', 'busy', 0, { activity: thinking(10) }),
         session('d', 'busy', 1, { activity: { ...thinking(20), kind: 'writing' } }),
         session('b', 'idle', 5),
@@ -209,8 +233,10 @@ describe('Home', () => {
       const before = format.calls;
       expect(vi.getTimerCount()).toBe(1);
       act(() => vi.advanceTimersByTime(3000));
-      expect(screen.getAllByRole('listitem')[0]).toHaveTextContent('Thinking · 0:13');
-      expect(screen.getAllByRole('listitem')[1]).toHaveTextContent('Replying · 0:23');
+      const items = screen.getAllByRole('listitem');
+      expect(items[0]).toHaveTextContent('Permission · Bash · 0:33');
+      expect(items[1]).toHaveTextContent('Thinking · 0:13');
+      expect(items[2]).toHaveTextContent('Replying · 0:23');
       expect(format.calls).toBe(before);
       expect(fetch).not.toHaveBeenCalled();
     } finally {
@@ -244,12 +270,32 @@ describe('Home', () => {
     expect(screen.getByText('Reading local sessions…')).toBeInTheDocument();
   });
 
-  it('words its counts in Chinese, with the figures in the mono face', () => {
-    renderHome([session('a', 'busy', 0), session('b', 'idle', 3)], {}, 'zh');
-    const running = screen.getByRole('region', { name: '正在运行' });
-    expect(running).toHaveTextContent('2 个会话中 1 个');
+  it('words its sections in Chinese, with the counts in the mono face', () => {
+    renderHome(
+      [
+        session('a', 'waiting', 0, { activity: waitingFor('Bash', 20) }),
+        session('b', 'busy', 0),
+        session('c', 'idle', 3),
+      ],
+      {},
+      'zh',
+    );
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      '等你处理',
+      '工作中',
+      '最近的会话',
+    ]);
+    expect(region('等你处理')).toHaveTextContent('权限 · Bash · 已 0:20');
+    expect(within(region('等你处理')).getByRole('button', { name: '新会话' })).toBeInTheDocument();
     expect(
-      [...running.querySelectorAll('[class*="count"] .figure')].map((f) => f.textContent),
-    ).toEqual(['2', '1']);
+      [...document.querySelectorAll('[class*="count"]')].map((f) => [
+        f.textContent,
+        f.classList.contains('figure'),
+      ]),
+    ).toEqual([
+      ['1', true],
+      ['1', true],
+      ['1', true],
+    ]);
   });
 });

@@ -63,7 +63,7 @@ describe('App', () => {
     const store = createStore();
     store.applyEvent({ type: 'sessions', sessions: createDemoSessions(DEMO_NOW) });
     render(<App store={store} connect={noConnect} />);
-    expect(screen.getByRole('heading', { name: 'Pick a session' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Home' })).toBeInTheDocument();
     expect(within(sidebar()).getAllByRole('list')).toHaveLength(3);
     // No session open: the header names no agent.
     expect(within(screen.getByRole('banner')).queryByText('Claude Code')).toBeNull();
@@ -89,30 +89,34 @@ describe('App', () => {
     expect(screen.getByRole('dialog', { name: 'New session' })).toBeInTheDocument();
   });
 
-  it('puts running sessions first on the home screen and opens the most active one', async () => {
+  it('puts the working sessions on the home screen, after those that need you', () => {
     const store = createStore();
     store.applyEvent({ type: 'sessions', sessions: createDemoSessions(DEMO_NOW) });
     render(<App store={store} connect={noConnect} runs={fakeRuns()} />);
-    const running = screen.getByRole('region', { name: 'Running' });
-    const card = within(running).getByRole('button', { name: /Live viewer research/ });
+    const working = screen.getByRole('region', { name: 'Working' });
+    const card = within(working).getByRole('button', { name: /Live viewer research/ });
     expect(within(card).getByText('Claude Code')).toHaveAttribute('data-agent', 'claude-code');
-    expect(within(running).queryByRole('button', { name: /Fix flaky login/ })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Open the most recently active session' }));
-    await waitFor(() =>
-      expect(window.location.hash).toBe(`#/s/${encodeURIComponent(DEMO_SESSION_ID)}`),
+    expect(within(working).queryByRole('button', { name: /Fix flaky login/ })).toBeNull();
+    expect(screen.getByRole('region', { name: 'Needs you' })).toHaveTextContent(
+      'Nothing needs you.',
     );
+    // The Session page opens the most recently active session; Home offers a new one.
+    expect(screen.queryByRole('button', { name: /most recently active/ })).toBeNull();
+    expect(
+      within(screen.getByRole('main')).getByRole('button', { name: 'New session' }),
+    ).toBeInTheDocument();
   });
 
-  it('offers recent sessions when nothing is running', async () => {
+  it('offers recent sessions when nothing is working', () => {
     const store = createStore();
     const [, idle, closed] = createDemoSessions(DEMO_NOW);
     if (!idle || !closed) throw new Error('fixture');
     store.applyEvent({ type: 'sessions', sessions: [closed, idle] });
     render(<App store={store} connect={noConnect} runs={fakeRuns()} />);
-    // Nothing runs, and Running says so (W6-fix1 DR3).
-    const running = screen.getByRole('region', { name: 'Running' });
-    expect(running).toHaveTextContent('0 of 2 sessions');
-    expect(running).toHaveTextContent('Nothing is running.');
+    // Nothing works, and Working says so (W6-fix1 DR3).
+    const working = screen.getByRole('region', { name: 'Working' });
+    expect(working).toHaveTextContent('Nothing is working.');
+    expect(within(working).queryByRole('listitem')).toBeNull();
     const recent = screen.getByRole('region', { name: 'Recent' });
     expect(
       within(recent)
@@ -122,8 +126,62 @@ describe('App', () => {
       expect.stringContaining('Fix flaky login test'),
       expect.stringContaining('Untitled session'),
     ]);
-    fireEvent.click(screen.getByRole('button', { name: 'Open the most recently active session' }));
+  });
+
+  // F1: the session that needs a decision leads the board, saying what for, and a click lands on
+  // the prompt itself, even one hidden with Escape before.
+  it('lists a session with an open permission prompt under Needs you, and opens it onto the prompt', async () => {
+    const store = createStore();
+    const [, idle] = createDemoSessions(DEMO_NOW);
+    if (!idle) throw new Error('fixture');
+    store.applyEvent({ type: 'sessions', sessions: createDemoSessions(DEMO_NOW) });
+    const prompt = {
+      id: 'tu_1',
+      toolName: 'Bash',
+      input: { command: 'ls' },
+      questions: null,
+      requestedAt: new Date(DEMO_NOW.getTime() - 20_000).toISOString(),
+    };
+    store.applyEvent({
+      type: 'run',
+      run: runState({
+        id: 'run_2',
+        sessionId: idle.id,
+        status: 'waiting-permission',
+        pendingPermissions: [prompt],
+      }),
+    });
+    render(<App store={store} connect={noConnect} runs={fakeRuns()} />);
+    const needsYou = screen.getByRole('region', { name: 'Needs you' });
+    const card = within(needsYou).getByRole('button', { name: /Fix flaky login test/ });
+    expect(card).toHaveTextContent('Permission · Bash · 0:20');
+    expect(
+      within(screen.getByRole('region', { name: 'Recent' })).queryByRole('button', {
+        name: /Fix flaky login test/,
+      }),
+    ).toBeNull();
+    // No composer on Home: the prompt belongs to the session page.
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    fireEvent.click(card);
     await waitFor(() => expect(window.location.hash).toBe(`#/s/${encodeURIComponent(idle.id)}`));
+    const dialog = await screen.findByRole('dialog', { name: 'Claude Code wants to use Bash' });
+    expect(dialog).toHaveFocus();
+
+    // Hidden with Escape, then back from Home: the row opens it again.
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    act(() => {
+      window.location.hash = '#/';
+    });
+    const again = await within(await screen.findByRole('region', { name: 'Needs you' })).findByRole(
+      'button',
+      { name: /Fix flaky login test/ },
+    );
+    fireEvent.click(again);
+    expect(
+      await screen.findByRole('dialog', { name: 'Claude Code wants to use Bash' }),
+    ).toBeInTheDocument();
   });
 
   it('opens a session when it is clicked in the sidebar', async () => {
@@ -517,7 +575,7 @@ describe('App', () => {
     store.applyEvent({ type: 'sessions', sessions: createDemoSessions(DEMO_NOW) });
     const runs = fakeRuns();
     render(<App store={store} connect={noConnect} runs={runs} />);
-    fireEvent.click(screen.getByRole('button', { name: 'New session' }));
+    fireEvent.click(within(screen.getByRole('main')).getByRole('button', { name: 'New session' }));
     fireEvent.change(screen.getByRole('textbox', { name: 'Working directory' }), {
       target: { value: '/w/demo' },
     });

@@ -1,13 +1,13 @@
-import { ArrowRight, Plus } from 'lucide-react';
-import { useMemo, useRef } from 'react';
+import { Plus } from 'lucide-react';
+import { type ReactNode, useMemo, useRef } from 'react';
 import type { AgentKind, SessionSummary } from '../../../src/core/model.js';
 import { AgentTag } from '../components/AgentTag';
 import { Delayed } from '../components/Delayed';
-import { FigureText } from '../components/FigureText';
 import { SessionRow } from '../components/SessionRow';
 import { useRovingFocus } from '../data/useRovingFocus';
-import { useI18n } from '../i18n';
-import { isListed, liveFilterOf } from '../lib/sessions';
+import { type MessageKey, useI18n } from '../i18n';
+import { isListed } from '../lib/sessions';
+import { longestWaitFirst } from '../lib/waiting';
 import css from './Home.module.css';
 
 interface Props {
@@ -26,7 +26,6 @@ interface Props {
 const RECENT = 6;
 const newestFirst = (a: SessionSummary, b: SessionSummary) =>
   b.updatedAt.localeCompare(a.updatedAt);
-const isRunning = (s: SessionSummary) => liveFilterOf(s) === 'running';
 
 /** Where each agent's sessions are read from, and the options that move or drop them. */
 const WHERE: { agent: AgentKind; dir: string; options: string[] }[] = [
@@ -46,10 +45,12 @@ const WHERE: { agent: AgentKind; dir: string; options: string[] }[] = [
 ];
 
 /**
- * The screen before a session is open: what is running right now, then what ran recently, each
- * a flat list, most recently active first, of the sidebar's rows at card density (the project
- * leads the title). The rows are one tab stop; the arrow keys move between them and Enter opens
- * one. With no sessions, where glassbox looks.
+ * The board: three flat lists of the sidebar's rows at card density (the project leads the
+ * title), most urgent first. Needs you: the sessions waiting for you, the longest wait first,
+ * each saying what it waits for. Working: the busy ones, each saying what it is doing. Recent:
+ * the rest, most recently active first. The first two stay when empty, and say so; New session
+ * sits in the header. The rows are one tab stop; the arrow keys move between them and Enter
+ * opens one. With no sessions, where glassbox looks.
  */
 export function Home({
   sessions,
@@ -67,16 +68,23 @@ export function Home({
     () => sessions.filter((s) => isListed(s, showProbes)),
     [sessions, showProbes],
   );
-  const running = useMemo(() => visible.filter(isRunning).sort(newestFirst), [visible]);
+  const needsYou = useMemo(
+    () => visible.filter((s) => s.live === 'waiting').sort(longestWaitFirst),
+    [visible],
+  );
+  const working = useMemo(
+    () => visible.filter((s) => s.live === 'busy').sort(newestFirst),
+    [visible],
+  );
   const recent = useMemo(
     () =>
       visible
-        .filter((s) => !isRunning(s))
+        .filter((s) => s.live !== 'waiting' && s.live !== 'busy')
         .sort(newestFirst)
         .slice(0, RECENT),
     [visible],
   );
-  const rows = [...running, ...recent];
+  const rows = [...needsYou, ...working, ...recent];
   const roving = useRovingFocus(
     ref,
     rows.map((s) => s.id),
@@ -89,6 +97,13 @@ export function Home({
         <p className={css.placeholder}>{t('home.connecting')}</p>
       </Delayed>
     );
+
+  const newSession = (
+    <button type="button" className={css.newSession} onClick={onNewSession}>
+      <Plus size={14} aria-hidden="true" />
+      {t('composer.newSession')}
+    </button>
+  );
 
   if (visible.length === 0)
     return (
@@ -106,16 +121,11 @@ export function Home({
             ))}
           </ul>
           <p>{t('home.emptyBody2')}</p>
-          <button type="button" className={css.newSession} onClick={onNewSession}>
-            <Plus size={14} aria-hidden="true" />
-            {t('composer.newSession')}
-          </button>
+          {newSession}
         </section>
       </div>
     );
 
-  // The most recently active of all the rows, running or not.
-  const latest = [...rows].sort(newestFirst)[0];
   const list = (items: SessionSummary[]) => (
     <ul className={css.rows}>
       {items.map((s) => (
@@ -133,42 +143,33 @@ export function Home({
       ))}
     </ul>
   );
+  const section = (
+    name: 'needsYou' | 'working' | 'recent',
+    items: SessionSummary[],
+    none: MessageKey | null,
+    extra?: ReactNode,
+  ) => (
+    <section className={css.section} aria-labelledby={`home-${name}`} data-section={name}>
+      <div className={css.header}>
+        <h2 id={`home-${name}`}>{t(`home.${name}`)}</h2>
+        <span
+          className={`${css.count} figure`}
+          data-attention={name === 'needsYou' && items.length > 0 ? '' : undefined}
+        >
+          {items.length}
+        </span>
+        {extra}
+      </div>
+      {items.length > 0 ? list(items) : none && <p className={css.none}>{t(none)}</p>}
+    </section>
+  );
 
   return (
     <div className={css.home} ref={ref}>
-      <h1 className="visually-hidden">{t('app.emptyTitle')}</h1>
-      <section className={css.section} aria-labelledby="home-running" data-section="running">
-        <div className={css.header}>
-          <h2 id="home-running">{t('home.running')}</h2>
-          <span className={css.count}>
-            <FigureText
-              k="home.runningOf"
-              params={{ n: running.length, m: visible.length }}
-              figures={['n', 'm']}
-            />
-          </span>
-          {latest && (
-            <button type="button" className={css.openLatest} onClick={() => onOpen(latest.id)}>
-              {t('home.openLatest')}
-              <ArrowRight size={14} aria-hidden="true" />
-            </button>
-          )}
-        </div>
-        {running.length > 0 ? (
-          list(running)
-        ) : (
-          <p className={css.none}>{t('home.nothingRunning')}</p>
-        )}
-      </section>
-      {recent.length > 0 && (
-        <section className={css.section} aria-labelledby="home-recent" data-section="recent">
-          <div className={css.header}>
-            <h2 id="home-recent">{t('home.recent')}</h2>
-            <span className={`${css.count} figure`}>{recent.length}</span>
-          </div>
-          {list(recent)}
-        </section>
-      )}
+      <h1 className="visually-hidden">{t('nav.home')}</h1>
+      {section('needsYou', needsYou, 'home.nothingWaiting', newSession)}
+      {section('working', working, 'home.nothingWorking')}
+      {recent.length > 0 && section('recent', recent, null)}
     </div>
   );
 }

@@ -1,7 +1,5 @@
 /** Chinese UI copy (default). Keys are the source of truth for `en.ts`. */
 export const zh = {
-  'app.emptyTitle': '选择一个会话',
-  'app.emptyBody': '左侧列出本机所有会话，运行中的排在最前。',
   'app.loading': '正在加载会话…',
   'conn.connecting': '连接中',
   'conn.open': '已连接',
@@ -460,11 +458,11 @@ export const zh = {
   'home.emptyBody2':
     '在终端里运行其中任何一个，会话会自动出现在这里；也可以直接在 glassbox 里开始一个 Claude Code 会话。',
   'home.connecting': '正在读取本机会话…',
-  'home.running': '正在运行',
+  'home.needsYou': '等你处理',
+  'home.working': '工作中',
   'home.recent': '最近的会话',
-  'home.openLatest': '打开最近活跃的会话',
-  'home.runningOf': '{m} 个会话中 {n} 个',
-  'home.nothingRunning': '没有会话在运行。',
+  'home.nothingWaiting': '没有需要你处理的会话。',
+  'home.nothingWorking': '没有会话在工作。',
   'activity.reading': '正在读取 {x}',
   'activity.searching': '正在搜索 {x}',
   'activity.editing': '正在编辑 {x}',
