@@ -34,6 +34,8 @@ import { detectTrouble } from '../shared/trouble.js';
 import type { AppStore } from './app.js';
 import { troubleLabel } from './open-session.js';
 import { RateTracker } from './rate.js';
+import { RulesService } from './rules.js';
+import { createDemoRules, DEMO_HOME } from './rules-demo.js';
 import { compareSessions, isActive, listedSummary, withRepo } from './store.js';
 import { type WeekRead, WeekService, type WeekStore } from './week.js';
 import { createDemoWeek } from './week-demo.js';
@@ -162,6 +164,10 @@ export class DemoStore implements AppStore, WeekStore {
   private readonly weekBehind: SessionSnapshot[];
   /** The weekly receipt's data, read from the demo's sessions and the week behind them. */
   readonly week: WeekService = new WeekService(this, { repoOf: demoRepo });
+  /** A permission history behind the demo's sessions: read by Rules only, never listed. */
+  private readonly rulesBehind: SessionSnapshot[];
+  /** The Rules page's data: the demo's sessions, the week behind them, and that history. */
+  readonly rules: RulesService;
   private readonly sessionCbs = new Set<(s: SessionSummary[]) => void>();
   private readonly patchCbs = new Set<(p: SessionPatch) => void>();
   private timer: NodeJS.Timeout | null = null;
@@ -186,6 +192,18 @@ export class DemoStore implements AppStore, WeekStore {
     this.sides = createDemoSideSnapshots(now);
     this.quotas = createDemoQuotas(now);
     this.weekBehind = createDemoWeek(now.getTime());
+    const history = createDemoRules(now.getTime());
+    this.rulesBehind = history.sessions;
+    this.rules = new RulesService(
+      {
+        weekSessions: () => [...this.weekSessions(), ...this.rulesBehind.map((s) => s.session)],
+        readSession: async (id) => {
+          const behind = this.rulesBehind.find((s) => s.session.id === id);
+          return behind ? { snapshot: structuredClone(behind), bytes: 0 } : this.readSession(id);
+        },
+      },
+      { home: DEMO_HOME, readSettings: async (projects) => history.settings(projects) },
+    );
     const inFlight = this.snap.requests.find(
       (r) => r.agentId === MAIN_AGENT_ID && r.status === 'in-flight',
     );
@@ -233,6 +251,7 @@ export class DemoStore implements AppStore, WeekStore {
 
   async stop(): Promise<void> {
     this.week.stop();
+    this.rules.stop();
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
     this.sessionCbs.clear();
