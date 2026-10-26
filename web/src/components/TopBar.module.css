@@ -92,12 +92,18 @@
   flex: 1;
 }
 
-/* A 6px dot and the word; green only while connected. */
+/* The connection, only while it is news: a chip with a 6px dot and the word, in red while it
+   reconnects. Connected, it shows nothing (F5): the word stays in the page, read but not seen,
+   so the status region announces a drop and the recovery alike. */
 .conn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   flex: none;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-l);
   font-size: var(--fs-meta);
   color: var(--muted);
   white-space: nowrap;
@@ -111,17 +117,24 @@
   background: var(--faint);
 }
 
-.conn[data-state="open"]::before {
-  background: var(--success);
-}
-
 .conn[data-state="reconnecting"] {
+  border-color: var(--error);
   color: var(--error);
   font-weight: 600;
 }
 
 .conn[data-state="reconnecting"]::before {
   background: var(--error);
+}
+
+.conn[data-state="open"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
 }
 
 .iconButton {
@@ -217,19 +230,18 @@
   color: var(--text);
 }
 
-/* What gives way as the bar narrows, in order (D4): Connected while it is connected, Follow
-   latest's word, the page nav's words (all below 1200); the quota's full form (its own sheet);
-   the wordmark's word and the rate's line (below 900). Never: the menu, the mark, the three page
-   icons, the rate figure, the quota's first meter, the eye, the settings. */
+/* What gives way as the bar narrows, in order (D4): Follow latest's word (a session's), the
+   page nav's words (all below 1200); the quota's full form (its own sheet); the wordmark's word
+   and the rate's line (below 900). Never: the menu, the mark, the three page icons, the rate
+   figure, the quota's first meter, the connection chip while it is not connected, the eye, the
+   settings. */
 
-/* Two columns or fewer: Follow keeps its eye, and the connection shows only when it drops. It
-   stays in the page while hidden, so its status region still announces the drop. */
+/* Two columns or fewer: Follow keeps its eye. */
 @media (max-width: 1199px) {
   .toggleLabel {
     display: none;
   }
 
-  .conn[data-state="open"],
   .pageLabel {
     position: absolute;
     width: 1px;
@@ -246,22 +258,13 @@
   }
 }
 
-/* In a session the title keeps at least 240px (D4 DR1), paid for by the others, sooner: Connected
-   and Follow latest's word below 1400, the rate's line below 1300, the wordmark's word below 1200,
-   the quota's full form below 1600. The page nav's words go at 1200 on every page alike: the nav
-   is what all three pages share, and it must not change as you move between them. */
+/* In a session the title keeps at least 240px (D4 DR1), paid for by the others, sooner: Follow
+   latest's word below 1400, the rate's line below 1300, the wordmark's word below 1200, the
+   quota's full form below 1600. The page nav's words go at 1200 on every page alike: the nav is
+   what all three pages share, and it must not change as you move between them. */
 @media (max-width: 1399px) {
   .bar[data-session] .toggleLabel {
     display: none;
-  }
-
-  .bar[data-session] .conn[data-state="open"] {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
   }
 
   .bar[data-session] .toggle {

@@ -94,23 +94,28 @@ export function TopBar(p: Props) {
         sessionOpen={p.title !== null}
       />
       <TopQuota quotas={p.quotas} sessionOpen={p.title !== null} />
+      {/* News only while it is not connected (a chip); connected, read but not seen, so the
+          status region announces the next drop and the recovery alike. */}
       <span role="status" className={css.conn} data-state={p.connection}>
         {t(`conn.${p.connection}`)}
       </span>
-      {/* Named by its word, which narrow screens hide: the eye alone still says Follow latest. */}
-      <button
-        type="button"
-        className={css.toggle}
-        aria-pressed={p.follow}
-        aria-label={t('follow.label')}
-        title={t('follow.label')}
-        onClick={() => p.onFollow(!p.follow)}
-      >
-        <Eye size={14} aria-hidden="true" />
-        <span className={css.toggleLabel} aria-hidden="true">
-          {t('follow.label')}
-        </span>
-      </button>
+      {/* A session-page control: Home and Stats have no latest turn to follow. Named by its
+          word, which narrow screens hide: the eye alone still says Follow latest. */}
+      {p.nav.page === 'session' && (
+        <button
+          type="button"
+          className={css.toggle}
+          aria-pressed={p.follow}
+          aria-label={t('follow.label')}
+          title={t('follow.label')}
+          onClick={() => p.onFollow(!p.follow)}
+        >
+          <Eye size={14} aria-hidden="true" />
+          <span className={css.toggleLabel} aria-hidden="true">
+            {t('follow.label')}
+          </span>
+        </button>
+      )}
       <SettingsMenu prefs={p.prefs} onPrefs={p.onPrefs} />
     </header>
   );
