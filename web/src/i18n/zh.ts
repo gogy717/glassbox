@@ -486,6 +486,8 @@ export const zh = {
   'perm.allow': '允许',
   'perm.deny': '拒绝',
   'perm.skip': '跳过',
+  'perm.approve': '批准',
+  'perm.reject': '驳回',
   'perm.reason': '理由（可选）',
   'perm.confirmDeny': '确认拒绝',
   'perm.cancel': '取消',

@@ -493,6 +493,8 @@ export const en: Record<MessageKey, string> = {
   'perm.allow': 'Allow',
   'perm.deny': 'Deny',
   'perm.skip': 'Skip',
+  'perm.approve': 'Approve',
+  'perm.reject': 'Reject',
   'perm.reason': 'Reason (optional)',
   'perm.confirmDeny': 'Confirm deny',
   'perm.cancel': 'Cancel',

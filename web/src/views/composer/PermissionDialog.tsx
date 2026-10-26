@@ -200,7 +200,17 @@ function ToolPrompt({ request, busy, onDecide }: PartProps) {
   );
 }
 
-function Questions({ request, busy, onDecide }: PartProps) {
+/**
+ * An AskUserQuestion's questions, each its options to pick (one, or any), then Skip and Send.
+ * `shortcuts`: answered from a list with keys of its own (the Inbox), Send says y and Skip n, and
+ * nothing is said of Esc, which hides no prompt there.
+ */
+export function Questions({
+  request,
+  busy,
+  onDecide,
+  shortcuts = false,
+}: PartProps & { shortcuts?: boolean }) {
   const { t } = useI18n();
   const questions = request.questions ?? [];
   const [answers, setAnswers] = useState<Record<string, string[]>>({});
@@ -250,11 +260,12 @@ function Questions({ request, busy, onDecide }: PartProps) {
         </fieldset>
       ))}
       <div className={css.actions}>
-        <span className={css.keys}>{t('perm.keys')}</span>
+        {!shortcuts && <span className={css.keys}>{t('perm.keys')}</span>}
         <button
           type="button"
           className={css.button}
           disabled={busy}
+          aria-keyshortcuts={shortcuts ? 'n' : undefined}
           onClick={() => onDecide({ decision: 'deny' })}
         >
           {t('perm.skip')}
@@ -264,6 +275,7 @@ function Questions({ request, busy, onDecide }: PartProps) {
           className={css.button}
           data-kind="primary"
           disabled={busy || !complete}
+          aria-keyshortcuts={shortcuts ? 'y' : undefined}
           onClick={submit}
         >
           {t('perm.send')}

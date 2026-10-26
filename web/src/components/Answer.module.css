@@ -29,3 +29,36 @@
   font-size: var(--fs-meta);
   color: var(--error);
 }
+
+/* A plan's answers have no command to lead them: the buttons keep to the right edge. */
+.end {
+  justify-content: flex-end;
+}
+
+/* Inline, in the Inbox: a question's groups or a plan, then the buttons, as the dialog stacks
+   them. */
+.inline {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* Checked native inputs in the steel accent, as in the dialog. */
+.inline input[type="radio"],
+.inline input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
+/* The plan read whole, in a box of its own that scrolls past a screenful. */
+.plan {
+  max-height: 50vh;
+  overflow-y: auto;
+  padding: 8px 12px;
+  border-radius: var(--radius-m);
+  background: var(--layer-2);
+}
+
+.inline .answer {
+  padding: 0;
+}
