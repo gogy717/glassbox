@@ -49,11 +49,30 @@ function withOrphan(): SessionSnapshot {
   return snap;
 }
 
+/** The demo with a local command (/model) minutes before its first prompt: a turn with no call. */
+function withCommand(): SessionSnapshot {
+  const snap = createDemoSnapshot(DEMO_NOW);
+  const started = new Date(NOW - 50 * 60_000).toISOString();
+  snap.turns.unshift({
+    id: 'turn_m0',
+    agentId: MAIN_AGENT_ID,
+    index: 0,
+    origin: 'human',
+    prompt: '/model',
+    startedAt: started,
+    endedAt: started,
+    status: 'complete',
+    requestIds: [],
+  });
+  return snap;
+}
+
 const fixtures: [string, SessionSnapshot][] = [
   ['demo (running, sub-agents, workflow)', createDemoSnapshot(DEMO_NOW)],
   ['demo with failures', withFailures()],
   ['demo with queueing', withQueueing()],
   ['demo with an orphaned sub-agent', withOrphan()],
+  ['demo with a local command before its first prompt', withCommand()],
   ...createDemoSideSnapshots(DEMO_NOW).map((s): [string, SessionSnapshot] => [s.session.id, s]),
 ];
 

@@ -236,6 +236,31 @@ describe('a session as hourly buckets', () => {
     expect(s?.inWindow.agentMs).toBeGreaterThan(s?.inWindow.activeMs ?? 0);
   });
 
+  // The Claude Code parser ends a local command's turn (/model, no call) at its own start.
+  it('counts no time for a turn that ended at its own start: a local command before the prompt', () => {
+    const now = new Date(2026, 10, 21, 20, 41).getTime();
+    const snap = createDemoSnapshot(new Date(now));
+    const base = sessionBuckets(snap, now);
+    // An hour before the demo's first prompt, in an hour of its own.
+    const started = new Date(now - 60 * 60_000).toISOString();
+    snap.turns.unshift({
+      id: 'turn_m0',
+      agentId: 'main',
+      index: 0,
+      origin: 'human',
+      prompt: '/model',
+      startedAt: started,
+      endedAt: started,
+      status: 'complete',
+      requestIds: [],
+    });
+    const b = sessionBuckets(snap, now);
+    expect(b.hours.has(hourStart(now - 60 * 60_000))).toBe(false);
+    expect(additive(sliceSession(b, everything(b)))).toEqual(
+      additive(sliceSession(base, everything(base))),
+    );
+  });
+
   it('counts no time after the moment it is bucketed as of, though the snapshot runs on', () => {
     const now = new Date(2026, 10, 21, 20, 41).getTime();
     const snap = createDemoSnapshot(new Date(now));
