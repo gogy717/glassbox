@@ -18,6 +18,7 @@ import { TopBar } from './components/TopBar';
 import { ApprovalsContext, useApprovals } from './data/approvals';
 import { connectEvents } from './data/events';
 import { notifyState, useNeedsYouNotifications } from './data/notifications';
+import { PriceTableContext } from './data/price-table';
 import {
   createRunsClient,
   failedSessions,
@@ -33,6 +34,7 @@ import { createStore, type Store, StoreContext } from './data/store';
 import { useNow } from './data/useNow';
 import { I18nContext, makeI18n, useI18n } from './i18n';
 import { lazyView } from './lib/lazy-view';
+import { priceTable } from './lib/prices';
 import { isListed } from './lib/sessions';
 import { applyTheme, loadPrefs, type Prefs, savePrefs } from './prefs';
 import { formatRoute, pageOf, parseRoute, sessionLink, useRoute, youngWeek } from './router';
@@ -140,6 +142,7 @@ export function App({ store: given, connect = connectEvents, runs: givenRuns }: 
   const [runs] = useState(() => givenRuns ?? createRunsClient());
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
   const i18n = useMemo(() => makeI18n(prefs.locale), [prefs.locale]);
+  const prices = useMemo(() => priceTable(prefs.prices), [prefs.prices]);
   useEffect(() => {
     applyTheme(prefs.theme);
     savePrefs(prefs);
@@ -149,7 +152,9 @@ export function App({ store: given, connect = connectEvents, runs: givenRuns }: 
   return (
     <StoreContext.Provider value={store}>
       <I18nContext.Provider value={i18n}>
-        <Shell store={store} connect={connect} runs={runs} prefs={prefs} onPrefs={setPrefs} />
+        <PriceTableContext.Provider value={prices}>
+          <Shell store={store} connect={connect} runs={runs} prefs={prefs} onPrefs={setPrefs} />
+        </PriceTableContext.Provider>
       </I18nContext.Provider>
     </StoreContext.Provider>
   );

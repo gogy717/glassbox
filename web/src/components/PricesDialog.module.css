@@ -1,0 +1,154 @@
+/* API prices (estimate): the table every cost is worked out from, a row per model. */
+.body {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px 16px;
+}
+
+.intro,
+.note {
+  margin: 0;
+  font-size: var(--fs-small);
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.note {
+  font-size: var(--fs-meta);
+}
+
+/* The table scrolls inside the dialog, its head kept in view. */
+.scroll {
+  max-height: min(420px, calc(100vh - 300px));
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-meta);
+}
+
+.table th,
+.table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+  vertical-align: middle;
+}
+
+.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--layer-2);
+  color: var(--muted);
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.model {
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.table thead th:first-child,
+.table .model {
+  text-align: left;
+}
+
+.table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+.id {
+  font-family: var(--font-mono);
+}
+
+.edited {
+  margin-left: 6px;
+  color: var(--faint);
+}
+
+.remove {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--muted);
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+.remove:hover {
+  background: var(--layer-3);
+  color: var(--text);
+}
+
+.price {
+  width: 64px;
+  height: 24px;
+  padding: 0 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-s);
+  background: var(--layer-1);
+  color: var(--text);
+  font-size: var(--fs-meta);
+  text-align: right;
+}
+
+.add {
+  display: flex;
+  gap: 8px;
+}
+
+.addInput {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-l);
+  background: var(--layer-1);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-small);
+}
+
+.foot {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* As the composer's buttons: 28px, one weight. */
+.button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-l);
+  background: var(--layer-1);
+  color: var(--text);
+  font-size: var(--fs-small);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--layer-2);
+}
+
+.button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

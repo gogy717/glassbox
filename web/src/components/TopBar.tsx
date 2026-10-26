@@ -15,6 +15,7 @@ import { useI18n } from '../i18n';
 import type { Prefs } from '../prefs';
 import { type Page, statsLink } from '../router';
 import { AgentTag } from './AgentTag';
+import { PricesDialog } from './PricesDialog';
 import { useOnePopover, usePopoverDismiss } from './popover';
 import { QuotaBar } from './QuotaBar';
 import { LiveDot } from './Status';
@@ -219,6 +220,8 @@ function PageNav({ page, here, session, sessionsLoaded }: PageNavProps) {
 function SettingsMenu({ prefs, onPrefs }: { prefs: Prefs; onPrefs(p: Prefs): void }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
+  // The price table needs more room than the popover: a dialog of its own, opened from it.
+  const [prices, setPrices] = useState(false);
   const close = useCallback(() => setOpen(false), []);
   useOnePopover('settings', open, close);
   const ref = useRef<HTMLDivElement>(null);
@@ -269,7 +272,26 @@ function SettingsMenu({ prefs, onPrefs }: { prefs: Prefs; onPrefs(p: Prefs): voi
             <span>{t('settings.showProbes')}</span>
           </label>
           <NotifySetting prefs={prefs} onPrefs={onPrefs} />
+          <button
+            type="button"
+            className={css.pricesButton}
+            aria-haspopup="dialog"
+            onClick={() => {
+              setOpen(false);
+              setPrices(true);
+            }}
+          >
+            {t('settings.prices')}
+          </button>
         </div>
+      )}
+      {prices && (
+        <PricesDialog
+          prices={prefs.prices}
+          onPrices={(p) => onPrefs({ ...prefs, prices: p })}
+          onClose={() => setPrices(false)}
+          returnFocusTo={buttonRef}
+        />
       )}
     </div>
   );

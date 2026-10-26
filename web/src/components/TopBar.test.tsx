@@ -1,9 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { render, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
-import { I18nContext, makeI18n } from '../i18n';
-import { loadPrefs } from '../prefs';
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { useState } from 'react';
+import { afterEach, describe, expect, it } from 'vitest';
+import { I18nContext, type Locale, makeI18n } from '../i18n';
+import { DEFAULT_PRICES } from '../lib/prices';
+import { loadPrefs, type Prefs } from '../prefs';
 import { TopBar } from './TopBar';
 
 // jsdom applies no media queries: the thresholds are read from the sheet itself.
@@ -106,5 +108,129 @@ describe('the top bar as it narrows (D4 DR1)', () => {
     const session = mediaBlocks(sheet).find((b) => b.max === 1399);
     expect(session?.body).toMatch(/\.bar\[data-session\] \.toggleLabel/);
     expect(session?.body).not.toMatch(/\.pageLabel/);
+  });
+});
+
+/** The bar with prefs that change as Settings changes them, each change kept in `changes`. */
+function PrefsHarness(p: { start: Partial<Prefs>; locale: Locale; changes: Prefs[] }) {
+  const [prefs, setPrefs] = useState<Prefs>(() => ({ ...loadPrefs(), ...p.start }));
+  return (
+    <I18nContext.Provider value={makeI18n(p.locale)}>
+      <TopBar
+        nav={navOf('home')}
+        title={null}
+        agent={null}
+        sidebarId="session-list"
+        sidebarOpen
+        live={null}
+        connection="open"
+        quotas={[]}
+        follow
+        onFollow={() => {}}
+        prefs={prefs}
+        onPrefs={(next) => {
+          p.changes.push(next);
+          setPrefs(next);
+        }}
+        onToggleSidebar={() => {}}
+      />
+    </I18nContext.Provider>
+  );
+}
+
+/** Every change Settings makes to the prefs, in order. */
+function renderWithPrefs(start: Partial<Prefs> = {}, locale: Locale = 'en') {
+  const changes: Prefs[] = [];
+  render(<PrefsHarness start={start} locale={locale} changes={changes} />);
+  return changes;
+}
+
+const openPrices = (settings = 'Settings', label = 'API prices (estimate)') => {
+  fireEvent.click(screen.getByRole('button', { name: settings }));
+  fireEvent.click(screen.getByRole('button', { name: label }));
+  return screen.getByRole('dialog', { name: label });
+};
+
+const cell = (dialog: HTMLElement, model: string, kind: string) =>
+  within(dialog).getByRole('spinbutton', {
+    name: `${model}: ${kind}, USD per million tokens`,
+  }) as HTMLInputElement;
+
+// Proposal 6: what the tokens would cost on the API, from a table the person can correct.
+describe('API prices in Settings', () => {
+  afterEach(() => localStorage.clear());
+
+  it('opens the price table from Settings: a row per model, its five prices as inputs', () => {
+    renderWithPrefs();
+    const dialog = openPrices();
+    // The settings popover gives way to the dialog.
+    expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull();
+    const rows = within(dialog).getAllByRole('row').slice(1);
+    expect(rows.map((r) => r.querySelector('th')?.textContent)).toEqual(
+      Object.keys(DEFAULT_PRICES),
+    );
+    expect(cell(dialog, 'claude-opus-5-5', 'Input').value).toBe('4');
+    expect(cell(dialog, 'claude-opus-5-5', 'Cache write (5 min)').value).toBe('5');
+    expect(cell(dialog, 'claude-opus-5-5', 'Cache write (1 h)').value).toBe('8');
+    expect(cell(dialog, 'claude-opus-5-5', 'Cache read').value).toBe('0.2');
+    expect(cell(dialog, 'claude-opus-5-5', 'Output').value).toBe('20');
+    expect(dialog).toHaveTextContent('Oct 26, 2026');
+    expect(within(dialog).getByRole('button', { name: 'Reset to defaults' })).toBeDisabled();
+  });
+
+  it('keeps an edited price as the model’s whole row, and a number that is not one not at all', () => {
+    const changes = renderWithPrefs();
+    const dialog = openPrices();
+    fireEvent.change(cell(dialog, 'claude-opus-5-5', 'Output'), { target: { value: '25' } });
+    expect(changes.at(-1)?.prices).toEqual({
+      'claude-opus-5-5': { input: 4, cacheWrite: 5, cacheWrite1h: 8, cacheRead: 0.2, output: 25 },
+    });
+    const before = changes.length;
+    fireEvent.change(cell(dialog, 'claude-opus-5-5', 'Input'), { target: { value: '' } });
+    fireEvent.change(cell(dialog, 'claude-opus-5-5', 'Input'), { target: { value: '-1' } });
+    expect(changes).toHaveLength(before);
+    const row = within(dialog).getByRole('rowheader', { name: /claude-opus-5-5/ });
+    expect(row).toHaveTextContent('edited');
+  });
+
+  it('resets every price to the defaults', () => {
+    const changes = renderWithPrefs({
+      prices: {
+        'claude-opus-5-5': { input: 1, cacheWrite: 1, cacheWrite1h: 1, cacheRead: 1, output: 1 },
+      },
+    });
+    const dialog = openPrices();
+    expect(cell(dialog, 'claude-opus-5-5', 'Input').value).toBe('1');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Reset to defaults' }));
+    expect(changes.at(-1)?.prices).toEqual({});
+    expect(cell(dialog, 'claude-opus-5-5', 'Input').value).toBe('4');
+  });
+
+  it('adds a model the table does not price, and removes it again', () => {
+    const changes = renderWithPrefs();
+    const dialog = openPrices();
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Add a model' }), {
+      target: { value: ' gpt-5.5-codex ' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add' }));
+    expect(changes.at(-1)?.prices).toEqual({
+      'gpt-5.5-codex': { input: 0, cacheWrite: 0, cacheWrite1h: 0, cacheRead: 0, output: 0 },
+    });
+    fireEvent.change(cell(dialog, 'gpt-5.5-codex', 'Input'), { target: { value: '1.25' } });
+    expect(changes.at(-1)?.prices['gpt-5.5-codex']?.input).toBe(1.25);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove gpt-5.5-codex' }));
+    expect(changes.at(-1)?.prices).toEqual({});
+    // A default model is reset, not removed.
+    expect(within(dialog).queryByRole('button', { name: 'Remove claude-opus-5-5' })).toBeNull();
+  });
+
+  it('speaks Chinese', () => {
+    renderWithPrefs({}, 'zh');
+    const dialog = openPrices('设置', 'API 价格（估算）');
+    const input = within(dialog).getByRole('spinbutton', {
+      name: 'claude-opus-5-5：输入，美元/百万 token',
+    }) as HTMLInputElement;
+    expect(input.value).toBe('4');
+    expect(within(dialog).getByRole('button', { name: '恢复默认' })).toBeInTheDocument();
   });
 });
