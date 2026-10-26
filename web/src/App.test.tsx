@@ -973,6 +973,51 @@ describe('App notifications', () => {
     focus.mockRestore();
   });
 
+  it('goes back to a session’s item at each of its notifications, the Inbox already there', async () => {
+    localStorage.setItem('glassbox.prefs', JSON.stringify({ notify: true }));
+    const store = createStore();
+    const [demo, idle, closed] = createDemoSessions(DEMO_NOW);
+    if (!demo || !idle || !closed) throw new Error('fixture');
+    // One waits in a terminal from the start; the other's run asks once the page is up.
+    store.applyEvent({ type: 'sessions', sessions: [demo, idle, { ...closed, live: 'waiting' }] });
+    render(<App store={store} connect={noConnect} runs={fakeRuns()} />);
+    const ask = (id: string, after: number) => ({
+      type: 'run' as const,
+      run: runState({
+        id: 'run_a',
+        sessionId: idle.id,
+        status: 'waiting-permission',
+        pendingPermissions: [
+          {
+            id,
+            toolName: 'Bash',
+            input: { command: 'ls' },
+            questions: null,
+            requestedAt: new Date(DEMO_NOW.getTime() + after).toISOString(),
+          },
+        ],
+      }),
+    });
+    const focus = vi.spyOn(window, 'focus').mockImplementation(() => {});
+    act(() => store.applyEvent(ask('tu_1', 1000)));
+    act(() => FakeNotification.shown.at(-1)?.onclick?.());
+    const name = 'Permission for Bash · Fix flaky login test';
+    await waitFor(() => expect(screen.getByRole('article', { name })).toHaveFocus());
+    // Up to the terminal's wait; the run is answered, and asks again.
+    fireEvent.keyDown(screen.getByRole('article', { name }), { key: 'ArrowUp' });
+    const other = screen.getByRole('article', { name: 'Your turn · Untitled session' });
+    expect(other).toHaveFocus();
+    act(() =>
+      store.applyEvent({ type: 'run', run: runState({ id: 'run_a', sessionId: idle.id }) }),
+    );
+    act(() => store.applyEvent(ask('tu_2', 3000)));
+    expect(FakeNotification.shown).toHaveLength(2);
+    // Its link is the one already open: the click still goes to its item, so y answers that.
+    act(() => FakeNotification.shown.at(-1)?.onclick?.());
+    await waitFor(() => expect(screen.getByRole('article', { name })).toHaveFocus());
+    focus.mockRestore();
+  });
+
   it('notifies nothing while the setting is off', () => {
     const store = createStore();
     const [, idle] = createDemoSessions(DEMO_NOW);

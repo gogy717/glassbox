@@ -37,6 +37,11 @@ interface Props {
   now: number;
   /** The session whose item focus starts on (a notification's); else the first item. */
   at: string | null;
+  /**
+   * How many times something has asked for `at` (a notification's click): each asks afresh, even
+   * for the item the page is already at, whose link does not change.
+   */
+  call?: number;
   onOpen(sessionId: string): void;
   /** Answers a prompt of a glassbox run, as its dialog does (`RunsClient.decide`). */
   onDecide?(runId: string, permissionId: string, d: PermissionDecision): Promise<void> | void;
@@ -87,6 +92,7 @@ export function Inbox({
   loaded,
   now,
   at,
+  call = 0,
   onOpen,
   onDecide,
   armMs = PROMPT_ARM_MS,
@@ -120,14 +126,19 @@ export function Inbox({
   );
   const stop = current !== null && ids.includes(current) ? current : (ids[0] ?? null);
 
-  // On arrival, and when a notification names another item, focus starts on its item, else the
-  // first, so the keys work at once. With none yet (the runs' prompts come after the list), on the
-  // first to arrive, unless focus has gone somewhere else on the page meanwhile.
-  const placed = useRef<{ at: string | null; from: Element | null; done: boolean } | null>(null);
+  // On arrival, and at each notification's click, focus starts on its item, else the first, so
+  // the keys work at once. With none yet (the runs' prompts come after the list), on the first to
+  // arrive, unless focus has gone somewhere else on the page meanwhile.
+  const placed = useRef<{
+    at: string | null;
+    call: number;
+    from: Element | null;
+    done: boolean;
+  } | null>(null);
   useLayoutEffect(() => {
     if (!loaded) return;
-    if (!placed.current || placed.current.at !== at)
-      placed.current = { at, from: document.activeElement, done: false };
+    if (!placed.current || placed.current.at !== at || placed.current.call !== call)
+      placed.current = { at, call, from: document.activeElement, done: false };
     const p = placed.current;
     if (p.done) return;
     const target = [...waits, ...stuck].find((i) => i.session.id === at) ?? waits[0] ?? stuck[0];

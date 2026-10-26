@@ -316,7 +316,9 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
     [sessions, prefs.showProbes],
   );
   // And, when asked for, a desktop notification as each one begins to wait or to look stuck; a
-  // click opens the Inbox at its item, where y answers it.
+  // click opens the Inbox at its item, where y answers it. Each click counts: its link may be the
+  // one already open, and the Inbox goes back to the item all the same.
+  const [inboxCall, setInboxCall] = useState(0);
   useNeedsYouNotifications({
     enabled: prefs.notify && notifyState() === 'granted',
     waiting,
@@ -324,6 +326,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
     loaded: state.sessionsLoaded,
     t,
     onOpen: (id) => {
+      setInboxCall((n) => n + 1);
       window.location.hash = inboxLink(id);
     },
   });
@@ -500,6 +503,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
                   showProbes={prefs.showProbes}
                   loaded={state.sessionsLoaded}
                   at={route.inbox.item}
+                  call={inboxCall}
                   onOpen={openSession}
                   onDecide={(runId, id, d) => runs.decide(runId, id, d)}
                 />

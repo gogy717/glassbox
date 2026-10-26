@@ -83,6 +83,7 @@ interface Board {
   sessions: SessionSummary[];
   prompts?: Map<string, OpenPrompt>;
   at?: string | null;
+  call?: number;
 }
 
 /** The page's key map, as App listens for it. */
@@ -104,6 +105,7 @@ function renderInbox(board: Board, more: { armMs?: number; locale?: 'en' | 'zh' 
         loaded
         now={NOW}
         at={b.at ?? null}
+        call={b.call ?? 0}
         armMs={more.armMs ?? 0}
         onOpen={onOpen}
         onDecide={onDecide}
@@ -229,6 +231,17 @@ describe('Inbox', () => {
     expect(document.activeElement).toBe(items()[0]);
     first.update({ sessions: [a, b], at: b.id });
     expect(document.activeElement).toBe(items()[1]);
+  });
+
+  it('goes back to the item asked for each time it is asked, the one named already included', () => {
+    const a = session('waiting', { activity: waitingOn('Bash', 90) });
+    const b = session('waiting', { activity: waitingOn('Edit', 30) });
+    const { update } = renderInbox({ sessions: [a, b], at: a.id, call: 1 });
+    expect(document.activeElement).toBe(items()[0]);
+    act(() => (items()[1] as HTMLElement).focus());
+    // Its notification again: the same link, asked for once more.
+    update({ sessions: [a, b], at: a.id, call: 2 });
+    expect(document.activeElement).toBe(items()[0]);
   });
 
   it('starts on the first item to arrive when the page opened on none, unless focus is elsewhere', () => {
