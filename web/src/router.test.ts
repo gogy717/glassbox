@@ -178,12 +178,43 @@ describe('the Stats page (#/stats)', () => {
   });
 });
 
+describe('the Rules page (#/rules)', () => {
+  it.each([
+    ['#/rules', '30d'],
+    ['#/rules?window=30d', '30d'],
+    ['#/rules?window=7d', '7d'],
+    ['#/rules?window=all', 'all'],
+    ['#/rules?window=week', '30d'],
+  ] as const)('reads %s as Rules over the window %s', (hash, rules) => {
+    expect(parseRoute(hash)).toEqual({ ...HOME, rules });
+  });
+
+  it.each(['#/rulesx', '#/rules/7d', '#/stats'])('does not read %j as Rules', (hash) => {
+    expect(parseRoute(hash)).not.toHaveProperty('rules');
+  });
+
+  it('writes the last 30 days as the bare page, and round-trips every window', () => {
+    expect(formatRoute({ ...HOME, rules: '30d' })).toBe('#/rules');
+    expect(formatRoute({ ...HOME, rules: 'all' })).toBe('#/rules?window=all');
+    for (const rules of ['7d', '30d', 'all'] as const)
+      expect(parseRoute(formatRoute({ ...HOME, rules }))).toEqual({ ...HOME, rules });
+  });
+
+  it('leaves Rules for a session named without it, as a click on a session does', () => {
+    const next = { sessionId: 's1', agentId: 'main', turnId: null, requestId: null };
+    const merged = mergeRoute({ ...HOME, rules: '7d' }, next);
+    expect(merged).not.toHaveProperty('rules');
+    expect(formatRoute(merged)).toBe('#/s/s1');
+  });
+});
+
 describe('pageOf', () => {
   it.each<[Route, string]>([
     [HOME, 'home'],
     [{ ...HOME, sessionId: 's1' }, 'session'],
     [{ ...HOME, stats: 'week' }, 'stats'],
     [{ ...HOME, stats: '7d' }, 'stats'],
+    [{ ...HOME, rules: '30d' }, 'rules'],
   ])('%j is the %s page', (route, page) => {
     expect(pageOf(route)).toBe(page);
   });

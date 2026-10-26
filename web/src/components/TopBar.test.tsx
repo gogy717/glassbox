@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { I18nContext, type Locale, makeI18n } from '../i18n';
@@ -35,7 +35,7 @@ type Props = Parameters<typeof TopBar>[0];
 
 const navOf = (page: Props['nav']['page']): Props['nav'] => ({
   page,
-  here: page === 'home' ? '#/' : page === 'stats' ? '#/stats' : '#/s/x',
+  here: page === 'home' ? '#/' : page === 'session' ? '#/s/x' : `#/${page}`,
   session: { href: '#/s/x', waiting: false },
   sessionsLoaded: true,
 });
@@ -113,31 +113,59 @@ describe('Jump to…', () => {
     },
   );
 
-  it('gives up its word and keys below 1500 in a session, so the title keeps its 240px', () => {
-    // Measured in English: with them, a session's title had 202px at 1400 and 252px at 1450.
+  it('gives up its word and keys below 1550 in a session, so the title keeps its 240px', () => {
+    // Measured with Rules in the nav, beside the longest state ("Waiting for you"): with them, a
+    // session's title had 210px at 1510 and 250px at 1550.
     const hiding = mediaBlocks(sheet).filter((b) =>
       /\.bar\[data-session\] \.jumpLabel/.test(b.body),
     );
-    expect(hiding.map((b) => b.max)).toEqual([1499]);
-    // Off a session, at the width the page nav's words go.
+    expect(hiding.map((b) => b.max)).toEqual([1549]);
+    // Off a session, below 1200, with Follow latest's word.
     expect(mediaBlocks(sheet).some((b) => b.max === 1199 && /\.jumpLabel\b/.test(b.body))).toBe(
       true,
     );
   });
 });
 
+describe('the page nav', () => {
+  const links = (page: Props['nav']['page']) =>
+    within(renderBar({ nav: navOf(page) }).getByRole('navigation', { name: 'Pages' })).getAllByRole(
+      'link',
+    );
+
+  it('links Rules after Stats, marked as the page you are on there', () => {
+    const onRules = links('rules');
+    expect(onRules.map((a) => a.textContent)).toEqual(['Home', 'Session', 'Stats', 'Rules']);
+    expect(onRules[3]).toHaveAttribute('aria-current', 'page');
+    expect(onRules[3]).toHaveAttribute('href', '#/rules');
+    cleanup();
+    const onHome = links('home');
+    expect(onHome[3]).not.toHaveAttribute('aria-current');
+    expect(onHome[3]).toHaveAttribute('href', '#/rules');
+  });
+});
+
 describe('the top bar as it narrows (D4 DR1)', () => {
-  it('drops the page nav words at one width on all three pages, a session included', () => {
+  it('drops the page nav words at one width on every page, a session included', () => {
+    // Four words since Rules: with them, a session's title had 164px at 1200 and 244px at 1280
+    // (English, measured).
     const hiding = mediaBlocks(sheet).filter((b) => /\.pageLabel\b/.test(b.body));
-    expect(hiding.map((b) => b.max)).toEqual([1199]);
+    expect(hiding.map((b) => b.max)).toEqual([1279]);
     // Nothing narrows the nav for one page only: no rule ties its words to an open session.
     expect(sheet).not.toMatch(/\[data-session\][^{,]*\.pageLabel/);
   });
 
-  it('lets a session pay for its title with Follow latest’s word first, below 1400', () => {
-    const session = mediaBlocks(sheet).find((b) => b.max === 1399);
+  it('lets a session pay for its title with Follow latest’s word first, below 1470', () => {
+    // Beside "Waiting for you", its word left a session's title 234px at 1460, 244px at 1470.
+    const session = mediaBlocks(sheet).find((b) => b.max === 1469);
     expect(session?.body).toMatch(/\.bar\[data-session\] \.toggleLabel/);
     expect(session?.body).not.toMatch(/\.pageLabel/);
+  });
+
+  it('keeps the wordmark’s word out of a session below 1320, where the page nav has its words', () => {
+    // Beside "Waiting for you", with both words, the title had 208px at 1280 and 248px at 1320.
+    const session = mediaBlocks(sheet).find((b) => /\.bar\[data-session\] \.wordmark/.test(b.body));
+    expect(session?.max).toBe(1319);
   });
 });
 

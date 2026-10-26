@@ -1205,6 +1205,14 @@ describe('App keyboard shortcuts', () => {
     await waitFor(() => expect(window.location.hash).toBe(demoLink));
   });
 
+  it('goes to Rules with g r', async () => {
+    window.location.hash = demoLink;
+    render(<App store={demoStore()} connect={noConnect} runs={fakeRuns()} />);
+    key('g');
+    key('r');
+    await waitFor(() => expect(window.location.hash).toBe('#/rules'));
+  });
+
   it('switches the session page’s tab with 1 to 5', async () => {
     window.location.hash = demoLink;
     render(<App store={demoStore()} connect={noConnect} runs={fakeRuns()} />);
@@ -1268,13 +1276,14 @@ describe('App keyboard shortcuts', () => {
       'Go Home',
       'Go to the session page',
       'Go to Stats',
+      'Go to Rules',
       'Show these shortcuts',
       'Close a dialog, the palette or this list',
     ])
       expect(dialog).toHaveTextContent(words);
     expect(
       [...dialog.querySelectorAll('dt')].map((dt) => dt.textContent?.replace(/\s+/g, ' ')),
-    ).toEqual(['Ctrl K', '/', '1–5', 'j / k', 'g h', 'g s', 'g t', '?', 'Esc']);
+    ).toEqual(['Ctrl K', '/', '1–5', 'j / k', 'g h', 'g s', 'g t', 'g r', '?', 'Esc']);
     fireEvent.keyDown(dialog, { key: 'Escape' });
     expect(screen.queryByRole('dialog')).toBeNull();
   });
@@ -1338,6 +1347,7 @@ describe('App palette', () => {
       'blog / Untitled sessionSession',
       'HomePage',
       'StatsPage',
+      'RulesPage',
       'Execution chainTab',
       'How it workedTab',
       'Where tokens wentTab',
@@ -1707,7 +1717,8 @@ describe('App pages: Home · Session · Stats', () => {
 
   const at = (id: string) => `#/s/${encodeURIComponent(id)}`;
   const pages = () => within(screen.getByRole('banner')).getByRole('navigation', { name: 'Pages' });
-  const page = (name: 'Home' | 'Session' | 'Stats') => within(pages()).getByRole('link', { name });
+  const page = (name: 'Home' | 'Session' | 'Stats' | 'Rules') =>
+    within(pages()).getByRole('link', { name });
   const listed = (sessions = createDemoSessions(DEMO_NOW)) => {
     const store = createStore();
     store.applyEvent({ type: 'sessions', sessions });
@@ -1723,12 +1734,20 @@ describe('App pages: Home · Session · Stats', () => {
       within(pages())
         .getAllByRole('link')
         .map((a) => a.textContent),
-    ).toEqual(['Home', 'Session', 'Stats']);
+    ).toEqual(['Home', 'Session', 'Stats', 'Rules']);
     expect(page('Stats')).toHaveAttribute('aria-current', 'page');
     expect(page('Home')).not.toHaveAttribute('aria-current');
     expect(page('Home')).toHaveAttribute('href', '#/');
     const wordmark = within(screen.getByRole('banner')).getByRole('link', { name: 'glassbox' });
     expect(wordmark).toHaveAttribute('href', '#/');
+  });
+
+  it('opens Rules, its own chunk, marked as the page you are on', async () => {
+    window.location.hash = '#/rules';
+    render(<App store={listed()} connect={noConnect} runs={fakeRuns()} />);
+    expect(page('Rules')).toHaveAttribute('aria-current', 'page');
+    expect(await screen.findByRole('heading', { name: 'Rules' })).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith('/api/rules?window=30d', expect.anything());
   });
 
   it('goes Back and Forward across all three pages', async () => {
@@ -1883,7 +1902,7 @@ describe('App pages: Home · Session · Stats', () => {
     expect(screen.getByRole('textbox', { name: 'Message' })).toBeInTheDocument();
   });
 
-  it('speaks Chinese: 首页 · 会话 · 统计', async () => {
+  it('speaks Chinese: 首页 · 会话 · 统计 · 规则', async () => {
     localStorage.setItem('glassbox.prefs', JSON.stringify({ locale: 'zh' }));
     onTestFinished(() => localStorage.clear());
     window.location.hash = '#/stats';
@@ -1893,7 +1912,7 @@ describe('App pages: Home · Session · Stats', () => {
       within(nav)
         .getAllByRole('link')
         .map((a) => a.textContent),
-    ).toEqual(['首页', '会话', '统计']);
+    ).toEqual(['首页', '会话', '统计', '规则']);
     expect(within(nav).getByRole('link', { name: '会话' })).toHaveAttribute('title', '还没有会话');
     const windows = await screen.findByRole('radiogroup', { name: '时间范围' });
     expect(

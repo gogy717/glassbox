@@ -58,6 +58,7 @@ const ALL: Command[] = [
   'search',
   'goHome',
   'goStats',
+  'goRules',
   'tab:steps',
   'nextPrompt',
 ];
@@ -118,6 +119,13 @@ describe('useShortcuts', () => {
     press('Shift', { shiftKey: true });
     press('t');
     expect(ran).toEqual(['goHome', 'goStats']);
+  });
+
+  it('goes to Rules with g then r', () => {
+    const ran = setup();
+    press('g');
+    press('r');
+    expect(ran).toEqual(['goRules']);
   });
 
   it('leaves a key alone with Ctrl, ⌘ or Alt held, and opens the palette with Ctrl+K or ⌘K', () => {
@@ -200,6 +208,7 @@ describe('KEYMAP', () => {
         'g h',
         'g s',
         'g t',
+        'g r',
         '?',
         'Escape',
       ]),

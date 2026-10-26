@@ -1,12 +1,13 @@
 import { useCallback, useSyncExternalStore } from 'react';
 import { MAIN_AGENT_ID } from '../../src/core/model.js';
+import type { RulesWindowKind } from '../../src/shared/permissions.js';
 import { type WeekWindowKind, weekStart } from '../../src/shared/week.js';
 
 export const TABS = ['flow', 'steps', 'tokens', 'time', 'files'] as const;
 export type Tab = (typeof TABS)[number];
 
-/** The three pages of the top bar's nav. */
-export type Page = 'home' | 'session' | 'stats';
+/** The pages of the top bar's nav. */
+export type Page = 'home' | 'session' | 'stats' | 'rules';
 
 /** Which card of a call is open: its request, its response, or one of its tools (`tool:<id>`). */
 export type CardKey = 'request' | 'response' | `tool:${string}`;
@@ -27,6 +28,8 @@ export interface Route {
   card?: CardKey;
   /** The Stats page, over this window; absent on the other pages. */
   stats?: WeekWindowKind;
+  /** The Rules page, over this window; absent on the other pages. */
+  rules?: RulesWindowKind;
 }
 
 const HOME: Route = {
@@ -37,10 +40,16 @@ const HOME: Route = {
   requestId: null,
 };
 
-/** The page a route shows: Stats, else the session it names, else Home. */
-export const pageOf = (r: Route): Page => (r.stats ? 'stats' : r.sessionId ? 'session' : 'home');
+/** The page a route shows: Rules or Stats, else the session it names, else Home. */
+export const pageOf = (r: Route): Page =>
+  r.rules ? 'rules' : r.stats ? 'stats' : r.sessionId ? 'session' : 'home';
 
 export function parseRoute(hash: string): Route {
+  const rules = /^#\/rules(?:\?(.*))?$/.exec(hash);
+  if (rules) {
+    const kind = new URLSearchParams(rules[1] ?? '').get('window');
+    return { ...HOME, rules: kind === '7d' || kind === 'all' ? kind : '30d' };
+  }
   const stats = /^#\/stats(?:\?(.*))?$/.exec(hash);
   if (stats) {
     const kind = new URLSearchParams(stats[1] ?? '').get('window');
@@ -70,7 +79,8 @@ export function parseRoute(hash: string): Route {
 }
 
 export function formatRoute(r: Route): string {
-  // This week is the page's own default, as the flow tab is a session's.
+  // The last 30 days are Rules' own default, and this week Stats', as the flow tab is a session's.
+  if (r.rules) return r.rules === '30d' ? '#/rules' : `#/rules?window=${r.rules}`;
   if (r.stats) return r.stats === 'week' ? '#/stats' : `#/stats?window=${r.stats}`;
   if (r.sessionId === null) return '#/';
   const q = new URLSearchParams();
@@ -83,6 +93,9 @@ export function formatRoute(r: Route): string {
   const qs = q.toString();
   return `#/s/${encodeURIComponent(r.sessionId)}${qs ? `?${qs}` : ''}`;
 }
+
+/** Where the nav's Rules link goes: the page over its own default window. */
+export const RULES_LINK = '#/rules';
 
 /** A link to a session as it opens: its main agent, on the flow tab, following its latest turn. */
 export const sessionLink = (sessionId: string) => formatRoute({ ...HOME, sessionId });
@@ -106,13 +119,14 @@ const CARD_OWNERS = ['sessionId', 'agentId', 'turnId', 'requestId'] as const;
  * `next` over `current`. A card is one request's, so a move to another request, turn, agent or
  * session that does not name a card closes it, rather than opening the same card of a request
  * nobody asked about (a Response panel left open, then a step clicked in the steps view). A
- * session named without `stats` is opened: a click on one leaves the Stats page for it.
+ * session named without `stats` or `rules` is opened: a click on one leaves Stats or Rules for it.
  */
 export function mergeRoute(current: Route, next: Partial<Route>): Route {
   const merged = { ...current, ...next };
   const moved = CARD_OWNERS.some((k) => k in next && next[k] !== current[k]);
   if (moved && !('card' in next)) delete merged.card;
   if ('sessionId' in next && !('stats' in next)) delete merged.stats;
+  if ('sessionId' in next && !('rules' in next)) delete merged.rules;
   return merged;
 }
 

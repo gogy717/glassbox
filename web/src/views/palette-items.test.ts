@@ -62,20 +62,27 @@ describe('sessionItems', () => {
 
 describe('pageItems', () => {
   it('offers the tabs only when there is a session to show them', () => {
-    const go = { home: vi.fn(), stats: vi.fn() };
-    expect(pageItems(t, { ...go, tab: null }).map((i) => i.label)).toEqual(['Home', 'Stats']);
+    const go = { home: vi.fn(), stats: vi.fn(), rules: vi.fn() };
+    expect(pageItems(t, { ...go, tab: null }).map((i) => i.label)).toEqual([
+      'Home',
+      'Stats',
+      'Rules',
+    ]);
     const tab = vi.fn();
     const items = pageItems(t, { ...go, tab });
     expect(items.map((i) => i.label)).toEqual([
       'Home',
       'Stats',
+      'Rules',
       'Execution chain',
       'How it worked',
       'Where tokens went',
       'Timeline',
       'Files',
     ]);
-    items[4]?.run();
+    items[5]?.run();
     expect(tab).toHaveBeenCalledWith('tokens');
+    items[2]?.run();
+    expect(go.rules).toHaveBeenCalled();
   });
 });

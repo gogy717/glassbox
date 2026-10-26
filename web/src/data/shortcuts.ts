@@ -15,6 +15,7 @@ export type Command =
   | 'goHome'
   | 'goSession'
   | 'goStats'
+  | 'goRules'
   | `tab:${Tab}`
   | 'nextPrompt'
   | 'previousPrompt'
@@ -50,6 +51,7 @@ export const KEYMAP: readonly KeyRow[] = [
   { label: 'keys.home', bindings: [{ keys: ['g', 'h'], command: 'goHome' }] },
   { label: 'keys.session', bindings: [{ keys: ['g', 's'], command: 'goSession' }] },
   { label: 'keys.stats', bindings: [{ keys: ['g', 't'], command: 'goStats' }] },
+  { label: 'keys.rules', bindings: [{ keys: ['g', 'r'], command: 'goRules' }] },
   { label: 'keys.help', bindings: [{ keys: ['?'], command: 'help' }] },
   { label: 'keys.close', bindings: [{ keys: ['Escape'], command: null }] },
 ];

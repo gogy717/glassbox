@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { MINUTE_MS, RATE_MINUTES, type TokenRate as Rate } from '../../../src/shared/rate.js';
@@ -60,6 +62,17 @@ function renderRate(
   );
   return { onAgent, button: () => screen.getByRole('button', { name: /^Token rate|^Token 速率/ }) };
 }
+
+// jsdom applies no media queries: the threshold is read from the sheet itself.
+describe('the rate in a session’s top bar (DR1)', () => {
+  it('gives up its line below 1390, so the title keeps its 240px', () => {
+    // With Rules in the nav, beside "Waiting for you", the line left a session's title 210px at
+    // 1350 and 250px at 1390.
+    const sheet = readFileSync(join(import.meta.dirname, 'TokenRate.module.css'), 'utf8');
+    const block = /@media \(max-width: (\d+)px\) \{\s*\.wrap\[data-session\] \.spark/.exec(sheet);
+    expect(block?.[1]).toBe('1389');
+  });
+});
 
 describe('TokenRate', () => {
   it('says when an agent reports a turn’s tokens only as it ends, in scope only', () => {
