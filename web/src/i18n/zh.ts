@@ -49,6 +49,7 @@ export const zh = {
   'summary.requests': '模型调用',
   'summary.toolCalls': '工具调用',
   'summary.duration': '活跃时长',
+  'summary.overDays': '跨 {n} 天',
   'summary.input': '输入',
   'summary.cacheHit': '缓存命中率',
   'summary.output': '输出(思考)',

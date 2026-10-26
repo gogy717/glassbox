@@ -1,14 +1,92 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Turn } from '../../../src/core/model.js';
 import { I18nContext, makeI18n } from '../i18n';
 import { cjkInMono } from '../test/cjk';
-import { demoOpen } from '../test/demo';
+import { DEMO_NOW, demoOpen } from '../test/demo';
 import { SummaryBar } from './SummaryBar';
 
-const value = (label: string) =>
-  within(screen.getByRole('region', { name: 'Summary' }))
+const value = (label: string, region = 'Summary') =>
+  within(screen.getByRole('region', { name: region }))
     .getByText(label)
     .parentElement?.querySelector('[data-value]')?.textContent;
+
+describe('SummaryBar figures', () => {
+  // The demo's last turn runs: its active time and span run to the clock.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(DEMO_NOW);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('reads token counts compact, the exact count in the tooltip and for screen readers', () => {
+    render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <SummaryBar open={demoOpen()} agentId="main" />
+      </I18nContext.Provider>,
+    );
+    const bar = screen.getByRole('region', { name: 'Summary' });
+    expect(value('Input')).toBe('1.84M');
+    expect(value('Output (thinking)')).toBe('42K (27.1K)');
+    const input = within(bar).getByText('Input').parentElement as HTMLElement;
+    expect(input).toHaveAttribute('title', '1,838,850');
+    expect(input.querySelector('[data-value]')).toHaveAttribute('aria-hidden', 'true');
+    expect(input.querySelector('.visually-hidden')).toHaveTextContent('1,838,850');
+    expect(within(bar).getByText('Output (thinking)').parentElement).toHaveAttribute(
+      'title',
+      '42,040 (27,050)',
+    );
+    // Counts stay exact: nobody needs "1.2K tool calls".
+    expect(value('Model calls')).toBe('28');
+    expect(within(bar).getByText('Model calls').parentElement).not.toHaveAttribute('title');
+  });
+
+  it('sets a Chinese unit out of the mono face', () => {
+    render(
+      <I18nContext.Provider value={makeI18n('zh')}>
+        <SummaryBar open={demoOpen()} agentId="main" />
+      </I18nContext.Provider>,
+    );
+    expect(value('输入', '汇总')).toBe('184万');
+    expect(value('输出(思考)', '汇总')).toBe('4.2万 (2.71万)');
+    expect(cjkInMono(document.body)).toEqual([]);
+  });
+
+  it('says how many days the active time is spread over once a session crosses midnight', () => {
+    const open = demoOpen();
+    const first = open.turns.get('turn_m1') as Turn;
+    // The first prompt two days before the clock; the last turn still runs: three days.
+    const early = {
+      ...first,
+      startedAt: new Date(DEMO_NOW.getTime() - 2 * 86_400_000).toISOString(),
+    };
+    const spread = { ...open, turns: new Map(open.turns).set(first.id, early) };
+    render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <SummaryBar open={spread} agentId="main" />
+      </I18nContext.Provider>,
+    );
+    expect(value('Active time')).toMatch(/^\d+h\d+m · over 3 days$/);
+    cleanup();
+    render(
+      <I18nContext.Provider value={makeI18n('zh')}>
+        <SummaryBar open={spread} agentId="main" />
+      </I18nContext.Provider>,
+    );
+    expect(value('活跃时长', '汇总')).toMatch(/ · 跨 3 天$/);
+    expect(cjkInMono(document.body)).toEqual([]);
+    // Within one day the figure stands alone.
+    cleanup();
+    render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <SummaryBar open={demoOpen()} agentId="main" />
+      </I18nContext.Provider>,
+    );
+    expect(value('Active time')).toBe('3m4s');
+  });
+});
 
 describe('SummaryBar', () => {
   it('shows a dash, not 0ms, for an agent that has made no model call', () => {

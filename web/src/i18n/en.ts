@@ -50,6 +50,7 @@ export const en: Record<MessageKey, string> = {
   'summary.requests': 'Model calls',
   'summary.toolCalls': 'Tool calls',
   'summary.duration': 'Active time',
+  'summary.overDays': 'over {n} {n|day|days}',
   'summary.input': 'Input',
   'summary.cacheHit': 'Cache hit',
   'summary.output': 'Output (thinking)',

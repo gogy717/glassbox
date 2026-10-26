@@ -222,9 +222,9 @@ describe('App', () => {
     expect(value('Model calls')).toBe('28');
     expect(value('Tool calls')).toBe('24');
     expect(value('Active time')).toBe('3m4s');
-    expect(value('Input')).toBe('1,838,850');
+    expect(value('Input')).toBe('1.84M');
     expect(value('Cache hit')).toBe('86.0%');
-    expect(value('Output (thinking)')).toBe('42,040 (27,050)');
+    expect(value('Output (thinking)')).toBe('42K (27.1K)');
 
     expect(screen.getByRole('navigation', { name: 'Agent' })).toHaveTextContent('Main');
     expect(within(summary).getByRole('button', { name: /^Data diagnostics/ })).toBeInTheDocument();

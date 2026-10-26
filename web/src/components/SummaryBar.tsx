@@ -6,10 +6,18 @@ import { type OpenSession, useRate } from '../data/store';
 import { useNow } from '../data/useNow';
 import { useI18n } from '../i18n';
 import { summarize } from '../lib/agents';
-import { DASH, formatDuration, formatNumber, formatPercent } from '../lib/format';
+import {
+  calendarDays,
+  DASH,
+  formatCompact,
+  formatDuration,
+  formatNumber,
+  formatPercent,
+} from '../lib/format';
 import { lazyView } from '../lib/lazy-view';
-import { UiCjk } from './CompactFigure';
+import { CompactFigure, UiCjk } from './CompactFigure';
 import { Diagnostics } from './Diagnostics';
+import { FigureText } from './FigureText';
 import { ReceiptBoundary, ReceiptLoading } from './ReceiptEntry';
 import css from './SummaryBar.module.css';
 import { rateText } from './TokenRate';
@@ -17,10 +25,12 @@ import { rateText } from './TokenRate';
 interface Figure {
   label: string;
   value: ReactNode;
+  /** The count in full when `value` is compact ("1.84M"): the tooltip, and what is read out. */
+  exact?: string;
   /** Below 900px, behind "More figures": the bar keeps prompts, calls, active time, output. */
   more?: boolean;
-  /** Muted after the value, e.g. the thinking share of output. */
-  aside?: string;
+  /** Muted after the value: the thinking share of output, the days the active time spans. */
+  aside?: ReactNode;
   /** Only below 900px, where the top bar gives it up: the token rate. */
   narrowOnly?: boolean;
 }
@@ -83,23 +93,41 @@ export function SummaryBar({
   const [more, setMore] = useState(false);
   // Counts only change with the data; the clock only moves the running duration.
   const s = useMemo(() => summarize(open, agentId, now), [open, agentId, now]);
-  // No call reported usage yet (Grok before a turn total): unknown, not zero.
-  const tokens = (n: number) => (s.measured ? formatNumber(n, intl) : DASH);
+  // No call reported usage yet (Grok before a turn total): unknown, not zero. A token count is
+  // read compact ("1.84M", "184万"), the exact count in the tooltip and for screen readers.
+  const tokens = (n: number) =>
+    s.measured ? <CompactFigure value={formatCompact(n, intl)} /> : DASH;
+  const exact = (n: number) => (s.measured ? formatNumber(n, intl) : undefined);
+  // Active time is the turns' sum; a session that ran over several days says so beside it.
+  const days = s.span ? calendarDays(s.span.start, s.span.end) : 1;
   const figures: Figure[] = [
     { label: t('summary.turns'), value: formatNumber(s.turns, intl) },
     { label: t('summary.requests'), value: formatNumber(s.requests, intl) },
     { label: t('summary.toolCalls'), value: formatNumber(s.toolCalls, intl), more: true },
-    // Nothing ran yet: no duration rather than "0ms".
+    // Nothing ran yet: no active time rather than "0ms".
     {
       label: t('summary.duration'),
       value: s.requests === 0 ? DASH : formatDuration(s.activeMs),
+      aside:
+        s.requests > 0 && days > 1 ? (
+          <>
+            · <FigureText k="summary.overDays" params={{ n: days }} />
+          </>
+        ) : undefined,
     },
-    { label: t('summary.input'), value: tokens(s.input), more: true },
+    { label: t('summary.input'), value: tokens(s.input), exact: exact(s.input), more: true },
     { label: t('summary.cacheHit'), value: formatPercent(s.cacheHitRate, intl), more: true },
     {
       label: t('summary.output'),
       value: tokens(s.output),
-      aside: s.measured ? `(${formatNumber(s.thinking, intl)})` : undefined,
+      exact: s.measured
+        ? `${formatNumber(s.output, intl)} (${formatNumber(s.thinking, intl)})`
+        : undefined,
+      aside: s.measured ? (
+        <>
+          (<CompactFigure value={formatCompact(s.thinking, intl)} />)
+        </>
+      ) : undefined,
     },
   ];
   if (rate)
@@ -119,11 +147,14 @@ export function SummaryBar({
             className={css.metric}
             data-extra={f.more || undefined}
             data-narrow-only={f.narrowOnly || undefined}
+            title={f.exact}
           >
-            <span className={`${css.value} figure`} data-value>
-              {f.value}
+            {/* A compact figure is for the eye; the exact one beside it is what is read out. */}
+            <span className={css.value} data-value aria-hidden={f.exact ? 'true' : undefined}>
+              <span className="figure">{f.value}</span>
               {f.aside && <span className={css.aside}> {f.aside}</span>}
             </span>
+            {f.exact && <span className="visually-hidden">{f.exact}</span>}
             <span className={`${css.label} section-label`}>{f.label}</span>
           </div>
         ))}

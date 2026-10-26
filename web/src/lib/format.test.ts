@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  calendarDays,
   compactUnit,
   fitSummary,
   formatClock,
@@ -100,6 +101,31 @@ describe('formatCompact', () => {
     expect(compactUnit(1_234_567, 'en')).toEqual({ unit: 'M', divisor: 1_000_000 });
     expect(compactUnit(1_500_000, 'zh')).toEqual({ unit: '万', divisor: 10_000 });
     expect(compactUnit(800, 'en')).toEqual({ unit: '', divisor: 1 });
+  });
+});
+
+describe('calendarDays', () => {
+  const t = (iso: string) => Date.parse(iso);
+
+  it('counts the local calendar days a span touches, in the given zone', () => {
+    expect(calendarDays(t('2026-10-23T09:00:00Z'), t('2026-10-23T21:00:00Z'), 'UTC')).toBe(1);
+    expect(calendarDays(t('2026-10-23T23:30:00Z'), t('2026-10-24T00:30:00Z'), 'UTC')).toBe(2);
+    expect(calendarDays(t('2026-10-23T15:00:00Z'), t('2026-10-26T09:00:00Z'), 'UTC')).toBe(4);
+    // One hour that is one day in UTC and two in Sydney, where it crosses midnight.
+    const a = t('2026-10-23T12:30:00Z');
+    const b = t('2026-10-23T13:30:00Z');
+    expect(calendarDays(a, b, 'UTC')).toBe(1);
+    expect(calendarDays(a, b, 'Australia/Sydney')).toBe(2);
+    expect(calendarDays(b, a, 'Australia/Sydney')).toBe(2);
+  });
+
+  it('counts across a year boundary, and a 25-hour day when the clocks go back as one', () => {
+    expect(calendarDays(t('2025-12-31T23:00:00Z'), t('2026-01-01T01:00:00Z'), 'UTC')).toBe(2);
+    // New York, 1 Nov 2026: 00:30 EDT to 23:30 EST is 24 hours on one calendar day.
+    expect(
+      calendarDays(t('2026-11-01T04:30:00Z'), t('2026-11-02T04:30:00Z'), 'America/New_York'),
+    ).toBe(1);
+    expect(calendarDays(Number.NaN, t('2026-01-01T01:00:00Z'), 'UTC')).toBe(1);
   });
 });
 

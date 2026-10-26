@@ -59,6 +59,8 @@ describe('summarize', () => {
       requests: 28,
       toolCalls: 24,
       activeMs: 184_000,
+      // From the first prompt (two seconds into the demo's 40 minutes) to now: turn 3 runs.
+      span: { start: NOW.getTime() - 40 * 60_000 + 2_000, end: NOW.getTime() },
       input: 1_838_850,
       cacheHitRate: 1_582_194 / 1_838_850,
       output: 42_040,
@@ -100,6 +102,8 @@ describe('summarize', () => {
     expect(summarize(withCommand, 'main', NOW.getTime())).toEqual({
       ...base,
       turns: base.turns + 1,
+      // It is the first thing the agent did, so the span starts there: 0 ms of it active.
+      span: { start: Date.parse(started), end: NOW.getTime() },
     });
     // A prompt whose first call is not on record yet (the process is busy): its time runs.
     const typing = new Date(NOW.getTime() - 10_000).toISOString();
