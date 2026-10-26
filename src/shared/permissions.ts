@@ -66,8 +66,18 @@ const SETUP = new Set(['cd', 'pushd', 'popd', 'export', 'set', 'unset', 'source'
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
 const DELETES = new Set(['rm', 'rmdir', 'shred', 'unlink']);
 const ADMIN = new Set(['sudo', 'su', 'doas']);
-/** Programs that run whatever command they are given. */
+/**
+ * Programs that run whatever command they are given, and the shell's own words that do (a rule
+ * for `for` allows every loop, whatever it runs).
+ */
 const RUNS_ANY = new Set([
+  'for',
+  'while',
+  'until',
+  'if',
+  'case',
+  'select',
+  'function',
   'sh',
   'bash',
   'zsh',
