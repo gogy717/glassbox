@@ -54,7 +54,7 @@
    neutral, the person blue, the model green, the tools amber; what is missing hatched. */
 .seg[data-group="fixed"],
 .swatch[data-group="fixed"] {
-  --part-color: var(--seg-waiting);
+  --part-color: var(--part-fixed);
 }
 
 .seg[data-group="user"],

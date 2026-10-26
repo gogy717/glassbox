@@ -221,7 +221,7 @@ describe('tokens.css', () => {
   // The context bill colours a request's parts by who put them there (ContextView's GROUP): the
   // agent's fixed prompt and tools in the quiet neutral, the person, the model, the tools. Its bar
   // is sorted by size, so any two may touch: every pair keeps the chart standard.
-  const PART_COLOURS = ['--seg-waiting', '--cat-explore', '--cat-run', '--cat-ask'];
+  const PART_COLOURS = ['--part-fixed', '--cat-explore', '--cat-run', '--cat-ask'];
   it.each(NAMES.map((name, i) => [name, i] as const))(
     'the context bill’s four groups stay apart for every eye (%s)',
     (_, i) => {
@@ -233,6 +233,11 @@ describe('tokens.css', () => {
               deltaE(t.get(a) as string, t.get(b) as string, v),
               `${a} vs ${b} (${v})`,
             ).toBeGreaterThanOrEqual(RESERVED[v]);
+      // The quiet neutral still shows on a dark panel: 3:1, as a mark must.
+      if (i > 0)
+        expect(
+          contrast(t.get('--part-fixed') as string, t.get('--layer-1') as string),
+        ).toBeGreaterThanOrEqual(3);
     },
   );
 
