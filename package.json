@@ -1,6 +1,6 @@
 {
   "name": "glassbox",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "private": true,
   "description": "Live viewer for Claude Code, Codex, Grok, oh-my-pi and OpenCode: what it's doing, the tool-call chain, and where tokens go — including multi-agent runs",
   "type": "module",
