@@ -107,6 +107,49 @@
   white-space: nowrap;
 }
 
+/* A row and its pin, in the row's top right corner (the title leaves it room): shown on hover or
+   focus, and always once pinned. Beside the row, not in it: a button holds no button. */
+.item {
+  position: relative;
+}
+
+.pin {
+  position: absolute;
+  top: 7px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-m);
+  background: transparent;
+  color: var(--muted);
+  opacity: 0;
+  cursor: pointer;
+  transition:
+    opacity var(--motion),
+    color var(--motion),
+    background var(--motion);
+}
+
+.item:hover .pin,
+.item:focus-within .pin,
+.pin[aria-pressed="true"] {
+  opacity: 1;
+}
+
+.pin:hover {
+  background: var(--layer-3);
+  color: var(--text);
+}
+
+.pin[aria-pressed="true"] {
+  color: var(--text);
+}
+
 /* "5 more sessions are idle or closed. Show all" */
 .hidden {
   margin: 14px 14px 0;

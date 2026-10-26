@@ -320,6 +320,8 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
                 selectedId={route.sessionId}
                 showProbes={prefs.showProbes}
                 failures={failures}
+                prefs={prefs}
+                onPrefs={onPrefs}
                 onSelect={(id) => {
                   navigate({ sessionId: id, agentId: 'main', turnId: null, requestId: null });
                   if (!floating) return;

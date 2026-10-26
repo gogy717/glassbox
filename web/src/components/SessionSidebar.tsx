@@ -1,7 +1,7 @@
-import { Search } from 'lucide-react';
+import { Pin, Search } from 'lucide-react';
 import { type Ref, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { AgentKind, SessionSummary } from '../../../src/core/model.js';
-import { useRovingFocus } from '../data/useRovingFocus';
+import { type RovingItemProps, useRovingFocus } from '../data/useRovingFocus';
 import { type MessageKey, useI18n } from '../i18n';
 import { AGENT_TONES, agentName } from '../lib/agent-names';
 import {
@@ -13,6 +13,7 @@ import {
   type SessionGroup,
   type TimeBucket,
 } from '../lib/sessions';
+import { DEFAULT_PREFS, type Prefs } from '../prefs';
 import { Delayed } from './Delayed';
 import { SessionRow } from './SessionRow';
 import css from './SessionSidebar.module.css';
@@ -26,8 +27,13 @@ interface Props {
   loaded?: boolean;
   /** The sessions whose glassbox run failed, with its error (`failedSessions`). */
   failures?: ReadonlyMap<string, string | null>;
+  /** The list's pins, folds and grouping (D, F7), as saved; the list changes them through `onPrefs`. */
+  prefs?: Prefs;
+  onPrefs?(p: Prefs): void;
   onSelect(id: string): void;
 }
+
+const NO_PREFS = () => {};
 
 /** A live-state chip's word: the state's own name. */
 const LIVE_WORD: Record<LiveFilter, MessageKey> = {
@@ -58,6 +64,8 @@ export function SessionSidebar({
   showProbes,
   loaded = true,
   failures,
+  prefs = DEFAULT_PREFS,
+  onPrefs = NO_PREFS,
   onSelect,
 }: Props) {
   const { t } = useI18n();
@@ -109,10 +117,11 @@ export function SessionSidebar({
   }, [refocus]);
   const agent = onlyAgent;
   const live = onlyLive;
+  const pinned = prefs.pinned;
   const groups = useMemo(
     // The open session keeps its row, so the list never loses what the page shows.
-    () => groupSessions(sessions, query, { showProbes, agent, live, keep: selectedId }),
-    [sessions, query, showProbes, agent, live, selectedId],
+    () => groupSessions(sessions, query, { showProbes, agent, live, keep: selectedId, pinned }),
+    [sessions, query, showProbes, agent, live, selectedId, pinned],
   );
   // Sessions the live filter alone hides, for "5 more are idle or closed".
   const hidden = useMemo(() => {
@@ -127,6 +136,36 @@ export function SessionSidebar({
   const listRef = useRef<HTMLDivElement>(null);
   const ids = useMemo(() => groups.flatMap((g) => g.sessions.map((s) => s.id)), [groups]);
   const roving = useRovingFocus(listRef, ids, selectedId);
+  // Focus follows a row that a change lists elsewhere (a pin moves it to the Pinned group).
+  const [refocusRow, setRefocusRow] = useState<string | null>(null);
+  useLayoutEffect(() => {
+    if (refocusRow === null) return;
+    setRefocusRow(null);
+    [...(listRef.current?.querySelectorAll<HTMLElement>('[data-roving]') ?? [])]
+      .find((el) => el.dataset.roving === refocusRow)
+      ?.focus();
+  }, [refocusRow]);
+  const pinnedSet = useMemo(() => new Set(pinned), [pinned]);
+  const togglePin = (id: string) => {
+    onPrefs({
+      ...prefs,
+      pinned: pinnedSet.has(id) ? pinned.filter((p) => p !== id) : [...pinned, id],
+    });
+    setRefocusRow(id);
+  };
+  // A row's keys: P alone pins or unpins it; the rest move between the rows.
+  const rowProps = (id: string): RovingItemProps => {
+    const props = roving(id);
+    return {
+      ...props,
+      onKeyDown: (e) => {
+        if ((e.key === 'p' || e.key === 'P') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+          e.preventDefault();
+          togglePin(id);
+        } else props.onKeyDown(e);
+      },
+    };
+  };
   // A project group reads as its name; the pinned and time groups in the UI language.
   const label = (g: SessionGroup) =>
     g.kind === 'project'
@@ -216,15 +255,28 @@ export function SessionSidebar({
               {label(g)}
             </li>
             {g.sessions.map((s) => (
-              <li key={s.id}>
+              <li key={s.id} className={css.item}>
                 <SessionRow
                   session={s}
                   selected={s.id === selectedId}
                   now={now}
                   failure={failures?.get(s.id)}
-                  roving={roving(s.id)}
+                  roving={rowProps(s.id)}
                   onSelect={onSelect}
                 />
+                {/* Named Pin whether pressed or not: pressed says it is pinned. Not a tab stop:
+                    the rows are one, and P on a row does the same. */}
+                <button
+                  type="button"
+                  className={css.pin}
+                  tabIndex={-1}
+                  aria-pressed={pinnedSet.has(s.id)}
+                  aria-label={t('sidebar.pin')}
+                  title={`${t(pinnedSet.has(s.id) ? 'sidebar.unpin' : 'sidebar.pin')} · P`}
+                  onClick={() => togglePin(s.id)}
+                >
+                  <Pin size={12} aria-hidden="true" />
+                </button>
               </li>
             ))}
           </ul>

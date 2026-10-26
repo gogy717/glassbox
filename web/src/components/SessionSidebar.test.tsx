@@ -1,8 +1,10 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { useState } from 'react';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createDemoSessions } from '../../../src/core/fixtures/demo.js';
 import type { SessionSummary } from '../../../src/core/model.js';
 import { I18nContext, makeI18n } from '../i18n';
+import { DEFAULT_PREFS, type Prefs } from '../prefs';
 import { DEMO_NOW } from '../test/demo';
 import tagCss from './AgentTag.module.css';
 import { WAIT_MS } from './Delayed';
@@ -10,6 +12,8 @@ import rowCss from './SessionRow.module.css';
 import { SessionSidebar } from './SessionSidebar';
 
 const sessions = createDemoSessions(DEMO_NOW);
+// A session's row, not the pin beside it in the same list item.
+const isRow = (b: HTMLElement) => b.classList.contains(rowCss.row as string);
 
 function renderSidebar(onSelect = vi.fn()) {
   render(
@@ -57,7 +61,7 @@ describe('SessionSidebar', () => {
 
   it('marks every session with its agent, in that agent’s colours, even with one agent', () => {
     renderSidebar();
-    const items = screen.getAllByRole('button').filter((b) => b.closest('li'));
+    const items = screen.getAllByRole('button').filter(isRow);
     const tags = items.map((b) => b.querySelector('[data-agent]'));
     expect(tags.every((tag) => tag?.getAttribute('data-agent') === 'claude-code')).toBe(true);
     const tag = tags[0] as HTMLElement;
@@ -113,7 +117,7 @@ describe('SessionSidebar', () => {
     const group = screen.getByRole('group', { name: 'Filter by agent' });
     const chips = within(group).getAllByRole('button');
     expect(chips.map((c) => c.textContent)).toEqual(['All 3', 'Claude Code 2', 'Grok 1']);
-    const rows = () => screen.getAllByRole('button').filter((b) => b.closest('li'));
+    const rows = () => screen.getAllByRole('button').filter(isRow);
     expect(rows()).toHaveLength(sessions.length);
 
     const grok = within(group).getByRole('button', { name: /^Grok/ });
@@ -193,7 +197,7 @@ describe('SessionSidebar', () => {
     );
     const group = screen.getByRole('group', { name: 'Filter by agent' });
     fireEvent.click(within(group).getByRole('button', { name: /^Grok/ }));
-    const rows = screen.getAllByRole('button').filter((b) => b.closest('li'));
+    const rows = screen.getAllByRole('button').filter(isRow);
     expect(rows).toHaveLength(2);
     expect(rows.find((b) => b.getAttribute('aria-current') === 'true')).toHaveTextContent(
       open.title ?? '',
@@ -216,7 +220,7 @@ describe('SessionSidebar', () => {
     for (const chip of within(group).getAllByRole('button'))
       expect(chip).not.toHaveAttribute('data-roving');
     fireEvent.click(within(group).getByRole('button', { name: /^Grok/ }));
-    const rows = screen.getAllByRole('button').filter((b) => b.closest('li'));
+    const rows = screen.getAllByRole('button').filter(isRow);
     expect(rows).toHaveLength(sessions.length - 1);
     // One stop, on the first row the filter left.
     expect(rows.map((r) => r.tabIndex)).toEqual(rows.map((_, i) => (i === 0 ? 0 : -1)));
@@ -227,7 +231,7 @@ describe('SessionSidebar', () => {
     expect(rows.at(-1)).toHaveFocus();
     // Back to every agent: the stop stays on the row last focused.
     fireEvent.click(within(group).getByRole('button', { name: /^Grok/ }));
-    const all = screen.getAllByRole('button').filter((b) => b.closest('li'));
+    const all = screen.getAllByRole('button').filter(isRow);
     expect(all.filter((r) => r.tabIndex === 0)).toEqual([rows.at(-1)]);
   });
 
@@ -246,11 +250,9 @@ describe('SessionSidebar', () => {
     const { rerender } = render(sidebar(mixed));
     const group = screen.getByRole('group', { name: '按 agent 筛选' });
     fireEvent.click(within(group).getByRole('button', { name: /^Grok/ }));
-    expect(screen.getAllByRole('button').filter((b) => b.closest('li'))).toHaveLength(1);
+    expect(screen.getAllByRole('button').filter(isRow)).toHaveLength(1);
     rerender(sidebar(sessions));
-    expect(screen.getAllByRole('button').filter((b) => b.closest('li'))).toHaveLength(
-      sessions.length,
-    );
+    expect(screen.getAllByRole('button').filter(isRow)).toHaveLength(sessions.length);
   });
 
   it('cuts long text inside the row and puts all of it in the row’s tooltip', () => {
@@ -332,7 +334,7 @@ describe('SessionSidebar', () => {
 
   it('is one tab stop, at the selected session, with arrow keys across projects', () => {
     renderSidebar();
-    const items = screen.getAllByRole('button').filter((b) => b.closest('li'));
+    const items = screen.getAllByRole('button').filter(isRow);
     expect(items.filter((b) => b.tabIndex === 0)).toEqual([
       screen.getByRole('button', { name: /Live viewer research/ }),
     ]);
@@ -383,7 +385,7 @@ describe('SessionSidebar', () => {
     const chips = within(group).getAllByRole('button');
     expect(chips.map((c) => c.textContent)).toEqual(['All', 'Running 2', 'Idle 1', 'Closed 1']);
     expect(chips[0]).toHaveAttribute('aria-pressed', 'true');
-    const rows = () => screen.getAllByRole('button').filter((b) => b.closest('li'));
+    const rows = () => screen.getAllByRole('button').filter(isRow);
 
     fireEvent.click(within(group).getByRole('button', { name: /^Running/ }));
     expect(
@@ -474,9 +476,7 @@ describe('SessionSidebar', () => {
       'aria-pressed',
       'true',
     );
-    expect(screen.getAllByRole('button').filter((b) => b.closest('li'))).toHaveLength(
-      sessions.length,
-    );
+    expect(screen.getAllByRole('button').filter(isRow)).toHaveLength(sessions.length);
   });
 
   it('clears a state filter whose sessions are gone, so the next one does not filter again', () => {
@@ -504,9 +504,7 @@ describe('SessionSidebar', () => {
     expect(document.activeElement).toBe(all);
     // A session starts running again: the list stays whole.
     rerender(sidebar(sessions));
-    expect(screen.getAllByRole('button').filter((b) => b.closest('li'))).toHaveLength(
-      sessions.length,
-    );
+    expect(screen.getAllByRole('button').filter(isRow)).toHaveLength(sessions.length);
     expect(within(group()).getByRole('button', { name: 'All' })).toHaveAttribute(
       'aria-pressed',
       'true',
@@ -537,7 +535,7 @@ describe('SessionSidebar', () => {
     expect(all).toHaveAttribute('aria-pressed', 'true');
     expect(document.activeElement).toBe(all);
     rerender(sidebar(three));
-    expect(screen.getAllByRole('button').filter((b) => b.closest('li'))).toHaveLength(three.length);
+    expect(screen.getAllByRole('button').filter(isRow)).toHaveLength(three.length);
   });
 
   it('keeps a chip row while its filter is armed, even with one choice left, so All can clear it', () => {
@@ -568,5 +566,111 @@ describe('SessionSidebar', () => {
     fireEvent.click(within(group).getByRole('button', { name: /^All/ }));
     // Nothing armed and one choice: no row.
     expect(screen.queryByRole('group', { name: 'Filter by agent' })).toBeNull();
+  });
+});
+
+/** The sidebar with its prefs held in state, as the app holds them. */
+function Harness({
+  sessions: list,
+  selectedId = null,
+  locale = 'en',
+  prefs: initial = DEFAULT_PREFS,
+  onPrefs,
+}: {
+  sessions: SessionSummary[];
+  selectedId?: string | null;
+  locale?: 'en' | 'zh';
+  prefs?: Prefs;
+  onPrefs?(p: Prefs): void;
+}) {
+  const [prefs, setPrefs] = useState(initial);
+  return (
+    <I18nContext.Provider value={makeI18n(locale)}>
+      <SessionSidebar
+        sessions={list}
+        selectedId={selectedId}
+        now={DEMO_NOW.getTime()}
+        prefs={prefs}
+        onPrefs={(p) => {
+          setPrefs(p);
+          onPrefs?.(p);
+        }}
+        onSelect={vi.fn()}
+      />
+    </I18nContext.Provider>
+  );
+}
+
+const lists = () => screen.getAllByRole('list').map((l) => l.getAttribute('aria-label'));
+const titles = (list: HTMLElement) =>
+  within(list)
+    .getAllByRole('button')
+    .filter(isRow)
+    .map((r) => r.querySelector(`.${rowCss.title}`)?.textContent);
+const pinOf = (row: HTMLElement) =>
+  within(row.parentElement as HTMLElement).getByRole('button', { name: 'Pin' });
+
+// Branch D (F7) item 2: pins, a first group of their own, kept in the prefs by id.
+describe('SessionSidebar pins', () => {
+  it('pins a session from the button beside its row into a first Pinned group, in the order pinned', () => {
+    const onPrefs = vi.fn();
+    render(<Harness sessions={sessions} onPrefs={onPrefs} />);
+    const pin = pinOf(screen.getByRole('button', { name: /Fix flaky login/ }));
+    expect(pin).toHaveAttribute('aria-pressed', 'false');
+    expect(pin).toHaveAttribute('title', 'Pin · P');
+    // Not a tab stop of its own: the rows are one, and P on a row pins it.
+    expect(pin.tabIndex).toBe(-1);
+    fireEvent.click(pin);
+    expect(onPrefs).toHaveBeenLastCalledWith(
+      expect.objectContaining({ pinned: [sessions[1]?.id] }),
+    );
+    expect(lists()).toEqual(['Pinned', 'glassbox', 'blog']);
+    fireEvent.click(pinOf(screen.getByRole('button', { name: /Untitled session/ })));
+    expect(lists()).toEqual(['Pinned', 'glassbox']);
+    const pinned = screen.getByRole('list', { name: 'Pinned' });
+    expect(titles(pinned)).toEqual(['Fix flaky login test', 'Untitled session']);
+    const pressed = within(pinned).getAllByRole('button', { name: 'Pin', pressed: true });
+    expect(pressed).toHaveLength(2);
+    expect(pressed[0]).toHaveAttribute('title', 'Unpin · P');
+    // Unpinned, a session goes back to its project.
+    fireEvent.click(pressed[0] as HTMLElement);
+    expect(lists()).toEqual(['Pinned', 'glassbox', 'shopfront']);
+    expect(onPrefs).toHaveBeenLastCalledWith(
+      expect.objectContaining({ pinned: [sessions[2]?.id] }),
+    );
+  });
+
+  it('pins and unpins the focused row with P, and keeps focus on it where it lands', () => {
+    render(<Harness sessions={sessions} />);
+    const row = screen.getByRole('button', { name: /Fix flaky login/ });
+    row.focus();
+    fireEvent.keyDown(row, { key: 'p' });
+    const moved = within(screen.getByRole('list', { name: 'Pinned' })).getByRole('button', {
+      name: /Fix flaky login/,
+    });
+    expect(moved).toHaveFocus();
+    expect(moved.tabIndex).toBe(0);
+    // With a modifier it is some other key (⌘P prints).
+    fireEvent.keyDown(moved, { key: 'p', metaKey: true });
+    expect(screen.getByRole('list', { name: 'Pinned' })).toBeInTheDocument();
+    fireEvent.keyDown(moved, { key: 'P' });
+    expect(screen.queryByRole('list', { name: 'Pinned' })).toBeNull();
+    expect(screen.getByRole('button', { name: /Fix flaky login/ })).toHaveFocus();
+  });
+
+  it('lists the saved pins first, and names the group in Chinese too', () => {
+    render(
+      <Harness
+        sessions={sessions}
+        locale="zh"
+        prefs={{ ...DEFAULT_PREFS, pinned: [sessions[2]?.id as string, sessions[0]?.id as string] }}
+      />,
+    );
+    expect(lists()).toEqual(['已置顶', 'shopfront']);
+    expect(titles(screen.getByRole('list', { name: '已置顶' }))).toEqual([
+      '未命名会话',
+      'Live viewer research (demo)',
+    ]);
+    expect(screen.getAllByRole('button', { name: '置顶', pressed: true })).toHaveLength(2);
   });
 });

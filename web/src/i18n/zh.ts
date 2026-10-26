@@ -46,6 +46,8 @@ export const zh = {
   'sidebar.showAll': '显示全部',
   'sidebar.runningIncludesWaiting': '运行中，包括等待你确认的会话',
   'sidebar.pinned': '已置顶',
+  'sidebar.pin': '置顶',
+  'sidebar.unpin': '取消置顶',
   'sidebar.today': '今天',
   'sidebar.yesterday': '昨天',
   'sidebar.thisWeek': '本周',

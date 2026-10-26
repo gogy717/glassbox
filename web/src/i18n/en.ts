@@ -47,6 +47,8 @@ export const en: Record<MessageKey, string> = {
   'sidebar.showAll': 'Show all',
   'sidebar.runningIncludesWaiting': 'Running, including sessions waiting for you',
   'sidebar.pinned': 'Pinned',
+  'sidebar.pin': 'Pin',
+  'sidebar.unpin': 'Unpin',
   'sidebar.today': 'Today',
   'sidebar.yesterday': 'Yesterday',
   'sidebar.thisWeek': 'This week',

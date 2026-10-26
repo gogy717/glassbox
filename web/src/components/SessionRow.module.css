@@ -44,6 +44,11 @@
   white-space: nowrap;
 }
 
+/* The sidebar's rows leave their top right corner to the pin that sits beside them. */
+.row[data-density="compact"] .title {
+  padding-right: 24px;
+}
+
 .meta {
   max-width: 100%;
   display: flex;
