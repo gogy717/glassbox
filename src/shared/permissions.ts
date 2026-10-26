@@ -343,3 +343,290 @@ export function runDecisions(runs: readonly RunState[]): Map<string, 'allow' | '
       if (d.decision !== 'cancelled') out.set(d.id, d.decision);
   return out;
 }
+
+// --- the rule table ------------------------------------------------------------------------
+
+/**
+ * `GET /api/rules?window=7d|30d|all[&refresh=1]`: every session of the window read once and
+ * kept, as the weekly receipt's are (`src/shared/week.ts`), its permission events counted by
+ * rule. The response is NDJSON: `progress` lines (`done` never goes down), then one `result`
+ * line, or an `error` line.
+ */
+export type RulesWindowKind = '7d' | '30d' | 'all';
+
+export const RULES_WINDOWS: readonly RulesWindowKind[] = ['7d', '30d', 'all'];
+
+const DAY_MS = 86_400_000;
+
+/** When a window begins (epoch ms): 7 or 30 days before `now`; null for all of it. */
+export function rulesWindowStart(kind: RulesWindowKind, now: number): number | null {
+  return kind === 'all' ? null : now - (kind === '7d' ? 7 : 30) * DAY_MS;
+}
+
+/** The endpoint's path for a window. */
+export const rulesPath = (kind: RulesWindowKind, refresh = false) =>
+  `/api/rules?window=${kind}${refresh ? '&refresh=1' : ''}`;
+
+/**
+ * Where sessions ran, as one: a repository's root, its worktrees included, or a directory in no
+ * repository. `root` is null when the session named no directory.
+ */
+export interface RuleProject {
+  root: string | null;
+  /** As the session list names it. */
+  name: string;
+}
+
+/** A session's permission events, and its project. */
+export interface SessionEvents {
+  sessionId: string;
+  project: RuleProject;
+  events: PermissionEvent[];
+}
+
+export interface RuleCounts {
+  asked: number;
+  allowed: number;
+  denied: number;
+  lastAsked: IsoTime;
+}
+
+/**
+ * The permission lists of one Claude Code settings file, the only part of it glassbox reads:
+ * the user's (`scope` 'global'), or a project's `.claude/settings.json` or `settings.local.json`
+ * (a worktree's own included, under its repository's `root`).
+ */
+export interface SettingsFile {
+  path: string;
+  scope: 'global' | 'project';
+  root: string | null;
+  allow: string[];
+  deny: string[];
+}
+
+/** A settings rule that holds a key: allows (or denies) at least all it does. */
+export interface SettingsHit {
+  path: string;
+  scope: 'global' | 'project';
+  root: string | null;
+  list: 'allow' | 'deny';
+  rule: string;
+}
+
+/** One rule, as asked for across the window. */
+export interface RuleRow extends RuleKey, RuleCounts {
+  agent: AgentKind;
+  /** Sessions it was asked in. */
+  sessions: number;
+  /** Each project it was asked in, with its counts there, the most asked first. */
+  projects: (RuleProject & RuleCounts)[];
+  /** The settings rules that already hold it, allow lists first. */
+  inSettings: SettingsHit[];
+  /**
+   * Asked `SUGGEST_AFTER` times or more and always allowed, harmless, and held by no deny rule
+   * and no allow rule where it would go (`scopeOf`): a Claude Code rule worth adding.
+   */
+  suggested: boolean;
+}
+
+export interface RulesWindow {
+  kind: RulesWindowKind;
+  /** When it begins (epoch ms); null for all. */
+  from: number | null;
+  now: number;
+}
+
+/** As `WeekStats`: the sessions the window counts, read now or found as cached, and failed. */
+export interface RulesStats {
+  considered: number;
+  read: number;
+  cached: number;
+  failed: number;
+  ms: number;
+}
+
+export interface RulesResult {
+  window: RulesWindow;
+  /** The most asked first. */
+  rows: RuleRow[];
+  /** The settings files found, with their two lists: nothing else of them is read. */
+  settings: SettingsFile[];
+  /** When it was put together (epoch ms). */
+  asOf: number;
+  stats: RulesStats;
+}
+
+export type RulesLine =
+  | { type: 'progress'; done: number; total: number }
+  | { type: 'result'; result: RulesResult }
+  | { type: 'error'; error: string };
+
+/** Times a rule is asked, and always allowed, before it is suggested. */
+export const SUGGEST_AFTER = 5;
+
+/** The gravest first: a rule keeps the gravest harm any of its calls showed. */
+const GRAVITY: readonly DangerKind[] = [
+  'sudo',
+  'delete',
+  'force-push',
+  'shell',
+  'pipe-to-shell',
+  'outside',
+];
+const graver = (a: DangerKind | null, b: DangerKind | null) =>
+  a === null ? b : b === null ? a : GRAVITY.indexOf(a) <= GRAVITY.indexOf(b) ? a : b;
+
+const later = (a: IsoTime, b: IsoTime) => (Date.parse(b) > Date.parse(a) ? b : a);
+
+/** A rule as its tool and its specifier: `Bash(npm test:*)` → Bash, `npm test:*`. */
+function parseRule(rule: string): { tool: string; spec: string | null } | null {
+  const m = /^([^()]+?)(?:\(([\s\S]*)\))?$/.exec(rule.trim());
+  return m ? { tool: (m[1] as string).trim(), spec: m[2] ?? null } : null;
+}
+
+/** A Bash rule's prefix holds a key's at a word boundary; a command without `:*` only itself. */
+function bashHolds(spec: string, keySpec: string): boolean {
+  if (spec === '*') return true;
+  const prefix = /^(.*?)(?::\*| \*)$/.exec(spec)?.[1]?.trim();
+  if (prefix === undefined) return false;
+  const key = keySpec.replace(/:\*$/, '');
+  return key === prefix || key.startsWith(`${prefix} `);
+}
+
+/**
+ * A path rule holds a key's pattern when equal, or when it ends in `/**` and its directory holds
+ * the key's; `**` holds every pattern inside the directory (not `~/…` or `//…`). `./x` is `x`, and
+ * a project's `/x` (from the settings file's directory) is taken as `x` too: the sessions it
+ * counts ran there.
+ */
+function pathHolds(spec: string, keySpec: string): boolean {
+  const plain = (s: string) => s.replace(/^\.\//, '').replace(/^\/(?!\/)/, '');
+  const r = plain(spec);
+  const k = plain(keySpec);
+  if (r === k) return true;
+  if (r === '**') return !k.startsWith('~/') && !k.startsWith('//');
+  if (!r.endsWith('/**')) return false;
+  const dir = r.slice(0, -3);
+  return k === dir || k.startsWith(`${dir}/`);
+}
+
+/** Whether settings rule `rule` allows (or denies) at least everything key `key` would. */
+export function holds(rule: string, key: string): boolean {
+  if (rule.trim() === key) return true;
+  const r = parseRule(rule);
+  const k = parseRule(key);
+  if (!r || !k) return false;
+  const mcp = k.tool.startsWith('mcp__') ? mcpTool(k.tool) : null;
+  if (mcp)
+    return r.spec === null && [`mcp__${mcp.server}`, `mcp__${mcp.server}__*`].includes(r.tool);
+  if (r.tool !== k.tool) return false;
+  if (r.spec === null || r.spec === '*') return true;
+  if (k.spec === null) return false;
+  if (k.tool === 'Bash') return bashHolds(r.spec, k.spec);
+  if (k.tool === 'Edit' || k.tool === 'Read') return pathHolds(r.spec, k.spec);
+  return r.spec === k.spec;
+}
+
+/** Every rule of `settings` that holds `key`, file by file, allow lists first. */
+function settingsHits(key: string, settings: readonly SettingsFile[]): SettingsHit[] {
+  const hits: SettingsHit[] = [];
+  for (const f of settings)
+    for (const list of ['allow', 'deny'] as const)
+      for (const rule of f[list])
+        if (holds(rule, key)) hits.push({ path: f.path, scope: f.scope, root: f.root, list, rule });
+  return hits;
+}
+
+/**
+ * Where a rule's line goes: your own settings when it was asked in two projects or more (or in
+ * none named), else the one project's.
+ */
+export function scopeOf(
+  row: Pick<RuleRow, 'projects'>,
+): { scope: 'global' } | { scope: 'project'; root: string; name: string } {
+  const [only, ...more] = row.projects;
+  return only && more.length === 0 && only.root !== null
+    ? { scope: 'project', root: only.root, name: only.name }
+    : { scope: 'global' };
+}
+
+function suggestedRow(row: Omit<RuleRow, 'suggested'>): boolean {
+  if (row.agent !== 'claude-code' || row.asked < SUGGEST_AFTER || row.denied > 0) return false;
+  if (row.danger !== null || row.inSettings.some((h) => h.list === 'deny')) return false;
+  const where = scopeOf(row);
+  return !row.inSettings.some(
+    (h) =>
+      h.list === 'allow' &&
+      (h.scope === 'global' || (where.scope === 'project' && h.root === where.root)),
+  );
+}
+
+const counts = (at: IsoTime): RuleCounts => ({ asked: 0, allowed: 0, denied: 0, lastAsked: at });
+const count = (c: RuleCounts, e: PermissionEvent) => {
+  c.asked++;
+  if (e.answer === 'allowed') c.allowed++;
+  else c.denied++;
+  c.lastAsked = later(c.lastAsked, e.at);
+};
+const mostAsked = (a: RuleCounts, b: RuleCounts) =>
+  b.asked - a.asked || Date.parse(b.lastAsked) - Date.parse(a.lastAsked);
+
+/**
+ * The rules asked since `from` (all when null), the most asked first: each with its counts, its
+ * sessions and projects, the gravest harm its calls showed, the settings rules that hold it, and
+ * whether it is suggested.
+ */
+export function ruleRows(
+  sessions: readonly SessionEvents[],
+  opts: { from: number | null; settings: readonly SettingsFile[] },
+): RuleRow[] {
+  const rows = new Map<
+    string,
+    Omit<RuleRow, 'sessions' | 'projects' | 'inSettings' | 'suggested'> & {
+      sessionIds: Set<string>;
+      byProject: Map<string, RuleProject & RuleCounts>;
+    }
+  >();
+  for (const s of sessions) {
+    for (const e of s.events) {
+      if (opts.from !== null && !(Date.parse(e.at) >= opts.from)) continue;
+      const id = `${e.agent}\n${e.key}`;
+      let row = rows.get(id);
+      if (!row) {
+        row = {
+          key: e.key,
+          tool: e.tool,
+          agent: e.agent,
+          danger: null,
+          ...counts(e.at),
+          sessionIds: new Set(),
+          byProject: new Map(),
+        };
+        rows.set(id, row);
+      }
+      count(row, e);
+      row.danger = graver(row.danger, e.danger);
+      row.sessionIds.add(s.sessionId);
+      const projectId = s.project.root ?? `\n${s.project.name}`;
+      let project = row.byProject.get(projectId);
+      if (!project) {
+        project = { ...s.project, ...counts(e.at) };
+        row.byProject.set(projectId, project);
+      }
+      count(project, e);
+    }
+  }
+  return [...rows.values()]
+    .map(({ sessionIds, byProject, ...row }) => {
+      const full = {
+        ...row,
+        sessions: sessionIds.size,
+        projects: [...byProject.values()].sort(
+          (a, b) => mostAsked(a, b) || a.name.localeCompare(b.name),
+        ),
+        inSettings: row.agent === 'claude-code' ? settingsHits(row.key, opts.settings) : [],
+      };
+      return { ...full, suggested: suggestedRow(full) };
+    })
+    .sort((a, b) => mostAsked(a, b) || a.key.localeCompare(b.key));
+}
