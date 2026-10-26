@@ -19,7 +19,7 @@ function renderRow(
   selected = false,
   onSelect = vi.fn(),
   locale: 'en' | 'zh' = 'en',
-  more: { density?: 'compact' | 'card'; failure?: string | null } = {},
+  more: { density?: 'compact' | 'card'; failure?: string | null; project?: string } = {},
 ) {
   render(
     <I18nContext.Provider value={makeI18n(locale)}>
@@ -125,6 +125,12 @@ describe('SessionRow', () => {
     expect(meta.children[1]).toHaveTextContent(/^· /);
   });
 
+  it('names no place at compact density, given one or not: the sidebar groups by it', () => {
+    const row = renderRow(idle, false, vi.fn(), 'en', { project: 'glassbox · weever' });
+    expect(row).toHaveAttribute('data-density', 'compact');
+    expect(row).not.toHaveTextContent('glassbox · weever');
+  });
+
   describe('at card density', () => {
     it('reads tag, project and title, then the activity with its clock and the tokens', () => {
       vi.useFakeTimers();
@@ -202,6 +208,17 @@ describe('SessionRow', () => {
         density: 'card',
       });
       expect(quiet.children).toHaveLength(2);
+    });
+
+    it('leads with the place it is given: a worktree’s, with its repository', () => {
+      const row = renderRow(idle, false, vi.fn(), 'en', {
+        density: 'card',
+        project: 'glassbox · weever',
+      });
+      expect(row.querySelector('[title="glassbox · weever"]')).toHaveTextContent(
+        'glassbox · weever /',
+      );
+      expect(row).not.toHaveTextContent(`${idle.project} /`);
     });
 
     it('writes no project before the title when it has none', () => {

@@ -9,7 +9,7 @@ import type { AgentKind } from '../../../../src/core/model.js';
 import { crossings, type RepoCrossing } from '../../../../src/shared/crossing.js';
 import type { WeekResult, WeekSession, WeekWindowKind } from '../../../../src/shared/week.js';
 import { clock, day, durationParts, partsText, shortDay } from '../../components/receipt/format';
-import { projectNames } from '../../components/receipt/printed';
+import { projectNames, projectTreeNames } from '../../components/receipt/printed';
 import {
   type GridCell,
   listedOnly,
@@ -45,6 +45,7 @@ export interface SessionLine {
   id: string;
   agent: AgentKind;
   title: string | null;
+  /** Where it ran: its project, and its worktree off the repository's main one. */
   project: string | null;
   ms: number;
 }
@@ -63,11 +64,25 @@ export function projectOf(w: StatsWeek, s: WeekSession): string | null {
   return name(s);
 }
 
+/**
+ * Where a session ran, as its row prints it (`projectTreeNames`): its project, then its worktree
+ * when that is not the repository's main one. Worked out once per week result.
+ */
+const placers = new WeakMap<WeekResult, (s: WeekSession) => string | null>();
+function placeOf(w: StatsWeek, s: WeekSession): string | null {
+  let place = placers.get(w.result);
+  if (!place) {
+    place = projectTreeNames(w.result.sessions);
+    placers.set(w.result, place);
+  }
+  return place(s);
+}
+
 const lineOf = (w: StatsWeek, s: WeekSession, ms: number): SessionLine => ({
   id: s.id,
   agent: s.agent,
   title: s.title,
-  project: projectOf(w, s),
+  project: placeOf(w, s),
   ms,
 });
 

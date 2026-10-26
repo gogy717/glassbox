@@ -5,6 +5,7 @@ import type { PermissionDecision } from '../../../src/shared/runs.js';
 import { shellCommand } from '../../../src/shared/tool-category.js';
 import { AgentTag } from '../components/AgentTag';
 import { Delayed } from '../components/Delayed';
+import { projectTreeNames } from '../components/receipt/printed';
 import { SessionRow } from '../components/SessionRow';
 import type { OpenPrompt } from '../data/runs';
 import { useRovingFocus } from '../data/useRovingFocus';
@@ -101,6 +102,8 @@ export function Home({
     [visible],
   );
   const rows = [...needsYou, ...working, ...recent];
+  // A worktree's session reads "glassbox · weever", named from every session as the sidebar names them.
+  const place = useMemo(() => projectTreeNames(sessions), [sessions]);
   const roving = useRovingFocus(
     ref,
     rows.map((s) => s.id),
@@ -175,6 +178,7 @@ export function Home({
             now={now}
             density="card"
             failure={failures.get(s.id)}
+            project={s.repo ? (place(s) ?? undefined) : undefined}
             note={answerInTerminal(s) ? t('home.answerInTerminal') : undefined}
             footer={answer(s)}
             roving={roving(s.id)}

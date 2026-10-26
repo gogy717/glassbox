@@ -24,6 +24,11 @@ interface Props {
   /** On a card, a muted last line: where to answer what it waits for. */
   note?: string;
   /**
+   * On a card, where it ran, before the title: Home names a worktree's session by its repository
+   * and tree ("glassbox · weever"). The session's own project when not given.
+   */
+  project?: string;
+  /**
    * On a card, controls under the row, outside its button (a button cannot hold buttons): Home's
    * answer to a prompt. The row's hairline then runs under them.
    */
@@ -49,6 +54,7 @@ export function SessionRow({
   density = 'compact',
   failure,
   note,
+  project = s.project,
   footer,
   roving,
   onSelect,
@@ -111,9 +117,9 @@ export function SessionRow({
       <button {...button}>
         <span className={css.head}>
           <AgentTag kind={s.agent} />
-          {s.project && (
-            <span className={css.project} title={s.project}>
-              <span className={css.name}>{s.project}</span>
+          {project && (
+            <span className={css.project} title={project}>
+              <span className={css.name}>{project}</span>
               <span className={css.slash}> /</span>
             </span>
           )}

@@ -150,6 +150,25 @@ describe('Home', () => {
     expect(screen.queryAllByRole('heading', { level: 3 })).toEqual([]);
   });
 
+  it('names a worktree’s session by its repository and the worktree, the main tree’s by the repository', () => {
+    const glassbox = (dir: string) => ({ root: '/w/glassbox', dir, name: 'glassbox' });
+    renderHome([
+      session('glassbox', 'busy', 0, { activity: thinking(5), repo: glassbox('/w/glassbox') }),
+      session('weever', 'busy', 1, {
+        cwd: '/w/trees/weever',
+        activity: thinking(9),
+        repo: glassbox('/w/trees/weever'),
+      }),
+      // No repository read: its directory's name, as before.
+      session('notes', 'busy', 2, { activity: thinking(12) }),
+    ]);
+    expect(rows(region('Working')).map((r) => r.textContent)).toEqual([
+      expect.stringContaining('glassbox /Session 1'),
+      expect.stringContaining('glassbox · weever /Session 2'),
+      expect.stringContaining('notes /Session 3'),
+    ]);
+  });
+
   it('says what a terminal’s prompt is about, and that the terminal is where to answer it', () => {
     const on = (tool: string, target: string, s: number): SessionActivity => ({
       ...waitingFor(tool, s),
