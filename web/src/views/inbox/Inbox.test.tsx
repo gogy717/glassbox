@@ -243,6 +243,15 @@ describe('Inbox', () => {
     expect(document.activeElement).toBe(items()[1]);
   });
 
+  it('stays on the item the person moved to when the one asked for comes late', () => {
+    const a = session('waiting', { activity: waitingOn('Bash', 90) });
+    const b = session('waiting', { activity: waitingOn('Edit', 30) });
+    const { update } = renderInbox({ sessions: [a], at: b.id });
+    act(() => (items()[0] as HTMLElement).focus());
+    update({ sessions: [a, b], at: b.id });
+    expect(document.activeElement).toBe(items()[0]);
+  });
+
   it('goes back to the item asked for each time it is asked, the one named already included', () => {
     const a = session('waiting', { activity: waitingOn('Bash', 90) });
     const b = session('waiting', { activity: waitingOn('Edit', 30) });

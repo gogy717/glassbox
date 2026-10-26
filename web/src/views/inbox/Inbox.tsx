@@ -129,8 +129,9 @@ export function Inbox({
 
   // On arrival, and at each notification's click, focus starts on its item, else the first, so
   // the keys work at once. With none yet (the runs' prompts come after the list), on the first to
-  // arrive, unless focus has gone somewhere else on the page meanwhile. An item asked for by name
-  // is waited for, never stood in for by another: a key must not answer another session's.
+  // arrive, unless focus has moved meanwhile, onto an item or anywhere else: it is never taken
+  // from under the keys. An item asked for by name is waited for, never stood in for by another:
+  // a key must not answer another session's.
   const placed = useRef<{
     at: string | null;
     call: number;
@@ -149,8 +150,7 @@ export function Inbox({
     if (!target) return;
     p.done = true;
     const active = document.activeElement;
-    const moved = active && active !== p.from && active !== document.body;
-    if (moved && !ref.current?.contains(active)) return;
+    if (active && active !== p.from && active !== document.body) return;
     itemEl(ref.current, target.id)?.focus();
   });
 
@@ -204,8 +204,8 @@ export function Inbox({
     const next = i < 0 ? (stop ? itemEl(ref.current, stop) : null) : items[i + by];
     next?.focus();
   };
-  const press = (key: 'y' | 'n') =>
-    focusedItem()?.querySelector<HTMLButtonElement>(`button[aria-keyshortcuts="${key}"]`)?.click();
+  const press = (k: 'y' | 'n') =>
+    focusedItem()?.querySelector<HTMLButtonElement>(`button[aria-keyshortcuts="${k}"]`)?.click();
   useCommand('nextPrompt', () => move(1));
   useCommand('previousPrompt', () => move(-1));
   useCommand('allowItem', () => press('y'));
