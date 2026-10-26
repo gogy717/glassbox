@@ -113,12 +113,13 @@ export const footLines = (L: Locale, measured: boolean) =>
 const MAX_LINES = 40;
 
 export function receiptText(d: ReceiptData, o: ReceiptOptions): string {
-  const lines = textLines(d, o, 3);
-  // Over 40 lines (the most a receipt can print): the title gives up lines first, down to one.
-  const over = lines.length - MAX_LINES;
-  const fitted = over > 0 ? textLines(d, o, Math.max(1, 3 - over)) : lines;
+  let titleLines = 3;
+  let lines = textLines(d, o, titleLines);
+  // Over 40 lines (the most a receipt can print): the title gives up lines, one at a time, down
+  // to one, whatever it wrapped to.
+  while (lines.length > MAX_LINES && titleLines > 1) lines = textLines(d, o, --titleLines);
   // Well formed whatever the session holds: a lone surrogate would not survive the clipboard.
-  return clean(fitted.join('\n'));
+  return clean(lines.join('\n'));
 }
 
 /** The receipt's lines, its title in at most `titleLines`. */

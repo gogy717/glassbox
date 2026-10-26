@@ -217,6 +217,13 @@ describe('the text version (R7)', () => {
       expect(lines.length).toBeLessThanOrEqual(40);
       expect(lines.filter((l) => cols(l) > COLUMNS)).toEqual([]);
     }
+    // A title of two lines gives up only what the block needs (final review #1).
+    const twoLines = {
+      ...partial,
+      title: 'A long title that needs two lines to fit on this receipt',
+    };
+    for (const locale of ['en', 'zh'] as const)
+      expect(receiptText(twoLines, { ...EN, locale }).split('\n').length).toBeLessThanOrEqual(40);
     expect(receiptText(partial, EN)).toContain('no price · gpt-5.5-codex');
     expect(receiptText(partial, EN)).toContain('A very long title that needs every one of…');
     const roomy = receiptText({ ...data, title: full.title }, EN);
