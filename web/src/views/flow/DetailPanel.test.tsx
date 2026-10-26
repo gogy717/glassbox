@@ -159,7 +159,10 @@ describe('DetailPanel', () => {
     const tabs = within(panel).getByRole('radiogroup', { name: 'Show' });
     expect(within(tabs).getByRole('radio', { name: 'Details' })).toBeChecked();
     fireEvent.click(within(tabs).getByRole('radio', { name: 'Context' }));
-    expect(within(panel).getByText(/About/)).toHaveTextContent('About 37,800 tokens in context');
+    // Its own chunk: there once it has loaded.
+    expect(await within(panel).findByText(/About/)).toHaveTextContent(
+      'About 37,800 tokens in context',
+    );
     // Readable | JSON is for what was sent, not for its bill.
     expect(within(panel).queryByRole('radiogroup', { name: 'Show as' })).toBeNull();
     expect(fetch).toHaveBeenCalledTimes(1);
@@ -181,6 +184,7 @@ describe('DetailPanel', () => {
     const panel = screen.getByRole('region', { name: 'Request details' });
     await within(panel).findByText('Fully reconstructed');
     fireEvent.click(within(panel).getByRole('radio', { name: 'Context' }));
+    await within(panel).findByText(/About/);
     await act(async () => {
       fireEvent.click(within(panel).getByRole('button', { name: 'Copy' }));
     });

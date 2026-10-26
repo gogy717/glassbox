@@ -1,9 +1,10 @@
 import { Search } from 'lucide-react';
-import { memo, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import type { ModelRequest, RequestDetail, ToolCall } from '../../../../../src/core/model.js';
 import {
   type ContextPart,
   type PartKind,
+  type RequestBill,
   requestBill,
 } from '../../../../../src/shared/context-bill.js';
 import { CompactFigure, UiCjk } from '../../../components/CompactFigure';
@@ -81,13 +82,15 @@ interface Row {
   find: string;
 }
 
-interface Props {
+export interface ContextViewProps {
   req: ModelRequest;
   detail: RequestDetail | null;
   /** The session's calls: a call or result names its call as the execution chain does. */
   calls?: ReadonlyMap<string, ToolCall>;
   /** Opens a call's card: a result links to the call it answers. */
   onOpenCall?(call: ToolCall): void;
+  /** Told the bill shown, for the panel's Copy. */
+  onBill?(bill: RequestBill): void;
 }
 
 /**
@@ -96,7 +99,13 @@ interface Props {
  * estimated tokens and share, a filter over them, and a call's or a result's link to the call.
  * Every figure is an estimate and says so. Memoised as the readable view is.
  */
-export const ContextView = memo(function ContextView({ req, detail, calls, onOpenCall }: Props) {
+export const ContextView = memo(function ContextView({
+  req,
+  detail,
+  calls,
+  onOpenCall,
+  onBill,
+}: ContextViewProps) {
   const { t, intl } = useI18n();
   const agent = useSessionAgent();
   const [query, setQuery] = useState('');
@@ -105,6 +114,7 @@ export const ContextView = memo(function ContextView({ req, detail, calls, onOpe
     () => requestBill({ hasDetail: req.hasDetail, usage: req.usage }, detail),
     [req.hasDetail, req.usage, detail],
   );
+  useEffect(() => onBill?.(bill), [bill, onBill]);
 
   const rows = useMemo((): Row[] => {
     if (bill.status !== 'ok') return [];

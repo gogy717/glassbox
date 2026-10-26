@@ -1,7 +1,17 @@
 import { ChevronUp, Maximize2 } from 'lucide-react';
-import { type ReactNode, useId, useMemo, useRef, useState } from 'react';
+import {
+  type ComponentType,
+  lazy,
+  type ReactNode,
+  Suspense,
+  useCallback,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { ModelRequest, RequestDetail, ToolCall } from '../../../../src/core/model.js';
-import { requestBill } from '../../../../src/shared/context-bill.js';
+import type { RequestBill } from '../../../../src/shared/context-bill.js';
 import type { ToolResultResponse } from '../../../../src/shared/protocol.js';
 import { CopyButton } from '../../components/CodeBlock';
 import { Delayed } from '../../components/Delayed';
@@ -22,11 +32,37 @@ import { formatClock, formatDuration, formatNumber } from '../../lib/format';
 import type { CardKey } from './cards';
 import css from './DetailPanel.module.css';
 import { ArgsView } from './detail/ArgsView';
-import { ContextView } from './detail/ContextView';
+import type { ContextViewProps } from './detail/ContextView';
 import { type DetailPrefs, useDetailPrefs } from './detail/prefs';
 import { KeyValues, RequestReadable } from './detail/RequestReadable';
 import { MarkdownToggle, ViewToggle } from './detail/ViewToggle';
 import { toolStatus } from './flow-model';
+
+// The context bill names calls with the command summary and reads files with the files model,
+// which the first chunk does without: its chunk is asked for as the app loads, so the tab is
+// there when it is opened.
+const contextView = import('./detail/ContextView');
+contextView.catch(() => {});
+// Its code did not load (glassbox upgraded since the page opened): the tab says so, and what was
+// sent is still a click away.
+const ContextView = lazy<ComponentType<ContextViewProps>>(() =>
+  contextView.then(
+    (m) => ({ default: m.ContextView }),
+    () => ({ default: ContextChunkNote }),
+  ),
+);
+
+function ContextChunkNote() {
+  const { t } = useI18n();
+  return (
+    <p className={css.message}>
+      {t('error.chunk')}{' '}
+      <button type="button" className={css.link} onClick={() => location.reload()}>
+        {t('error.reload')}
+      </button>
+    </p>
+  );
+}
 
 interface Props {
   sessionId: string;
@@ -79,6 +115,11 @@ export function DetailPanel({ sessionId, req, tools, card, onClose, calls, onOpe
   const { t } = useI18n();
   const [prefs] = useDetailPrefs();
   const context = card === 'request' && prefs.request === 'context';
+  // The bill the Context tab shows, for Copy: made in the tab's own chunk.
+  const bill = useRef<RequestBill | null>(null);
+  const onBill = useCallback((b: RequestBill) => {
+    bill.current = b;
+  }, []);
   const titleId = useId();
   const maxRef = useRef<HTMLButtonElement>(null);
   const [maximized, setMaximized] = useState(false);
@@ -106,7 +147,7 @@ export function DetailPanel({ sessionId, req, tools, card, onClose, calls, onOpe
   const copyText = () =>
     JSON.stringify(
       context
-        ? requestBill({ hasDetail: req.hasDetail, usage: req.usage }, detail)
+        ? bill.current
         : card === 'request'
           ? detail
           : tool
@@ -123,7 +164,14 @@ export function DetailPanel({ sessionId, req, tools, card, onClose, calls, onOpe
   const body =
     card === 'request' ? (
       context ? (
-        <ContextBody req={req} state={state} retry={retry} calls={calls} onOpenCall={onOpenCall} />
+        <ContextBody
+          req={req}
+          state={state}
+          retry={retry}
+          calls={calls}
+          onOpenCall={onOpenCall}
+          onBill={onBill}
+        />
       ) : (
         <RequestBody req={req} state={state} retry={retry} />
       )
@@ -316,14 +364,27 @@ function ContextBody({
   retry,
   calls,
   onOpenCall,
+  onBill,
 }: {
   req: ModelRequest;
   state: FetchState<RequestDetail>;
   retry(): void;
   calls?: ReadonlyMap<string, ToolCall>;
   onOpenCall?(call: ToolCall): void;
+  onBill(bill: RequestBill): void;
 }) {
-  if (!req.hasDetail) return <ContextView req={req} detail={null} />;
+  const { t } = useI18n();
+  const waiting = (
+    <Delayed>
+      <p className={css.message}>{t('detail.loading')}</p>
+    </Delayed>
+  );
+  if (!req.hasDetail)
+    return (
+      <Suspense fallback={waiting}>
+        <ContextView req={req} detail={null} onBill={onBill} />
+      </Suspense>
+    );
   return (
     <Loading state={state} retry={retry}>
       {(d) => (
@@ -335,7 +396,15 @@ function ContextBody({
               ))}
             </ul>
           )}
-          <ContextView req={req} detail={d} calls={calls} onOpenCall={onOpenCall} />
+          <Suspense fallback={waiting}>
+            <ContextView
+              req={req}
+              detail={d}
+              calls={calls}
+              onOpenCall={onOpenCall}
+              onBill={onBill}
+            />
+          </Suspense>
         </>
       )}
     </Loading>
