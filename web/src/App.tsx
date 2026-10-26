@@ -8,11 +8,12 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react';
-import type { SessionSummary } from '../../src/core/model.js';
+import { MAIN_AGENT_ID, type SessionSummary } from '../../src/core/model.js';
 import type { RunState } from '../../src/shared/runs.js';
 import css from './App.module.css';
 import { Delayed } from './components/Delayed';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { Palette, type PaletteItem } from './components/Palette';
 import { SessionSidebar } from './components/SessionSidebar';
 import { ShortcutsHelp } from './components/ShortcutsHelp';
 import { TopBar } from './components/TopBar';
@@ -30,19 +31,20 @@ import {
   withWaiting,
 } from './data/runs';
 import { SessionAgentContext } from './data/session-agent';
-import { useCommand, useShortcuts } from './data/shortcuts';
+import { canRun, runCommand, useCommand, useShortcuts } from './data/shortcuts';
 import { createStore, type Store, StoreContext } from './data/store';
 import { useNow } from './data/useNow';
-import { I18nContext, makeI18n, useI18n } from './i18n';
+import { I18nContext, type MessageKey, makeI18n, useI18n } from './i18n';
 import { lazyView } from './lib/lazy-view';
 import { isListed } from './lib/sessions';
-import { applyTheme, loadPrefs, type Prefs, savePrefs } from './prefs';
+import { applyTheme, loadPrefs, type Prefs, savePrefs, type ThemePref } from './prefs';
 import {
   formatRoute,
   pageOf,
   parseRoute,
   sessionLink,
   statsLink,
+  type Tab,
   useRoute,
   youngWeek,
 } from './router';
@@ -51,6 +53,7 @@ import { Composer } from './views/composer/Composer';
 import { NewSessionDialog } from './views/composer/NewSessionDialog';
 import { PermissionDialog } from './views/composer/PermissionDialog';
 import { Home } from './views/Home';
+import { pageItems, promptItems, sessionItems } from './views/palette-items';
 import { SessionView } from './views/SessionView';
 import type { StatsPageProps } from './views/stats/StatsPage';
 
@@ -83,6 +86,14 @@ export interface AppProps {
   connect?: (store: Store, sessionId: string | null) => () => void;
   runs?: RunsClient;
 }
+
+/** The themes the palette offers, as the settings order them, each by the settings' word. */
+const THEMES: readonly ThemePref[] = ['light', 'dark', 'system'];
+const THEME_WORD: Record<ThemePref, MessageKey> = {
+  light: 'settings.themeLight',
+  dark: 'settings.themeDark',
+  system: 'settings.themeSystem',
+};
 
 const NARROW = '(max-width: 900px)';
 const TWO_COLUMNS = '(max-width: 1199px)';
@@ -324,15 +335,17 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
   const [help, setHelp] = useState(false);
   useCommand('help', () => setHelp(true));
   // As the nav's links go: Home, the session page as it was left, Stats.
-  useCommand('goHome', () => {
+  const goHome = () => {
     window.location.hash = '#/';
-  });
+  };
+  const goStats = () => {
+    if (page !== 'stats') window.location.hash = statsLink(Date.now());
+  };
+  useCommand('goHome', goHome);
   useCommand('goSession', () => {
     if (target) window.location.hash = target;
   });
-  useCommand('goStats', () => {
-    if (page !== 'stats') window.location.hash = statsLink(Date.now());
-  });
+  useCommand('goStats', goStats);
   // / searches the list, showing it first when it is hidden. Opened as an overlay, the list
   // starts in its search field anyway; shown as a column, focus goes there once it is.
   const searchOnShow = useRef(false);
@@ -350,6 +363,59 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
     searchOnShow.current = false;
     asideRef.current?.querySelector<HTMLElement>('input[type="search"]')?.focus();
   }, [sidebarShown]);
+  const toggleSidebar = () =>
+    floating ? setFloatOpen(!floatOpen) : setSidebarCollapsed(!sidebarCollapsed);
+
+  // ⌘K and Jump to…: the palette, over what is listed as it opens. It keeps those items while
+  // open, so a streaming update cannot move the option under the arrow keys.
+  const [jumpItems, setJumpItems] = useState<PaletteItem[] | null>(null);
+  const openSession = (id: string) => {
+    setDismissed(null);
+    navigate({ sessionId: id, agentId: MAIN_AGENT_ID, turnId: null, requestId: null });
+  };
+  // A prompt is shown where the prompt list is: its tab, or the flow from any other.
+  const selectPrompt = (turnId: string) => {
+    setFollow(false);
+    const tab = route.tab === 'steps' ? 'steps' : 'flow';
+    navigate({ agentId: MAIN_AGENT_ID, turnId, requestId: null, tab });
+  };
+  const goTab = route.sessionId
+    ? (tab: Tab) => navigate({ tab })
+    : target
+      ? (tab: Tab) => {
+          window.location.hash = formatRoute({ ...parseRoute(target), tab });
+        }
+      : null;
+  const paletteItems = (): PaletteItem[] => {
+    const locale = prefs.locale === 'en' ? 'zh' : 'en';
+    const action = (id: string, label: string, run: () => void): PaletteItem => ({
+      id: `action:${id}`,
+      kind: 'action',
+      label,
+      run,
+    });
+    return [
+      ...sessionItems(sessions, prefs.showProbes, t, openSession),
+      ...promptItems(open, t, selectPrompt),
+      ...pageItems(t, { home: goHome, stats: goStats, tab: goTab }),
+      action('new', t('composer.newSession'), () => setNewSession(true)),
+      ...(canRun('receipt')
+        ? [action('receipt', t('palette.receipt'), () => runCommand('receipt'))]
+        : []),
+      action('locale', t(locale === 'zh' ? 'palette.toChinese' : 'palette.toEnglish'), () =>
+        onPrefs({ ...prefs, locale }),
+      ),
+      ...THEMES.filter((theme) => theme !== prefs.theme).map((theme) =>
+        action(`theme:${theme}`, t('palette.theme', { theme: t(THEME_WORD[theme]) }), () =>
+          onPrefs({ ...prefs, theme }),
+        ),
+      ),
+      action('list', t(sidebarShown ? 'palette.hideList' : 'palette.showList'), toggleSidebar),
+      action('keys', t('keys.title'), () => setHelp(true)),
+    ];
+  };
+  const openPalette = () => setJumpItems(paletteItems());
+  useCommand('palette', openPalette);
 
   return (
     <UiContext.Provider value={ui}>
@@ -374,9 +440,8 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
             onFollow={setFollow}
             prefs={prefs}
             onPrefs={onPrefs}
-            onToggleSidebar={() =>
-              floating ? setFloatOpen(!floatOpen) : setSidebarCollapsed(!sidebarCollapsed)
-            }
+            onToggleSidebar={toggleSidebar}
+            onJump={openPalette}
           />
           <div
             className={css.body}
@@ -506,6 +571,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
             />
           )}
           {help && <ShortcutsHelp onClose={() => setHelp(false)} />}
+          {jumpItems && <Palette items={jumpItems} onClose={() => setJumpItems(null)} />}
         </div>
       </SessionAgentContext.Provider>
     </UiContext.Provider>

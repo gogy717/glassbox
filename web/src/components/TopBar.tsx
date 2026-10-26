@@ -3,12 +3,14 @@ import {
   Eye,
   House,
   Menu,
+  Search,
   SlidersHorizontal,
   SquareTerminal,
 } from 'lucide-react';
 import { type Ref, useCallback, useId, useRef, useState } from 'react';
 import type { AgentKind, LiveState, QuotaSnapshot } from '../../../src/core/model.js';
 import { askToNotify, notifyState } from '../data/notifications';
+import { keyLabel, paletteKeys } from '../data/shortcuts';
 import type { ConnectionState } from '../data/store';
 import { useNow } from '../data/useNow';
 import { useI18n } from '../i18n';
@@ -52,6 +54,8 @@ interface Props {
   prefs: Prefs;
   onPrefs(p: Prefs): void;
   onToggleSidebar(): void;
+  /** Opens the palette (⌘K): Jump to… beside Settings. */
+  onJump?(): void;
 }
 
 export function TopBar(p: Props) {
@@ -115,6 +119,22 @@ export function TopBar(p: Props) {
           <span className={css.toggleLabel} aria-hidden="true">
             {t('follow.label')}
           </span>
+        </button>
+      )}
+      {/* The palette, where the eye looks for settings. Named by its word at every width (the
+          word goes when narrow), its keys beside it and said to assistive tech. */}
+      {p.onJump && (
+        <button
+          type="button"
+          className={css.jump}
+          aria-label={t('palette.title')}
+          aria-keyshortcuts={paletteKeys()}
+          title={`${t('palette.title')} ${keyLabel('Mod+k')}`}
+          onClick={p.onJump}
+        >
+          <Search size={14} aria-hidden="true" />
+          <span className={css.jumpLabel}>{t('palette.title')}</span>
+          <kbd className={css.jumpKeys}>{keyLabel('Mod+k')}</kbd>
         </button>
       )}
       <SettingsMenu prefs={p.prefs} onPrefs={p.onPrefs} />

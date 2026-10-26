@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { render, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, within } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { I18nContext, makeI18n } from '../i18n';
 import { loadPrefs } from '../prefs';
 import { TopBar } from './TopBar';
@@ -91,6 +91,32 @@ describe('the top bar by page', () => {
     expect(open).toHaveAttribute('data-state', 'open');
     expect(baseRules(sheet)).toMatch(/\.conn\[data-state="open"\] \{[^}]*clip-path: inset\(50%\)/);
     for (const block of mediaBlocks(sheet)) expect(block.body).not.toMatch(/\.conn\b/);
+  });
+});
+
+describe('Jump to…', () => {
+  it.each(['home', 'session', 'stats'] as const)(
+    'sits beside Settings on %s, naming its keys, and opens the palette',
+    (page) => {
+      const onJump = vi.fn();
+      const bar = renderBar({ nav: navOf(page), onJump });
+      const jump = bar.getByRole('button', { name: 'Jump to…' });
+      expect(jump).toHaveAttribute('aria-keyshortcuts', 'Control+K');
+      expect(jump).toHaveTextContent('Jump to…Ctrl K');
+      expect(jump.nextElementSibling).toContainElement(
+        bar.getByRole('button', { name: 'Settings' }),
+      );
+      fireEvent.click(jump);
+      expect(onJump).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('gives up its word and keys before a session’s title does, as Follow latest does', () => {
+    const session = mediaBlocks(sheet).find((b) => b.max === 1399);
+    expect(session?.body).toMatch(/\.bar\[data-session\] \.jumpLabel/);
+    expect(mediaBlocks(sheet).some((b) => b.max === 1199 && /\.jumpLabel\b/.test(b.body))).toBe(
+      true,
+    );
   });
 });
 

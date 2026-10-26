@@ -1244,6 +1244,152 @@ describe('App keyboard shortcuts', () => {
   });
 });
 
+describe('App palette', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(DEMO_NOW);
+    window.location.hash = '';
+    localStorage.clear();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    window.location.hash = '';
+    localStorage.clear();
+    delete document.documentElement.dataset.theme;
+  });
+  const demoLink = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}`;
+  const listed = () => {
+    const store = createStore();
+    store.applyEvent({ type: 'sessions', sessions: createDemoSessions(DEMO_NOW) });
+    return store;
+  };
+  /** Ctrl+K (⌘K on a Mac), then `query` typed; the field, in either language. */
+  const jump = (query = '') => {
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'k', ctrlKey: true });
+    const field = screen.getByRole('combobox', { name: /^(Jump to…|跳转到…)$/ });
+    if (query) fireEvent.change(field, { target: { value: query } });
+    return field;
+  };
+  /** The palette's options (the composer has a select of its own). */
+  const options = () => {
+    const list = screen.queryByRole('listbox', { name: 'Matches' });
+    return list
+      ? within(list)
+          .getAllByRole('option')
+          .map((o) => o.textContent)
+      : [];
+  };
+
+  it('opens on Ctrl+K over the sessions, the pages, the tabs and the actions', () => {
+    render(<App store={listed()} connect={noConnect} runs={fakeRuns()} />);
+    jump();
+    expect(screen.getByRole('dialog', { name: 'Jump to…' })).toBeInTheDocument();
+    // The running session first; its dot says so.
+    expect(options()).toEqual([
+      'glassbox / Live viewer research (demo)Session',
+      'shopfront / Fix flaky login testSession',
+      'blog / Untitled sessionSession',
+      'HomePage',
+      'StatsPage',
+      'Execution chainTab',
+      'How it workedTab',
+      'Where tokens wentTab',
+      'TimelineTab',
+      'FilesTab',
+      'New sessionAction',
+      'Switch to Chinese · 中文Action',
+      'Theme: LightAction',
+      'Theme: DarkAction',
+      'Hide the session listAction',
+      'Keyboard shortcutsAction',
+    ]);
+    expect(screen.getAllByRole('option')[0]).toContainElement(
+      screen.getByRole('img', { name: 'Running' }),
+    );
+  });
+
+  it('opens the session picked, closing itself', async () => {
+    render(<App store={listed()} connect={noConnect} runs={fakeRuns()} />);
+    const field = jump('flaky');
+    expect(options()).toEqual(['shopfront / Fix flaky login testSession']);
+    fireEvent.keyDown(field, { key: 'Enter' });
+    await waitFor(() =>
+      expect(window.location.hash).toBe(
+        `#/s/${encodeURIComponent('claude-code:demo-0000-4000-8000-000000000002')}`,
+      ),
+    );
+    expect(screen.queryByRole('dialog', { name: 'Jump to…' })).toBeNull();
+  });
+
+  it('opens from Jump to… in the top bar too, and gives focus back to it', () => {
+    render(<App store={listed()} connect={noConnect} runs={fakeRuns()} />);
+    const button = within(screen.getByRole('banner')).getByRole('button', { name: 'Jump to…' });
+    expect(button).toHaveAttribute('aria-keyshortcuts', 'Control+K');
+    button.focus();
+    fireEvent.click(button);
+    const field = screen.getByRole('combobox', { name: 'Jump to…' });
+    expect(field).toHaveFocus();
+    fireEvent.keyDown(field, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Jump to…' })).toBeNull();
+    expect(button).toHaveFocus();
+  });
+
+  it('selects one of the open session’s prompts, on the prompt list', async () => {
+    window.location.hash = `${demoLink}?tab=time`;
+    render(<App store={demoStore()} connect={noConnect} runs={fakeRuns()} />);
+    const field = jump('prompt research');
+    // As the prompt list words it, on one line; the row's end cuts what does not fit.
+    expect(options()).toEqual([
+      expect.stringMatching(
+        /^Prompt 2 · Research how a live viewer could read Claude Code transcripts, use ultracode\. What I need .*…Prompt$/,
+      ),
+    ]);
+    fireEvent.keyDown(field, { key: 'Enter' });
+    await waitFor(() => expect(window.location.hash).toBe(`${demoLink}?turn=turn_m2`));
+    expect(screen.getByRole('button', { name: 'Follow latest' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+  });
+
+  it('switches the language and the theme, hides the list and starts a new session', () => {
+    render(<App store={listed()} connect={noConnect} runs={fakeRuns()} />);
+    fireEvent.keyDown(jump('chinese'), { key: 'Enter' });
+    expect(screen.getByRole('button', { name: '设置' })).toBeInTheDocument();
+    fireEvent.keyDown(jump('english'), { key: 'Enter' });
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument();
+    fireEvent.keyDown(jump('dark'), { key: 'Enter' });
+    expect(document.documentElement.dataset.theme).toBe('dark');
+    // The current theme is not offered again.
+    jump('theme');
+    expect(options()).toEqual(['Theme: LightAction', 'Theme: SystemAction']);
+    fireEvent.keyDown(screen.getByRole('combobox', { name: 'Jump to…' }), { key: 'Escape' });
+    fireEvent.keyDown(jump('hide list'), { key: 'Enter' });
+    expect(screen.queryByRole('navigation', { name: 'Sessions' })).toBeNull();
+    fireEvent.keyDown(jump('show list'), { key: 'Enter' });
+    expect(screen.getByRole('navigation', { name: 'Sessions' })).toBeInTheDocument();
+    fireEvent.keyDown(jump('new'), { key: 'Enter' });
+    expect(screen.getByRole('dialog', { name: 'New session' })).toBeInTheDocument();
+  });
+
+  it('prints the receipt of the session open, and offers none on Home', async () => {
+    const { unmount } = render(<App store={listed()} connect={noConnect} runs={fakeRuns()} />);
+    jump('receipt');
+    expect(options()).toEqual([]);
+    unmount();
+    window.location.hash = demoLink;
+    render(<App store={demoStore()} connect={noConnect} runs={fakeRuns()} />);
+    fireEvent.keyDown(jump('receipt'), { key: 'Enter' });
+    expect(await screen.findByRole('dialog', { name: 'Receipt' })).toBeInTheDocument();
+  });
+
+  it('lists the keyboard shortcuts from its actions', () => {
+    render(<App store={listed()} connect={noConnect} runs={fakeRuns()} />);
+    fireEvent.keyDown(jump('keyboard'), { key: 'Enter' });
+    expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
+  });
+});
+
 describe('documentTitle', () => {
   it('counts the sessions that need you, before the open session’s title', () => {
     expect(documentTitle(0, null)).toBe('glassbox');

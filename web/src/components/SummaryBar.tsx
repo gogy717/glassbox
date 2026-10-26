@@ -2,6 +2,7 @@ import { Receipt } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Suspense, useMemo, useRef, useState } from 'react';
 import type { TokenRate } from '../../../src/shared/rate.js';
+import { useCommand } from '../data/shortcuts';
 import { type OpenSession, useRate } from '../data/store';
 import { useNow } from '../data/useNow';
 import { useI18n } from '../i18n';
@@ -47,6 +48,8 @@ function ReceiptButton({ open }: { open: OpenSession }) {
   const ref = useRef<HTMLButtonElement>(null);
   // Nothing ran yet: nothing to print. Still focusable, so its reason is heard.
   const empty = open.requests.size === 0;
+  // The palette's Print receipt, while there is something to print.
+  useCommand('receipt', () => setShown(true), !empty);
   return (
     <>
       <button
