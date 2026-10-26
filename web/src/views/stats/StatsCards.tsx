@@ -40,7 +40,7 @@ import { st } from './strings';
 import type { Cell } from './WeekGrid';
 
 /** A card's head: its name, in capitals, and what its figures are, muted. */
-function Head({ id, name, note }: { id: string; name: string; note?: string }) {
+export function Head({ id, name, note }: { id: string; name: string; note?: string }) {
   return (
     <h2 id={id} className={css.cardHead}>
       <span className="section-label">{name}</span>

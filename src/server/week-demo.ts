@@ -1,14 +1,17 @@
 /**
  * A believable week behind the demo's weekly receipt: sessions across five CLIs and six projects,
  * worked in the day's usual blocks, with late nights, a lighter weekend and the odd swarm of
- * sub-agents. They are not listed as sessions (the demo's sidebar keeps its three); only the
- * week reads them. The same week on every run, placed relative to `now`.
+ * sub-agents; some of glassbox's in a second worktree, whose changes cross the open session's.
+ * They are not listed as sessions (the demo's sidebar keeps its three); only the week reads them.
+ * The same week on every run, placed relative to `now`.
  */
 import type {
   AgentKind,
   AgentNode,
   IsoTime,
+  LineChange,
   ModelRequest,
+  RepoIdentity,
   SessionSnapshot,
   TokenUsage,
   ToolCall,
@@ -97,6 +100,48 @@ const CLIS: Cli[] = [
 ];
 
 const PROJECTS = ['glassbox', 'shopfront', 'blog', 'infra', 'dotfiles', 'notes'];
+
+/** The demo's directories. */
+const DEV = '/Users/demo/Dev';
+/** glassbox's second working tree, where its last two Claude Code sessions of the week run. */
+const WORKTREE = `${DEV}/worktrees/glassbox-sidebar`;
+
+/**
+ * The demo's repositories, as the server reads them from `.git` (the demo's directories do not
+ * exist): `/Users/demo/Dev/worktrees/<repo>-<name>` is a worktree of `/Users/demo/Dev/<repo>`;
+ * any other directory is the main working tree of a repository of its own name.
+ */
+export function demoRepo(cwd: string): RepoIdentity {
+  const tree = /^(.*)\/worktrees\/([^/-]+)-[^/]+$/.exec(cwd);
+  if (tree) return { root: `${tree[1]}/${tree[2]}`, dir: cwd, name: tree[2] as string };
+  return { root: cwd, dir: cwd, name: cwd.split('/').filter(Boolean).at(-1) ?? cwd };
+}
+
+/**
+ * What the worktree's two sessions changed, as Claude Code records it: `store.ts` on the very
+ * line the open session's fix rewrites, and `sessions.ts` far from the lines the fix touches.
+ */
+const CROSSING: { file: string; before: string; after: string; lines: LineChange[] }[] = [
+  {
+    file: 'src/server/store.ts',
+    before: 'return sessions.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));',
+    after: 'return sessions.sort(byRecent);',
+    lines: [[41, 1, 1]],
+  },
+  {
+    file: 'src/server/sessions.ts',
+    before: ['export function groupSessions(list: Session[]) {', '  return group(list);'].join(
+      '\n',
+    ),
+    after: [
+      'export function groupSessions(list: Session[], by: GroupBy = "project") {',
+      '  if (by === "time") return byTime(list);',
+      '  // Pinned sessions keep their own group.',
+      '  return group(list);',
+    ].join('\n'),
+    lines: [[52, 2, 4]],
+  },
+];
 
 const TITLES = [
   'Build the Now board',
@@ -367,7 +412,7 @@ function build(p: Planned, n: number, random: () => number): SessionSnapshot {
       agent: p.cli.agent,
       nativeId,
       title: p.title,
-      cwd: `/Users/demo/Dev/${p.project}`,
+      cwd: `${DEV}/${p.project}`,
       project: p.project,
       startedAt: iso(p.start),
       updatedAt,
@@ -391,8 +436,30 @@ function build(p: Planned, n: number, random: () => number): SessionSnapshot {
   };
 }
 
+/**
+ * glassbox's last two Claude Code sessions of the week run in its second worktree, and make the
+ * changes that cross: each one's first finished Edit becomes one, so no figure of the week moves.
+ */
+function intoWorktree(week: SessionSnapshot[]): void {
+  const moved = week
+    .filter((s) => s.session.project === 'glassbox' && s.session.agent === 'claude-code')
+    .slice(-CROSSING.length);
+  moved.forEach((s, i) => {
+    s.session.cwd = WORKTREE;
+    s.session.project = 'glassbox-sidebar';
+    const t = s.toolCalls.find((x) => x.name === 'Edit' && x.status === 'complete');
+    const c = CROSSING[i] as (typeof CROSSING)[number];
+    if (!t) return;
+    t.input = { file_path: `${WORKTREE}/${c.file}`, old_string: c.before, new_string: c.after };
+    t.resultPreview = `The file ${WORKTREE}/${c.file} has been updated.`;
+    t.lineChanges = c.lines;
+  });
+}
+
 /** The demo week: the sessions of the last eight days, as of `now`. */
 export function createDemoWeek(now: number): SessionSnapshot[] {
   const random = rng(0x5eed_0043);
-  return plan(now, random).map((p, i) => build(p, i + 1, random));
+  const week = plan(now, random).map((p, i) => build(p, i + 1, random));
+  intoWorktree(week);
+  return week;
 }

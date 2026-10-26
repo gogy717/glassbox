@@ -11,7 +11,7 @@ import { BAR_HEIGHT, barcode } from './barcode';
 import { type ReceiptData, receiptData } from './data';
 import { fileName } from './exportImage';
 import { durationParts, modelName, partsText, serial } from './format';
-import { clean, printedProject, printedTitle, wellFormed } from './printed';
+import { clean, printedProject, printedTitle, projectTreeNames, wellFormed } from './printed';
 import { categoryLine, shares, timeRows } from './rows';
 import { RECEIPT_STRINGS } from './strings';
 import { receiptSvg, SCALE, SIZES, textWidth, WIDTH, wrap } from './svg';
@@ -628,6 +628,30 @@ describe('fix round 1', () => {
     const shown = svgText(receiptSvg(wide, EN, 'tall').svg);
     const printed = shown.match(/explore 172[^A-Z]*?other \d+/)?.[0] ?? '';
     expect(Number(line?.[1]) + textWidth(printed, 11)).toBeLessThanOrEqual(338);
+  });
+
+  it('names a session’s place by its repository and, off the main tree, its worktree', () => {
+    const glassbox = (dir: string) => ({ root: '/w/glassbox', dir, name: 'glassbox' });
+    const main = { cwd: '/w/glassbox', project: 'glassbox', repo: glassbox('/w/glassbox') };
+    const tree = { cwd: '/w/trees/weever/web', project: 'web', repo: glassbox('/w/trees/weever/') };
+    const apiA = {
+      cwd: '/a/work/api',
+      project: 'api',
+      repo: { root: '/a/work/api', dir: '/a/work/api', name: 'api' },
+    };
+    const apiB = {
+      cwd: '/b/home/api-x',
+      project: 'api-x',
+      repo: { root: '/b/home/api', dir: '/b/home/api-x', name: 'api' },
+    };
+    const plain = { cwd: '/w/notes', project: 'notes', repo: null };
+    const name = projectTreeNames([main, tree, apiA, apiB, plain]);
+    expect(name(main)).toBe('glassbox');
+    expect(name(tree)).toBe('glassbox · weever');
+    // Two repositories of one name read with their parents, as the session list names them.
+    expect(name(apiA)).toBe('work/api');
+    expect(name(apiB)).toBe('home/api · api-x');
+    expect(name(plain)).toBe('notes');
   });
 
   it('prints a project only as a name: never an encoded home path (F6)', () => {

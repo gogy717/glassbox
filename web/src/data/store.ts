@@ -79,7 +79,7 @@ function remove<T>(map: Map<string, T>, ids: string[] | undefined): Map<string, 
   return next;
 }
 
-function fromSnapshot(id: string, s: SessionSnapshot): OpenSession {
+export function fromSnapshot(id: string, s: SessionSnapshot): OpenSession {
   return {
     id,
     session: s.session,

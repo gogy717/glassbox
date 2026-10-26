@@ -1,7 +1,7 @@
 import { createDemoSnapshot } from '../../../src/core/fixtures/demo.js';
-import type { SessionSnapshot } from '../../../src/core/model.js';
+import type { RepoIdentity, SessionSnapshot } from '../../../src/core/model.js';
 import { sessionBuckets, sliceSession } from '../../../src/server/week-buckets.js';
-import { createDemoWeek } from '../../../src/server/week-demo.js';
+import { createDemoWeek, demoRepo } from '../../../src/server/week-demo.js';
 import {
   type WeekResult,
   type WeekSession,
@@ -15,16 +15,21 @@ import {
  */
 export const WEEK_NOW = new Date(2026, 10, 21, 20, 41).getTime();
 
-/** `/api/week`'s result for `snaps` as the server would slice them, at `now`. */
+/**
+ * `/api/week`'s result for `snaps` as the server would slice them, at `now`; each session's
+ * repository by `repoOf`, as the server's lookup gives it, when one is given.
+ */
 export function weekResult(
   snaps: SessionSnapshot[],
   kind: WeekWindowKind = 'week',
   now = WEEK_NOW,
+  repoOf?: (cwd: string) => RepoIdentity | null,
 ): WeekResult {
   const window = weekWindow(kind, now);
   const sessions = snaps
     .map((s) => sliceSession(sessionBuckets(s, now), window, s.session.tags ?? []))
     .filter((s): s is WeekSession => s !== null)
+    .map((s) => (repoOf && s.cwd ? { ...s, repo: repoOf(s.cwd) } : s))
     .sort(
       (a, b) =>
         b.inWindow.agentMs - a.inWindow.agentMs || b.inWindow.activeMs - a.inWindow.activeMs,
@@ -37,6 +42,9 @@ export function weekResult(
   };
 }
 
-/** The demo's week: its live session and the synthetic week behind the weekly receipt. */
+/**
+ * The demo's week: its live session and the synthetic week behind the weekly receipt, each
+ * session's repository as the demo server reads it.
+ */
 export const demoWeek = (kind: WeekWindowKind = 'week', now = WEEK_NOW) =>
-  weekResult([createDemoSnapshot(new Date(now)), ...createDemoWeek(now)], kind, now);
+  weekResult([createDemoSnapshot(new Date(now)), ...createDemoWeek(now)], kind, now, demoRepo);

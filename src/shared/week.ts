@@ -17,6 +17,7 @@
  * active time and a segment's agent time are split at hour boundaries.
  */
 import type { AgentKind, RepoIdentity, TokenUsage } from '../core/model.js';
+import type { FileOps } from './crossing.js';
 import type { ToolCategory } from './tool-category.js';
 
 export type WeekWindowKind = 'week' | '7d';
@@ -60,6 +61,13 @@ export interface WeekFigures {
    * the client can price it at its API price table. Adds up to `usage`.
    */
   usageByModel: Record<string, TokenUsage>;
+  /**
+   * The files the main agent and its sub-agents changed, path by path (`crossing.ts`): each
+   * change counted in the hour its call started, as the call is; the lines of each when the
+   * agent recorded them; at most `MAX_PATHS` paths, the most recently changed. Not the edits
+   * themselves: those come from the session (`/api/sessions/:id`). Absent when none changed.
+   */
+  files?: FileOps;
 }
 
 export interface WeekSession {

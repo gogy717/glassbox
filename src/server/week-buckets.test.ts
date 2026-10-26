@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createDemoSideSnapshots, createDemoSnapshot } from '../core/fixtures/demo.js';
 import type { SessionSnapshot } from '../core/model.js';
 import { emptyUsage, totalTokens } from '../core/usage.js';
+import { fileOpsOf } from '../shared/crossing.js';
 import type { WeekSession, WeekWindow } from '../shared/week.js';
 import {
   HOUR_MS,
@@ -301,6 +302,7 @@ describe('a session as hourly buckets', () => {
       failures: 0,
       usage: { ...emptyUsage(), output: agentMs },
       usageByModel: { m: { ...emptyUsage(), output: agentMs } },
+      files: new Map(),
     });
     const b: SessionBuckets = {
       id: 's',
@@ -323,6 +325,52 @@ describe('a session as hourly buckets', () => {
   });
 
   // Proposal 6: the client prices a week by model, so usage keeps the model of each call.
+  it('keeps the files its calls changed, as the session’s own changes say, files last', () => {
+    const now = new Date(2026, 9, 22, 12, 30).getTime();
+    const snap = createDemoSnapshot(new Date(now));
+    const b = sessionBuckets(snap, now);
+    const all = sliceSession(b, everything(b));
+    // The main agent and its descendants, as the week counts their calls.
+    const ids = new Set(['main']);
+    for (let grew = true; grew; ) {
+      grew = false;
+      for (const a of snap.agents)
+        if (a.parentId !== null && ids.has(a.parentId) && !ids.has(a.id))
+          grew = ids.add(a.id).size > 0;
+    }
+    const files = fileOpsOf(snap.toolCalls, snap.session.cwd, ids, 0);
+    expect(files?.paths.length).toBeGreaterThan(2);
+    expect(all?.inWindow.files).toEqual(files);
+    expect(Object.keys(all?.inWindow ?? {}).at(-1)).toBe('files');
+    // A session that changed no file says nothing of files.
+    const [side] = createDemoSideSnapshots(new Date(now));
+    if (!side) throw new Error('no side session');
+    const quiet = { ...side, toolCalls: side.toolCalls.filter((t) => !/Edit|Write/.test(t.name)) };
+    const sq = sliceSession(sessionBuckets(quiet, now), everything(sessionBuckets(quiet, now)));
+    expect(sq?.inWindow).not.toHaveProperty('files');
+  });
+
+  it('counts a change in the window its call started in, as it counts the call', () => {
+    const monday = new Date(2026, 10, 23, 0, 0).getTime();
+    const now = monday + 40_000;
+    const snap = createDemoSnapshot(new Date(now));
+    // One edit of the demo's fix lands after midnight; the rest of its file work before.
+    const late = snap.toolCalls.find((t) => t.id === 'tu_m2e');
+    if (!late) throw new Error('fixture');
+    late.startedAt = new Date(monday + 5_000).toISOString();
+    late.endedAt = new Date(monday + 6_000).toISOString();
+    const b = sessionBuckets(snap, now);
+    const store = (s: WeekSession | null) =>
+      s?.inWindow.files?.paths.find((p) => p.path.endsWith('/src/server/store.ts'));
+    const before = store(sliceSession(b, weekWindow('week', monday - 1)));
+    const after = store(sliceSession(b, weekWindow('week', now)));
+    expect(after?.edited).toBe(1);
+    expect(after?.marks.map((m) => m[0])).toEqual([monday + 6_000]);
+    expect((before?.edited ?? 0) + (after?.edited ?? 0)).toBe(
+      store(sliceSession(b, everything(b)))?.edited,
+    );
+  });
+
   it('keeps usage by the model of each call, adding up to the usage', () => {
     const now = new Date(2026, 9, 22, 12, 30).getTime();
     const snap = createDemoSnapshot(new Date(now));

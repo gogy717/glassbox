@@ -1,4 +1,8 @@
+/// <reference types="node" />
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import postcss from 'postcss';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionSummary } from '../../../../src/core/model.js';
 import type { WeekLine, WeekResult, WeekWindowKind } from '../../../../src/shared/week.js';
@@ -488,6 +492,41 @@ describe('the Stats page (D4)', () => {
     const label = cell.getAttribute('aria-label') ?? '';
     expect(label).not.toContain('No agent worked');
     expect(tip()).toHaveTextContent(label.replace(' · ', ''));
+  });
+
+  it('puts Crossing under By CLI and Top projects, above Tokens, when worktrees crossed', async () => {
+    serve({ week });
+    render(page(createStore()));
+    const crossing = await screen.findByRole('region', { name: /^Crossing/ });
+    const main = crossing.closest('[data-column="main"]') as HTMLElement;
+    const order = [...main.querySelectorAll('[data-area]')].map((c) => c.getAttribute('data-area'));
+    expect(order).toEqual(['grid', 'cli', 'projects', 'crossing', 'tokens']);
+    expect(crossing).toHaveTextContent('3 files changed from more than one worktree of glassbox');
+  });
+
+  it('keeps Crossing after Top projects, across the page, once the columns dissolve (D4)', () => {
+    // Under 1200px every card is the grid's own, placed by `order` (equal orders keep the DOM's).
+    const rules = new Map<string, Record<string, string>>();
+    postcss
+      .parse(readFileSync(join(import.meta.dirname, 'StatsPage.module.css'), 'utf8'))
+      .walkAtRules('media', (media) => {
+        if (!media.params.includes('max-width: 1199px')) return;
+        media.walkRules((rule) => {
+          for (const selector of rule.selectors) {
+            const area = /^\.card\[data-area="(\w+)"\]$/.exec(selector)?.[1];
+            if (!area) continue;
+            const decls = rules.get(area) ?? {};
+            rule.walkDecls((d) => {
+              decls[d.prop] = d.value;
+            });
+            rules.set(area, decls);
+          }
+        });
+      });
+    const order = (area: string) => Number(rules.get(area)?.order ?? 0);
+    expect(order('crossing')).toBe(order('projects'));
+    expect(order('crossing')).toBeLessThan(order('longest'));
+    expect(rules.get('crossing')?.['grid-column']).toBe('1 / -1');
   });
 
   it('keeps all three cards on an empty week, each with a dash and no hint (DR4)', async () => {

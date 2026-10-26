@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { ToolCall } from '../../../../src/core/model.js';
+import { demoRepo } from '../../../../src/server/week-demo.js';
 import type { OpenSession } from '../../data/store';
 import { subtreeIds } from '../../lib/agents';
 import { demoOpen } from '../../test/demo';
+import { demoWeek } from '../../test/week';
 import {
   buildFiles,
+  crossingKeys,
   type FileVerb,
   filterFiles,
   lineDiff,
@@ -104,6 +107,40 @@ describe('touchesOf', () => {
           { before: 'c', after: 'd', all: true },
         ],
       });
+    });
+
+    it('says where an edit landed, as its result recorded it, in the file as the edit left it', () => {
+      const edit = (lineChanges: [number, number, number][]) =>
+        touchesOf(
+          call('Edit', { file_path: '/r/a.ts', old_string: 'a', new_string: 'b' }, { lineChanges }),
+        )[0]?.lines;
+      expect(edit([[41, 1, 3]])).toBe('41-43');
+      // The second change sits three lines lower once the first put three in.
+      expect(
+        edit([
+          [36, 0, 3],
+          [41, 1, 3],
+        ]),
+      ).toBe('36-38, 44-46');
+      // Lines only removed: where they were.
+      expect(edit([[5, 2, 0]])).toBe('5');
+      expect(
+        edit([
+          [1, 0, 1],
+          [10, 1, 1],
+          [20, 1, 1],
+          [30, 1, 1],
+        ]),
+      ).toBe('1, 11, 21, …');
+      const over = call(
+        'Write',
+        { file_path: '/r/a.ts', content: 'x' },
+        { resultPreview: 'The file /r/a.ts has been updated.', lineChanges: [[2, 1, 1]] },
+      );
+      expect(touchesOf(over)[0]?.lines).toBe('2');
+      // A patch names its own files: a call's line changes are never its sections'.
+      const patch = call('apply_patch', { input: PATCH }, { lineChanges: [[1, 1, 1]] });
+      expect(touchesOf(patch).map((t) => t.lines)).toEqual([null, null, null]);
     });
 
     it('creates a file with Write, or edits it when the result says the file was there', () => {
@@ -608,5 +645,31 @@ describe('lineDiff', () => {
     expect(kinds.slice(-99)).toEqual(Array(99).fill('same'));
     const middle = kinds.slice(7, -99);
     expect(middle).toEqual([...Array(1094).fill('del'), ...Array(1093).fill('add')]);
+  });
+});
+
+describe('crossingKeys', () => {
+  const open = demoOpen();
+  const repo = demoRepo(open.session.cwd as string);
+
+  it('names the other worktrees that changed each of the session’s files in the week', () => {
+    expect([...crossingKeys(open, repo, demoWeek('7d'))]).toEqual([
+      ['/Users/demo/Dev/glassbox/src/server/store.ts', ['glassbox-sidebar']],
+      ['/Users/demo/Dev/glassbox/src/server/sessions.ts', ['glassbox-sidebar']],
+    ]);
+  });
+
+  it('finds nothing without the week, nor when the other tree changed none of the session’s files', () => {
+    expect(crossingKeys(open, repo, null).size).toBe(0);
+    const week = demoWeek('7d');
+    const quiet = {
+      ...week,
+      sessions: week.sessions.map((s) =>
+        s.repo?.dir.includes('/worktrees/')
+          ? { ...s, inWindow: { ...s.inWindow, files: undefined } }
+          : s,
+      ),
+    };
+    expect(crossingKeys(open, repo, quiet).size).toBe(0);
   });
 });

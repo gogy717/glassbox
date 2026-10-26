@@ -1,5 +1,5 @@
 import { useCallback, useSyncExternalStore } from 'react';
-import { MAIN_AGENT_ID } from '../../src/core/model.js';
+import { MAIN_AGENT_ID, type ToolCall } from '../../src/core/model.js';
 import { type WeekWindowKind, weekStart } from '../../src/shared/week.js';
 
 export const TABS = ['flow', 'steps', 'tokens', 'time', 'files'] as const;
@@ -86,6 +86,22 @@ export function formatRoute(r: Route): string {
 
 /** A link to a session as it opens: its main agent, on the flow tab, following its latest turn. */
 export const sessionLink = (sessionId: string) => formatRoute({ ...HOME, sessionId });
+
+/** A link to one call of a session: its card open in the execution chain, as the Files tab lands. */
+export const callLink = (
+  sessionId: string,
+  tool: Pick<ToolCall, 'id' | 'agentId' | 'requestId'>,
+  turnId: string | null,
+) =>
+  formatRoute({
+    ...HOME,
+    sessionId,
+    agentId: tool.agentId,
+    tab: 'flow',
+    turnId,
+    requestId: tool.requestId,
+    card: `tool:${tool.id}`,
+  });
 
 const DAY_MS = 86_400_000;
 

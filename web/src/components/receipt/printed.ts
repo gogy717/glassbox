@@ -95,4 +95,23 @@ export function projectNames(sessions: readonly Named[]): (s: Named) => string |
   return (s) => (s.repo ? byRepo(s) : printedProject(s.cwd, s.project));
 }
 
+/** A directory's segments, whichever separator, without empties. */
+const segments = (dir: string) => dir.split(/[\\/]+/).filter(Boolean);
+
+/**
+ * Where each session ran, as a row prints it (Home's cards, Stats' session rows): its project
+ * as `projectNames` names it, then its working tree's name when that is not the repository's
+ * main one ("glassbox · weever"), alike in both languages.
+ */
+export function projectTreeNames(sessions: readonly Named[]): (s: Named) => string | null {
+  const project = projectNames(sessions);
+  return (s) => {
+    const name = project(s);
+    if (!name || !s.repo) return name;
+    const dir = segments(s.repo.dir);
+    if (dir.join('/') === segments(s.repo.root).join('/')) return name;
+    return `${name} · ${clean(dir.at(-1) ?? '')}`;
+  };
+}
+
 type Named = Pick<SessionSummary, 'cwd' | 'project' | 'repo'>;

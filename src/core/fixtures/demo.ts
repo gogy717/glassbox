@@ -9,6 +9,7 @@
 import type {
   AgentNode,
   IsoTime,
+  LineChange,
   ModelRequest,
   QuotaSnapshot,
   QuotaWindow,
@@ -52,6 +53,8 @@ interface DemoToolSpec {
   result?: string;
   error?: boolean;
   spawned?: ToolCall['spawned'];
+  /** Where an edit landed, as Claude Code records it. */
+  lineChanges?: LineChange[];
 }
 
 export function createDemoSnapshot(now: Date = new Date()): SessionSnapshot {
@@ -108,6 +111,7 @@ export function createDemoSnapshot(now: Date = new Date()): SessionSnapshot {
         resultPreview: tool.result ?? null,
         hasFullResult: tool.result !== undefined,
         spawned: tool.spawned ?? null,
+        ...(tool.lineChanges ? { lineChanges: tool.lineChanges } : {}),
       });
       if (toolEnd !== null) toolStart = toolEnd;
     }
@@ -208,6 +212,7 @@ export function createDemoSnapshot(now: Date = new Date()): SessionSnapshot {
         },
         durSec: 0.06,
         result: `The file ${DEMO_CWD}/src/server/store.ts has been updated.`,
+        lineChanges: [[41, 1, 3]],
       },
       {
         id: 'tu_m2e',
@@ -224,6 +229,7 @@ export function createDemoSnapshot(now: Date = new Date()): SessionSnapshot {
         },
         durSec: 0.06,
         result: `The file ${DEMO_CWD}/src/server/store.ts has been updated.`,
+        lineChanges: [[36, 0, 3]],
       },
       {
         id: 'tu_m2f',
@@ -264,6 +270,10 @@ export function createDemoSnapshot(now: Date = new Date()): SessionSnapshot {
         },
         durSec: 0.07,
         result: `Applied 2 edits to ${DEMO_CWD}/src/server/sessions.ts`,
+        lineChanges: [
+          [3, 1, 1],
+          [18, 1, 1],
+        ],
       },
       {
         id: 'tu_m2h',

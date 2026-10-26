@@ -1,3 +1,4 @@
+import type { SessionSnapshot } from '../../../src/core/model.js';
 import {
   type ApiErrorResponse,
   api,
@@ -26,6 +27,10 @@ async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
 
 export const fetchSessions = (signal?: AbortSignal) =>
   getJson<SessionsResponse>(api.sessions(), signal);
+
+/** A session as it is now, read once (the open session comes over the event stream instead). */
+export const fetchSnapshot = (sessionId: string, signal?: AbortSignal) =>
+  getJson<SessionSnapshot>(api.session(sessionId), signal);
 
 export const fetchRequestDetail = (sessionId: string, requestId: string, signal?: AbortSignal) =>
   getJson<RequestDetailResponse>(api.requestDetail(sessionId, requestId), signal);

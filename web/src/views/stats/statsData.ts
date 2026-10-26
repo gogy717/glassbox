@@ -6,9 +6,10 @@
  * the receipt counts them, so "6 projects" lists six.
  */
 import type { AgentKind } from '../../../../src/core/model.js';
+import { crossings, type RepoCrossing } from '../../../../src/shared/crossing.js';
 import type { WeekResult, WeekSession, WeekWindowKind } from '../../../../src/shared/week.js';
 import { clock, day, durationParts, partsText, shortDay } from '../../components/receipt/format';
-import { projectNames } from '../../components/receipt/printed';
+import { projectNames, projectTreeNames } from '../../components/receipt/printed';
 import {
   type GridCell,
   listedOnly,
@@ -44,6 +45,7 @@ export interface SessionLine {
   id: string;
   agent: AgentKind;
   title: string | null;
+  /** Where it ran: its project, and its worktree off the repository's main one. */
   project: string | null;
   ms: number;
 }
@@ -62,11 +64,25 @@ export function projectOf(w: StatsWeek, s: WeekSession): string | null {
   return name(s);
 }
 
+/**
+ * Where a session ran, as its row prints it (`projectTreeNames`): its project, then its worktree
+ * when that is not the repository's main one. Worked out once per week result.
+ */
+const placers = new WeakMap<WeekResult, (s: WeekSession) => string | null>();
+function placeOf(w: StatsWeek, s: WeekSession): string | null {
+  let place = placers.get(w.result);
+  if (!place) {
+    place = projectTreeNames(w.result.sessions);
+    placers.set(w.result, place);
+  }
+  return place(s);
+}
+
 const lineOf = (w: StatsWeek, s: WeekSession, ms: number): SessionLine => ({
   id: s.id,
   agent: s.agent,
   title: s.title,
-  project: projectOf(w, s),
+  project: placeOf(w, s),
   ms,
 });
 
@@ -82,6 +98,29 @@ export function topProjects(w: StatsWeek, n = 5): { name: string; ms: number; se
     by.set(name, p);
   }
   return [...by.values()].sort((a, b) => b.ms - a.ms || b.sessions - a.sessions).slice(0, n);
+}
+
+/**
+ * The window's crossings: the repositories worked on in two or more worktrees, and the files more
+ * than one of those changed (`crossings`), each repository named as Top projects names it.
+ * Worked out once per week result.
+ */
+const crossed = new WeakMap<WeekResult, RepoCrossing[]>();
+export function crossingOf(w: StatsWeek): RepoCrossing[] {
+  let found = crossed.get(w.result);
+  if (!found) {
+    const byRoot = new Map<string, WeekSession>();
+    for (const s of w.result.sessions)
+      if (s.repo && !byRoot.has(s.repo.root)) byRoot.set(s.repo.root, s);
+    found = crossings(
+      w.result.sessions.map((s) => ({ id: s.id, repo: s.repo, files: s.inWindow.files })),
+    ).map((r) => {
+      const s = byRoot.get(r.root);
+      return { ...r, name: (s && projectOf(w, s)) || r.name };
+    });
+    crossed.set(w.result, found);
+  }
+  return found;
 }
 
 /** The sessions that worked longest by their own clock (session time, as LONGEST): five. */

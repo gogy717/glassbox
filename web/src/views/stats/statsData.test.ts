@@ -55,6 +55,26 @@ describe('the Stats page projects', () => {
   });
 });
 
+describe('the Stats page session rows', () => {
+  it('name a worktree’s session by its repository and tree, the main tree’s by the repository', () => {
+    const base = demoWeek();
+    const [a, b, c] = base.sessions as [WeekSession, WeekSession, WeekSession];
+    const repo = { root: '/home/dev/src/glassbox', name: 'glassbox' };
+    const sessions: WeekSession[] = [
+      { ...a, cwd: '/home/dev/src/glassbox', repo: { ...repo, dir: '/home/dev/src/glassbox' } },
+      { ...b, cwd: '/home/dev/work/whitefish', repo: { ...repo, dir: '/home/dev/work/whitefish' } },
+      { ...c, cwd: '/home/dev/notes', project: 'notes', repo: null },
+    ];
+    const w = statsWeek({ ...base, sessions }, false);
+    const place = new Map(longestSessions(w, 3).map((l) => [l.id, l.project]));
+    expect(place.get(a.id)).toBe('glassbox');
+    expect(place.get(b.id)).toBe('glassbox · whitefish');
+    expect(place.get(c.id)).toBe('notes');
+    // Top projects still counts the trees as one.
+    expect(topProjects(w).map((p) => p.name)).toEqual(['glassbox', 'notes']);
+  });
+});
+
 describe('the Stats page figures', () => {
   it('are the weekly receipt’s own, from the same listed sessions (N6)', () => {
     expect(w.receipt).toEqual(weekReceipt(listedOnly(r, false)));

@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { checkSnapshot } from '../core/invariants.js';
+import { crossings } from '../shared/crossing.js';
 import { DemoStore } from './demo-store.js';
 import { WeekService } from './week.js';
-import { createDemoWeek } from './week-demo.js';
+import { createDemoWeek, demoRepo } from './week-demo.js';
 
 const NOW = new Date(2026, 10, 21, 20, 41).getTime(); // Sat 21 Nov
 
@@ -46,5 +47,39 @@ describe('the demo week', () => {
     expect(Math.max(...hours)).toBeGreaterThan(60 * 60_000);
     // Grok reports no usage here, so "not reported" has a line to print.
     expect(r.sessions.some((s) => s.agent === 'grok' && !s.reportsUsage)).toBe(true);
+  });
+
+  it('works on glassbox in a second worktree too, whose changes cross the main tree’s', async () => {
+    const r = await new WeekService(store, { now: () => NOW, repoOf: demoRepo }).compute('7d');
+    const repos = crossings(
+      r.sessions.map((s) => ({ id: s.id, repo: s.repo, files: s.inWindow.files })),
+    );
+    expect(repos.map((c) => c.name)).toEqual(['glassbox']);
+    expect(repos[0]?.trees.map((t) => [t.name, t.main])).toEqual([
+      ['glassbox', true],
+      ['glassbox-sidebar', false],
+    ]);
+    const overlap = new Map(repos[0]?.paths.map((p) => [p.path, p.overlap]));
+    // The open session's fix and the worktree's change meet on one line; elsewhere they part.
+    expect(overlap.get('src/server/store.ts')).toBe(true);
+    expect(overlap.get('src/server/sessions.ts')).toBe(false);
+    expect(overlap.get('src/app.ts')).toBe(null);
+  });
+
+  it('reads a worktree of a demo repository as that repository’s, and opens the week’s sessions', async () => {
+    expect(demoRepo('/Users/demo/Dev/worktrees/glassbox-sidebar')).toEqual({
+      root: '/Users/demo/Dev/glassbox',
+      dir: '/Users/demo/Dev/worktrees/glassbox-sidebar',
+      name: 'glassbox',
+    });
+    expect(demoRepo('/Users/demo/Dev/blog')).toEqual({
+      root: '/Users/demo/Dev/blog',
+      dir: '/Users/demo/Dev/blog',
+      name: 'blog',
+    });
+    // Never listed, but open: the Crossing panel shows their edits.
+    const id = store.weekSessions().find((s) => s.cwd?.includes('/worktrees/'))?.id ?? '';
+    expect(store.listSessions().some((s) => s.id === id)).toBe(false);
+    expect((await store.getSnapshot(id))?.session.id).toBe(id);
   });
 });

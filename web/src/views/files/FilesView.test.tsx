@@ -1,9 +1,13 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ToolCall } from '../../../../src/core/model.js';
-import type { OpenSession } from '../../data/store';
+import { demoRepo } from '../../../../src/server/week-demo.js';
+import type { EditMark } from '../../../../src/shared/crossing.js';
+import type { WeekLine, WeekResult, WeekSession } from '../../../../src/shared/week.js';
+import { createStore, type OpenSession, StoreContext } from '../../data/store';
 import { I18nContext, makeI18n } from '../../i18n';
 import { demoOpen } from '../../test/demo';
+import { demoWeek, WEEK_NOW } from '../../test/week';
 import { UiContext } from '../../ui';
 import { FilesView } from './FilesView';
 import { resetFilesPrefs } from './prefs';
@@ -86,6 +90,20 @@ describe('FilesView', () => {
     expect(rows()).toHaveLength(6);
   });
 
+  it('says on a call which lines its edit changed, as a read says which it read', () => {
+    renderFiles(
+      'main',
+      withTool(demoOpen(), {
+        name: 'Edit',
+        input: { file_path: '/Users/demo/Dev/glassbox/src/x.ts', old_string: 'a', new_string: 'b' },
+        lineChanges: [[41, 1, 3]],
+      }),
+    );
+    fireEvent.click(row(/^x\.ts/));
+    const calls = within(screen.getByRole('list', { name: 'Tool calls' })).getAllByRole('button');
+    expect(calls.map((c) => c.textContent)).toEqual([expect.stringMatching(/^Edit:41-43·edited·/)]);
+  });
+
   it('unfolds a row into the calls behind it, each a link to its card in the execution chain', () => {
     const { navigate, setFollow } = renderFiles();
     fireEvent.click(row(/^store\.ts/));
@@ -95,8 +113,9 @@ describe('FilesView', () => {
       expect.stringMatching(/^Read·read·\d\d:\d\d:\d\d$/),
       expect.stringMatching(/^Edit·Failed·/),
       expect.stringMatching(/^Read:36-65·read·/),
-      expect.stringMatching(/^Edit·edited·/),
-      expect.stringMatching(/^Edit·edited·/),
+      // The two edits that landed, each with the lines Claude Code recorded.
+      expect.stringMatching(/^Edit:41-43·edited·/),
+      expect.stringMatching(/^Edit:36-38·edited·/),
     ]);
     fireEvent.click(calls[3] as HTMLElement);
     expect(setFollow).toHaveBeenCalledWith(false);
@@ -286,5 +305,202 @@ describe('FilesView', () => {
     );
     expect(screen.getByRole('heading', { level: 3, name: '项目根目录' })).toBeInTheDocument();
     expect(row(/^store\.ts/)).toHaveTextContent('修改 ×2 · 读取 ×2 · 1 次失败');
+  });
+});
+
+describe('the Crossing chip', () => {
+  const TREE = '/Users/demo/Dev/worktrees/glassbox-sidebar';
+  beforeEach(() => {
+    localStorage.clear();
+    resetFilesPrefs();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  /**
+   * The demo session open, a session of `other` listed (glassbox's other worktree), the weeks
+   * served one a read (the last again once they run out).
+   */
+  function renderCrossing(
+    locale: 'en' | 'zh' = 'en',
+    other = TREE,
+    weeks: WeekResult[] = [demoWeek('7d')],
+  ) {
+    const open = demoOpen();
+    const store = createStore();
+    const sibling = {
+      ...open.session,
+      id: 'claude-code:sidebar',
+      cwd: other,
+      repo: demoRepo(other),
+    };
+    store.applyEvent({
+      type: 'sessions',
+      sessions: [{ ...open.session, repo: demoRepo(open.session.cwd as string) }, sibling],
+    });
+    let read = 0;
+    const fetched = vi.fn(async (_url: string) => {
+      const line: WeekLine = {
+        type: 'result',
+        result: weeks[Math.min(read++, weeks.length - 1)] as WeekResult,
+      };
+      return new Response(`${JSON.stringify(line)}\n`);
+    });
+    vi.stubGlobal('fetch', fetched);
+    render(
+      <StoreContext.Provider value={store}>
+        <I18nContext.Provider value={makeI18n(locale)}>
+          <UiContext.Provider value={{ follow: true, setFollow: vi.fn() }}>
+            <FilesView open={open} agentId="main" navigate={vi.fn()} />
+          </UiContext.Provider>
+        </I18nContext.Provider>
+      </StoreContext.Provider>,
+    );
+    return { fetched, store, open, sibling };
+  }
+
+  /** The demo's 7 days with the worktree's latest session also changing `file` of the tree. */
+  function withWorktreeChange(file: string): WeekResult {
+    const week = demoWeek('7d');
+    const latest = week.sessions
+      .filter((s) => s.repo?.dir === TREE)
+      .sort((a, b) => b.id.localeCompare(a.id))[0] as WeekSession;
+    const at = WEEK_NOW - 60_000;
+    const path = {
+      path: `${TREE}/${file}`,
+      edited: 1,
+      created: 0,
+      deleted: 0,
+      first: at,
+      last: at,
+      marks: [[at, null]] as EditMark[],
+    };
+    const files = latest.inWindow.files ?? { paths: [], more: 0 };
+    const changed = {
+      ...latest,
+      inWindow: { ...latest.inWindow, files: { ...files, paths: [...files.paths, path] } },
+    };
+    return { ...week, sessions: week.sessions.map((s) => (s === latest ? changed : s)) };
+  }
+
+  it('is not there outside a repository with another worktree at work, and reads no week', () => {
+    const fetched = vi.fn();
+    vi.stubGlobal('fetch', fetched);
+    renderFiles();
+    expect(screen.queryByRole('button', { name: /^Crossing/ })).toBeNull();
+    expect(fetched).not.toHaveBeenCalled();
+  });
+
+  it('is not there when the repository’s other sessions ran in the same worktree', async () => {
+    const { fetched } = renderCrossing('en', '/Users/demo/Dev/glassbox');
+    // Time for a week read, had one started, to arrive and draw the chip.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 30)));
+    expect(fetched).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /^Crossing/ })).toBeNull();
+  });
+
+  it('counts the files another worktree changed too, names it, and shows only those when pressed', async () => {
+    const { fetched } = renderCrossing();
+    const chip = await screen.findByRole('button', { name: /^Crossing/ });
+    expect(fetched.mock.calls[0]?.[0]).toBe('/api/week?window=7d');
+    expect(chip).toHaveTextContent('Crossing2');
+    expect(chip).toHaveAttribute('title', '2 files also changed in glassbox-sidebar');
+    expect(chip).toHaveAttribute('aria-pressed', 'false');
+    // Each such file says where else it changed.
+    expect(row(/^store\.ts/)).toHaveTextContent('also changed in glassbox-sidebar');
+    expect(row(/^store\.test\.ts/)).not.toHaveTextContent('also changed');
+    fireEvent.click(chip);
+    expect(chip).toHaveAttribute('aria-pressed', 'true');
+    expect(rowNames()).toEqual(['sessions.ts', 'store.ts']);
+    fireEvent.click(chip);
+    expect(rows()).toHaveLength(6);
+  });
+
+  it('shows too when a week read before has another worktree’s sessions the list does not (the demo’s)', async () => {
+    const open = demoOpen();
+    const store = createStore();
+    store.applyEvent({
+      type: 'sessions',
+      sessions: [{ ...open.session, repo: demoRepo(open.session.cwd as string) }],
+    });
+    const asked: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        asked.push(url);
+        const line: WeekLine = {
+          type: 'result',
+          result: demoWeek(url.includes('7d') ? '7d' : 'week'),
+        };
+        return new Response(`${JSON.stringify(line)}\n`);
+      }),
+    );
+    // The Stats page read this week before the session was opened.
+    store.weeks.request('week');
+    await vi.waitFor(() => expect(store.weeks.get().week?.result).not.toBeNull());
+    render(
+      <StoreContext.Provider value={store}>
+        <I18nContext.Provider value={makeI18n('en')}>
+          <FilesView open={open} agentId="main" navigate={vi.fn()} />
+        </I18nContext.Provider>
+      </StoreContext.Provider>,
+    );
+    const chip = await screen.findByRole('button', { name: /^Crossing/ });
+    expect(chip).toHaveTextContent('Crossing2');
+    expect(asked).toEqual(['/api/week?window=week', '/api/week?window=7d']);
+  });
+
+  it('reads the week again when another worktree’s session changes, at most twice a minute', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: WEEK_NOW });
+    try {
+      const { fetched, store, open, sibling } = renderCrossing('en', TREE, [
+        demoWeek('7d'),
+        withWorktreeChange('src/server/store.test.ts'),
+      ]);
+      const chip = await screen.findByRole('button', { name: /^Crossing/ });
+      expect(chip).toHaveTextContent('Crossing2');
+      const update = (sec: number) =>
+        act(() =>
+          store.applyEvent({
+            type: 'sessions',
+            sessions: [
+              { ...open.session, repo: demoRepo(open.session.cwd as string) },
+              { ...sibling, updatedAt: new Date(WEEK_NOW + sec * 1000).toISOString() },
+            ],
+          }),
+        );
+      // A moment later: not yet, the last read is too fresh.
+      vi.setSystemTime(WEEK_NOW + 10_000);
+      update(10);
+      expect(fetched).toHaveBeenCalledTimes(1);
+      // Half a minute on, the change is read: the worktree now changed a third file of the session.
+      vi.setSystemTime(WEEK_NOW + 31_000);
+      update(31);
+      await waitFor(() => expect(chip).toHaveTextContent('Crossing3'));
+      expect(fetched).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('says so in a sentence when the other worktree changed none of the session’s files', async () => {
+    const week = demoWeek('7d');
+    renderCrossing('en', TREE, [
+      {
+        ...week,
+        sessions: week.sessions.map((s) =>
+          s.repo?.dir === TREE ? { ...s, inWindow: { ...s.inWindow, files: undefined } } : s,
+        ),
+      },
+    ]);
+    const chip = await screen.findByRole('button', { name: /^Crossing/ });
+    expect(chip).toHaveTextContent('Crossing0');
+    expect(chip).toHaveAttribute('title', 'No file also changed in another worktree');
+  });
+
+  it('speaks Chinese', async () => {
+    renderCrossing('zh');
+    const chip = await screen.findByRole('button', { name: /^交叉/ });
+    expect(chip).toHaveAttribute('title', '2 个文件也在 glassbox-sidebar 里改过');
+    expect(row(/^store\.ts/)).toHaveTextContent('glassbox-sidebar 也改过');
   });
 });

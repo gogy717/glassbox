@@ -13,6 +13,7 @@ import { useWeekCache } from '../../data/store';
 import type { WeekEntry } from '../../data/weeks';
 import { type Locale, useI18n } from '../../i18n';
 import { agentName } from '../../lib/agent-names';
+import { CrossingCard } from './Crossing';
 import {
   CliCard,
   cliRowText,
@@ -78,8 +79,9 @@ function useHeld(on: boolean, ms: number): boolean {
  * The Stats page (D4): this machine's week, the weekly receipt's interactive sibling, from the
  * same results (R30) and the same counts (N6). Its head: the window, its span and sessions, when
  * the data is from, and Print. Then the overview, when the agents worked beside the hour, by CLI,
- * top projects and longest sessions, tokens beside right now. What was read before shows at once
- * while the window is read again; a first read shows its progress over empty cards.
+ * top projects and longest sessions, crossing (when worktrees of a repository were at work), tokens
+ * beside right now. What was read before shows at once while the window is read again; a first
+ * read shows its progress over empty cards.
  */
 export function StatsPage({
   window: kind,
@@ -410,6 +412,7 @@ function Week({
             onPin={onPin}
           />
         </div>
+        <CrossingCard w={w} locale={L} />
         <TokensCard w={w} locale={L} />
       </div>
       <div className={css.column} data-column="side">

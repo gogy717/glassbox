@@ -4,7 +4,7 @@
  * The Files tab's model, and the outcome strip's count of files (`outcome.ts`), so the two agree.
  * It never looks at the file system, so a file is whatever a call named.
  */
-import type { IsoTime, ToolCall } from '../core/model.js';
+import type { IsoTime, LineChange, ToolCall } from '../core/model.js';
 import { field, isObj, isUrl, type Obj, pathField } from './tool-category.js';
 
 export type FileVerb = 'edited' | 'created' | 'deleted' | 'read' | 'searched';
@@ -38,7 +38,10 @@ export type EditDetail =
 export interface RawTouch {
   path: string;
   verb: FileVerb;
-  /** The lines a read named by its offset and limit, as "36-65". */
+  /**
+   * The lines a read named by its offset and limit, as "36-65"; an edit's, where the agent
+   * recorded them (`editLines`).
+   */
   lines: string | null;
   detail: EditDetail;
 }
@@ -195,6 +198,24 @@ function readLines(input: Obj): string | null {
   return typeof l === 'number' ? `${o}-${o + l - 1}` : `${o}`;
 }
 
+/** Runs an edit's lines name before "…". */
+const SHOWN_RUNS = 3;
+
+/**
+ * Where an edit's changes sit in the file as it left it, written as a read's lines are: "41-43",
+ * "36-38, 44-46"; a run only removed reads as the line where it was. Three runs, then "…".
+ */
+export function editLines(changes: readonly LineChange[]): string | null {
+  if (changes.length === 0) return null;
+  let shift = 0;
+  const runs = changes.map(([at, removed, added]) => {
+    const from = at + shift;
+    shift += added - removed;
+    return added > 1 ? `${from}-${from + added - 1}` : `${from}`;
+  });
+  return runs.length > SHOWN_RUNS ? `${runs.slice(0, SHOWN_RUNS).join(', ')}, …` : runs.join(', ');
+}
+
 /** The result of a Write that found the file there (Claude Code says so); a new file otherwise. */
 const OVERWROTE = /has been updated/;
 
@@ -228,13 +249,15 @@ export function touchesOf(tool: ToolCall): RawTouch[] {
   const path = pathField(input);
   if (!path || isUrl(path)) return [];
   const none: EditDetail = { kind: 'none' };
+  // An edit of one file: where it landed, when the agent recorded it.
+  const changed = tool.lineChanges ? editLines(tool.lineChanges) : null;
   if (READERS.has(name)) return [{ path, verb: 'read', lines: readLines(input), detail: none }];
   if (SEARCHERS.has(name))
     return GLOB.test(path) ? [] : [{ path, verb: 'searched', lines: null, detail: none }];
   if (WRITERS.has(name)) {
     const content = CONTENT_KEYS.map((k) => field(input, k)).find((v) => v !== null) ?? '';
     const verb = OVERWROTE.test(tool.resultPreview ?? '') ? 'edited' : 'created';
-    return [{ path, verb, lines: null, detail: { kind: 'write', content } }];
+    return [{ path, verb, lines: changed, detail: { kind: 'write', content } }];
   }
   if (NOTEBOOK_EDITORS.has(name)) {
     const n = input.cell_number;
@@ -250,7 +273,7 @@ export function touchesOf(tool: ToolCall): RawTouch[] {
   if (REPLACERS.has(name)) {
     const edits = replacements(input);
     const detail: EditDetail = edits.length > 0 ? { kind: 'replace', edits } : none;
-    return [{ path, verb: 'edited', lines: null, detail }];
+    return [{ path, verb: 'edited', lines: changed, detail }];
   }
   if (DELETERS.has(name)) return [{ path, verb: 'deleted', lines: null, detail: none }];
   return [];

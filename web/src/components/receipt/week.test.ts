@@ -231,6 +231,16 @@ describe('the weekly receipt’s figures', () => {
     expect(both.sessions).toBe(2);
   });
 
+  it('counts the demo’s worktree of glassbox as glassbox, as the server names it', () => {
+    for (const kind of ['week', '7d'] as const) {
+      const r = demoWeek(kind);
+      expect(r.sessions.some((s) => s.repo?.dir.endsWith('/worktrees/glassbox-sidebar'))).toBe(
+        true,
+      );
+      expect(weekReceipt(r).projects).toBe(6);
+    }
+  });
+
   it('takes the longest session by its own clock, wherever it is listed (C2)', () => {
     const top = busiest(3);
     const [first, second, third] = top;
