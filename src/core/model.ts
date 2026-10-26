@@ -74,6 +74,12 @@ export interface SessionSummary {
    * known: a closed session, one not opened, or an older server. The UI then shows `live`.
    */
   activity?: SessionActivity;
+  /**
+   * The strongest sign that a running session is stuck (`src/shared/trouble.ts`), read by the
+   * server from the session it has open, and read again as time passes; null when it sees none.
+   * Absent when nothing is known: a session not running, not opened, or an older server.
+   */
+  trouble?: TroubleSignal | null;
 }
 
 /**
@@ -103,6 +109,31 @@ export interface SessionActivity {
   /** Who is doing it: `MAIN_AGENT_ID`, or the sub-agent whose work started last. */
   agentId: string;
   /** When it started: the tool call, the model call, the turn's last step, or the idle spell. */
+  since: IsoTime | null;
+}
+
+/**
+ * - 'repeat': the same call `n` times in a row; `x` names it as a row may (a command's summary).
+ * - 'failing': `n` tool calls failed in a row.
+ * - 'errors': `n` of the last `of` model calls failed.
+ * - 'waiting': waiting for the person since `since`, past ten minutes.
+ * - 'long-turn': the running prompt, since `since`, past three times the others' `median` (ms).
+ * - 'compaction': the context was compacted `n` times.
+ */
+export type TroubleKind = 'repeat' | 'failing' | 'errors' | 'waiting' | 'long-turn' | 'compaction';
+
+/** What a sign points at: a tool call, a model call or a prompt, and whose it is. */
+export type TroubleRef =
+  | { kind: 'tool'; agentId: string; requestId: string; toolCallId: string }
+  | { kind: 'request'; agentId: string; requestId: string }
+  | { kind: 'turn'; agentId: string; turnId: string };
+
+/** One sign of trouble, as data the UI words by its kind; the server sends no sentences. */
+export interface TroubleSignal {
+  kind: TroubleKind;
+  params: Record<string, string | number>;
+  at: TroubleRef | null;
+  /** When it began: the first call of the streak, the first error, the wait, the prompt. */
   since: IsoTime | null;
 }
 

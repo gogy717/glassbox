@@ -92,14 +92,15 @@ export { isActive } from './live.js';
 
 /**
  * The summary under the latest polled live state. An open session's parser hears of a change
- * at once but may send its next summary up to a patch gap later: its activity was worked out
- * for the old state, so it goes until then. Idle sessions are not opened in the background;
- * their activity needs nothing a parser knows: idle since the last write.
+ * at once but may send its next summary up to a patch gap later: its activity and its sign of
+ * trouble were worked out for the old state, so they go until then. Idle sessions are not
+ * opened in the background; their activity needs nothing a parser knows: idle since the last
+ * write.
  */
 export function listedSummary(summary: SessionSummary, live = summary.live): SessionSummary {
   let next = summary;
   if (summary.live !== live) {
-    const { activity: _stale, ...rest } = summary;
+    const { activity: _stale, trouble: _staleSign, ...rest } = summary;
     next = { ...rest, live };
   }
   if (live !== 'idle' || next.activity) return next;
@@ -262,7 +263,7 @@ export class SessionStore implements WeekStore {
     if (!entry || this.stopped) return null;
     const open = entry.open ?? (entry.opening ? await entry.opening.catch(() => null) : null);
     if (this.stopped) return null;
-    if (open) return { snapshot: open.parser.snapshot(), bytes: 0 };
+    if (open) return { snapshot: open.snapshot(), bytes: 0 };
     const once = new OpenSession(entry.adapter, entry.source, {
       patchMs: this.opts.patchMs,
       pollMs: this.opts.pollMs,
@@ -301,7 +302,7 @@ export class SessionStore implements WeekStore {
 
   async getSnapshot(sessionId: string): Promise<SessionSnapshot | null> {
     const open = await this.openById(sessionId);
-    return open ? open.parser.snapshot() : null;
+    return open ? open.snapshot() : null;
   }
 
   async getRequestDetail(sessionId: string, requestId: string): Promise<RequestDetail | null> {
@@ -411,6 +412,7 @@ export class SessionStore implements WeekStore {
       chunkBytes: this.opts.chunkBytes,
       live: entry.live,
       log: this.opts.log,
+      now: this.opts.now,
       onBackfill: () => this.rate.absorbNext(id),
       onSummary: (summary) => {
         if (entry.open !== session && entry.opening === null) return;
@@ -560,6 +562,8 @@ export class SessionStore implements WeekStore {
         } catch (err) {
           this.opts.log(`session ${entry.summary.id}: watch dirs failed: ${errorText(err)}`);
         }
+        // A wait or a prompt runs on with nothing written: its signs are read again each poll.
+        entry.open?.refreshTrouble();
       }
     }
     this.notifySessions();

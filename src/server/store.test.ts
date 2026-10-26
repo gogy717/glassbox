@@ -12,7 +12,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createDemoQuota } from '../core/fixtures/demo.js';
+import { createDemoQuota, createDemoSessions } from '../core/fixtures/demo.js';
 import { checkSnapshot } from '../core/invariants.js';
 import type {
   QuotaSnapshot,
@@ -33,7 +33,7 @@ import {
   lines,
   rec,
 } from './__tests__/fake-adapter.js';
-import { SessionStore, type SessionStoreOptions } from './store.js';
+import { listedSummary, SessionStore, type SessionStoreOptions } from './store.js';
 
 let root: string;
 let fake: FakeAdapter;
@@ -480,6 +480,72 @@ describe('SessionStore', () => {
     await sleep(250);
 
     expect(patches).toEqual([]);
+  });
+});
+
+describe('SessionStore signs of trouble', () => {
+  const npmTest = (id: string) => rec.tool(id, 'ra', 'Bash', { command: 'npm test -- --run' });
+
+  it('sends a running session’s strongest sign in its listed and patched summary', async () => {
+    const p = await session('a', rec.req('ra', T(1)), npmTest('t1'), npmTest('t2'));
+    await setLive({ a: 'busy' });
+    const s = await startStore();
+    await vi.waitFor(() => expect(s.listSessions()[0]?.trouble).toBeNull(), { timeout: 5000 });
+    const patches: SessionPatch[] = [];
+    s.onPatch(p.id, (x) => patches.push(x));
+
+    await appendFile(p.main, lines(npmTest('t3')));
+
+    const sign = {
+      kind: 'repeat',
+      // What a row may show of it: the command's summary, never its line.
+      params: { x: 'npm test', n: 3 },
+      at: { kind: 'tool', agentId: 'main', requestId: 'ra', toolCallId: 't3' },
+      since: T(1),
+    };
+    await vi.waitFor(() => expect(s.listSessions()[0]?.trouble).toEqual(sign), { timeout: 5000 });
+    // Patches carry it too, so a client's list keeps it.
+    await appendFile(p.main, lines(rec.title('Still looping')));
+    await vi.waitFor(() => expect(patches.at(-1)?.session.title).toBe('Still looping'), {
+      timeout: 5000,
+    });
+    expect(patches.at(-1)?.session.trouble).toEqual(sign);
+    expect((await s.getSnapshot(p.id))?.session.trouble).toEqual(sign);
+  });
+
+  it('carries none for a session that is not running, open or not', async () => {
+    const p = await session('a', rec.req('ra', T(1)), npmTest('t1'), npmTest('t2'), npmTest('t3'));
+    const s = await startStore();
+    await s.getSnapshot(p.id);
+    expect(s.listSessions()[0]).not.toHaveProperty('trouble');
+    expect((await s.getSnapshot(p.id))?.session).not.toHaveProperty('trouble');
+  });
+
+  it('reads them again as time passes: a wait becomes a sign with nothing written', async () => {
+    let now = Date.parse(T(1)) + 5 * 60_000;
+    await session('a', rec.req('ra', T(1)));
+    await setLive({ a: 'waiting' });
+    const s = await startStore({ now: () => now });
+    await vi.waitFor(() => expect(s.listSessions()[0]?.trouble).toBeNull(), { timeout: 5000 });
+
+    now += 6 * 60_000;
+
+    await vi.waitFor(() => expect(s.listSessions()[0]?.trouble?.kind).toBe('waiting'), {
+      timeout: 5000,
+    });
+    expect(s.listSessions()[0]?.trouble?.since).toBe(T(1));
+  });
+
+  it('drops a sign worked out for a live state the poll has since replaced', () => {
+    const sign = { kind: 'waiting' as const, params: {}, at: null, since: T(1) };
+    const waiting: SessionSummary = {
+      ...createDemoSessions()[0],
+      live: 'waiting',
+      trouble: sign,
+    } as SessionSummary;
+    expect(listedSummary(waiting, 'waiting').trouble).toEqual(sign);
+    expect(listedSummary(waiting, 'busy')).not.toHaveProperty('trouble');
+    expect(listedSummary(waiting, 'closed')).not.toHaveProperty('trouble');
   });
 });
 

@@ -27,6 +27,12 @@ describe('DemoStore', () => {
     expect(list).toHaveLength(3);
   });
 
+  it('reads the running demo session’s signs of trouble as the server does; the rest carry none', () => {
+    const [demo, ...rest] = store.listSessions();
+    expect(demo).toHaveProperty('trouble', null);
+    for (const s of rest) expect(s).not.toHaveProperty('trouble');
+  });
+
   // The sidebar offers every listed session; each must open (audit #25).
   it('opens every session it lists, with its details and results', async () => {
     for (const { id } of store.listSessions()) {

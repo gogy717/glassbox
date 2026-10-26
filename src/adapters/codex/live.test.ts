@@ -215,10 +215,10 @@ describe('a Codex home reached through a symlink', () => {
     const settled = async () => {
       const after = (await s.getSnapshot(id)) as SessionSnapshot;
       parser.setLive(after.session.live);
-      // Stamped when each parser was told the live state.
+      // Stamped when each parser was told the live state; the sign of trouble is the server's.
       const stamp = (snap: SessionSnapshot) => ({
         ...snap,
-        session: { ...snap.session, updatedAt: null },
+        session: { ...snap.session, updatedAt: null, trouble: undefined },
       });
       expect(stamp(after)).toEqual(stamp(parser.snapshot()));
     };

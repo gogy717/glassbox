@@ -28,7 +28,9 @@ import {
   type RateKind,
   type TokenRate,
 } from '../shared/rate.js';
+import { detectTrouble } from '../shared/trouble.js';
 import type { AppStore } from './app.js';
+import { troubleLabel } from './open-session.js';
 import { RateTracker } from './rate.js';
 import { compareSessions, isActive, listedSummary } from './store.js';
 import { type WeekRead, WeekService, type WeekStore } from './week.js';
@@ -552,11 +554,14 @@ export class DemoStore implements AppStore, WeekStore {
     this.refreshActivity();
   }
 
-  /** What the demo session is doing, worked out as a parser would. */
+  /**
+   * What the demo session is doing, worked out as a parser would, and its strongest sign of
+   * trouble as the server reads one of a session it has open.
+   */
   private refreshActivity(): void {
     const s = this.snap;
-    const { activity: _old, ...session } = s.session;
-    s.session = {
+    const { activity: _old, trouble: _sign, ...session } = s.session;
+    const next: SessionSummary = {
       ...session,
       ...activityField({
         live: s.session.live,
@@ -566,6 +571,18 @@ export class DemoStore implements AppStore, WeekStore {
         updatedAt: s.session.updatedAt,
       }),
     };
+    if (isActive(next.live)) {
+      const byId = <T extends { id: string }>(items: T[]) => new Map(items.map((x) => [x.id, x]));
+      const input = {
+        session: next,
+        agents: byId(s.agents),
+        turns: byId(s.turns),
+        requests: byId(s.requests),
+        toolCalls: byId(s.toolCalls),
+      };
+      next.trouble = detectTrouble(input, MAIN_AGENT_ID, Date.now(), troubleLabel)[0] ?? null;
+    }
+    s.session = next;
   }
 
   private snapshotOf(sessionId: string): SessionSnapshot | undefined {

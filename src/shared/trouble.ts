@@ -11,44 +11,25 @@ import type {
   ModelRequest,
   SessionSummary,
   ToolCall,
+  TroubleKind,
+  TroubleRef,
+  TroubleSignal,
   Turn,
 } from '../core/model.js';
 import { MAIN_AGENT_ID } from '../core/model.js';
 import { SHELL_TOOLS, shellCommand } from './tool-category.js';
 
+export type { TroubleKind, TroubleRef, TroubleSignal };
+
 /** Strongest first: the order in which the summary bar lists them, and the server picks one. */
-export const TROUBLE_KINDS = [
+export const TROUBLE_KINDS: readonly TroubleKind[] = [
   'repeat',
   'failing',
   'errors',
   'waiting',
   'long-turn',
   'compaction',
-] as const;
-export type TroubleKind = (typeof TROUBLE_KINDS)[number];
-
-/** What a sign points at: a tool call, a model call or a prompt, with whose it is. */
-export type TroubleRef =
-  | { kind: 'tool'; agentId: string; requestId: string; toolCallId: string }
-  | { kind: 'request'; agentId: string; requestId: string }
-  | { kind: 'turn'; agentId: string; turnId: string };
-
-/**
- * One sign of trouble, as data: the UI words it by `kind` from `params`, never a sentence.
- * - 'repeat': `n` calls in a row the same; `x` names the call.
- * - 'failing': `n` tool calls failed in a row.
- * - 'errors': `n` of the last `of` model calls failed.
- * - 'waiting': waiting for the person, since `since`.
- * - 'long-turn': the running prompt, since `since`, against the others' `median` (ms).
- * - 'compaction': the context was compacted `n` times.
- */
-export interface TroubleSignal {
-  kind: TroubleKind;
-  params: Record<string, string | number>;
-  at: TroubleRef | null;
-  /** When it began: the first call of the streak, the first error, the wait, the prompt. */
-  since: IsoTime | null;
-}
+];
 
 type Agent = Pick<AgentNode, 'id' | 'parentId' | 'status'>;
 type Prompt = Pick<Turn, 'id' | 'agentId' | 'startedAt' | 'endedAt' | 'status'>;
