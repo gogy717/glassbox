@@ -182,7 +182,7 @@ describe('FlowView', () => {
     ]);
     expect(items[0]).toHaveAttribute('aria-current', 'true');
     expect(within(items[0] as HTMLElement).getAllByText('Running')[0]).toBeInTheDocument();
-    expect(items[2]).toHaveTextContent('3 calls · 3 tools');
+    expect(items[2]).toHaveTextContent('3 calls · 11 tools');
     // A complete turn is a quiet check, named for screen readers.
     expect(
       within(items[2] as HTMLElement).getAllByRole('img', { name: 'Complete' })[0],
@@ -389,7 +389,8 @@ describe('FlowView', () => {
     expect(within(second).getAllByText('Failed', { selector: '[data-status-label]' })).toHaveLength(
       2,
     );
-    const edit = within(second).getByRole('button', { name: /^Edit/ });
+    // The first Edit card is the one that failed; the two after it landed.
+    const edit = within(second).getAllByRole('button', { name: /^Edit/ })[0] as HTMLElement;
     expect(within(edit).getByText('Failed', { selector: '[data-status-label]' })).toBeVisible();
 
     expect(within(row(3)).getByText('Final reply')).toBeInTheDocument();
@@ -458,10 +459,10 @@ describe('FlowView', () => {
     renderFlow({ route: { turnId: 'turn_m1' }, follow: false });
     fireEvent.click(within(row(1)).getByRole('button', { name: /^Response/ }));
     expect(within(row(1)).getByRole('region', { name: 'Response details' })).toBeInTheDocument();
-    fireEvent.click(within(row(2)).getByRole('button', { name: /^Edit/ }));
+    fireEvent.click(within(row(2)).getAllByRole('button', { name: /^Edit/ })[0] as HTMLElement);
     expect(within(row(1)).queryByRole('region')).toBeNull();
     expect(within(row(2)).getByRole('region', { name: 'Tool call details' })).toBeInTheDocument();
-    fireEvent.click(within(row(2)).getByRole('button', { name: /^Edit/ }));
+    fireEvent.click(within(row(2)).getAllByRole('button', { name: /^Edit/ })[0] as HTMLElement);
     expect(screen.queryByRole('region', { name: /details/ })).toBeNull();
     vi.unstubAllGlobals();
   });
@@ -546,7 +547,7 @@ describe('FlowView', () => {
       vi.fn(async () => new Response('{}', { status: 404 })),
     );
     const { navigate, setFollow } = renderFlow({ route: { turnId: 'turn_m1' }, follow: false });
-    fireEvent.click(within(row(2)).getByRole('button', { name: /^Edit/ }));
+    fireEvent.click(within(row(2)).getAllByRole('button', { name: /^Edit/ })[0] as HTMLElement);
     expect(navigate).toHaveBeenLastCalledWith(
       { turnId: 'turn_m1', requestId: 'req_m2', card: 'tool:tu_m2b' },
       { replace: true },
@@ -554,7 +555,7 @@ describe('FlowView', () => {
     expect(setFollow).toHaveBeenCalledWith(false);
     // A clicked call is where the reader is: not marked like a linked one.
     expect(row(2)).not.toHaveAttribute('data-focused');
-    fireEvent.click(within(row(2)).getByRole('button', { name: /^Edit/ }));
+    fireEvent.click(within(row(2)).getAllByRole('button', { name: /^Edit/ })[0] as HTMLElement);
     expect(navigate).toHaveBeenLastCalledWith(
       { requestId: null, card: undefined },
       { replace: true },

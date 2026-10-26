@@ -53,6 +53,14 @@ describe('CallRow strip', () => {
       'Response',
       'Read',
       'Edit',
+      'Read',
+      'Edit',
+      'Edit',
+      'Write',
+      'MultiEdit',
+      'NotebookEdit',
+      'Read',
+      'Read',
     ]);
     for (const card of rest) expect(leadingArrow(card)).toBe(true);
   });
@@ -133,7 +141,7 @@ describe('CallRow why line', () => {
   it('says nothing for a call that only ran tools, and leaves the cards’ summaries as they were', () => {
     const row = renderRow('req_m2', []);
     expect(why(row)).toBeNull();
-    expect(within(row).getByRole('group', { name: 'Read' })).toHaveTextContent('store.ts');
+    expect(within(row).getAllByRole('group', { name: 'Read' })[0]).toHaveTextContent('store.ts');
   });
 
   // A call in flight with nothing said: req_m2 has one tool of its own, a Read.

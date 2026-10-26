@@ -4,7 +4,8 @@
  * receipt drew before its pen was shared with the weekly receipt (78cb423), then with WORK's
  * turns line saying "Prompts", not "Conversations" (the UX pass's words). Changing how the
  * session receipt looks changes it on purpose: then the hash changes in the same commit, which
- * says why.
+ * says why. So does changing what the demo sessions did: the receipt prints their tool calls and
+ * the mix of their kinds (the demo's fix grew file work; the pen did not change).
  */
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, expect, it } from 'vitest';
@@ -45,6 +46,6 @@ function receipts(): string {
 
 it('draws the session receipt exactly as it did before the weekly receipt shared its pen', () => {
   expect(createHash('sha256').update(receipts()).digest('hex')).toBe(
-    '72424e095021b4e7073af16f53fc6fa9764372877bfee591612760b0415c12ec',
+    '3fb162e6b8f315cce07c81bc3b2d466b4db6b9d2ecbb4797f9d5e2e3130fe013',
   );
 });

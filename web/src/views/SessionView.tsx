@@ -12,9 +12,11 @@ import { FlowView } from './flow/FlowView';
 import css from './SessionView.module.css';
 import { StepsView } from './steps/StepsView';
 
-// The charts' views load on first use: the app's first chunk stays under Vite's 500 kB line.
+// The charts' and files' views load on first use: the app's first chunk stays under Vite's
+// 500 kB line.
 const TimeView = lazyView(() => import('./time/TimeView').then((m) => m.TimeView));
 const TokensView = lazyView(() => import('./tokens/TokensView').then((m) => m.TokensView));
+const FilesView = lazyView(() => import('./files/FilesView').then((m) => m.FilesView));
 
 interface Props {
   open: OpenSession;
@@ -98,6 +100,7 @@ export function SessionView({ open, route, navigate, live = null, rateAgent = nu
           {route.tab === 'tokens' && (
             <TokensView open={open} agentId={agentId} navigate={navigate} />
           )}
+          {route.tab === 'files' && <FilesView open={open} agentId={agentId} navigate={navigate} />}
         </Suspense>
       </div>
     </div>

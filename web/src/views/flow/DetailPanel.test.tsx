@@ -147,7 +147,7 @@ describe('DetailPanel', () => {
     const copied = JSON.parse(writeText.mock.calls[0]?.[0] ?? '');
     expect(copied).toMatchObject({
       name: 'Edit',
-      input: { file_path: '/repo/src/server/store.ts' },
+      input: { file_path: '/Users/demo/Dev/glassbox/src/server/store.ts' },
     });
   });
 

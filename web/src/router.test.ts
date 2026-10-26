@@ -32,6 +32,11 @@ describe('parseRoute', () => {
     });
   });
 
+  it('knows the files tab', () => {
+    expect(parseRoute('#/s/x?tab=files')).toEqual({ ...HOME, sessionId: 'x', tab: 'files' });
+    expect(formatRoute({ ...HOME, sessionId: 'x', tab: 'files' })).toBe('#/s/x?tab=files');
+  });
+
   it('treats a malformed escape in the session id as the home route instead of throwing', () => {
     expect(parseRoute('#/s/%E0%A4%A')).toEqual(HOME);
   });

@@ -78,7 +78,7 @@ describe('timeBreakdown', () => {
     expect(b.model.thinking).toBeCloseTo(141_800, -1);
     expect(b.model.generating).toBeCloseTo(39_200, -1);
     expect(b.model.waiting).toBe(0);
-    expect(b.tools).toEqual({ explore: 550, edit: 50, delegate: 250 });
+    expect(b.tools).toEqual({ explore: 830, edit: 390, delegate: 250 });
     near(b.idle, 2_214_000);
   });
 });

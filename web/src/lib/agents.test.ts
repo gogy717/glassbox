@@ -57,7 +57,7 @@ describe('summarize', () => {
     expect(s).toEqual({
       turns: 3,
       requests: 28,
-      toolCalls: 24,
+      toolCalls: 32,
       activeMs: 184_000,
       // From the first prompt (two seconds into the demo's 40 minutes) to now: turn 3 runs.
       span: { start: NOW.getTime() - 40 * 60_000 + 2_000, end: NOW.getTime() },

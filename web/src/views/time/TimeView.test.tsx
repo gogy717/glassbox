@@ -75,8 +75,8 @@ describe('TimeView', () => {
     ).toEqual([
       'Thinking2m21s',
       'Generating39s',
-      'Tools · Explore550ms',
-      'Tools · Edit50ms',
+      'Tools · Explore830ms',
+      'Tools · Edit390ms',
       'Tools · Delegate250ms',
       'Idle (between prompts)36m54s',
     ]);
@@ -289,7 +289,7 @@ describe('TimeView', () => {
     const items = within(totals)
       .getAllByRole('listitem')
       .map((li) => li.textContent);
-    expect(items[0]).toBe('3m1s');
+    expect(items[0]).toBe('3m2s');
     expect(items[1]).toBe('1m12s');
   });
 

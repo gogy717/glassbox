@@ -2,7 +2,7 @@ import { useCallback, useSyncExternalStore } from 'react';
 import { MAIN_AGENT_ID } from '../../src/core/model.js';
 import { type WeekWindowKind, weekStart } from '../../src/shared/week.js';
 
-export const TABS = ['flow', 'steps', 'tokens', 'time'] as const;
+export const TABS = ['flow', 'steps', 'tokens', 'time', 'files'] as const;
 export type Tab = (typeof TABS)[number];
 
 /** The three pages of the top bar's nav. */

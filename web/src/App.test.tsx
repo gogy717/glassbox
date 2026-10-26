@@ -278,7 +278,7 @@ describe('App', () => {
       within(summary).getByText(label).parentElement?.querySelector('[data-value]')?.textContent;
     expect(value('Prompts')).toBe('3');
     expect(value('Model calls')).toBe('28');
-    expect(value('Tool calls')).toBe('24');
+    expect(value('Tool calls')).toBe('32');
     expect(value('Active time')).toBe('3m4s');
     expect(value('Input')).toBe('1.84M');
     expect(value('Cache hit')).toBe('86.0%');
@@ -291,6 +291,7 @@ describe('App', () => {
       'How it worked',
       'Where tokens went',
       'Timeline',
+      'Files',
     ]);
     expect(screen.getByRole('tabpanel')).toContainElement(
       screen.getByRole('list', { name: 'Prompts' }),
@@ -336,6 +337,18 @@ describe('App', () => {
     render(<App store={demoStore()} connect={noConnect} />);
     expect(screen.getByRole('tabpanel')).toContainElement(
       await screen.findByRole('img', { name: 'Timeline per agent' }),
+    );
+  });
+
+  it('shows the files tab, loaded on first use', async () => {
+    window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}?tab=files`;
+    render(<App store={demoStore()} connect={noConnect} />);
+    expect(screen.getByRole('tab', { name: 'Files' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tabpanel')).toContainElement(
+      await screen.findByRole('heading', { level: 3, name: 'src/server' }),
+    );
+    expect(screen.getByText(/files edited/).closest('p')).toHaveTextContent(
+      '3 files edited · 1 created · 3 read · Main',
     );
   });
 
@@ -602,18 +615,24 @@ describe('App', () => {
     render(<App store={demoStore()} connect={noConnect} runs={fakeRuns()} />);
     const tab = (name: string) => screen.getByRole('tab', { name });
     expect(tab('Execution chain')).toHaveAttribute('tabindex', '0');
-    expect(tab('Timeline')).toHaveAttribute('tabindex', '-1');
+    expect(tab('Files')).toHaveAttribute('tabindex', '-1');
     tab('Execution chain').focus();
     fireEvent.keyDown(tab('Execution chain'), { key: 'ArrowRight' });
     expect(tab('How it worked')).toHaveFocus();
     await waitFor(() => expect(window.location.hash).toContain('tab=steps'));
+    // Files is the last tab: End lands on it, and it wraps round to the first.
     fireEvent.keyDown(tab('How it worked'), { key: 'End' });
+    expect(tab('Files')).toHaveFocus();
+    await waitFor(() => expect(window.location.hash).toContain('tab=files'));
+    fireEvent.keyDown(tab('Files'), { key: 'ArrowLeft' });
     expect(tab('Timeline')).toHaveFocus();
     fireEvent.keyDown(tab('Timeline'), { key: 'ArrowRight' });
+    expect(tab('Files')).toHaveFocus();
+    fireEvent.keyDown(tab('Files'), { key: 'ArrowRight' });
     expect(tab('Execution chain')).toHaveFocus();
     fireEvent.keyDown(tab('Execution chain'), { key: 'ArrowLeft' });
-    expect(tab('Timeline')).toHaveFocus();
-    fireEvent.keyDown(tab('Timeline'), { key: 'Home' });
+    expect(tab('Files')).toHaveFocus();
+    fireEvent.keyDown(tab('Files'), { key: 'Home' });
     expect(tab('Execution chain')).toHaveFocus();
   });
 

@@ -3,7 +3,8 @@
  * component tests. Times are relative to `now` so in-flight timers look alive.
  *
  * It covers: a main agent with three turns, a background sub-agent, a two-phase workflow
- * run with three agents, a failed tool, a running tool and an in-flight request.
+ * run with three agents, a failed tool, a running tool, an in-flight request, and the file work
+ * of a fix (reads, edits that miss and land, a new file, a two-part edit, a notebook cell).
  */
 import type {
   AgentNode,
@@ -23,6 +24,8 @@ import { MAIN_AGENT_ID } from '../model.js';
 import { emptyUsage, sumUsage } from '../usage.js';
 
 export const DEMO_SESSION_ID = 'claude-code:demo-0000-4000-8000-000000000001';
+/** The demo session's working directory; its file tool calls name paths under it. */
+export const DEMO_CWD = '/Users/demo/Dev/glassbox';
 
 interface DemoRequestSpec {
   id: string;
@@ -161,11 +164,14 @@ export function createDemoSnapshot(now: Date = new Date()): SessionSnapshot {
     write: 3_400,
     out: 1_540,
     think: 1_100,
+    // The fix as file work: a read, an edit that misses, the lines read again, two edits that
+    // land, a new test, a two-part edit of a second file, a notebook cell, two more reads. All
+    // within the 0.8 s before req_m3, so no request, turn or token figure moves.
     tools: [
       {
         id: 'tu_m2a',
         name: 'Read',
-        input: { file_path: '/repo/src/server/store.ts' },
+        input: { file_path: `${DEMO_CWD}/src/server/store.ts` },
         durSec: 0.15,
         result: '1\timport { readdir } from "node:fs/promises";\n2\t…',
       },
@@ -173,13 +179,118 @@ export function createDemoSnapshot(now: Date = new Date()): SessionSnapshot {
         id: 'tu_m2b',
         name: 'Edit',
         input: {
-          file_path: '/repo/src/server/store.ts',
+          file_path: `${DEMO_CWD}/src/server/store.ts`,
           old_string: 'a.updatedAt',
           new_string: 'b.updatedAt',
         },
         durSec: 0.05,
         result: '<tool_use_error>String to replace not found in file.</tool_use_error>',
         error: true,
+      },
+      {
+        id: 'tu_m2c',
+        name: 'Read',
+        input: { file_path: `${DEMO_CWD}/src/server/store.ts`, offset: 36, limit: 30 },
+        durSec: 0.1,
+        result: '36\texport function sortSessions(sessions: Session[]): Session[] {\n37\t…',
+      },
+      {
+        id: 'tu_m2d',
+        name: 'Edit',
+        input: {
+          file_path: `${DEMO_CWD}/src/server/store.ts`,
+          old_string: 'return sessions.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));',
+          new_string: [
+            'return sessions.sort(',
+            '  (a, b) => busyFirst(a, b) || b.updatedAt.localeCompare(a.updatedAt),',
+            ');',
+          ].join('\n'),
+        },
+        durSec: 0.06,
+        result: `The file ${DEMO_CWD}/src/server/store.ts has been updated.`,
+      },
+      {
+        id: 'tu_m2e',
+        name: 'Edit',
+        input: {
+          file_path: `${DEMO_CWD}/src/server/store.ts`,
+          old_string: 'export function sortSessions(',
+          new_string: [
+            '/** Busy sessions first; the rest keep their order. */',
+            'const busyFirst = (a: Session, b: Session) => Number(isBusy(b)) - Number(isBusy(a));',
+            '',
+            'export function sortSessions(',
+          ].join('\n'),
+        },
+        durSec: 0.06,
+        result: `The file ${DEMO_CWD}/src/server/store.ts has been updated.`,
+      },
+      {
+        id: 'tu_m2f',
+        name: 'Write',
+        input: {
+          file_path: `${DEMO_CWD}/src/server/store.test.ts`,
+          content: [
+            "import { describe, expect, it } from 'vitest';",
+            "import { sortSessions } from './store.js';",
+            '',
+            "describe('sortSessions', () => {",
+            "  it('lists busy sessions first, then by most recent update', () => {",
+            "    const sorted = sortSessions([idle('10:00'), busy('09:00'), idle('11:00')]);",
+            "    expect(sorted.map((s) => s.live)).toEqual(['busy', 'idle', 'idle']);",
+            '  });',
+            '});',
+            '',
+          ].join('\n'),
+        },
+        durSec: 0.08,
+        result: `File created successfully at: ${DEMO_CWD}/src/server/store.test.ts`,
+      },
+      {
+        id: 'tu_m2g',
+        name: 'MultiEdit',
+        input: {
+          file_path: `${DEMO_CWD}/src/server/sessions.ts`,
+          edits: [
+            {
+              old_string: "import { sortSessions } from './store.js';",
+              new_string: "import { isBusy, sortSessions } from './store.js';",
+            },
+            {
+              old_string: "const busy = s.live === 'busy' || s.live === 'waiting';",
+              new_string: 'const busy = isBusy(s);',
+            },
+          ],
+        },
+        durSec: 0.07,
+        result: `Applied 2 edits to ${DEMO_CWD}/src/server/sessions.ts`,
+      },
+      {
+        id: 'tu_m2h',
+        name: 'NotebookEdit',
+        input: {
+          notebook_path: `${DEMO_CWD}/notes/sorting.ipynb`,
+          cell_id: 'cell-3',
+          cell_type: 'code',
+          edit_mode: 'replace',
+          new_source: 'sessions.sort(key=lambda s: (not s.busy, s.updated_at), reverse=True)',
+        },
+        durSec: 0.07,
+        result: 'Cell cell-3 replaced.',
+      },
+      {
+        id: 'tu_m2i',
+        name: 'Read',
+        input: { file_path: `${DEMO_CWD}/src/core/model.ts` },
+        durSec: 0.1,
+        result: '1\t/**\n2\t * Agent-neutral data model.\n3\t…',
+      },
+      {
+        id: 'tu_m2j',
+        name: 'Read',
+        input: { file_path: `${DEMO_CWD}/README.md`, offset: 1, limit: 40 },
+        durSec: 0.08,
+        result: '1\t# glassbox\n2\t…',
       },
     ],
   });
@@ -472,7 +583,7 @@ export function createDemoSnapshot(now: Date = new Date()): SessionSnapshot {
     agent: 'claude-code',
     nativeId: 'demo-0000-4000-8000-000000000001',
     title: 'Live viewer research (demo)',
-    cwd: '/Users/demo/Dev/glassbox',
+    cwd: DEMO_CWD,
     project: 'glassbox',
     startedAt: at(0),
     updatedAt: now.toISOString(),

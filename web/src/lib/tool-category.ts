@@ -86,6 +86,15 @@ function stringInput(tool: ToolCall, input: string): string {
 }
 
 /**
+ * The path a call's input names, whatever the agent calls the key (`file_path`, `filePath`,
+ * `path`, `target_file`…), as written: a search's directory as much as a read's file, a URL as
+ * much as a path. Null when the input names none.
+ */
+export function pathField(input: unknown): string | null {
+  return PATH_KEYS.map((k) => field(input, k)).find(Boolean) ?? null;
+}
+
+/**
  * The file a call's summary names by its basename (a read, an edit, a listing), whole, so a view
  * with room can show more of it; null when the summary is something else (a command, a pattern,
  * a URL, a glob).
@@ -95,7 +104,7 @@ export function inputPath(tool: ToolCall): string | null {
   if (!isObj(input) || tool.name === 'glob' || tool.name === 'Workflow') return null;
   const f = (k: string) => field(input, k);
   if (shellCommand(input) || f('pattern') || f('query') || f('url')) return null;
-  const path = PATH_KEYS.map(f).find(Boolean);
+  const path = pathField(input);
   return path && !isUrl(path) ? path : null;
 }
 
