@@ -11,6 +11,7 @@ import type {
   SessionSnapshot,
   SessionSummary,
 } from '../core/model.js';
+import type { SessionContextBill } from './context-bill.js';
 import type { TokenRate } from './rate.js';
 import type { RunState } from './runs.js';
 
@@ -53,6 +54,12 @@ export const api = {
   /** GET → RequestDetail. 404 when the request is unknown. */
   requestDetail: (sessionId: string, requestId: string) =>
     `/api/sessions/${enc(sessionId)}/requests/${enc(requestId)}/detail`,
+  /**
+   * GET → ContextBillResponse: what the agent's finished requests carried in their contexts
+   * (`context-bill.ts`). 404 when the session is unknown; an agent without requests has none.
+   */
+  contextBill: (sessionId: string, agentId: string) =>
+    `/api/sessions/${enc(sessionId)}/context?agent=${enc(agentId)}`,
   /** GET → ToolResultResponse. 404 when the tool call is unknown. */
   toolResult: (sessionId: string, toolCallId: string) =>
     `/api/sessions/${enc(sessionId)}/tool-calls/${enc(toolCallId)}/result`,
@@ -67,6 +74,7 @@ export const api = {
 export type SessionsResponse = SessionSummary[];
 export type SessionResponse = SessionSnapshot;
 export type RequestDetailResponse = RequestDetail;
+export type ContextBillResponse = SessionContextBill;
 export interface ToolResultResponse {
   toolCallId: string;
   result: unknown;

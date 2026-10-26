@@ -75,6 +75,9 @@
   --seg-thinking: #9b8bd6;
   --seg-generating: #5fb37a;
   --seg-waiting: #c9ced5;
+  /* The context bill's quiet neutral: the system prompt and tools an agent sends with every
+     request, beside the person's blue, the model's green and the tools' amber. */
+  --part-fixed: #c9ced5;
   /* Blocked on the person answering a permission prompt; follows the theme's warning colour. */
   --seg-approval: var(--warning);
 
@@ -212,6 +215,7 @@
     --card-tool-bg: #35291f;
     --card-tool-text: #ffc98f;
     --seg-waiting: #3d434b;
+    --part-fixed: #656b73;
     --cat-explore: #3987e5;
     --cat-edit: #d95926;
     --cat-run: #199e70;
@@ -280,6 +284,7 @@
   --card-tool-bg: #35291f;
   --card-tool-text: #ffc98f;
   --seg-waiting: #3d434b;
+  --part-fixed: #656b73;
   --cat-explore: #3987e5;
   --cat-edit: #d95926;
   --cat-run: #199e70;

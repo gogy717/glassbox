@@ -59,7 +59,25 @@ describe('DemoStore', () => {
     expect(await store.getSnapshot('claude-code:nope')).toBeNull();
 
     expect((await store.getRequestDetail(DEMO_SESSION_ID, 'req_m1'))?.completeness).toBe('full');
+    // What each request sent: the conversation so far, made up from the demo (demo-detail.ts).
+    const sent = await store.getRequestDetail(DEMO_SESSION_ID, 'req_m3');
+    expect(sent?.messages?.map((m) => (m as { role: string }).role)).toEqual([
+      'user',
+      'assistant',
+      'user',
+      'assistant',
+      'user',
+    ]);
     expect(await store.getRequestDetail(DEMO_SESSION_ID, 'nope')).toBeNull();
+    // The bill of what the main agent's finished requests carried.
+    const bill = await store.getContextBill(DEMO_SESSION_ID, 'main');
+    expect(bill).toMatchObject({ agentId: 'main', requests: 5, read: 5, unavailable: null });
+    expect(bill?.items[0]).toMatchObject({
+      kind: 'file',
+      path: '/Users/demo/Dev/glassbox/src/server/store.ts',
+    });
+    expect(bill?.fixed?.requests).toBe(5);
+    expect(await store.getContextBill('claude-code:nope', 'main')).toBeNull();
     expect(await store.getRequestDetail('claude-code:nope', 'req_m1')).toBeNull();
 
     expect(await store.getToolResult(DEMO_SESSION_ID, 'tu_m1a')).toEqual({

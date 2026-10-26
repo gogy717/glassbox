@@ -1,0 +1,179 @@
+/* "What the context held": a section of Where tokens went, under a hairline like the others. */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  min-height: 22px;
+}
+
+.head h3 {
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+
+.agent {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+/* The advice: a sentence in the lede's quieter manner, a takeaway rather than an alert. */
+.advice {
+  margin: 0;
+  font-size: var(--fs-small);
+  line-height: var(--lh);
+  color: var(--text);
+}
+
+.fixed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
+  padding: 6px 10px;
+  border-radius: var(--radius-m);
+  background: var(--layer-2);
+  font-size: var(--fs-small);
+}
+
+.fixedLabel {
+  color: var(--muted);
+}
+
+.fixedValue {
+  font-weight: 500;
+}
+
+.items {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 10px;
+  border-radius: var(--radius-m);
+}
+
+.item:hover {
+  background: var(--layer-2);
+}
+
+.what {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.name {
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-body);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button.name {
+  cursor: pointer;
+}
+
+button.name:hover {
+  text-decoration: underline;
+}
+
+.name[data-mono] {
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+}
+
+.meta {
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+
+.tokens {
+  font-size: var(--fs-body);
+  white-space: nowrap;
+}
+
+.compactions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.compactions h4 {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-label);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.compactions h4:lang(zh) {
+  text-transform: none;
+}
+
+.drops {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-small);
+}
+
+/* A compaction is the chart's amber dashed line: its mark, beside the words. */
+.drop {
+  padding-left: 10px;
+  border-left: 2px dashed var(--warning);
+}
+
+.dropAt,
+.retry {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.dropAt:hover,
+.retry:hover {
+  text-decoration: underline;
+}
+
+.dropName[data-mono] {
+  font-family: var(--font-mono);
+}
+
+.message,
+.note {
+  margin: 0;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}

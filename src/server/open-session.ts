@@ -11,11 +11,13 @@ import {
   type EntityKind,
   type LiveState,
   MAIN_AGENT_ID,
+  type ModelRequest,
   type SessionPatch,
   type SessionSnapshot,
   type SessionSummary,
   type TroubleSignal,
 } from '../core/model.js';
+import { ContextLedger, type SessionContextBill } from '../shared/context-bill.js';
 import { SHELL_TOOLS } from '../shared/tool-category.js';
 import { detectTrouble, type TroubleInput } from '../shared/trouble.js';
 import { Coalescer } from './coalescer.js';
@@ -174,6 +176,10 @@ class TroubleWatch {
   }
 }
 
+/** An agent's requests in the order they were sent; one without a recorded start comes first. */
+const byStart = (a: ModelRequest, b: ModelRequest) =>
+  (a.startedAt ?? '').localeCompare(b.startedAt ?? '');
+
 interface Tracked {
   file: SourceFile;
   tailer: JsonlTailer | null;
@@ -206,6 +212,9 @@ type ReadResult = { reset: true } | { reset: false; changes: ChangeSet[]; lines:
  */
 export class OpenSession {
   parser!: SessionParser;
+  /** Per agent, the bill of its requests' contexts, fed only what is new; the parser's. */
+  private ledgers = new Map<string, ContextLedger>();
+  private ledgersOf: SessionParser | null = null;
   private files = new Map<string, Tracked>();
   private watcher: DirWatcher | null = null;
   private chain: Promise<void> = Promise.resolve();
@@ -272,6 +281,31 @@ export class OpenSession {
       files: [...files.values()].map((t) => t.file),
       lines: stats.lines,
     };
+  }
+
+  /**
+   * What the agent's finished requests carried in their contexts. The ledger is kept between
+   * calls and fed the requests that finished since; a request it holds that changed place or
+   * went (a rebuild, a request re-issued) starts it again.
+   */
+  contextBill(agentId: string): SessionContextBill {
+    const parser = this.parser;
+    if (this.ledgersOf !== parser) {
+      this.ledgers = new Map();
+      this.ledgersOf = parser;
+    }
+    const snapshot = parser.snapshot();
+    const finished = snapshot.requests
+      .filter((r) => r.agentId === agentId && r.status !== 'in-flight')
+      .sort(byStart);
+    let ledger = this.ledgers.get(agentId);
+    if (!ledger || ledger.fed.some((id, i) => finished[i]?.id !== id)) {
+      ledger = new ContextLedger(agentId, snapshot.session.cwd);
+      this.ledgers.set(agentId, ledger);
+    }
+    for (const r of finished.slice(ledger.fed.length))
+      ledger.add(r, r.hasDetail ? parser.requestDetail(r.id) : null);
+    return ledger.bill();
   }
 
   /** The parser's snapshot, its summary as the session list has it. */

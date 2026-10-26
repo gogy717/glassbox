@@ -168,6 +168,43 @@ describe('SessionStore', () => {
     expect(await s.getToolResult('fake:nope', 'tu1')).toEqual({ found: false, result: undefined });
   });
 
+  it('bills what an agent’s requests carried, and reads only the new ones again', async () => {
+    const go = { role: 'user', content: 'Fix the sort' };
+    const ran = [
+      go,
+      {
+        role: 'assistant',
+        content: [{ type: 'tool_use', id: 'tu1', name: 'Bash', input: { command: 'npm test' } }],
+      },
+      {
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: 'tu1', content: 'x'.repeat(8_000) }],
+      },
+    ];
+    const p = await session(
+      'a',
+      rec.sent('r1', T(1), 1_000, [go]),
+      rec.sent('r2', T(2), 3_000, ran),
+    );
+    const s = await startStore();
+    const first = await s.getContextBill(p.id, 'main');
+    expect(first).toMatchObject({ agentId: 'main', requests: 2, read: 2 });
+    expect(first?.items[0]).toMatchObject({ key: 'result:tu1', tool: 'Bash', requests: 1 });
+    expect(first?.fixed?.requests).toBe(2);
+
+    await appendFile(p.main, lines(rec.sent('r3', T(3), 3_100, ran)));
+    await vi.waitFor(async () => expect((await s.getContextBill(p.id, 'main'))?.read).toBe(3), {
+      timeout: 5000,
+    });
+    expect((await s.getContextBill(p.id, 'main'))?.items[0]).toMatchObject({
+      key: 'result:tu1',
+      requests: 2,
+    });
+    // An agent with no requests, a session nobody knows.
+    expect(await s.getContextBill(p.id, 'nobody')).toMatchObject({ requests: 0, read: 0 });
+    expect(await s.getContextBill('fake:nope', 'main')).toBeNull();
+  });
+
   it('serves request details and full tool results', async () => {
     const p = await session(
       'a',

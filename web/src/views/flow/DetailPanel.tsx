@@ -1,6 +1,16 @@
 import { ChevronUp, Maximize2 } from 'lucide-react';
-import { type ReactNode, useId, useMemo, useRef, useState } from 'react';
+import {
+  type ComponentType,
+  lazy,
+  type ReactNode,
+  Suspense,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { ModelRequest, RequestDetail, ToolCall } from '../../../../src/core/model.js';
+import type { RequestBill } from '../../../../src/shared/context-bill.js';
 import type { ToolResultResponse } from '../../../../src/shared/protocol.js';
 import { CopyButton } from '../../components/CodeBlock';
 import { Delayed } from '../../components/Delayed';
@@ -9,6 +19,7 @@ import { JsonInspector } from '../../components/JsonInspector';
 import { Markdown } from '../../components/Markdown';
 import { Modal } from '../../components/Modal';
 import { StatusMark } from '../../components/Status';
+import { Switch } from '../../components/Switch';
 import { TextBlock } from '../../components/TextBlock';
 import { fetchRequestDetail, fetchToolResult } from '../../data/api';
 import { useApprovalsContext } from '../../data/approvals';
@@ -20,10 +31,37 @@ import { formatClock, formatDuration, formatNumber } from '../../lib/format';
 import type { CardKey } from './cards';
 import css from './DetailPanel.module.css';
 import { ArgsView } from './detail/ArgsView';
-import { useDetailPrefs } from './detail/prefs';
+import type { ContextViewProps } from './detail/ContextView';
+import { type DetailPrefs, useDetailPrefs } from './detail/prefs';
 import { KeyValues, RequestReadable } from './detail/RequestReadable';
 import { MarkdownToggle, ViewToggle } from './detail/ViewToggle';
 import { toolStatus } from './flow-model';
+
+// The context bill names calls with the command summary and reads files with the files model,
+// which the first chunk does without: its chunk is asked for as the app loads, so the tab is
+// there when it is opened.
+const contextView = import('./detail/ContextView');
+contextView.catch(() => {});
+// Its code did not load (glassbox upgraded since the page opened): the tab says so, and what was
+// sent is still a click away.
+const ContextView = lazy<ComponentType<ContextViewProps>>(() =>
+  contextView.then(
+    (m) => ({ default: m.ContextView }),
+    () => ({ default: ContextChunkNote }),
+  ),
+);
+
+function ContextChunkNote() {
+  const { t } = useI18n();
+  return (
+    <p className={css.message}>
+      {t('error.chunk')}{' '}
+      <button type="button" className={css.link} onClick={() => location.reload()}>
+        {t('error.reload')}
+      </button>
+    </p>
+  );
+}
 
 interface Props {
   sessionId: string;
@@ -31,6 +69,10 @@ interface Props {
   tools: ToolCall[];
   card: CardKey;
   onClose(): void;
+  /** The session's calls, so the context bill names a call as the chain does. */
+  calls?: ReadonlyMap<string, ToolCall>;
+  /** Opens a call's card: a tool result in the context bill links to the call it answers. */
+  onOpenCall?(call: ToolCall): void;
 }
 
 /** How fully a request's body was reconstructed, as a quiet mark: never a green badge. */
@@ -44,13 +86,36 @@ function Completeness({ detail }: { detail: RequestDetail }) {
   return <StatusMark status="waiting" label={t('detail.unavailable', { agent })} />;
 }
 
+/** A request's card: what it sent, or the bill of its context (remembered). */
+function RequestTabs() {
+  const { t } = useI18n();
+  const [prefs, setPrefs] = useDetailPrefs();
+  return (
+    <Switch<DetailPrefs['request']>
+      size="small"
+      label={t('detail.show')}
+      value={prefs.request}
+      options={[
+        { value: 'details', label: t('detail.tabDetails') },
+        { value: 'context', label: t('detail.tabContext') },
+      ]}
+      onChange={(request) => setPrefs({ request })}
+    />
+  );
+}
+
 /**
  * The panel under a call row for the selected card: what was sent, what came back, what ran.
- * Its head names the card and call, says how complete a request is, and holds the one
- * Readable | JSON switch, copy (what the panel shows, as JSON), maximize and close.
+ * Its head names the card and call, says how complete a request is, and holds a request's
+ * Details | Context switch, the one Readable | JSON switch (for what was sent), copy (what the
+ * panel shows, as JSON), maximize and close.
  */
-export function DetailPanel({ sessionId, req, tools, card, onClose }: Props) {
+export function DetailPanel({ sessionId, req, tools, card, onClose, calls, onOpenCall }: Props) {
   const { t } = useI18n();
+  const [prefs] = useDetailPrefs();
+  const context = card === 'request' && prefs.request === 'context';
+  // The bill the Context tab shows, for Copy: made in the tab's own chunk, none until it has.
+  const [bill, onBill] = useState<RequestBill | null>(null);
   const titleId = useId();
   const maxRef = useRef<HTMLButtonElement>(null);
   const [maximized, setMaximized] = useState(false);
@@ -77,17 +142,35 @@ export function DetailPanel({ sessionId, req, tools, card, onClose }: Props) {
   // Built when Copy is clicked: a request can be megabytes.
   const copyText = () =>
     JSON.stringify(
-      card === 'request'
-        ? detail
-        : tool
-          ? { name: tool.name, input: tool.input, result: fullResult ?? tool.resultPreview }
-          : { model: req.model, stopReason: req.stopReason, blocks: req.blocks, usage: req.usage },
+      context
+        ? bill
+        : card === 'request'
+          ? detail
+          : tool
+            ? { name: tool.name, input: tool.input, result: fullResult ?? tool.resultPreview }
+            : {
+                model: req.model,
+                stopReason: req.stopReason,
+                blocks: req.blocks,
+                usage: req.usage,
+              },
       null,
       2,
     );
   const body =
     card === 'request' ? (
-      <RequestBody req={req} state={state} retry={retry} />
+      context ? (
+        <ContextBody
+          req={req}
+          state={state}
+          retry={retry}
+          calls={calls}
+          onOpenCall={onOpenCall}
+          onBill={onBill}
+        />
+      ) : (
+        <RequestBody req={req} state={state} retry={retry} />
+      )
     ) : card === 'response' ? (
       <ResponseBody req={req} />
     ) : tool ? (
@@ -98,7 +181,7 @@ export function DetailPanel({ sessionId, req, tools, card, onClose }: Props) {
         loadFull={() => setFullFor(tool.id)}
       />
     ) : null;
-  const canCopy = card !== 'request' || detail !== null;
+  const canCopy = context ? bill !== null : card !== 'request' || detail !== null;
   return (
     <section className={css.panel} aria-labelledby={titleId}>
       <div className={css.head}>
@@ -110,7 +193,7 @@ export function DetailPanel({ sessionId, req, tools, card, onClose }: Props) {
         </span>
         {detail && <Completeness detail={detail} />}
         <span className={css.headTools}>
-          <ViewToggle />
+          <Switches request={card === 'request'} context={context} />
           {canCopy && <CopyButton text={copyText} className={css.icon} />}
           <button
             ref={maxRef}
@@ -140,12 +223,22 @@ export function DetailPanel({ sessionId, req, tools, card, onClose }: Props) {
           label={`${title} · ${callRef}`}
           returnFocusTo={maxRef}
           onClose={() => setMaximized(false)}
-          actions={<ViewToggle />}
+          actions={<Switches request={card === 'request'} context={context} />}
         >
           {body}
         </Modal>
       )}
     </section>
+  );
+}
+
+/** The head's switches: a request's Details | Context, and Readable | JSON for what was sent. */
+function Switches({ request, context }: { request: boolean; context: boolean }) {
+  return (
+    <span className={css.switches}>
+      {request && <RequestTabs />}
+      {!context && <ViewToggle />}
+    </span>
   );
 }
 
@@ -254,6 +347,60 @@ function RequestBody({
               </Cell>
             </div>
           )}
+        </>
+      )}
+    </Loading>
+  );
+}
+
+/** The bill of what a request sent, from the same fetch as its details, with their notes. */
+function ContextBody({
+  req,
+  state,
+  retry,
+  calls,
+  onOpenCall,
+  onBill,
+}: {
+  req: ModelRequest;
+  state: FetchState<RequestDetail>;
+  retry(): void;
+  calls?: ReadonlyMap<string, ToolCall>;
+  onOpenCall?(call: ToolCall): void;
+  onBill(bill: RequestBill): void;
+}) {
+  const { t } = useI18n();
+  const waiting = (
+    <Delayed>
+      <p className={css.message}>{t('detail.loading')}</p>
+    </Delayed>
+  );
+  if (!req.hasDetail)
+    return (
+      <Suspense fallback={waiting}>
+        <ContextView req={req} detail={null} onBill={onBill} />
+      </Suspense>
+    );
+  return (
+    <Loading state={state} retry={retry}>
+      {(d) => (
+        <>
+          {d.notes.length > 0 && (
+            <ul className={css.notes}>
+              {d.notes.map((n) => (
+                <li key={n}>{n}</li>
+              ))}
+            </ul>
+          )}
+          <Suspense fallback={waiting}>
+            <ContextView
+              req={req}
+              detail={d}
+              calls={calls}
+              onOpenCall={onOpenCall}
+              onBill={onBill}
+            />
+          </Suspense>
         </>
       )}
     </Loading>

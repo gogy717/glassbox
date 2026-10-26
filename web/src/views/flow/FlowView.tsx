@@ -73,6 +73,23 @@ export function FlowView({ open, agentId, route, navigate, live = null }: Props)
     (id: string) => navRef.current({ agentId: id, turnId: null, requestId: null }),
     [],
   );
+  const openRef = useRef(open);
+  openRef.current = open;
+  // A call named elsewhere (a result in a request's context): in its own prompt, its card open.
+  const openCall = useCallback(
+    (call: ToolCall) => {
+      const req = openRef.current.requests.get(call.requestId);
+      if (!req) return;
+      setFollow(false);
+      navRef.current({
+        agentId: req.agentId,
+        turnId: req.turnId,
+        requestId: req.id,
+        card: `tool:${call.id}`,
+      });
+    },
+    [setFollow],
+  );
 
   // The open card lives in the URL (`card=`), so "that tool call" is a link. Replaced, not
   // pushed: Back goes to the previous view, not through every card opened on the way.
@@ -151,6 +168,7 @@ export function FlowView({ open, agentId, route, navigate, live = null }: Props)
               follow={follow}
               onUserScrollAway={() => setFollow(false)}
               onEnterAgent={enterAgent}
+              onOpenCall={openCall}
             />
           </>
         ) : (
@@ -178,6 +196,7 @@ interface ListProps {
   follow: boolean;
   onUserScrollAway(): void;
   onEnterAgent(agentId: string): void;
+  onOpenCall(call: ToolCall): void;
 }
 
 const ROW_GAP = 12;
@@ -203,6 +222,7 @@ function CallList({
   follow,
   onUserScrollAway,
   onEnterAgent,
+  onOpenCall,
 }: ListProps) {
   const { t } = useI18n();
   const parentRef = useRef<HTMLDivElement>(null);
@@ -295,6 +315,7 @@ function CallList({
                 selected={openCard(selected, call.req.id, call.tools)}
                 onSelect={onSelect}
                 onEnterAgent={onEnterAgent}
+                onOpenCall={onOpenCall}
               />
             </div>
           );

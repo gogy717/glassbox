@@ -5,8 +5,10 @@ import { type Context, Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { stream, streamSSE } from 'hono/streaming';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
+import { MAIN_AGENT_ID } from '../core/model.js';
 import type {
   ApiErrorResponse,
+  ContextBillResponse,
   QuotaResponse,
   RateResponse,
   ServerEvent,
@@ -31,6 +33,7 @@ export type AppStore = Pick<
   | 'listSessions'
   | 'getSnapshot'
   | 'getRequestDetail'
+  | 'getContextBill'
   | 'getToolResult'
   | 'onSessions'
   | 'onPatch'
@@ -100,6 +103,12 @@ export function createApp(deps: AppDeps): Hono {
   app.get('/api/sessions/:id/requests/:requestId/detail', async (c) => {
     const detail = await store.getRequestDetail(c.req.param('id'), c.req.param('requestId'));
     return detail ? jsonResponse(c, detail) : fail(c, 404, 'request not found');
+  });
+
+  app.get('/api/sessions/:id/context', async (c) => {
+    const agentId = c.req.query('agent') || MAIN_AGENT_ID;
+    const bill = await store.getContextBill(c.req.param('id'), agentId);
+    return bill ? jsonResponse<ContextBillResponse>(c, bill) : fail(c, 404, 'session not found');
   });
 
   app.get('/api/sessions/:id/tool-calls/:toolCallId/result', async (c) => {

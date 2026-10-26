@@ -279,6 +279,20 @@ describe('TokensView', () => {
     }
   });
 
+  it('ends with what the context held, the picked agent’s, from the server', async () => {
+    const fetch = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal('fetch', fetch);
+    renderTokens('a1b2c3d4e5f60718');
+    expect(
+      screen.getByRole('region', { name: 'What the context held · Explore transcript format' }),
+    ).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringMatching(/\/context\?agent=a1b2c3d4e5f60718$/),
+      expect.anything(),
+    );
+    vi.unstubAllGlobals();
+  });
+
   it('ranks the costliest requests and jumps to one in the flow tab', () => {
     const { navigate, setFollow } = renderTokens();
     const top = screen.getByRole('region', { name: 'Costliest 5 requests' });

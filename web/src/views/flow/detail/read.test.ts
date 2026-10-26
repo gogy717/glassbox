@@ -59,9 +59,10 @@ describe('readMessages', () => {
     });
     expect(assistant?.blocks).toEqual([
       { kind: 'thinking', text: 'Look first' },
-      { kind: 'thinking', text: null },
+      // What stands in for text kept back is measured, so the context bill can weigh it.
+      { kind: 'thinking', text: null, sealed: 2 },
       // Claude Code keeps the block but not its text.
-      { kind: 'thinking', text: null },
+      { kind: 'thinking', text: null, sealed: 3 },
       { kind: 'text', text: 'On it.' },
       { kind: 'tool-use', name: 'Bash', id: 'tu_1', input: { command: 'ls' } },
     ]);
@@ -103,7 +104,15 @@ describe('readMessages', () => {
         },
       ]) ?? [];
     expect(sys?.role).toBe('system');
-    expect(added?.blocks).toEqual([{ kind: 'tool-ref', name: 'mcp__docs__batch', added: true }]);
+    // The definition rides along: the context bill weighs a tool added by what it adds.
+    expect(added?.blocks).toEqual([
+      {
+        kind: 'tool-ref',
+        name: 'mcp__docs__batch',
+        added: true,
+        definition: { name: 'mcp__docs__batch' },
+      },
+    ]);
   });
 
   it('reads Grok’s messages: calls by name only, tool results by id only', () => {

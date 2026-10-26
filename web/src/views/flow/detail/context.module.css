@@ -1,0 +1,278 @@
+/* A request's context bill: the total and a filter, a bar of the parts and its legend, then the
+   parts by size, each with its estimate and share. */
+.view {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 12px 12px;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 16px;
+}
+
+.total {
+  margin: 0;
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: min(240px, 100%);
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-l);
+  background: var(--layer-1);
+  color: var(--muted);
+}
+
+.search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--fs-meta);
+}
+
+.search:focus-within {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
+/* Who put a part there (ContextView's GROUP): the agent's fixed prompt and tools in the quiet
+   neutral, the person blue, the model green, the tools amber; what is missing hatched. */
+.seg[data-group="fixed"],
+.swatch[data-group="fixed"] {
+  --part-color: var(--part-fixed);
+}
+
+.seg[data-group="user"],
+.swatch[data-group="user"] {
+  --part-color: var(--cat-explore);
+}
+
+.seg[data-group="model"],
+.swatch[data-group="model"] {
+  --part-color: var(--cat-run);
+}
+
+.seg[data-group="results"],
+.swatch[data-group="results"] {
+  --part-color: var(--cat-ask);
+}
+
+.seg[data-group="gap"],
+.swatch[data-group="gap"] {
+  --part-color: repeating-linear-gradient(135deg, var(--faint) 0 2px, transparent 2px 5px);
+}
+
+/* Thin, with a 2px surface gap between parts; the ends rounded. */
+.bar {
+  display: flex;
+  gap: 2px;
+  height: 10px;
+  min-width: 0;
+}
+
+.seg {
+  flex-basis: 0;
+  min-width: 2px;
+  height: 100%;
+  background: var(--part-color);
+}
+
+.seg:first-child {
+  border-radius: var(--radius-xs) 0 0 var(--radius-xs);
+}
+
+.seg:last-child {
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+}
+
+.seg:only-child {
+  border-radius: var(--radius-xs);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-meta);
+}
+
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.swatch {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: var(--radius-xs);
+  background: var(--part-color);
+}
+
+.legendLabel {
+  color: var(--muted);
+}
+
+.legendValue {
+  font-weight: 500;
+}
+
+.legendShare {
+  color: var(--muted);
+}
+
+/* The list's columns: what, tokens, share; the head in the section-label manner. */
+.listHead,
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 64px 52px;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.listHead {
+  padding: 6px 4px 0 21px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+
+.count {
+  min-width: 0;
+}
+
+.colTokens,
+.colShare {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  max-height: 420px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.row {
+  grid-template-columns: 9px minmax(0, 1fr) 64px 52px;
+  gap: 8px;
+  padding: 3px 4px;
+  border-radius: var(--radius-m);
+  font-size: var(--fs-meta);
+}
+
+.row:hover {
+  background: var(--layer-2);
+}
+
+.row .swatch {
+  align-self: center;
+}
+
+.what {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.word {
+  flex: none;
+  color: var(--muted);
+}
+
+.label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+.label[data-mono] {
+  font-family: var(--font-mono);
+}
+
+.link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.link[data-mono] {
+  font-family: var(--font-mono);
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+/* What this request added: a quiet tag, in words. */
+.added {
+  flex: none;
+  padding: 0 5px;
+  border-radius: var(--radius-s);
+  background: var(--layer-3);
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.tokens,
+.share {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.share {
+  color: var(--muted);
+}
+
+.more {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--fs-meta);
+  cursor: pointer;
+}
+
+.message,
+.noMatch,
+.note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+
+.message {
+  padding: 10px 12px;
+}

@@ -44,6 +44,13 @@
   margin-right: 8px;
 }
 
+/* A request's Details | Context, then Readable | JSON. */
+.switches {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+}
+
 .icon {
   display: inline-grid;
   place-items: center;

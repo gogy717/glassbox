@@ -12,6 +12,7 @@ import type {
   SessionSummary,
 } from '../core/model.js';
 import type { QuotaSource } from '../core/quota-source.js';
+import type { SessionContextBill } from '../shared/context-bill.js';
 import { type RateCoverage, ratePerMinute, type TokenRate } from '../shared/rate.js';
 import { Coalescer } from './coalescer.js';
 import { isActive } from './live.js';
@@ -329,6 +330,12 @@ export class SessionStore implements WeekStore {
   async getRequestDetail(sessionId: string, requestId: string): Promise<RequestDetail | null> {
     const open = await this.openById(sessionId);
     return open ? open.parser.requestDetail(requestId) : null;
+  }
+
+  /** What the agent's finished requests carried in their contexts; null for an unknown session. */
+  async getContextBill(sessionId: string, agentId: string): Promise<SessionContextBill | null> {
+    const open = await this.openById(sessionId);
+    return open ? open.contextBill(agentId) : null;
   }
 
   async getToolResult(
