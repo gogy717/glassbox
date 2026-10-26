@@ -36,7 +36,8 @@ export function toolPhrase(tool: string): MessageKey {
 
 /**
  * A phrase with its target (a file, a pattern, a host, a command's summary) in the mono face.
- * Its words keep their spaces, for the row's name; on screen the line's gap spaces them.
+ * Its words keep their spaces, for the row's name; on screen the line's gap spaces them. The
+ * target is what gives way in a narrow row (`data-gives-way`), never the verb.
  */
 function Phrase({ k, x }: { k: MessageKey; x: string }) {
   const { locale } = useI18n();
@@ -48,7 +49,7 @@ function Phrase({ k, x }: { k: MessageKey; x: string }) {
           <span key={i}>{p}</span>
         ) : (
           // biome-ignore lint/suspicious/noArrayIndexKey: the parts of one fixed text
-          <span key={i} className={css.target}>
+          <span key={i} className={css.target} data-gives-way>
             <UiCjk text={p.value} />
           </span>
         ),
@@ -142,7 +143,9 @@ export function ActivityLine({ session: s, failure, density }: Props) {
         {card && failure && (
           <>
             <span className={css.sep}> · </span>
-            <span className={css.reason}>{failure}</span>
+            <span className={css.reason} data-gives-way>
+              {failure}
+            </span>
           </>
         )}
       </span>

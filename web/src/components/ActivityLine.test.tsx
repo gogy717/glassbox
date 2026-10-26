@@ -141,6 +141,19 @@ describe('ActivityLine', () => {
     ).toHaveTextContent('Thinking · 0:05');
   });
 
+  it('marks what may give way in a narrow row: a target or a reason, never a verb or a clock', () => {
+    const giving = (el: HTMLElement) =>
+      [...el.querySelectorAll('[data-gives-way]')].map((x) => x.textContent);
+    const tool = session('busy', { tool: 'Read', target: 'tokens.css', since: ago(4) });
+    expect(giving(line(tool))).toEqual(['tokens.css']);
+    expect(giving(line(tool, { density: 'compact' }))).toEqual(['tokens.css']);
+    expect(giving(line(session('busy', { kind: 'thinking', since: ago(72) })))).toEqual([]);
+    expect(giving(line(session('busy', { tool: 'TodoWrite' })))).toEqual([]);
+    expect(giving(line(session('waiting', { kind: 'waiting', tool: 'Bash' })))).toEqual(['Bash']);
+    expect(giving(line(session('idle'), { failure: 'missing file' }))).toEqual(['missing file']);
+    expect(giving(line(session('idle')))).toEqual([]);
+  });
+
   it('words it in Chinese', () => {
     const s = session('busy', { tool: 'Read', target: 'tokens.css', since: ago(4) });
     expect(line(s, { locale: 'zh' })).toHaveTextContent('正在读取 tokens.css · 已 0:04');
