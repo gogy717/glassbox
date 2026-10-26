@@ -4,7 +4,7 @@
  * for the rest (`st`). A session is a link only while the session list has it (R32). Each card
  * draws again only when its own figures change: a hover in the grid draws none of them.
  */
-import { memo } from 'react';
+import { memo, type RefObject, useEffect, useRef, useState } from 'react';
 import type { QuotaSnapshot, QuotaWindow } from '../../../../src/core/model.js';
 import { firstCountedIndex, ratePerMinute, rateSeries } from '../../../../src/shared/rate.js';
 import type { WeekWindowKind } from '../../../../src/shared/week.js';
@@ -55,14 +55,16 @@ function SessionRows({
   rows,
   listed,
   locale,
+  listRef,
 }: {
   rows: SessionLine[];
   listed: Set<string>;
   locale: Locale;
+  listRef?: RefObject<HTMLUListElement | null>;
 }) {
   const { t } = useI18n();
   return (
-    <ul className={css.sessions}>
+    <ul ref={listRef} className={css.sessions}>
       {rows.map((s) => {
         const title = s.title ?? t('sidebar.untitled');
         return (
@@ -87,6 +89,55 @@ function SessionRows({
         );
       })}
     </ul>
+  );
+}
+
+/** An hour's sessions listed before "N more" (eleven have worked in one hour). */
+const HOUR_ROWS = 8;
+
+/**
+ * An hour's sessions: the first `HOUR_ROWS`, then "N more", which shows the rest and moves focus
+ * on to the first of them, as the sidebar's groups do. Keyed by the hour, so another hour
+ * starts folded.
+ */
+function HourSessions({
+  rows,
+  listed,
+  locale,
+}: {
+  rows: SessionLine[];
+  listed: Set<string>;
+  locale: Locale;
+}) {
+  const [unfolded, setUnfolded] = useState(false);
+  const listRef = useRef<HTMLUListElement>(null);
+  useEffect(() => {
+    if (!unfolded) return;
+    const first = listRef.current?.children[HOUR_ROWS];
+    if (!(first instanceof HTMLElement)) return;
+    // Its title is a link while the session list has it; else the row itself takes the focus.
+    const link = first.querySelector('a');
+    if (link) link.focus();
+    else {
+      first.tabIndex = -1;
+      first.focus();
+    }
+  }, [unfolded]);
+  const more = unfolded ? 0 : Math.max(0, rows.length - HOUR_ROWS);
+  return (
+    <>
+      <SessionRows
+        rows={more > 0 ? rows.slice(0, HOUR_ROWS) : rows}
+        listed={listed}
+        locale={locale}
+        listRef={listRef}
+      />
+      {more > 0 && (
+        <button type="button" className={css.link} onClick={() => setUnfolded(true)}>
+          {st(locale, 'more', { n: more })}
+        </button>
+      )}
+    </>
   );
 }
 
@@ -142,7 +193,7 @@ export const HourCard = memo(function HourCard(p: {
                 })
               : st(L, 'hourIdle')}
           </p>
-          <SessionRows rows={hour.sessions} listed={p.listed} locale={L} />
+          <HourSessions key={hour.start} rows={hour.sessions} listed={p.listed} locale={L} />
         </>
       ) : (
         <h2 id="stats-hour" className={css.hourTitle}>
