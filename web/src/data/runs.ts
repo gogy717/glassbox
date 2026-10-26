@@ -1,6 +1,11 @@
 /** Client for glassbox-owned runs (B-lite): start, message, interrupt, end, answer prompts. */
 
-import type { LiveState, SessionSummary } from '../../../src/core/model.js';
+import {
+  type LiveState,
+  MAIN_AGENT_ID,
+  type SessionActivity,
+  type SessionSummary,
+} from '../../../src/core/model.js';
 import {
   type ApiErrorResponse,
   api,
@@ -10,6 +15,7 @@ import {
 import {
   type DirectoriesResponse,
   type PermissionDecision,
+  type PermissionRequest,
   type RunState,
   runsApi,
   type StartRunRequest,
@@ -124,29 +130,64 @@ export function failedSessions(runs: Map<string, RunState>): Map<string, string 
 }
 
 /**
- * The sessions whose glassbox run has a permission prompt or question open: the prompt the
- * composer shows (`pendingPermissions`). Their process only knows it is busy.
+ * The permission prompt or question each session's glassbox runs hold open, by session: the
+ * prompt the composer shows (`pendingPermissions`), the oldest when there are several, on any
+ * run that has not closed. Their process only knows it is busy.
  */
-export function waitingSessionIds(runs: Map<string, RunState>): string[] {
-  const ids = new Set<string>();
-  for (const r of runs.values())
-    if (r.sessionId && r.status !== 'closed' && r.pendingPermissions.length > 0)
-      ids.add(r.sessionId);
-  return [...ids].sort();
+export function pendingPrompts(runs: Map<string, RunState>): Map<string, PermissionRequest> {
+  const out = new Map<string, PermissionRequest>();
+  for (const r of runs.values()) {
+    if (!r.sessionId || r.status === 'closed') continue;
+    for (const p of r.pendingPermissions) {
+      const have = out.get(r.sessionId);
+      if (!have || p.requestedAt < have.requestedAt) out.set(r.sessionId, p);
+    }
+  }
+  return new Map([...out].sort(([a], [b]) => a.localeCompare(b)));
 }
 
-/** A session's live state, 'waiting' ("Waiting for you") when it is one of `waiting`. */
-export function waitingLive(s: SessionSummary, waiting: readonly string[]): LiveState {
-  return waiting.includes(s.id) ? 'waiting' : s.live;
+/**
+ * The prompts open, as one string: a run event arrives with every streamed piece of a reply, so
+ * what depends on the prompts alone is derived again only when this changes.
+ */
+export function promptsKey(runs: Map<string, RunState>): string {
+  return [...pendingPrompts(runs)].map(([sessionId, p]) => `${sessionId}\t${p.id}`).join('\n');
 }
 
-/** `sessions` with those in `waiting` live as 'waiting'; the same list when none is. */
+/** A session's live state, 'waiting' ("Waiting for you") when a prompt is open on it. */
+export function waitingLive(
+  s: SessionSummary,
+  prompts: ReadonlyMap<string, PermissionRequest>,
+): LiveState {
+  return prompts.has(s.id) ? 'waiting' : s.live;
+}
+
+/**
+ * A prompt as the activity a parser reports for a session blocked on one: waiting, for the
+ * prompt's tool, since it was asked. The row then says what the session waits for, and since
+ * when, as it does for a session a terminal holds.
+ */
+export function promptActivity(p: PermissionRequest): SessionActivity {
+  return {
+    kind: 'waiting',
+    tool: p.toolName,
+    target: null,
+    agentId: MAIN_AGENT_ID,
+    since: p.requestedAt,
+  };
+}
+
+/**
+ * `sessions` with those in `prompts` live as 'waiting', their activity the prompt; the same list
+ * when none is.
+ */
 export function withWaiting(
   sessions: SessionSummary[],
-  waiting: readonly string[],
+  prompts: ReadonlyMap<string, PermissionRequest>,
 ): SessionSummary[] {
-  if (waiting.length === 0) return sessions;
-  return sessions.map((s) =>
-    waitingLive(s, waiting) !== s.live ? { ...s, live: waitingLive(s, waiting) } : s,
-  );
+  if (prompts.size === 0) return sessions;
+  return sessions.map((s) => {
+    const p = prompts.get(s.id);
+    return p ? { ...s, live: 'waiting', activity: promptActivity(p) } : s;
+  });
 }

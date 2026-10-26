@@ -20,10 +20,11 @@ import { connectEvents } from './data/events';
 import {
   createRunsClient,
   failedSessions,
+  pendingPrompts,
+  promptsKey,
   type RunsClient,
   runForSession,
   waitingLive,
-  waitingSessionIds,
   withWaiting,
 } from './data/runs';
 import { SessionAgentContext } from './data/session-agent';
@@ -228,10 +229,12 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
   };
   const pending = run?.pendingPermissions[0];
   // A session with a prompt open is waiting for you, in the top bar and the list: the composer's
-  // prompt says so, while its process only knows it is busy.
-  const waitingKey = waitingSessionIds(state.runs).join('\n');
-  const waiting = useMemo(() => (waitingKey ? waitingKey.split('\n') : []), [waitingKey]);
-  const sessions = useMemo(() => withWaiting(state.sessions, waiting), [state.sessions, waiting]);
+  // prompt says so, while its process only knows it is busy. A run event arrives with every
+  // streamed piece of a reply, so the prompts are read again only when one opens or closes.
+  const promptKey = promptsKey(state.runs);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: promptKey names every prompt open in state.runs
+  const prompts = useMemo(() => pendingPrompts(state.runs), [promptKey]);
+  const sessions = useMemo(() => withWaiting(state.sessions, prompts), [state.sessions, prompts]);
   const failures = useMemo(() => failedSessions(state.runs), [state.runs]);
   // The session page as it was last left, agent, tab, turn, request and card: the nav's Session
   // goes back to it, and back on Home that session's row keeps the tab stop.
@@ -288,7 +291,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
             title={route.sessionId ? (summary?.title ?? t('sidebar.untitled')) : null}
             agent={route.sessionId ? (summary?.agent ?? null) : null}
             sidebarOpen={sidebarShown}
-            live={summary ? waitingLive(summary, waiting) : null}
+            live={summary ? waitingLive(summary, prompts) : null}
             connection={state.connection}
             quotas={state.quotas}
             follow={follow}

@@ -1,13 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionSummary } from '../../../src/core/model.js';
 import { TOKEN_HEADER } from '../../../src/shared/protocol.js';
-import type { RunState } from '../../../src/shared/runs.js';
+import type { PermissionRequest, RunState } from '../../../src/shared/runs.js';
 import { ApiError } from './api';
 import {
   createRunsClient,
   failedSessions,
+  pendingPrompts,
+  promptsKey,
   runForSession,
-  waitingSessionIds,
+  waitingLive,
   withWaiting,
 } from './runs';
 
@@ -154,32 +156,70 @@ describe('failedSessions', () => {
   });
 });
 
-describe('waitingSessionIds and withWaiting', () => {
-  const ask = { id: 'tu_1', toolName: 'Bash', input: {}, questions: null, requestedAt: '' };
-  const run = (id: string, sessionId: string | null, status: RunState['status'], open: number) =>
-    ({ id, sessionId, status, pendingPermissions: Array(open).fill(ask) }) as RunState;
+describe('pendingPrompts and withWaiting', () => {
+  const at = (s: string) => `2026-10-23T10:00:${s}.000Z`;
+  const ask = (id: string, s: string, toolName = 'Bash'): PermissionRequest => ({
+    id,
+    toolName,
+    input: {},
+    questions: toolName === 'AskUserQuestion' ? [] : null,
+    requestedAt: at(s),
+  });
+  const run = (
+    id: string,
+    sessionId: string | null,
+    status: RunState['status'],
+    prompts: PermissionRequest[],
+  ) => ({ id, sessionId, status, pendingPermissions: prompts }) as RunState;
 
-  it('are the sessions with a prompt open on a run that has not closed', () => {
+  it('are the oldest prompt open per session, on runs that have not closed', () => {
     const runs = new Map(
       [
-        run('a', 's1', 'waiting-permission', 1),
-        run('b', 's2', 'running', 0),
-        run('c', 's3', 'closed', 1),
-        run('d', null, 'waiting-permission', 1),
-        run('e', 's1', 'idle', 0),
+        run('a', 's1', 'waiting-permission', [ask('tu_2', '05'), ask('tu_1', '01')]),
+        run('b', 's2', 'running', []),
+        run('c', 's3', 'closed', [ask('tu_3', '02')]),
+        run('d', null, 'waiting-permission', [ask('tu_4', '03')]),
+        run('e', 's1', 'idle', []),
+        run('f', 's4', 'waiting-permission', [ask('tu_5', '04', 'AskUserQuestion')]),
       ].map((r) => [r.id, r]),
     );
-    expect(waitingSessionIds(runs)).toEqual(['s1']);
+    const prompts = pendingPrompts(runs);
+    expect([...prompts.keys()]).toEqual(['s1', 's4']);
+    expect(prompts.get('s1')?.id).toBe('tu_1');
+    // The key names each prompt open, so the list is derived again only when one opens or closes,
+    // not with every streamed piece a run event carries.
+    expect(promptsKey(runs)).toBe('s1\ttu_1\ns4\ttu_5');
+    expect(promptsKey(new Map())).toBe('');
   });
 
-  it('say those sessions are waiting, and leave the list as it was when none is', () => {
+  it('say those sessions wait for the prompt’s tool since it was asked, and leave the list as it was when none is', () => {
     const sessions = [
-      { id: 's1', live: 'busy' },
+      {
+        id: 's1',
+        live: 'busy',
+        activity: {
+          kind: 'tool',
+          tool: 'Bash',
+          target: 'npm test',
+          agentId: 'main',
+          since: at('00'),
+        },
+      },
       { id: 's2', live: 'busy' },
     ] as SessionSummary[];
-    expect(withWaiting(sessions, []).map((s) => s.live)).toEqual(['busy', 'busy']);
-    expect(withWaiting(sessions, [])).toBe(sessions);
-    expect(withWaiting(sessions, ['s1']).map((s) => s.live)).toEqual(['waiting', 'busy']);
-    expect(withWaiting(sessions, ['s1'])[1]).toBe(sessions[1]);
+    expect(withWaiting(sessions, new Map())).toBe(sessions);
+    const prompts = new Map([['s1', ask('tu_1', '01')]]);
+    const out = withWaiting(sessions, prompts);
+    expect(out.map((s) => s.live)).toEqual(['waiting', 'busy']);
+    expect(out[0]?.activity).toEqual({
+      kind: 'waiting',
+      tool: 'Bash',
+      target: null,
+      agentId: 'main',
+      since: at('01'),
+    });
+    expect(out[1]).toBe(sessions[1]);
+    expect(waitingLive(sessions[0] as SessionSummary, prompts)).toBe('waiting');
+    expect(waitingLive(sessions[1] as SessionSummary, prompts)).toBe('busy');
   });
 });
