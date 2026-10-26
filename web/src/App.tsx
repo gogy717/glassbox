@@ -359,9 +359,10 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
     if (target) window.location.hash = target;
   });
   useCommand('goStats', goStats);
-  useCommand('goInbox', () => {
-    window.location.hash = inboxLink();
-  });
+  const goInbox = () => {
+    if (page !== 'inbox') window.location.hash = inboxLink();
+  };
+  useCommand('goInbox', goInbox);
   // / searches the list, showing it first when it is hidden. Opened as an overlay, the list
   // starts in its search field anyway; shown as a column, focus goes there once it is.
   const searchOnShow = useRef(false);
@@ -413,7 +414,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
     return [
       ...sessionItems(sessions, prefs.showProbes, t, openSession),
       ...promptItems(open, t, selectPrompt),
-      ...pageItems(t, { home: goHome, stats: goStats, tab: goTab }),
+      ...pageItems(t, { home: goHome, stats: goStats, inbox: goInbox, tab: goTab }),
       action('new', t('composer.newSession'), () => setNewSession(true)),
       ...(canRun('receipt')
         ? [action('receipt', t('palette.receipt'), () => runCommand('receipt'))]

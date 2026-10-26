@@ -1393,6 +1393,7 @@ describe('App palette', () => {
       'blog / Untitled sessionSession',
       'HomePage',
       'StatsPage',
+      'InboxPage',
       'Execution chainTab',
       'How it workedTab',
       'Where tokens wentTab',
