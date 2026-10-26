@@ -82,10 +82,11 @@ describe('pageItems', () => {
       'Timeline',
       'Files',
     ]);
-    items[5]?.run();
+    items[6]?.run();
     expect(tab).toHaveBeenCalledWith('tokens');
     items[2]?.run();
     expect(go.inbox).toHaveBeenCalledOnce();
-    expect(go.rules).toHaveBeenCalled();
+    items[3]?.run();
+    expect(go.rules).toHaveBeenCalledOnce();
   });
 });

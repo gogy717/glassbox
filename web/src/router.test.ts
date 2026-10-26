@@ -223,6 +223,8 @@ describe('the Inbox page (#/inbox)', () => {
       stats: 'week',
     });
   });
+});
+
 describe('the Rules page (#/rules)', () => {
   it.each([
     ['#/rules', '30d'],

@@ -248,6 +248,7 @@ function PageNav({ page, here, session, sessionsLoaded, inbox }: PageNavProps) {
             {inbox}
           </span>
         )}
+      </a>
       <a href={page === 'rules' ? here : RULES_LINK} title={t('nav.rules')} {...item('rules')}>
         <ShieldCheck size={14} aria-hidden="true" />
         {label(t('nav.rules'))}

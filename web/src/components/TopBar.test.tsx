@@ -106,7 +106,7 @@ describe('the Inbox in the page nav', () => {
       within(nav(bar))
         .getAllByRole('link')
         .map((a) => a.textContent),
-    ).toEqual(['Home', 'Session', 'Stats', 'Inbox']);
+    ).toEqual(['Home', 'Session', 'Stats', 'Inbox', 'Rules']);
     const inbox = within(nav(bar)).getByRole('link', { name: 'Inbox' });
     expect(inbox).toHaveAttribute('href', '#/inbox');
     expect(inbox).not.toHaveAttribute('aria-current');
@@ -175,13 +175,19 @@ describe('the page nav', () => {
 
   it('links Rules after Stats, marked as the page you are on there', () => {
     const onRules = links('rules');
-    expect(onRules.map((a) => a.textContent)).toEqual(['Home', 'Session', 'Stats', 'Rules']);
-    expect(onRules[3]).toHaveAttribute('aria-current', 'page');
-    expect(onRules[3]).toHaveAttribute('href', '#/rules');
+    expect(onRules.map((a) => a.textContent)).toEqual([
+      'Home',
+      'Session',
+      'Stats',
+      'Inbox',
+      'Rules',
+    ]);
+    expect(onRules[4]).toHaveAttribute('aria-current', 'page');
+    expect(onRules[4]).toHaveAttribute('href', '#/rules');
     cleanup();
     const onHome = links('home');
-    expect(onHome[3]).not.toHaveAttribute('aria-current');
-    expect(onHome[3]).toHaveAttribute('href', '#/rules');
+    expect(onHome[4]).not.toHaveAttribute('aria-current');
+    expect(onHome[4]).toHaveAttribute('href', '#/rules');
   });
 });
 
