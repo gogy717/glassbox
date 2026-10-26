@@ -7,7 +7,7 @@
 import { simpleCommands } from '../core/command-summary.js';
 import type { IsoTime, ModelRequest, ToolCall } from '../core/model.js';
 import { buildFiles, type FilesSource } from './files.js';
-import { SHELLS, shellCommand, toolCategory } from './tool-category.js';
+import { SHELL_TOOLS, shellCommand, toolCategory } from './tool-category.js';
 
 /** How a test run went: by its call's status, else by what its output says. */
 export type TestVerdict = 'passed' | 'failed' | 'running' | 'unknown';
@@ -29,9 +29,6 @@ export interface Outcome {
 export interface OutcomeSource extends FilesSource {
   requests: ReadonlyMap<string, ModelRequest>;
 }
-
-/** Shell tools of every agent glassbox reads, and of the agents that call theirs so. */
-const SHELL_TOOLS = new Set([...SHELLS, 'execute_command']);
 
 type Commands = ReturnType<typeof simpleCommands>;
 

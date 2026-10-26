@@ -161,6 +161,12 @@ export const SHELLS = new Set([
   'bash',
 ]);
 
+/**
+ * Shell tools whose calls are read for what they run (a test runner, a commit, a loop): `SHELLS`,
+ * and `execute_command`, as agents glassbox may read next name theirs.
+ */
+export const SHELL_TOOLS: ReadonlySet<string> = new Set([...SHELLS, 'execute_command']);
+
 const READ_ONLY = new Set([
   'rg',
   'grep',
