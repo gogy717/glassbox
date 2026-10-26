@@ -315,7 +315,7 @@ export const en: Record<MessageKey, string> = {
   'quota.whyCannotFetch':
     'Updates only while the agent that caches it runs: glassbox has no way to fetch it.',
   'settings.showProbes': 'Show probe sessions',
-  'settings.notify': 'Notify me when a session needs me',
+  'settings.notify': 'Notify me when a session needs me or looks stuck',
   'settings.notifyBlocked': 'Blocked in the browser’s site settings',
   'settings.notifyUnsupported': 'Not offered by this browser',
   'time.merged':

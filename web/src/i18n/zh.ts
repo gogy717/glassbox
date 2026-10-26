@@ -310,7 +310,7 @@ export const zh = {
   'quota.whyCacheOnly': '只在 {agent} 运行时更新：glassbox 无法联网获取。',
   'quota.whyCannotFetch': '只在缓存它的智能体运行时更新：glassbox 无法联网获取。',
   'settings.showProbes': '显示探针会话',
-  'settings.notify': '有会话需要我时通知我',
+  'settings.notify': '有会话需要我或看起来卡住时通知我',
   'settings.notifyBlocked': '已被浏览器的网站设置拦截',
   'settings.notifyUnsupported': '这个浏览器不提供通知',
   'time.merged': '{requests} 次请求 · {tools} 个工具 · 合计 {total}',

@@ -715,7 +715,9 @@ describe('App notifications', () => {
   }
   const notifyBox = () => {
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
-    return screen.getByRole('checkbox', { name: 'Notify me when a session needs me' });
+    return screen.getByRole('checkbox', {
+      name: 'Notify me when a session needs me or looks stuck',
+    });
   };
   const saved = () => JSON.parse(localStorage.getItem('glassbox.prefs') ?? '{}');
 
@@ -783,6 +785,33 @@ describe('App notifications', () => {
     const box = notifyBox();
     expect(box).toBeDisabled();
     expect(box).toHaveAccessibleDescription('Not offered by this browser');
+  });
+
+  it('notifies once as a running session begins to look stuck, its sign the body', () => {
+    localStorage.setItem('glassbox.prefs', JSON.stringify({ notify: true }));
+    const store = createStore();
+    const [busy, ...rest] = createDemoSessions(DEMO_NOW);
+    if (!busy) throw new Error('fixture');
+    store.applyEvent({ type: 'sessions', sessions: [{ ...busy, trouble: null }, ...rest] });
+    render(<App store={store} connect={noConnect} runs={fakeRuns()} />);
+    const sign = {
+      kind: 'repeat' as const,
+      params: { x: 'npm test', n: 4 },
+      at: null,
+      since: DEMO_NOW.toISOString(),
+    };
+    act(() =>
+      store.applyEvent({ type: 'sessions', sessions: [{ ...busy, trouble: sign }, ...rest] }),
+    );
+    act(() =>
+      store.applyEvent({
+        type: 'sessions',
+        sessions: [{ ...busy, trouble: { ...sign, params: { x: 'npm test', n: 5 } } }, ...rest],
+      }),
+    );
+    expect(FakeNotification.shown.map((x) => [x.title, x.options?.body])).toEqual([
+      ['glassbox / Live viewer research (demo)', 'Repeated npm test 4×'],
+    ]);
   });
 
   it('notifies once as a session begins to wait, not on page load, and opens it from the notification', async () => {
