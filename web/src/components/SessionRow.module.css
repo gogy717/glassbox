@@ -155,3 +155,26 @@
 .tokens {
   flex: none;
 }
+
+/* On a card, under its activity: what a running session's agent last said (whole in the
+   tooltip), then where to answer what it waits for ("Answer it in the terminal"). One muted line
+   each, cut by the row. */
+.said,
+.note {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+
+/* A card with controls under it (Home's answer to a prompt): the hairline runs under both. */
+.card {
+  border-bottom: 1px solid var(--border);
+}
+
+.card > .row {
+  border-bottom: 0;
+}

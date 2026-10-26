@@ -1,8 +1,10 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { SessionActivity, SessionSummary } from '../../../src/core/model.js';
+import type { PermissionRequest } from '../../../src/shared/runs.js';
 import { WAIT_MS } from '../components/Delayed';
 import { I18nContext, makeI18n } from '../i18n';
+import { PROMPT_ARM_MS } from './composer/PermissionDialog';
 import { Home } from './Home';
 
 // Every row render words its age once: counting the calls counts the rows' renders.
@@ -68,21 +70,27 @@ function renderHome(
 ) {
   const onOpen = vi.fn();
   const onNewSession = vi.fn();
-  render(
+  const ui = (list: SessionSummary[], more: Partial<Parameters<typeof Home>[0]>) => (
     <I18nContext.Provider value={makeI18n(locale)}>
       <Home
-        sessions={sessions}
+        sessions={list}
         loaded
         now={NOW}
         showProbes={false}
         failures={new Map()}
         onOpen={onOpen}
         onNewSession={onNewSession}
-        {...props}
+        {...more}
       />
-    </I18nContext.Provider>,
+    </I18nContext.Provider>
   );
-  return { onOpen, onNewSession };
+  const { rerender } = render(ui(sessions, props));
+  return {
+    onOpen,
+    onNewSession,
+    /** The same board with what the next update says. */
+    update: (list: SessionSummary[], more = props) => rerender(ui(list, more)),
+  };
 }
 
 const rows = (el: HTMLElement) => within(el).getAllByRole('listitem');
@@ -115,13 +123,16 @@ describe('Home', () => {
       'Recent',
     ]);
 
-    // Each says what it waits for, the longest wait first; the clock replaces the age.
+    // Each says what it waits for, the longest wait first; the clock replaces the age. A
+    // terminal holds these prompts, so they say where to answer them; a turn is not answered.
     const needsYou = region('Needs you');
     expect(titles(needsYou)).toEqual(['Session 7', 'Session 6', 'Session 3']);
     expect(rows(needsYou).map((r) => r.textContent)).toEqual([
       expect.stringMatching(/mill \/Session 7Your turn · 3:40$/),
-      expect.stringMatching(/lantern \/Session 6Question · 1:02$/),
-      expect.stringMatching(/shopfront \/Session 3Permission · Bash · 0:20$/),
+      expect.stringMatching(/lantern \/Session 6Question · 1:02Answer it in the terminal$/),
+      expect.stringMatching(
+        /shopfront \/Session 3Permission · Bash · 0:20Answer it in the terminal$/,
+      ),
     ]);
     expect(within(needsYou).getByText('3')).toHaveClass('figure');
     expect(within(needsYou).getByText('3')).toHaveAttribute('data-attention');
@@ -137,6 +148,174 @@ describe('Home', () => {
     expect(within(recent).getByText('3')).toHaveClass('figure');
     // No project headings: the project leads each row instead.
     expect(screen.queryAllByRole('heading', { level: 3 })).toEqual([]);
+  });
+
+  it('says what a terminal’s prompt is about, and that the terminal is where to answer it', () => {
+    const on = (tool: string, target: string, s: number): SessionActivity => ({
+      ...waitingFor(tool, s),
+      target,
+    });
+    renderHome([
+      session('shopfront', 'waiting', 0, { activity: on('Bash', 'git push +1', 20) }),
+      session('lantern', 'waiting', 1, {
+        activity: on('AskUserQuestion', 'Which beds first?', 62),
+      }),
+    ]);
+    const [question, push] = rows(region('Needs you'));
+    expect(push).toHaveTextContent(
+      /shopfront \/Session 1Permission · Bash · git push \+1 · 0:20Answer it in the terminal$/,
+    );
+    expect(question).toHaveTextContent(
+      /lantern \/Session 2Question · Which beds first\? · 1:02Answer it in the terminal$/,
+    );
+    // The target in the mono face, as a running tool's is.
+    expect(within(push as HTMLElement).getByText('git push +1')).toHaveClass(/target/);
+  });
+
+  it('leaves the terminal out of a prompt that glassbox holds', () => {
+    const held = session('glassbox', 'waiting', 0, { activity: waitingFor('Bash', 20) });
+    const request = {
+      id: 'tu_1',
+      toolName: 'Bash',
+      input: { command: 'npm test' },
+      questions: null,
+      requestedAt: ago(20),
+    };
+    renderHome([held], { prompts: new Map([[held.id, { runId: 'run_1', request }]]) });
+    expect(screen.getByRole('listitem')).not.toHaveTextContent('terminal');
+  });
+
+  describe('answering a glassbox run’s prompt', () => {
+    const ask = (id: string, toolName: string, input: unknown, s = 20): PermissionRequest => ({
+      id,
+      toolName,
+      input,
+      questions:
+        toolName === 'AskUserQuestion'
+          ? [{ question: 'Which beds first?', header: 'Beds', multiSelect: false, options: [] }]
+          : null,
+      requestedAt: ago(s),
+    });
+    /** Waiting sessions whose prompts glassbox runs hold, as App lists them (`withWaiting`). */
+    function held(...asks: [runId: string, request: PermissionRequest][]) {
+      const sessions = asks.map(([, r]) =>
+        session('garden', 'waiting', 0, {
+          activity: { ...waitingFor(r.toolName, 0), since: r.requestedAt },
+        }),
+      );
+      const prompts = new Map(
+        asks.map(([runId, request], i) => [sessions[i]?.id as string, { runId, request }]),
+      );
+      return { sessions, prompts };
+    }
+
+    it('says what it wants, and Allow and Deny answer it through the run that holds it', async () => {
+      const onDecide = vi.fn(async () => {});
+      const { sessions, prompts } = held(
+        ['run_7', ask('tu_3', 'Bash', { command: 'git push origin main', description: 'Push' })],
+        ['run_8', ask('tu_4', 'Edit', { file_path: '/w/garden/beds.md', old_string: 'a' }, 30)],
+      );
+      renderHome(sessions, { prompts, onDecide, armMs: 0 });
+      const [edit, push] = rows(region('Needs you')) as HTMLElement[];
+      // The row's own button opens the session; its answer sits beside it, named for the session.
+      const answer = within(push as HTMLElement).getByRole('group', {
+        name: 'Permission for Bash · Session 1',
+      });
+      expect(answer).toHaveTextContent('git push origin main');
+      expect(within(answer).getByText('git push origin main')).toHaveAttribute(
+        'title',
+        'git push origin main',
+      );
+      expect(within(edit as HTMLElement).getByRole('group')).toHaveTextContent('beds.md');
+
+      fireEvent.click(within(answer).getByRole('button', { name: 'Allow' }));
+      await act(async () => {});
+      expect(onDecide).toHaveBeenCalledWith('run_7', 'tu_3', { decision: 'allow' });
+      // Answered: nothing more to press until the row moves on.
+      expect(within(answer).getByRole('button', { name: 'Deny' })).toBeDisabled();
+
+      fireEvent.click(within(edit as HTMLElement).getByRole('button', { name: 'Deny' }));
+      await act(async () => {});
+      expect(onDecide).toHaveBeenLastCalledWith('run_8', 'tu_4', { decision: 'deny' });
+    });
+
+    it('keeps Open for a question, which needs the dialog', () => {
+      const { sessions, prompts } = held(['run_7', ask('tu_5', 'AskUserQuestion', {})]);
+      const { onOpen } = renderHome(sessions, { prompts, onDecide: vi.fn(), armMs: 0 });
+      const answer = within(screen.getByRole('listitem')).getByRole('group');
+      expect(answer).toHaveTextContent('Which beds first?');
+      expect(within(answer).queryByRole('button', { name: 'Allow' })).toBeNull();
+      expect(within(answer).queryByRole('button', { name: 'Deny' })).toBeNull();
+      fireEvent.click(within(answer).getByRole('button', { name: 'Open' }));
+      expect(onOpen).toHaveBeenCalledWith(sessions[0]?.id);
+    });
+
+    it('keeps Open for a plan to approve, which is read whole in the dialog', () => {
+      const plan = '## Plan\n\n1. Split the parser\n2. Add the tests';
+      const { sessions, prompts } = held(['run_7', ask('tu_6', 'ExitPlanMode', { plan })]);
+      const { onOpen } = renderHome(sessions, { prompts, onDecide: vi.fn(), armMs: 0 });
+      const answer = within(screen.getByRole('listitem')).getByRole('group', {
+        name: 'Plan to approve · Session 1',
+      });
+      expect(answer).toHaveTextContent('## Plan 1. Split the parser 2. Add the tests');
+      expect(within(answer).queryByRole('button', { name: 'Allow' })).toBeNull();
+      fireEvent.click(within(answer).getByRole('button', { name: 'Open' }));
+      expect(onOpen).toHaveBeenCalledWith(sessions[0]?.id);
+    });
+
+    it('arms its buttons only once the rows have stood still', () => {
+      const { sessions, prompts } = held(['run_7', ask('tu_3', 'Bash', { command: 'ls' })]);
+      const props = { prompts, onDecide: vi.fn() };
+      renderHome(sessions, props);
+      const allow = () => screen.getByRole('button', { name: 'Allow' });
+      expect(allow()).toBeDisabled();
+      act(() => vi.advanceTimersByTime(PROMPT_ARM_MS));
+      expect(allow()).toBeEnabled();
+      // A session that starts to wait moves the rows: a click meant for one must not land on the
+      // next one's Allow.
+      cleanup();
+      const longer = session('mill', 'waiting', 2, { activity: waitingFor('Bash', 90) });
+      renderHome([longer, ...sessions], props);
+      expect(allow()).toBeDisabled();
+      act(() => vi.advanceTimersByTime(PROMPT_ARM_MS));
+      expect(allow()).toBeEnabled();
+    });
+
+    it('gives the next prompt of the same session fresh buttons, armed afresh', async () => {
+      const onDecide = vi.fn(async () => {});
+      const first = held(['run_7', ask('tu_3', 'Bash', { command: 'npm test' })]);
+      const { update } = renderHome(first.sessions, { prompts: first.prompts, onDecide });
+      act(() => vi.advanceTimersByTime(PROMPT_ARM_MS));
+      fireEvent.click(screen.getByRole('button', { name: 'Allow' }));
+      await act(async () => {});
+      expect(screen.getByRole('button', { name: 'Allow' })).toBeDisabled();
+
+      // The run asks again at once: the same row, another prompt.
+      const id = first.sessions[0]?.id as string;
+      const next = ask('tu_4', 'Bash', { command: 'git push' });
+      update(first.sessions, {
+        prompts: new Map([[id, { runId: 'run_7', request: next }]]),
+        onDecide,
+      });
+      expect(screen.getByRole('group')).toHaveTextContent('git push');
+      expect(screen.getByRole('button', { name: 'Allow' })).toBeDisabled();
+      act(() => vi.advanceTimersByTime(PROMPT_ARM_MS));
+      fireEvent.click(screen.getByRole('button', { name: 'Allow' }));
+      await act(async () => {});
+      expect(onDecide).toHaveBeenLastCalledWith('run_7', 'tu_4', { decision: 'allow' });
+    });
+
+    it('says why an answer did not go through, and lets it be sent again', async () => {
+      const onDecide = vi.fn(async () => {
+        throw new Error('run ended');
+      });
+      const { sessions, prompts } = held(['run_7', ask('tu_3', 'Bash', { command: 'ls' })]);
+      renderHome(sessions, { prompts, onDecide, armMs: 0 });
+      fireEvent.click(screen.getByRole('button', { name: 'Allow' }));
+      await act(async () => {});
+      expect(screen.getByRole('alert')).toHaveTextContent('Could not send: run ended');
+      expect(screen.getByRole('button', { name: 'Allow' })).toBeEnabled();
+    });
   });
 
   it('says a resting session is idle, and since when, on its second line', () => {

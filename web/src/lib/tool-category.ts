@@ -68,7 +68,7 @@ const PARSE_MAX = 100_000;
  * raw input, Codex's broken function arguments): summarized as the object they hold, or by their
  * first value, never shown as JSON.
  */
-function stringInput(tool: ToolCall, input: string): string {
+function stringInput(tool: Pick<ToolCall, 'name' | 'input'>, input: string): string {
   if (!/^\s*[[{]/.test(input)) return clip(input);
   if (input.length <= PARSE_MAX) {
     try {
@@ -95,8 +95,11 @@ export function inputPath(tool: ToolCall): string | null {
   return path && !isUrl(path) ? path : null;
 }
 
-/** One line saying what the call did: the command, the file, the pattern, the host… */
-export function summarizeInput(tool: ToolCall): string {
+/**
+ * One line saying what the call did, or a permission prompt wants to do: the command, the file,
+ * the pattern, the host…
+ */
+export function summarizeInput(tool: Pick<ToolCall, 'name' | 'input'>): string {
   const input = tool.input;
   if (tool.name === 'Workflow') {
     const name = /\bname:\s*['"]([^'"]+)['"]/.exec(field(input, 'script') ?? '')?.[1];

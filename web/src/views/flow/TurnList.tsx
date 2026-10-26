@@ -6,6 +6,7 @@ import { StatusMark, type UiStatus } from '../../components/Status';
 import { useApprovalsContext } from '../../data/approvals';
 import { usePriceTable } from '../../data/price-table';
 import { useSessionAgentKind } from '../../data/session-agent';
+import { useCommand } from '../../data/shortcuts';
 import type { OpenSession } from '../../data/store';
 import { useNow } from '../../data/useNow';
 import { useRovingFocus } from '../../data/useRovingFocus';
@@ -282,6 +283,17 @@ export const TurnList = memo(function TurnList({
     [rows],
   );
   const roving = useRovingFocus(listRef, ids, selectedId);
+  // j and k: the next and the previous prompt as the list shows them, newest on top, within its
+  // filter and its open folds; selected as a click does. Off the list, they start at its top.
+  const move = (by: 1 | -1) => {
+    const shownIds = rows.flatMap((r) => (r.kind === 'turn' ? [r.item.turn.id] : []));
+    const at = selectedId === null ? -1 : shownIds.indexOf(selectedId);
+    const next =
+      at < 0 ? shownIds[0] : shownIds[Math.max(0, Math.min(at + by, shownIds.length - 1))];
+    if (next && next !== selectedId) onSelect(next);
+  };
+  useCommand('nextPrompt', () => move(1));
+  useCommand('previousPrompt', () => move(-1));
 
   // Follow moves the selection to each new turn and a link may select an old one: keep it in view.
   useEffect(() => {

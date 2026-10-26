@@ -163,3 +163,44 @@ describe('activity of a live Claude Code session', () => {
     expect(p.patch(ch).session.activity).toMatchObject({ kind: 'tool', tool: 'Read' });
   });
 });
+
+describe('what a live Claude Code session last said', () => {
+  const lastReply = (p: ClaudeSessionParser) => p.snapshot().session.lastReply;
+
+  it('is the main agent’s latest words in its latest turn, while the process is up', () => {
+    const p = live(
+      userPrompt({ text: 'release it', ts: at(0) }),
+      apiRequest({ id: 'api-1', ts: at(1) }),
+      assistantBlocks({
+        requestRef: 'api-1',
+        requestId: 'req_1',
+        blocks: [
+          { type: 'text', text: 'Tagging v2.0 now.' },
+          { type: 'tool_use', id: 'toolu_tag', name: 'Bash', input: { command: 'git tag v2.0' } },
+        ],
+        blockTs: [at(2), at(3)],
+      }),
+    );
+    expect(lastReply(p)).toBe('Tagging v2.0 now.');
+
+    // A new prompt has said nothing yet: the last turn's words are not its words.
+    p.ingestLines(mainFile, [
+      toolResult({ toolUseId: 'toolu_tag', ts: at(4) }),
+      userPrompt({ text: 'and push', ts: at(10) }),
+    ]);
+    expect(lastReply(p)).toBeNull();
+
+    const ch = p.ingestLines(mainFile, [
+      apiRequest({ id: 'api-2', ts: at(11) }),
+      ...assistantBlocks({
+        requestRef: 'api-2',
+        requestId: 'req_2',
+        blocks: [{ type: 'text', text: 'Pushed to origin.' }],
+        blockTs: [at(12)],
+      }),
+    ]);
+    expect(p.patch(ch).session.lastReply).toBe('Pushed to origin.');
+    p.setLive('closed');
+    expect('lastReply' in p.snapshot().session).toBe(false);
+  });
+});

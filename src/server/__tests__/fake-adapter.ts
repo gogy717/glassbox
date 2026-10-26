@@ -717,6 +717,10 @@ export class FakeParser implements SessionParser {
             },
           }
         : {}),
+      // Like a real parser's: what it last said, while its process is up.
+      ...(this.live === 'busy' || this.live === 'waiting' || this.live === 'idle'
+        ? { lastReply: `Said in ${[...this.requests.keys()].at(-1) ?? 'nothing'}.` }
+        : {}),
       usage: sumUsage([...this.requests.values()].map((r) => r.usage)),
       counts: {
         turns: 0,

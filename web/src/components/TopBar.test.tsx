@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { useState } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { I18nContext, type Locale, makeI18n } from '../i18n';
 import { DEFAULT_PRICES } from '../lib/prices';
 import { loadPrefs, type Prefs } from '../prefs';
@@ -93,6 +93,36 @@ describe('the top bar by page', () => {
     expect(open).toHaveAttribute('data-state', 'open');
     expect(baseRules(sheet)).toMatch(/\.conn\[data-state="open"\] \{[^}]*clip-path: inset\(50%\)/);
     for (const block of mediaBlocks(sheet)) expect(block.body).not.toMatch(/\.conn\b/);
+  });
+});
+
+describe('Jump to…', () => {
+  it.each(['home', 'session', 'stats'] as const)(
+    'sits beside Settings on %s, naming its keys, and opens the palette',
+    (page) => {
+      const onJump = vi.fn();
+      const bar = renderBar({ nav: navOf(page), onJump });
+      const jump = bar.getByRole('button', { name: 'Jump to…' });
+      expect(jump).toHaveAttribute('aria-keyshortcuts', 'Control+K');
+      expect(jump).toHaveTextContent('Jump to…Ctrl K');
+      expect(jump.nextElementSibling).toContainElement(
+        bar.getByRole('button', { name: 'Settings' }),
+      );
+      fireEvent.click(jump);
+      expect(onJump).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('gives up its word and keys below 1500 in a session, so the title keeps its 240px', () => {
+    // Measured in English: with them, a session's title had 202px at 1400 and 252px at 1450.
+    const hiding = mediaBlocks(sheet).filter((b) =>
+      /\.bar\[data-session\] \.jumpLabel/.test(b.body),
+    );
+    expect(hiding.map((b) => b.max)).toEqual([1499]);
+    // Off a session, at the width the page nav's words go.
+    expect(mediaBlocks(sheet).some((b) => b.max === 1199 && /\.jumpLabel\b/.test(b.body))).toBe(
+      true,
+    );
   });
 });
 

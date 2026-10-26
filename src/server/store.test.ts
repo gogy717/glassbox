@@ -391,6 +391,25 @@ describe('SessionStore', () => {
     expect(s.listSessions()[0]).not.toHaveProperty('activity');
   });
 
+  it('lists what an open session last said, and drops it once the poll finds it closed', async () => {
+    const p = await session('a', rec.req('ra', T(1)));
+    await setLive({ a: 'busy' });
+    const s = await startStore({ patchMs: 60_000 });
+    await vi.waitFor(() => expect(s.listSessions()[0]?.lastReply).toBe('Said in ra.'), {
+      timeout: 5000,
+    });
+    // A patch goes out now, so the parser's next summary waits a whole patch gap.
+    await appendFile(p.main, lines(rec.req('rb', T(2))));
+    await vi.waitFor(() => expect(s.listSessions()[0]?.lastReply).toBe('Said in rb.'), {
+      timeout: 5000,
+    });
+
+    await setLive({ a: 'closed' });
+
+    await vi.waitFor(() => expect(s.listSessions()[0]?.live).toBe('closed'), { timeout: 5000 });
+    expect(s.listSessions()[0]).not.toHaveProperty('lastReply');
+  });
+
   it('tells a session that opens the live state that changed while it loaded', async () => {
     const p = await session('a', rec.req('ra', T(1)));
     const s = await startStore();
@@ -1455,5 +1474,31 @@ describe('SessionStore for the weekly receipt', () => {
     const read = parser()?.ingested.length ?? 0;
     expect(read).toBeGreaterThan(0);
     expect(read).toBeLessThan(chunks / 2);
+  });
+});
+
+describe('listedSummary', () => {
+  const said: SessionSummary = {
+    id: 'fake:a',
+    agent: 'fake',
+    nativeId: 'a',
+    title: null,
+    cwd: null,
+    project: 'proj',
+    startedAt: null,
+    updatedAt: T(1),
+    live: 'busy',
+    version: null,
+    model: null,
+    usage: null,
+    counts: null,
+    lastReply: 'Pushed to origin.',
+  };
+
+  it('keeps the last words while the process is up, and drops them once it is not', () => {
+    expect(listedSummary(said, 'idle').lastReply).toBe('Pushed to origin.');
+    expect(listedSummary(said, 'waiting').lastReply).toBe('Pushed to origin.');
+    for (const live of ['closed', 'unknown'] as const)
+      expect(listedSummary(said, live)).not.toHaveProperty('lastReply');
   });
 });

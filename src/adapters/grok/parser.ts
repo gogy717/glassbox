@@ -13,6 +13,7 @@ import { basename } from 'node:path';
 import { activityField } from '../../core/activity.js';
 import type { ChangeSet, SessionParser, SessionSource, SourceFile } from '../../core/adapter.js';
 import { emptyChanges } from '../../core/changes.js';
+import { lastReplyField } from '../../core/last-reply.js';
 import type {
   AgentNode,
   Diagnostics,
@@ -1187,6 +1188,15 @@ export class GrokSessionParser implements SessionParser {
         requests: requests.slice(-1).map((req) => this.requestView(req, requests, pairs)),
         lastTurn: this.lastTurnView(requests),
         updatedAt: this.updatedAt ?? this.source.summary.updatedAt,
+      }),
+      // The latest turn's requests are viewed newest first, as far as its last words are.
+      ...lastReplyField({
+        live: this.live,
+        lastTurn: this.lastTurnView(requests),
+        request: (id) => {
+          const req = requests.find((r) => r.id === id);
+          return req ? this.requestView(req, requests, pairs) : undefined;
+        },
       }),
       usage,
       counts: {

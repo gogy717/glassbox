@@ -6,6 +6,7 @@ import { ApiError } from './api';
 import {
   createRunsClient,
   failedSessions,
+  openPrompts,
   pendingPrompts,
   promptsKey,
   runForSession,
@@ -190,6 +191,11 @@ describe('pendingPrompts and withWaiting', () => {
     // not with every streamed piece a run event carries.
     expect(promptsKey(runs)).toBe('s1\ttu_1\ns4\ttu_5');
     expect(promptsKey(new Map())).toBe('');
+    // Each with the run that holds it: Home answers a prompt through that run.
+    expect([...openPrompts(runs)].map(([s, p]) => [s, p.runId, p.request.id])).toEqual([
+      ['s1', 'a', 'tu_1'],
+      ['s4', 'f', 'tu_5'],
+    ]);
   });
 
   it('say those sessions wait for the prompt’s tool since it was asked, and leave the list as it was when none is', () => {

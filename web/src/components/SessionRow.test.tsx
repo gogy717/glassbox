@@ -92,6 +92,11 @@ describe('SessionRow', () => {
     expect(meta.querySelector('.visually-hidden')).toHaveTextContent('42K output tokens');
   });
 
+  it('never says what it last said on the sidebar’s compact row', () => {
+    const row = renderRow({ ...reading, lastReply: 'Found it.' });
+    expect(row).not.toHaveTextContent('Found it');
+  });
+
   it('says a failed run failed, then its age', () => {
     const meta = renderRow(idle, false, vi.fn(), 'en', { failure: 'missing file' })
       .lastElementChild as HTMLElement;
@@ -149,6 +154,33 @@ describe('SessionRow', () => {
       };
       expect(decls('.project')).toMatchObject({ 'max-width': '40%', 'min-width': '0' });
       expect(decls('.name')).toMatchObject({ overflow: 'hidden', 'text-overflow': 'ellipsis' });
+    });
+
+    it('says what a running session last said under its activity, as one plain line', () => {
+      const said = '**Found it.** The `build` script\nskips the lockfile.';
+      const row = renderRow({ ...reading, lastReply: said }, false, vi.fn(), 'en', {
+        density: 'card',
+      });
+      const [, meta, last] = [...row.children] as HTMLElement[];
+      expect(meta).toHaveTextContent(/^Reading tokens\.css/);
+      expect(last).toHaveTextContent('“Found it. The build script skips the lockfile.”');
+      // Cut by the row when it is longer than the line, whole in the tooltip then.
+      expect(last).toHaveAttribute('data-clip');
+      Object.defineProperty(last, 'scrollWidth', { value: 900 });
+      fireEvent.pointerEnter(row);
+      expect(row.title).toContain('“Found it. The build script skips the lockfile.”');
+    });
+
+    it('says nothing more of a session that is not running, or has said nothing yet', () => {
+      const idleSaid = renderRow({ ...idle, lastReply: 'Done.' }, false, vi.fn(), 'en', {
+        density: 'card',
+      });
+      expect(idleSaid.children).toHaveLength(2);
+      cleanup();
+      const quiet = renderRow({ ...reading, lastReply: null }, false, vi.fn(), 'en', {
+        density: 'card',
+      });
+      expect(quiet.children).toHaveLength(2);
     });
 
     it('writes no project before the title when it has none', () => {

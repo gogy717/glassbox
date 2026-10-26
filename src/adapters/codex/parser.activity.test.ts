@@ -38,3 +38,17 @@ describe('activity of a live Codex session', () => {
     expect('activity' in p.snapshot().session).toBe(false);
   });
 });
+
+describe('what a live Codex session last said', () => {
+  it('is the latest message of the turn: the commentary, then the final answer', () => {
+    // Only reasoning so far: nothing said yet.
+    expect(upTo(7).snapshot().session.lastReply).toBeNull();
+    // The UI's echo of the message is not a second thing said.
+    expect(upTo(9).snapshot().session.lastReply).toBe("I'll look around.");
+    const p = upTo(18);
+    p.setLive('idle');
+    expect(p.snapshot().session.lastReply).toBe('Plant mint along the path.');
+    p.setLive('closed');
+    expect('lastReply' in p.snapshot().session).toBe(false);
+  });
+});

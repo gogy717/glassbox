@@ -129,21 +129,33 @@ export function failedSessions(runs: Map<string, RunState>): Map<string, string 
   return failed;
 }
 
+/** A prompt open on a session, and the run that holds it: Home answers it through that run. */
+export interface OpenPrompt {
+  runId: string;
+  request: PermissionRequest;
+}
+
 /**
- * The permission prompt or question each session's glassbox runs hold open, by session: the
- * prompt the composer shows (`pendingPermissions`), the oldest when there are several, on any
- * run that has not closed. Their process only knows it is busy.
+ * The permission prompt or question each session's glassbox runs hold open, by session, with the
+ * run that holds it: the prompt the composer shows (`pendingPermissions`), the oldest when there
+ * are several, on any run that has not closed. Their process only knows it is busy.
  */
-export function pendingPrompts(runs: Map<string, RunState>): Map<string, PermissionRequest> {
-  const out = new Map<string, PermissionRequest>();
+export function openPrompts(runs: Map<string, RunState>): Map<string, OpenPrompt> {
+  const out = new Map<string, OpenPrompt>();
   for (const r of runs.values()) {
     if (!r.sessionId || r.status === 'closed') continue;
     for (const p of r.pendingPermissions) {
       const have = out.get(r.sessionId);
-      if (!have || p.requestedAt < have.requestedAt) out.set(r.sessionId, p);
+      if (!have || p.requestedAt < have.request.requestedAt)
+        out.set(r.sessionId, { runId: r.id, request: p });
     }
   }
   return new Map([...out].sort(([a], [b]) => a.localeCompare(b)));
+}
+
+/** `openPrompts` without the runs: the prompt open on each session. */
+export function pendingPrompts(runs: Map<string, RunState>): Map<string, PermissionRequest> {
+  return new Map([...openPrompts(runs)].map(([sessionId, p]) => [sessionId, p.request]));
 }
 
 /**

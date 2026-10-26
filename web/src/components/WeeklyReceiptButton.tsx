@@ -1,6 +1,7 @@
 import { Receipt } from 'lucide-react';
 import { Suspense, useRef, useState } from 'react';
 import type { WeekWindowKind } from '../../../src/shared/week.js';
+import { useCommand } from '../data/shortcuts';
 import { lazyView } from '../lib/lazy-view';
 import { ReceiptBoundary, ReceiptLoading } from './ReceiptEntry';
 import css from './WeeklyReceiptButton.module.css';
@@ -28,6 +29,8 @@ export function WeeklyReceiptButton({
 }) {
   const [shown, setShown] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
+  // The palette's Print receipt, on Stats.
+  useCommand('receipt', () => setShown(true));
   return (
     <>
       <button

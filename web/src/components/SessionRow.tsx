@@ -1,9 +1,10 @@
-import { type PointerEvent, useState } from 'react';
+import { type PointerEvent, type ReactNode, useState } from 'react';
 import type { SessionSummary } from '../../../src/core/model.js';
 import type { RovingItemProps } from '../data/useRovingFocus';
 import { translateParts, useI18n } from '../i18n';
 import { agentName } from '../lib/agent-names';
 import { formatCompact, formatRelative } from '../lib/format';
+import { plainText } from '../lib/preview';
 import { isRunning } from '../lib/sessions';
 import { troubleText } from '../lib/trouble';
 import { ActivityLine, TroubleLine } from './ActivityLine';
@@ -19,6 +20,13 @@ interface Props {
   density?: 'compact' | 'card';
   /** Set when the session's glassbox run failed: its error, or null when it gave none. */
   failure?: string | null;
+  /** On a card, a muted last line: where to answer what it waits for. */
+  note?: string;
+  /**
+   * On a card, controls under the row, outside its button (a button cannot hold buttons): Home's
+   * answer to a prompt. The row's hairline then runs under them.
+   */
+  footer?: ReactNode;
   roving?: RovingItemProps;
   onSelect(id: string): void;
 }
@@ -39,6 +47,8 @@ export function SessionRow({
   now,
   density = 'compact',
   failure,
+  note,
+  footer,
   roving,
   onSelect,
 }: Props) {
@@ -58,12 +68,16 @@ export function SessionRow({
   const figure = s.usage && s.usage.output > 0 ? formatCompact(s.usage.output, intl) : null;
   // Said in full ("42K output tokens"): the tooltip, and what a screen reader hears.
   const tokens = figure ? t('session.outputTokens', { n: figure }) : null;
+  // On a card, what a running session last said, as the plain words its markdown reads as.
+  const lastWords = density === 'card' && running && s.lastReply ? plainText(s.lastReply) : '';
+  const said = lastWords ? t('session.lastSaid', { text: lastWords }) : null;
   const tip = clipped
     ? [
         title,
         [agentName(s.agent), state, sign && troubleText(t, sign, now, 'short'), when, tokens]
           .filter(Boolean)
           .join(' · '),
+        said,
         s.cwd,
       ]
         .filter(Boolean)
@@ -88,8 +102,8 @@ export function SessionRow({
   // one says since when it waits.
   const showAge = !(running && (s.activity || (density === 'card' && s.live === 'waiting')));
 
-  if (density === 'card')
-    return (
+  if (density === 'card') {
+    const card = (
       <button {...button}>
         <span className={css.head}>
           <AgentTag kind={s.agent} />
@@ -129,8 +143,23 @@ export function SessionRow({
             </>
           )}
         </span>
+        {said && (
+          <span className={css.said} data-clip>
+            {said}
+          </span>
+        )}
+        {note && <span className={css.note}>{note}</span>}
       </button>
     );
+    return footer ? (
+      <div className={css.card}>
+        {card}
+        {footer}
+      </div>
+    ) : (
+      card
+    );
+  }
 
   return (
     <button {...button}>

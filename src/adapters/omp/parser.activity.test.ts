@@ -43,3 +43,19 @@ describe('activity of a live oh-my-pi session', () => {
     expect('activity' in parser.snapshot().session).toBe(false);
   });
 });
+
+describe('what a live oh-my-pi session last said', () => {
+  it('is the latest answer of the turn, nothing in a new one, and absent once closed', () => {
+    const t = new Transcript();
+    t.user('Hello', 1);
+    t.answer({ sec: 4, text: 'Hi. What should we build?' });
+    const parser = feed([...head, ...t.lines], [], 'idle');
+    expect(parser.snapshot().session.lastReply).toBe('Hi. What should we build?');
+    const before = t.lines.length;
+    t.user('A shed', 6);
+    parser.ingestLines(mainFile, t.lines.slice(before));
+    expect(parser.snapshot().session.lastReply).toBeNull();
+    parser.setLive('closed');
+    expect('lastReply' in parser.snapshot().session).toBe(false);
+  });
+});

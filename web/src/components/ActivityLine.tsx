@@ -94,19 +94,29 @@ function Doing({ a, clock }: { a: SessionActivity; clock: boolean }) {
 }
 
 /**
- * What a waiting session waits for, and for how long: "Permission · Bash · 0:20", "Question ·
- * 1:02", "Your turn · 3:40". On a card, under a heading that already says it waits for you.
+ * What a waiting session waits for, what about when its activity says, and for how long:
+ * "Permission · Bash · git push +1 · 0:20", "Question · 1:02", "Your turn · 3:40". On a card,
+ * under a heading that already says it waits for you.
  */
 function Waiting({ session: s }: { session: SessionSummary }) {
   const { t } = useI18n();
   const kind = waitKind(s.activity);
   const since = waitingSince(s);
+  const target = kind === 'turn' ? null : (s.activity?.target ?? null);
   return (
     <>
       {kind === 'permission' ? (
         <Phrase k={WAIT_KEY.permission} x={s.activity?.tool ?? ''} />
       ) : (
         <span>{t(WAIT_KEY[kind])}</span>
+      )}
+      {target && (
+        <>
+          <span className={css.sep}> · </span>
+          <span className={css.target}>
+            <UiCjk text={target} />
+          </span>
+        </>
       )}
       {since && (
         <>
