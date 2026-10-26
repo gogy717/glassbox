@@ -77,15 +77,37 @@ const IDLE_TICKS = 2;
 /** Requests per demo turn; all but the last call a tool. */
 const REQUESTS_PER_TURN = 3;
 
-const DEMO_TOOLS: { name: string; input: unknown; result: string }[] = [
+interface DemoTool {
+  name: string;
+  input: unknown;
+  result: string;
+  failed?: boolean;
+}
+
+const DEMO_TOOLS: DemoTool[] = [
   { name: 'Read', input: { file_path: '/repo/src/server/app.ts' }, result: '1\timport { Hono }…' },
   { name: 'Grep', input: { pattern: 'onPatch', path: 'src' }, result: 'src/server/store.ts:142' },
   { name: 'Bash', input: { command: 'npm test', description: 'Run tests' }, result: '89 passed' },
 ];
 
+/**
+ * Now and then the demo agent is stuck: it runs a flaky test again and again, failing, until a
+ * run passes, so the signs of trouble have something to show. Counted in the lane's tool calls:
+ * of every `STUCK_EVERY`, those from `STUCK_FROM` fail `STUCK_FAILS` times, then one passes.
+ */
+const FLAKY = {
+  name: 'Bash',
+  input: { command: 'npm test -- login', description: 'Run the login test' },
+};
+const FLAKY_FAIL = 'FAIL tests/login.spec.ts > signs in\n  TimeoutError: waiting for #submit';
+const FLAKY_PASS = '1 passed (3.2s)';
+const STUCK_EVERY = 12;
+const STUCK_FROM = 2;
+const STUCK_FAILS = 4;
+
 type Lane =
   | { phase: 'thinking'; ticksLeft: number; requestId: string }
-  | { phase: 'tool'; ticksLeft: number; requestId: string; toolId: string }
+  | { phase: 'tool'; ticksLeft: number; requestId: string; toolId: string; tool: DemoTool }
   | { phase: 'idle'; ticksLeft: number };
 
 interface Changed {
@@ -100,7 +122,8 @@ interface Changed {
  * Serves the demo fixture for `--demo`, and keeps it moving so the UI's live paths can be
  * built without a running Claude Code: every 2 s the main agent's in-flight request ages,
  * completes, calls a tool, starts the next request or turn; early ticks also finish the
- * fixture's running workflow.
+ * fixture's running workflow. Every couple of minutes the agent is stuck for a while on a flaky
+ * test (`nextTool`), so the signs of trouble show.
  */
 export class DemoStore implements AppStore, WeekStore {
   private readonly snap: SessionSnapshot;
@@ -117,6 +140,8 @@ export class DemoStore implements AppStore, WeekStore {
   private timer: NodeJS.Timeout | null = null;
   private tickNo = 0;
   private serial = 0;
+  /** Tool calls the lane has started: when the agent is stuck. */
+  private toolCalls = 0;
   private lane: Lane;
   /** The token rate, counted from simulated sessions as the real store counts real ones. */
   private readonly rate: RateTracker;
@@ -346,8 +371,7 @@ export class DemoStore implements AppStore, WeekStore {
     if (lane.phase === 'thinking') {
       const request = this.request(lane.requestId);
       const turn = this.turn(request.turnId as string);
-      const toolSpec =
-        request.index < REQUESTS_PER_TURN ? DEMO_TOOLS[this.serial % DEMO_TOOLS.length] : null;
+      const toolSpec = request.index < REQUESTS_PER_TURN ? this.nextTool() : null;
       this.completeRequest(request, now, toolSpec !== null);
       changed.turns.add(turn.id);
       if (toolSpec) {
@@ -358,6 +382,7 @@ export class DemoStore implements AppStore, WeekStore {
           ticksLeft: TOOL_TICKS,
           requestId: request.id,
           toolId: tool.id,
+          tool: toolSpec,
         };
       } else {
         this.snap.session.live = 'idle';
@@ -365,8 +390,7 @@ export class DemoStore implements AppStore, WeekStore {
       }
     } else if (lane.phase === 'tool') {
       const tool = this.toolCall(lane.toolId);
-      const spec = DEMO_TOOLS.find((t) => t.name === tool.name);
-      this.completeTool(tool, now, spec?.result ?? 'ok');
+      this.completeTool(tool, now, lane.tool.result, lane.tool.failed);
       changed.toolCalls.add(tool.id);
       const turnId = this.request(lane.requestId).turnId as string;
       const next = this.startRequest(turnId, now);
@@ -408,6 +432,14 @@ export class DemoStore implements AppStore, WeekStore {
       workflow.endedAt = now;
       changed.workflows.add(workflow.id);
     }
+  }
+
+  /** The lane's next tool call: the usual round, or the flaky test while the agent is stuck. */
+  private nextTool(): DemoTool {
+    const at = (this.toolCalls++ % STUCK_EVERY) - STUCK_FROM;
+    if (at >= 0 && at < STUCK_FAILS) return { ...FLAKY, result: FLAKY_FAIL, failed: true };
+    if (at === STUCK_FAILS) return { ...FLAKY, result: FLAKY_PASS };
+    return DEMO_TOOLS[this.serial % DEMO_TOOLS.length] as DemoTool;
   }
 
   private startTurn(now: IsoTime): Turn {
@@ -505,8 +537,8 @@ export class DemoStore implements AppStore, WeekStore {
     return tool;
   }
 
-  private completeTool(tool: ToolCall, now: IsoTime, result: string): void {
-    tool.status = 'complete';
+  private completeTool(tool: ToolCall, now: IsoTime, result: string, failed = false): void {
+    tool.status = failed ? 'error' : 'complete';
     tool.endedAt = now;
     tool.durationMs = Date.parse(now) - Date.parse(tool.startedAt ?? now);
     tool.resultPreview = result;

@@ -140,6 +140,33 @@ describe('DemoStore', () => {
     }
   });
 
+  it('gets stuck now and then on a flaky test, says so meanwhile, then moves on', async () => {
+    const signs: string[] = [];
+    store.onSessions((l) => {
+      const t = l.find((x) => x.id === DEMO_SESSION_ID)?.trouble;
+      const said = t ? `${t.kind} ${t.params.x} ${t.params.n}` : 'none';
+      if (signs.at(-1) !== said) signs.push(said);
+    });
+    await vi.advanceTimersByTimeAsync(80_000);
+    // Retried until it passed, the same call each time; then other work. Idle between two
+    // prompts, the session is not running, and a session not running carries no sign.
+    expect(signs).toEqual([
+      'none',
+      'repeat npm test 3',
+      'repeat npm test 4',
+      'none',
+      'repeat npm test 4',
+      'repeat npm test 5',
+      'none',
+    ]);
+    const snap = (await store.getSnapshot(DEMO_SESSION_ID)) as SessionSnapshot;
+    const runs = snap.toolCalls.filter(
+      (t) => (t.input as { command?: string }).command === 'npm test -- login',
+    );
+    expect(runs.map((t) => t.status)).toEqual(['error', 'error', 'error', 'error', 'complete']);
+    expect(checkSnapshot(snap)).toEqual([]);
+  });
+
   it('stops notifying after unsubscribe and after stop', async () => {
     const patches: SessionPatch[] = [];
     const lists: SessionSummary[][] = [];
