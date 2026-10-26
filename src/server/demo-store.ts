@@ -76,10 +76,26 @@ const IDLE_TICKS = 2;
 /** Requests per demo turn; all but the last call a tool. */
 const REQUESTS_PER_TURN = 3;
 
-const DEMO_TOOLS: { name: string; input: unknown; result: string }[] = [
-  { name: 'Read', input: { file_path: '/repo/src/server/app.ts' }, result: '1\timport { Hono }…' },
-  { name: 'Grep', input: { pattern: 'onPatch', path: 'src' }, result: 'src/server/store.ts:142' },
-  { name: 'Bash', input: { command: 'npm test', description: 'Run tests' }, result: '89 passed' },
+/** The demo's steps: what the agent says it will do, then the tool it calls. */
+const DEMO_TOOLS: { said: string; name: string; input: unknown; result: string }[] = [
+  {
+    said: 'Reading the server’s routes before touching the stream.',
+    name: 'Read',
+    input: { file_path: '/repo/src/server/app.ts' },
+    result: '1\timport { Hono }…',
+  },
+  {
+    said: 'Now to find where each patch is sent from.',
+    name: 'Grep',
+    input: { pattern: 'onPatch', path: 'src' },
+    result: 'src/server/store.ts:142',
+  },
+  {
+    said: 'Running the tests before I change anything.',
+    name: 'Bash',
+    input: { command: 'npm test', description: 'Run tests' },
+    result: '89 passed',
+  },
 ];
 
 type Lane =
@@ -347,7 +363,7 @@ export class DemoStore implements AppStore, WeekStore {
       const turn = this.turn(request.turnId as string);
       const toolSpec =
         request.index < REQUESTS_PER_TURN ? DEMO_TOOLS[this.serial % DEMO_TOOLS.length] : null;
-      this.completeRequest(request, now, toolSpec !== null);
+      this.completeRequest(request, now, toolSpec !== null, toolSpec?.said);
       changed.turns.add(turn.id);
       if (toolSpec) {
         const tool = this.startTool(request, toolSpec, now);
@@ -451,7 +467,13 @@ export class DemoStore implements AppStore, WeekStore {
     return request;
   }
 
-  private completeRequest(request: ModelRequest, now: IsoTime, callsTool: boolean): void {
+  /** `said`: what the reply says before the tool it calls, as agents often do. */
+  private completeRequest(
+    request: ModelRequest,
+    now: IsoTime,
+    callsTool: boolean,
+    said?: string,
+  ): void {
     const started = Date.parse(request.startedAt ?? now);
     const elapsed = Math.max(1000, Date.parse(now) - started);
     const firstBlockAt = new Date(started + elapsed * 0.6).toISOString();
@@ -476,6 +498,7 @@ export class DemoStore implements AppStore, WeekStore {
       durationMs: Math.round(elapsed * 0.6),
       at: firstBlockAt,
     });
+    if (said) request.blocks.push({ kind: 'text', text: said, at: now });
     if (!callsTool) request.blocks.push({ kind: 'text', text: 'Done with this step.', at: now });
   }
 

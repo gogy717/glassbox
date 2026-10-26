@@ -136,16 +136,18 @@ describe('DemoStore', () => {
 
   it('lists what the demo session last said as it moves on, as a parser would', async () => {
     const said = new Set<string | null>();
+    const whileBusy = new Set<string>();
     store.onSessions((l) => {
       const demo = l.find((x) => x.id === DEMO_SESSION_ID);
-      if (demo && 'lastReply' in demo) said.add(demo.lastReply ?? null);
+      if (!demo || !('lastReply' in demo)) return;
+      said.add(demo.lastReply ?? null);
+      if (demo.live === 'busy' && demo.lastReply) whileBusy.add(demo.lastReply);
     });
     await vi.advanceTimersByTimeAsync(80_000);
-    // Its words, then a new prompt that has said nothing yet, then words again.
-    expect(
-      [...said].filter((x) => typeof x === 'string' && x.trim() !== '').length,
-    ).toBeGreaterThan(0);
+    // A new prompt has said nothing yet; then each step says what it is about to do, while the
+    // session is busy, as Home's Working row shows it under the activity.
     expect(said.has(null)).toBe(true);
+    expect(whileBusy.size).toBeGreaterThan(1);
   });
 
   it('stops notifying after unsubscribe and after stop', async () => {
