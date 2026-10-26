@@ -119,10 +119,32 @@
   transition: width var(--motion);
 }
 
-/* Thirds: the overview across; two and one; one, one, one; two and one (D4). */
+/* The overview across, then two columns that each stack their own cards: the grid, the CLI and
+   project pair and the tokens on the left, two thirds wide; the hour, the longest sessions and
+   right now on the right (D4). A column is as tall as its cards and no taller, so three CLIs
+   beside eleven sessions never leave two thirds of an empty card. */
 .cards {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.column[data-column="main"] {
+  grid-column: span 2;
+}
+
+/* By CLI beside Top projects, each as tall as its own rows. */
+.pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
   gap: 16px;
 }
 
@@ -137,12 +159,7 @@
   background: var(--layer-1);
 }
 
-.card[data-area="grid"],
-.card[data-area="tokens"] {
-  grid-column: span 2;
-}
-
-.cards[data-skeleton] > .card {
+.cards[data-skeleton] .card {
   min-height: 220px;
 }
 
@@ -561,11 +578,18 @@ a.sessionTitle:hover {
   background: var(--faint);
 }
 
-/* Two columns beside the session list: the wide cards and the hour take the row, the three
-   cards two and one (D4). */
+/* Two columns beside the session list: the columns and the pair dissolve, and every card is
+   the grid's own, in reading order; the wide cards and the hour take a row, By CLI and Top
+   projects share one (D4). */
 @media (max-width: 1199px) {
   .cards {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+
+  .column,
+  .pair {
+    display: contents;
   }
 
   .card[data-area="grid"],
@@ -574,6 +598,34 @@ a.sessionTitle:hover {
   .card[data-area="tokens"],
   .card[data-area="now"] {
     grid-column: 1 / -1;
+  }
+
+  .card[data-area="grid"] {
+    order: 1;
+  }
+
+  .card[data-area="hour"] {
+    order: 2;
+  }
+
+  .card[data-area="cli"] {
+    order: 3;
+  }
+
+  .card[data-area="projects"] {
+    order: 4;
+  }
+
+  .card[data-area="longest"] {
+    order: 5;
+  }
+
+  .card[data-area="tokens"] {
+    order: 6;
+  }
+
+  .card[data-area="now"] {
+    order: 7;
   }
 }
 

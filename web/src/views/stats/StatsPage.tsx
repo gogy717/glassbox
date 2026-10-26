@@ -228,13 +228,19 @@ function Skeleton() {
   return (
     <div className={css.cards} aria-hidden="true" data-skeleton>
       <div className={css.overview} />
-      <div className={css.card} data-area="grid" />
-      <div className={css.card} data-area="hour" />
-      <div className={css.card} data-area="cli" />
-      <div className={css.card} data-area="projects" />
-      <div className={css.card} data-area="longest" />
-      <div className={css.card} data-area="tokens" />
-      <div className={css.card} data-area="now" />
+      <div className={css.column} data-column="main">
+        <div className={css.card} data-area="grid" />
+        <div className={css.pair}>
+          <div className={css.card} data-area="cli" />
+          <div className={css.card} data-area="projects" />
+        </div>
+        <div className={css.card} data-area="tokens" />
+      </div>
+      <div className={css.column} data-column="side">
+        <div className={css.card} data-area="hour" />
+        <div className={css.card} data-area="longest" />
+        <div className={css.card} data-area="now" />
+      </div>
     </div>
   );
 }
@@ -349,67 +355,76 @@ function Week({
           alarm={r.work.failures > 0}
         />
       </section>
-      <section className={css.card} data-area="grid" aria-labelledby="stats-when">
-        <div className={css.cardTop}>
-          <h2 id="stats-when" className={`${css.cardHead} section-label`}>
-            {st(L, 'when')}
-          </h2>
-          <Legend locale={L} />
+      {/* Two columns, each stacking its own cards, so a short card never holds an empty row. */}
+      <div className={css.column} data-column="main">
+        <section className={css.card} data-area="grid" aria-labelledby="stats-when">
+          <div className={css.cardTop}>
+            <h2 id="stats-when" className={`${css.cardHead} section-label`}>
+              {st(L, 'when')}
+            </h2>
+            <Legend locale={L} />
+          </div>
+          <WeekGrid
+            drawn={grid.receipt}
+            labels={labels}
+            locale={L}
+            label={st(L, 'when')}
+            selected={selected}
+            onSelect={setPicked}
+            week={w.result}
+          />
+          <div className={css.gridFoot}>
+            <span>
+              {rt(L, 'busiestHour')}{' '}
+              <strong>
+                {top.busiest
+                  ? `${hourOf(top.busiest.at, L)} · ${timeText(top.busiest.ms, L)}`
+                  : '—'}
+              </strong>
+            </span>
+            <span>
+              {rt(L, 'afterHours')} {/* Whole percents, as the slip prints it. */}
+              <strong>
+                {top.afterHours === null ? '—' : `${Math.round(top.afterHours * 100)}%`}
+              </strong>
+            </span>
+            <span className={css.caption}>
+              {hovered
+                ? caption(hovered, 'onlyHover')
+                : pinned
+                  ? caption(pinned, 'only')
+                  : st(L, 'isolateHint')}
+            </span>
+          </div>
+        </section>
+        <div className={css.pair}>
+          <CliCard w={w} locale={L} pinned={pinned} onHover={setHovered} onPin={onPin} />
+          <ProjectsCard
+            projects={projects}
+            agentMs={r.agentMs}
+            locale={L}
+            pinned={pinned}
+            onHover={setHovered}
+            onPin={onPin}
+          />
         </div>
-        <WeekGrid
-          drawn={grid.receipt}
-          labels={labels}
+        <TokensCard w={w} locale={L} />
+      </div>
+      <div className={css.column} data-column="side">
+        <HourCard
+          w={cards}
+          index={index}
+          kind={kind}
+          cell={selected}
+          listed={listed}
           locale={L}
-          label={st(L, 'when')}
-          selected={selected}
-          onSelect={setPicked}
-          week={w.result}
+          empty={r.sessions === 0}
+          elsewhere={elsewhere}
+          onElsewhere={onElsewhere}
         />
-        <div className={css.gridFoot}>
-          <span>
-            {rt(L, 'busiestHour')}{' '}
-            <strong>
-              {top.busiest ? `${hourOf(top.busiest.at, L)} · ${timeText(top.busiest.ms, L)}` : '—'}
-            </strong>
-          </span>
-          <span>
-            {rt(L, 'afterHours')} {/* Whole percents, as the slip prints it. */}
-            <strong>
-              {top.afterHours === null ? '—' : `${Math.round(top.afterHours * 100)}%`}
-            </strong>
-          </span>
-          <span className={css.caption}>
-            {hovered
-              ? caption(hovered, 'onlyHover')
-              : pinned
-                ? caption(pinned, 'only')
-                : st(L, 'isolateHint')}
-          </span>
-        </div>
-      </section>
-      <HourCard
-        w={cards}
-        index={index}
-        kind={kind}
-        cell={selected}
-        listed={listed}
-        locale={L}
-        empty={r.sessions === 0}
-        elsewhere={elsewhere}
-        onElsewhere={onElsewhere}
-      />
-      <CliCard w={w} locale={L} pinned={pinned} onHover={setHovered} onPin={onPin} />
-      <ProjectsCard
-        projects={projects}
-        agentMs={r.agentMs}
-        locale={L}
-        pinned={pinned}
-        onHover={setHovered}
-        onPin={onPin}
-      />
-      <LongestCard w={w} listed={listed} locale={L} />
-      <TokensCard w={w} locale={L} />
-      <NowCard quotas={quotas} now={now} />
+        <LongestCard w={w} listed={listed} locale={L} />
+        <NowCard quotas={quotas} now={now} />
+      </div>
     </div>
   );
 }
