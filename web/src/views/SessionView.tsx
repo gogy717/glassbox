@@ -3,7 +3,6 @@ import { MAIN_AGENT_ID } from '../../../src/core/model.js';
 import type { LivePartial } from '../../../src/shared/runs.js';
 import { AgentBreadcrumb } from '../components/AgentBreadcrumb';
 import { Delayed } from '../components/Delayed';
-import { OutcomeStrip } from '../components/OutcomeStrip';
 import { SummaryBar } from '../components/SummaryBar';
 import type { OpenSession } from '../data/store';
 import { useI18n } from '../i18n';
@@ -18,6 +17,11 @@ import { StepsView } from './steps/StepsView';
 const TimeView = lazyView(() => import('./time/TimeView').then((m) => m.TimeView));
 const TokensView = lazyView(() => import('./tokens/TokensView').then((m) => m.TokensView));
 const FilesView = lazyView(() => import('./files/FilesView').then((m) => m.FilesView));
+// The outcome strip reads command lines with the command summary, which the first chunk does
+// without: its chunk is asked for as the app loads, so the strip is there when a session opens.
+const outcomeStrip = import('../components/OutcomeStrip');
+outcomeStrip.catch(() => {});
+const OutcomeStrip = lazyView(() => outcomeStrip.then((m) => m.OutcomeStrip));
 
 interface Props {
   open: OpenSession;
@@ -57,7 +61,9 @@ export function SessionView({ open, route, navigate, live = null, rateAgent = nu
   return (
     <div className={css.view}>
       <SummaryBar open={open} agentId={agentId} rateAgent={rateAgent} />
-      <OutcomeStrip open={open} agentId={agentId} navigate={navigate} />
+      <Suspense fallback={null}>
+        <OutcomeStrip open={open} agentId={agentId} navigate={navigate} />
+      </Suspense>
       <div className={css.toolbar}>
         <AgentBreadcrumb
           open={open}

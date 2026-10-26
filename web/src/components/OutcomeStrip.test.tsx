@@ -148,7 +148,7 @@ describe('OutcomeStrip', () => {
     expect(cjkInMono(document.body)).toEqual([]);
   });
 
-  it('sits between the summary bar and the toolbar of the session page', () => {
+  it('sits between the summary bar and the toolbar of the session page', async () => {
     const open = demoOpen();
     render(
       <I18nContext.Provider value={makeI18n('en')}>
@@ -169,6 +169,8 @@ describe('OutcomeStrip', () => {
     );
     const summary = screen.getByRole('region', { name: 'Summary' });
     const tabs = screen.getByRole('tablist');
+    // Its chunk loads beside the first one.
+    await screen.findByRole('region', { name: 'Outcome' });
     expect(summary.nextElementSibling).toBe(strip());
     expect(strip().nextElementSibling?.contains(tabs)).toBe(true);
   });
