@@ -4,10 +4,11 @@ import type { LivePartial } from '../../../src/shared/runs.js';
 import { AgentBreadcrumb } from '../components/AgentBreadcrumb';
 import { Delayed } from '../components/Delayed';
 import { SummaryBar } from '../components/SummaryBar';
+import { useCommand } from '../data/shortcuts';
 import type { OpenSession } from '../data/store';
 import { useI18n } from '../i18n';
 import { lazyView } from '../lib/lazy-view';
-import { type Navigate, type Route, TABS } from '../router';
+import { type Navigate, type Route, TABS, type Tab } from '../router';
 import { FlowView } from './flow/FlowView';
 import css from './SessionView.module.css';
 import { StepsView } from './steps/StepsView';
@@ -62,6 +63,9 @@ export function SessionView({ open, route, navigate, live = null, rateAgent = nu
           agentId={agentId}
           onSelect={(id) => navigate({ agentId: id, turnId: null, requestId: null })}
         />
+        {TABS.map((tab) => (
+          <TabKey key={tab} tab={tab} navigate={navigate} />
+        ))}
         <div className={css.tabs} role="tablist">
           {TABS.map((tab) => (
             <button
@@ -105,4 +109,10 @@ export function SessionView({ open, route, navigate, live = null, rateAgent = nu
       </div>
     </div>
   );
+}
+
+/** A tab's digit: 1 to 5 switch the tabs, in their order (the key map's). */
+function TabKey({ tab, navigate }: { tab: Tab; navigate: Navigate }) {
+  useCommand(`tab:${tab}`, () => navigate({ tab }));
+  return null;
 }

@@ -20,6 +20,7 @@ export const en: Record<MessageKey, string> = {
   'nav.session': 'Session',
   'nav.stats': 'Stats',
   'nav.noSessions': 'No sessions yet',
+  'keys.title': 'Keyboard shortcuts',
   'keys.palette': 'Jump to a session, prompt, page or action',
   'keys.search': 'Search the session list',
   'keys.tabs': 'Switch the session page’s tab',

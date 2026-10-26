@@ -19,6 +19,7 @@ export const zh = {
   'nav.session': '会话',
   'nav.stats': '统计',
   'nav.noSessions': '还没有会话',
+  'keys.title': '快捷键',
   'keys.palette': '跳转到会话、轮次、页面或操作',
   'keys.search': '搜索会话列表',
   'keys.tabs': '切换会话页的标签',

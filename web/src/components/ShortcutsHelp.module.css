@@ -1,0 +1,43 @@
+/* The ? overlay: one line per shortcut, the keys in a column of their own, then what they do. */
+.list {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 10px 20px;
+  margin: 0;
+  padding: 16px 18px 20px;
+}
+
+.row {
+  display: contents;
+}
+
+.keys {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+.what {
+  margin: 0;
+  font-size: var(--fs-body);
+  color: var(--text);
+}
+
+/* A key: the mono face in a hairline box, as a keycap reads. */
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-s);
+  background: var(--layer-1);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+}

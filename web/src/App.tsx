@@ -14,6 +14,7 @@ import css from './App.module.css';
 import { Delayed } from './components/Delayed';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { SessionSidebar } from './components/SessionSidebar';
+import { ShortcutsHelp } from './components/ShortcutsHelp';
 import { TopBar } from './components/TopBar';
 import { ApprovalsContext, useApprovals } from './data/approvals';
 import { connectEvents } from './data/events';
@@ -29,13 +30,22 @@ import {
   withWaiting,
 } from './data/runs';
 import { SessionAgentContext } from './data/session-agent';
+import { useCommand, useShortcuts } from './data/shortcuts';
 import { createStore, type Store, StoreContext } from './data/store';
 import { useNow } from './data/useNow';
 import { I18nContext, makeI18n, useI18n } from './i18n';
 import { lazyView } from './lib/lazy-view';
 import { isListed } from './lib/sessions';
 import { applyTheme, loadPrefs, type Prefs, savePrefs } from './prefs';
-import { formatRoute, pageOf, parseRoute, sessionLink, useRoute, youngWeek } from './router';
+import {
+  formatRoute,
+  pageOf,
+  parseRoute,
+  sessionLink,
+  statsLink,
+  useRoute,
+  youngWeek,
+} from './router';
 import { UiContext } from './ui';
 import { Composer } from './views/composer/Composer';
 import { NewSessionDialog } from './views/composer/NewSessionDialog';
@@ -308,6 +318,39 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
       menuRef.current?.focus();
   }, [sidebarShown]);
 
+  // The keyboard (? lists it). The shell's part: the pages, the list's search and the overlay;
+  // the tabs and the prompt list carry out their own keys.
+  useShortcuts();
+  const [help, setHelp] = useState(false);
+  useCommand('help', () => setHelp(true));
+  // As the nav's links go: Home, the session page as it was left, Stats.
+  useCommand('goHome', () => {
+    window.location.hash = '#/';
+  });
+  useCommand('goSession', () => {
+    if (target) window.location.hash = target;
+  });
+  useCommand('goStats', () => {
+    if (page !== 'stats') window.location.hash = statsLink(Date.now());
+  });
+  // / searches the list, showing it first when it is hidden. Opened as an overlay, the list
+  // starts in its search field anyway; shown as a column, focus goes there once it is.
+  const searchOnShow = useRef(false);
+  useCommand('search', () => {
+    if (sidebarShown) {
+      asideRef.current?.querySelector<HTMLElement>('input[type="search"]')?.focus();
+    } else if (floating) setFloatOpen(true);
+    else {
+      searchOnShow.current = true;
+      setSidebarCollapsed(false);
+    }
+  });
+  useLayoutEffect(() => {
+    if (!sidebarShown || !searchOnShow.current) return;
+    searchOnShow.current = false;
+    asideRef.current?.querySelector<HTMLElement>('input[type="search"]')?.focus();
+  }, [sidebarShown]);
+
   return (
     <UiContext.Provider value={ui}>
       <SessionAgentContext.Provider value={summary?.agent ?? 'claude-code'}>
@@ -462,6 +505,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
               onClose={() => setNewSession(false)}
             />
           )}
+          {help && <ShortcutsHelp onClose={() => setHelp(false)} />}
         </div>
       </SessionAgentContext.Provider>
     </UiContext.Provider>

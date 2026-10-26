@@ -1128,6 +1128,122 @@ describe('App top-bar popovers', () => {
 });
 
 // F1: a background tab says how many sessions need you.
+describe('App keyboard shortcuts', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(DEMO_NOW);
+    window.location.hash = '';
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    window.location.hash = '';
+  });
+  const key = (k: string, init: KeyboardEventInit = {}) =>
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: k, ...init });
+  const demoLink = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}`;
+
+  it('goes to Stats, Home and back to the session with g t, g h and g s', async () => {
+    window.location.hash = demoLink;
+    const store = demoStore();
+    store.applyEvent({ type: 'sessions', sessions: createDemoSessions(DEMO_NOW) });
+    render(<App store={store} connect={noConnect} runs={fakeRuns()} />);
+    key('g');
+    key('t');
+    await waitFor(() => expect(window.location.hash).toBe('#/stats'));
+    key('g');
+    key('h');
+    await waitFor(() => expect(window.location.hash).toBe('#/'));
+    key('g');
+    key('s');
+    await waitFor(() => expect(window.location.hash).toBe(demoLink));
+  });
+
+  it('switches the session page’s tab with 1 to 5', async () => {
+    window.location.hash = demoLink;
+    render(<App store={demoStore()} connect={noConnect} runs={fakeRuns()} />);
+    const selected = () =>
+      screen.getAllByRole('tab').find((t) => t.getAttribute('aria-selected') === 'true')
+        ?.textContent;
+    key('2');
+    await waitFor(() => expect(selected()).toBe('How it worked'));
+    key('5');
+    await waitFor(() => expect(selected()).toBe('Files'));
+    key('1');
+    await waitFor(() => expect(selected()).toBe('Execution chain'));
+  });
+
+  it('moves along the prompt list with j and k, as a click on a row does', async () => {
+    window.location.hash = demoLink;
+    render(<App store={demoStore()} connect={noConnect} runs={fakeRuns()} />);
+    // Newest on top, following it: j goes down the list, to older prompts, and stops at the end.
+    const current = () =>
+      within(screen.getByRole('list', { name: 'Prompts' }))
+        .getAllByRole('button')
+        .find((b) => b.getAttribute('aria-current') === 'true')?.textContent;
+    expect(current()).toMatch(/design document/);
+    key('j');
+    await waitFor(() => expect(current()).toMatch(/Research how a live viewer/));
+    expect(window.location.hash).toContain('turn=turn_m2');
+    expect(screen.getByRole('button', { name: 'Follow latest' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+    key('j');
+    await waitFor(() => expect(current()).toMatch(/Busy sessions/));
+    key('j');
+    key('k');
+    await waitFor(() => expect(current()).toMatch(/Research how a live viewer/));
+  });
+
+  it('focuses the session list’s search with /, showing the list when it is hidden', () => {
+    const store = createStore();
+    store.applyEvent({ type: 'sessions', sessions: createDemoSessions(DEMO_NOW) });
+    render(<App store={store} connect={noConnect} runs={fakeRuns()} />);
+    const search = () => screen.getByRole('searchbox', { name: 'Search title or folder' });
+    key('/');
+    expect(search()).toHaveFocus();
+    // Hidden from the menu button: / shows it again, onto its search.
+    fireEvent.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Sessions' }));
+    expect(screen.queryByRole('searchbox', { name: 'Search title or folder' })).toBeNull();
+    key('/');
+    expect(search()).toHaveFocus();
+  });
+
+  it('lists every shortcut under ?, and Esc closes the list', () => {
+    render(<App store={createStore()} connect={noConnect} runs={fakeRuns()} />);
+    key('?', { shiftKey: true });
+    const dialog = screen.getByRole('dialog', { name: 'Keyboard shortcuts' });
+    for (const words of [
+      'Jump to a session, prompt, page or action',
+      'Search the session list',
+      'Switch the session page’s tab',
+      'Next / previous prompt',
+      'Go Home',
+      'Go to the session page',
+      'Go to Stats',
+      'Show these shortcuts',
+      'Close a dialog, the palette or this list',
+    ])
+      expect(dialog).toHaveTextContent(words);
+    expect(
+      [...dialog.querySelectorAll('dt')].map((dt) => dt.textContent?.replace(/\s+/g, ' ')),
+    ).toEqual(['Ctrl K', '/', '1–5', 'j / k', 'g h', 'g s', 'g t', '?', 'Esc']);
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('takes no keys typed in the composer', async () => {
+    window.location.hash = demoLink;
+    render(<App store={demoStore()} connect={noConnect} runs={fakeRuns()} />);
+    const box = screen.getByRole('textbox', { name: /message/i });
+    box.focus();
+    key('2');
+    key('g');
+    key('h');
+    expect(window.location.hash).toBe(demoLink);
+  });
+});
+
 describe('documentTitle', () => {
   it('counts the sessions that need you, before the open session’s title', () => {
     expect(documentTitle(0, null)).toBe('glassbox');
@@ -1292,6 +1408,16 @@ describe('App below three columns', () => {
     expect(screen.queryByRole('dialog', { name: 'Sessions' })).toBeNull();
     expect(document.activeElement).toBe(menu);
     expect(screen.getByRole('main')).not.toHaveAttribute('inert');
+  });
+
+  it('opens onto its search with /, from the page behind it', () => {
+    screenWidth(1024);
+    window.location.hash = `#/s/${encodeURIComponent(DEMO_SESSION_ID)}`;
+    render(<App store={demoStore()} connect={noConnect} />);
+    expect(screen.queryByRole('dialog', { name: 'Sessions' })).toBeNull();
+    fireEvent.keyDown(document.body, { key: '/' });
+    const list = screen.getByRole('dialog', { name: 'Sessions' });
+    expect(within(list).getByRole('searchbox')).toHaveFocus();
   });
 
   it('closes from the scrim, giving focus back to the menu', () => {
