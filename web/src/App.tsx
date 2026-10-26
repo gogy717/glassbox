@@ -56,6 +56,7 @@ import { Composer } from './views/composer/Composer';
 import { NewSessionDialog } from './views/composer/NewSessionDialog';
 import { PermissionDialog } from './views/composer/PermissionDialog';
 import { Home } from './views/Home';
+import { Inbox } from './views/inbox/Inbox';
 import { pageItems, promptItems, sessionItems } from './views/palette-items';
 import { SessionView } from './views/SessionView';
 import type { StatsPageProps } from './views/stats/StatsPage';
@@ -485,7 +486,17 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
               />
             </aside>
             <main ref={mainRef} tabIndex={-1} className={css.main} inert={modal}>
-              {route.stats ? (
+              {route.inbox ? (
+                <InboxContainer
+                  sessions={sessions}
+                  prompts={held}
+                  showProbes={prefs.showProbes}
+                  loaded={state.sessionsLoaded}
+                  at={route.inbox.item}
+                  onOpen={openSession}
+                  onDecide={(runId, id, d) => runs.decide(runId, id, d)}
+                />
+              ) : route.stats ? (
                 <ErrorBoundary key="stats">
                   <Suspense
                     fallback={
@@ -590,6 +601,12 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
 function HomeContainer(props: Omit<Parameters<typeof Home>[0], 'now'>) {
   const now = useNow(30_000);
   return <Home {...props} now={now} />;
+}
+
+function InboxContainer(props: Omit<Parameters<typeof Inbox>[0], 'now'>) {
+  // A sign's minutes move by the half minute at most; the waits' clocks tick on their own.
+  const now = useNow(30_000);
+  return <Inbox {...props} now={now} />;
 }
 
 function StatsContainer({

@@ -1438,6 +1438,88 @@ describe('App palette', () => {
 });
 
 // F1: a background tab says how many sessions need you.
+describe('App inbox', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(DEMO_NOW);
+    window.location.hash = '#/inbox';
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    window.location.hash = '';
+  });
+
+  const prompt = {
+    id: 'tu_1',
+    toolName: 'Bash',
+    input: { command: 'npm test' },
+    questions: null,
+    requestedAt: new Date(DEMO_NOW.getTime() - 20_000).toISOString(),
+  };
+
+  it('answers a run’s prompt from the Inbox, and the item leaves with the next update', async () => {
+    const store = createStore();
+    const [demo, other] = createDemoSessions(DEMO_NOW);
+    if (!demo || !other) throw new Error('fixture');
+    store.applyEvent({ type: 'sessions', sessions: [demo, { ...other, live: 'busy' }] });
+    const waiting = runState({
+      id: 'run_2',
+      sessionId: other.id,
+      status: 'waiting-permission',
+      pendingPermissions: [prompt],
+    });
+    store.applyEvent({ type: 'run', run: waiting });
+    const runs = fakeRuns();
+    render(<App store={store} connect={noConnect} runs={runs} />);
+    expect(screen.getByRole('heading', { level: 1, name: 'Inbox' })).toBeInTheDocument();
+    const item = screen.getByRole('article', {
+      name: 'Permission for Bash · Fix flaky login test',
+    });
+    expect(item).toHaveFocus();
+    // No composer and no prompt dialog: the Inbox talks to no session of its own.
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByRole('textbox', { name: /Message/ })).toBeNull();
+    const allow = within(item).getByRole('button', { name: 'Allow' });
+    await waitFor(() => expect(allow).toBeEnabled());
+    fireEvent.click(allow);
+    await waitFor(() =>
+      expect(runs.decide).toHaveBeenCalledWith('run_2', 'tu_1', { decision: 'allow' }),
+    );
+    act(() =>
+      store.applyEvent({
+        type: 'run',
+        run: { ...waiting, status: 'running', pendingPermissions: [] },
+      }),
+    );
+    expect(screen.queryByRole('article')).toBeNull();
+    expect(screen.getByRole('region', { name: 'Needs you' })).toHaveTextContent(
+      'Nothing needs you.',
+    );
+  });
+
+  it('opens an item’s session onto its prompt', async () => {
+    const store = createStore();
+    const [demo, other] = createDemoSessions(DEMO_NOW);
+    if (!demo || !other) throw new Error('fixture');
+    store.applyEvent({ type: 'sessions', sessions: [demo, { ...other, live: 'busy' }] });
+    store.applyEvent({
+      type: 'run',
+      run: runState({
+        id: 'run_2',
+        sessionId: other.id,
+        status: 'waiting-permission',
+        pendingPermissions: [prompt],
+      }),
+    });
+    render(<App store={store} connect={noConnect} runs={fakeRuns()} />);
+    fireEvent.click(screen.getByRole('link', { name: /Fix flaky login test/ }));
+    await waitFor(() => expect(window.location.hash).toBe(`#/s/${encodeURIComponent(other.id)}`));
+    expect(
+      await screen.findByRole('dialog', { name: 'Claude Code wants to use Bash' }),
+    ).toBeInTheDocument();
+  });
+});
+
 describe('documentTitle', () => {
   it('counts the sessions that need you, before the open session’s title', () => {
     expect(documentTitle(0, null)).toBe('glassbox');

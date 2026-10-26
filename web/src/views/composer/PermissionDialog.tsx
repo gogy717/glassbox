@@ -128,10 +128,11 @@ interface PartProps {
   onDecide(d: PermissionDecision): void;
 }
 
-function ToolPrompt({ request, busy, onDecide }: PartProps) {
-  const { t } = useI18n();
-  const [denying, setDenying] = useState(false);
-  const [reason, setReason] = useState('');
+/**
+ * What a tool's prompt is about, as the dialog shows it: the call's own description, then its
+ * command whole, else its whole input.
+ */
+export function ToolSummary({ request }: { request: PermissionRequest }) {
   const command = field(request.input, 'command');
   const description = field(request.input, 'description');
   return (
@@ -142,6 +143,17 @@ function ToolPrompt({ request, busy, onDecide }: PartProps) {
       ) : (
         <JsonInspector label={request.toolName} data={request.input ?? {}} />
       )}
+    </>
+  );
+}
+
+function ToolPrompt({ request, busy, onDecide }: PartProps) {
+  const { t } = useI18n();
+  const [denying, setDenying] = useState(false);
+  const [reason, setReason] = useState('');
+  return (
+    <>
+      <ToolSummary request={request} />
       {denying ? (
         <div className={css.denyRow}>
           <label className={css.reason}>

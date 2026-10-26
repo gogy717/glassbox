@@ -3,7 +3,7 @@ import type { SessionActivity, SessionSummary, TroubleSignal } from '../../../sr
 import { type MessageKey, type Params, translateParts, useI18n } from '../i18n';
 import { isRunning } from '../lib/sessions';
 import { toolCategory } from '../lib/tool-category';
-import { troublePhrase } from '../lib/trouble';
+import { type TroubleForm, troublePhrase } from '../lib/trouble';
 import { WAIT_KEY, waitingSince, waitKind } from '../lib/waiting';
 import css from './ActivityLine.module.css';
 import { UiCjk } from './CompactFigure';
@@ -131,11 +131,20 @@ function Waiting({ session: s, clock }: { session: SessionSummary; clock: boolea
 
 /**
  * A running session's strongest sign of trouble, short, in the error tone: "Retrying npm test ·
- * 4×", "Waiting 14 min". The call it names in the mono face, as an activity's target.
+ * 4×", "Waiting 14 min"; at length where there is room ("Repeated npm test 4×"). The call it
+ * names in the mono face, as an activity's target.
  */
-export function TroubleLine({ signal, now }: { signal: TroubleSignal; now: number }) {
+export function TroubleLine({
+  signal,
+  now,
+  form = 'short',
+}: {
+  signal: TroubleSignal;
+  now: number;
+  form?: TroubleForm;
+}) {
   const { t } = useI18n();
-  const { k, params } = troublePhrase(t, signal, now, 'short');
+  const { k, params } = troublePhrase(t, signal, now, form);
   const { x, ...rest } = params;
   return (
     <span className={css.trouble} data-trouble={signal.kind}>

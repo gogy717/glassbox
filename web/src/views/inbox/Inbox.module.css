@@ -1,0 +1,196 @@
+/* The Inbox: Home's board's manner, one column of items that each hold what to do about them. */
+.inbox {
+  min-width: 0;
+  padding: 26px 32px 48px;
+}
+
+.placeholder {
+  margin: 18vh auto 0;
+  text-align: center;
+  color: var(--muted);
+}
+
+/* The page's name, and its keys under it in the muted face. */
+.top {
+  max-width: 760px;
+  margin-bottom: 22px;
+}
+
+.top h1 {
+  margin: 0 0 4px;
+  font-size: var(--fs-readout);
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* Focus lands on the heading when the last item leaves: it frames nothing. */
+.top h1:focus {
+  outline: none;
+}
+
+.keys {
+  margin: 0;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+
+/* A section's header as Home's: the name, its count in the mono face. */
+.header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  max-width: 760px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.header h2 {
+  margin: 0;
+  font-size: var(--fs-title);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.count {
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+
+/* Things wait for you: the count in the waiting amber, as Home's is. */
+.count[data-attention] {
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.section + .section {
+  margin-top: 26px;
+}
+
+.none {
+  max-width: 760px;
+  margin: 0;
+  padding: 12px 10px;
+  font-size: var(--fs-body);
+  color: var(--muted);
+}
+
+.items {
+  max-width: 760px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* One item: a row of the list, a hairline under it; its focus ring frames it whole. */
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.item:focus-visible {
+  outline-offset: -2px;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.head > :first-child {
+  flex: none;
+  align-self: center;
+}
+
+/* The session, a link to it: its project before its title, the line cut at its end. */
+.title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-body);
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.title:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 3px;
+}
+
+.project {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+/* What it waits for or is doing, in the rows' meta face. */
+.what {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 4px;
+  min-width: 0;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+
+/* A plan's state, drawn as an activity's: the waiting dot, then the words and the clock. */
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--warning);
+}
+
+.sep {
+  color: var(--faint);
+}
+
+/* A tool's description and its command whole, as the dialog shows them. */
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* The line to act on and its buttons at the right edge. */
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* The resume command, in the mono face, cut before its button is. */
+.command {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  color: var(--text);
+}
+
+/* A stuck session's sign, at length, before its Open. */
+.sign {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--fs-meta);
+}
+
+@media (max-width: 900px) {
+  .inbox {
+    padding: 20px 16px 40px;
+  }
+}
