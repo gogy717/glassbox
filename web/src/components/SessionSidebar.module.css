@@ -93,18 +93,65 @@
   text-align: center;
 }
 
+/* A group: its title, which folds it, then its rows. The titles sit among the rows under the
+   list's one tab stop, so the arrow keys reach them. */
 .group {
   margin: 0;
   padding: 0;
-  list-style: none;
 }
 
 .groupTitle {
-  padding: 14px 14px 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 14px 14px 6px 10px;
+  border: 0;
+  background: transparent;
   color: var(--muted);
+  text-align: left;
+  cursor: pointer;
+  transition: color var(--motion);
+}
+
+.groupTitle:hover {
+  color: var(--text);
+}
+
+.groupTitle:focus-visible {
+  outline-offset: -2px;
+}
+
+.groupTitle > svg {
+  flex: none;
+}
+
+.groupName {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Folded: its count in the mono face, and a dot per running or waiting session, so nothing
+   urgent hides. */
+.groupCount {
+  flex: none;
+  letter-spacing: 0;
+}
+
+.groupDots {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  margin-left: 2px;
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 /* A row and its pin, in the row's top right corner (the title leaves it room): shown on hover or

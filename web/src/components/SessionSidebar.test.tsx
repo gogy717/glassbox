@@ -225,7 +225,10 @@ describe('SessionSidebar', () => {
     // One stop, on the first row the filter left.
     expect(rows.map((r) => r.tabIndex)).toEqual(rows.map((_, i) => (i === 0 ? 0 : -1)));
     (rows[0] as HTMLElement).focus();
+    // The next row is in another group: its title comes between (D, F7).
     fireEvent.keyDown(rows[0] as HTMLElement, { key: 'ArrowDown' });
+    expect(screen.getByRole('button', { name: 'blog' })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowDown' });
     expect(rows[1]).toHaveFocus();
     fireEvent.keyDown(rows[1] as HTMLElement, { key: 'End' });
     expect(rows.at(-1)).toHaveFocus();
@@ -341,7 +344,9 @@ describe('SessionSidebar', () => {
     const first = items[0] as HTMLElement;
     first.focus();
     fireEvent.keyDown(first, { key: 'ArrowDown' });
-    // The next session sits in another project's group.
+    // The next session sits in another project's group: its title comes first (D, F7).
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'shopfront' }));
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowDown' });
     expect(document.activeElement).toBe(items[1]);
     expect(items[1]?.closest('ul')).not.toBe(first.closest('ul'));
     fireEvent.keyDown(items[1] as HTMLElement, { key: 'End' });
@@ -672,5 +677,88 @@ describe('SessionSidebar pins', () => {
       'Live viewer research (demo)',
     ]);
     expect(screen.getAllByRole('button', { name: '置顶', pressed: true })).toHaveLength(2);
+  });
+});
+
+// Branch D (F7) item 1: a group folds from its title; the folded set is kept in the prefs.
+describe('SessionSidebar folding', () => {
+  it('folds a group from its title, which keeps its count and the dots of its running sessions', () => {
+    const onPrefs = vi.fn();
+    render(<Harness sessions={sessions} onPrefs={onPrefs} />);
+    const title = screen.getByRole('button', { name: 'glassbox' });
+    expect(title).toHaveAttribute('aria-expanded', 'true');
+    // The directory its sessions ran in, as the tooltip.
+    expect(title).toHaveAttribute('title', '/Users/demo/Dev/glassbox');
+    expect(title).toHaveAttribute(
+      'aria-controls',
+      screen.getByRole('list', { name: 'glassbox' }).id,
+    );
+    fireEvent.click(title);
+    expect(onPrefs).toHaveBeenLastCalledWith(expect.objectContaining({ folded: ['glassbox'] }));
+    expect(lists()).toEqual(['shopfront', 'blog']);
+    const folded = screen.getByRole('button', { name: /^glassbox/ });
+    expect(folded).toHaveAttribute('aria-expanded', 'false');
+    expect(folded).not.toHaveAttribute('aria-controls');
+    expect(folded).toHaveAccessibleName('glassbox 1 session 1 running');
+    expect(folded.querySelector('.figure')).toHaveTextContent('1');
+    expect(folded.querySelector('[data-state="busy"]')).not.toBeNull();
+    fireEvent.click(folded);
+    expect(onPrefs).toHaveBeenLastCalledWith(expect.objectContaining({ folded: [] }));
+    expect(lists()).toEqual(['glassbox', 'shopfront', 'blog']);
+  });
+
+  it('keeps the open session’s row on show in a folded group, and says who waits in it', () => {
+    // A waiting session beside the open one in shopfront, as saved folded.
+    const two = sessions.map((s, i) =>
+      i === 2
+        ? { ...s, live: 'waiting' as const, project: 'shopfront', cwd: sessions[1]?.cwd ?? null }
+        : s,
+    );
+    render(
+      <Harness
+        sessions={two}
+        selectedId={sessions[1]?.id ?? null}
+        prefs={{ ...DEFAULT_PREFS, folded: ['shopfront'] }}
+      />,
+    );
+    const title = screen.getByRole('button', { name: /^shopfront/ });
+    expect(title).toHaveAttribute('aria-expanded', 'false');
+    expect(title).toHaveAccessibleName('shopfront 2 sessions 1 waiting for you');
+    expect(title.querySelector('[data-state="waiting"]')).not.toBeNull();
+    expect(titles(screen.getByRole('list', { name: 'shopfront' }))).toEqual([
+      'Fix flaky login test',
+    ]);
+  });
+
+  it('folds from the keyboard: the titles sit among the rows under the list’s one tab stop', () => {
+    render(<Harness sessions={sessions} />);
+    const first = screen.getByRole('button', { name: /Live viewer research/ });
+    // Tab enters the list at a row, not at a title, until something was focused.
+    expect(screen.getByRole('button', { name: 'shopfront' }).tabIndex).toBe(-1);
+    expect(first.tabIndex).toBe(0);
+    first.focus();
+    fireEvent.keyDown(first, { key: 'ArrowDown' });
+    const title = screen.getByRole('button', { name: 'shopfront' });
+    expect(title).toHaveFocus();
+    expect(title.tabIndex).toBe(0);
+    // A native button: Enter and Space press it (jsdom does not), as a click does.
+    fireEvent.click(title);
+    expect(title).toHaveAttribute('aria-expanded', 'false');
+    expect(title).toHaveFocus();
+    fireEvent.keyDown(title, { key: 'ArrowDown' });
+    expect(screen.getByRole('button', { name: 'blog' })).toHaveFocus();
+  });
+
+  it('speaks a folded group in Chinese', () => {
+    render(
+      <Harness
+        sessions={sessions}
+        locale="zh"
+        prefs={{ ...DEFAULT_PREFS, folded: ['glassbox'] }}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /^glassbox/ })).toHaveAccessibleName(
+      'glassbox 1 个会话 1 个运行中',
+    );
   });
 });

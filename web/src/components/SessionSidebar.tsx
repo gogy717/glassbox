@@ -1,5 +1,5 @@
-import { Pin, Search } from 'lucide-react';
-import { type Ref, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown, ChevronRight, Pin, Search } from 'lucide-react';
+import { type Ref, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { AgentKind, SessionSummary } from '../../../src/core/model.js';
 import { type RovingItemProps, useRovingFocus } from '../data/useRovingFocus';
 import { type MessageKey, useI18n } from '../i18n';
@@ -7,6 +7,7 @@ import { AGENT_TONES, agentName } from '../lib/agent-names';
 import {
   groupSessions,
   isListed,
+  isRunning,
   LIVE_FILTERS,
   type LiveFilter,
   liveFilterOf,
@@ -17,6 +18,10 @@ import { DEFAULT_PREFS, type Prefs } from '../prefs';
 import { Delayed } from './Delayed';
 import { SessionRow } from './SessionRow';
 import css from './SessionSidebar.module.css';
+import { LiveDot } from './Status';
+
+/** A group title's roving id: no session id starts with a slash. */
+const headId = (key: string) => `/h/${key}`;
 
 interface Props {
   sessions: SessionSummary[];
@@ -132,10 +137,34 @@ export function SessionSidebar({
       0,
     );
   }, [groups, sessions, query, showProbes, agent, live]);
-  // One tab stop for the whole list; the arrow keys move between sessions, across projects.
+  // The folded groups, by key. A folded group keeps the open session's row, so the list never
+  // loses what the page shows.
+  const foldedSet = useMemo(() => new Set(prefs.folded), [prefs.folded]);
+  const toggleFold = (key: string) =>
+    onPrefs({
+      ...prefs,
+      folded: foldedSet.has(key) ? prefs.folded.filter((k) => k !== key) : [...prefs.folded, key],
+    });
+  const visible = useMemo(
+    () =>
+      groups.map((g) => ({
+        g,
+        rows: foldedSet.has(g.key) ? g.sessions.filter((s) => s.id === selectedId) : g.sessions,
+      })),
+    [groups, foldedSet, selectedId],
+  );
+  // One tab stop for the whole list; the arrow keys move between the rows and the group titles
+  // in their order, across projects. The rows come first here, so Tab enters at a row.
   const listRef = useRef<HTMLDivElement>(null);
-  const ids = useMemo(() => groups.flatMap((g) => g.sessions.map((s) => s.id)), [groups]);
+  const ids = useMemo(
+    () => [
+      ...visible.flatMap(({ rows }) => rows.map((s) => s.id)),
+      ...visible.map(({ g }) => headId(g.key)),
+    ],
+    [visible],
+  );
   const roving = useRovingFocus(listRef, ids, selectedId);
+  const uid = useId();
   // Focus follows a row that a change lists elsewhere (a pin moves it to the Pinned group).
   const [refocusRow, setRefocusRow] = useState<string | null>(null);
   useLayoutEffect(() => {
@@ -249,38 +278,93 @@ export function SessionSidebar({
               <p className={css.empty}>{t('sidebar.connecting')}</p>
             </Delayed>
           ))}
-        {groups.map((g) => (
-          <ul key={g.key} aria-label={label(g)} className={css.group}>
-            <li className={`${css.groupTitle} section-label`} aria-hidden="true">
-              {label(g)}
-            </li>
-            {g.sessions.map((s) => (
-              <li key={s.id} className={css.item}>
-                <SessionRow
-                  session={s}
-                  selected={s.id === selectedId}
-                  now={now}
-                  failure={failures?.get(s.id)}
-                  roving={rowProps(s.id)}
-                  onSelect={onSelect}
-                />
-                {/* Named Pin whether pressed or not: pressed says it is pinned. Not a tab stop:
-                    the rows are one, and P on a row does the same. */}
-                <button
-                  type="button"
-                  className={css.pin}
-                  tabIndex={-1}
-                  aria-pressed={pinnedSet.has(s.id)}
-                  aria-label={t('sidebar.pin')}
-                  title={`${t(pinnedSet.has(s.id) ? 'sidebar.unpin' : 'sidebar.pin')} · P`}
-                  onClick={() => togglePin(s.id)}
-                >
-                  <Pin size={12} aria-hidden="true" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        ))}
+        {visible.map(({ g, rows }, i) => {
+          const name = label(g);
+          const folded = foldedSet.has(g.key);
+          const listId = `${uid}-${i}`;
+          const busy = folded ? g.sessions.filter((s) => s.live === 'busy').length : 0;
+          const waiting = folded ? g.sessions.filter((s) => s.live === 'waiting').length : 0;
+          return (
+            <div key={g.key} className={css.group}>
+              <button
+                type="button"
+                className={`${css.groupTitle} section-label`}
+                aria-expanded={!folded}
+                aria-controls={rows.length > 0 ? listId : undefined}
+                title={g.kind === 'project' ? (g.cwd ?? undefined) : undefined}
+                {...roving(headId(g.key))}
+                onClick={() => toggleFold(g.key)}
+              >
+                {folded ? (
+                  <ChevronRight size={12} aria-hidden="true" />
+                ) : (
+                  <ChevronDown size={12} aria-hidden="true" />
+                )}
+                <span className={css.groupName}>{name}</span>
+                {/* Folded: how many, and a dot per running or waiting session, so nothing urgent
+                    hides. The spaces are for the title's spoken name. */}
+                {folded && (
+                  <>
+                    {' '}
+                    <span className={`${css.groupCount} figure`} aria-hidden="true">
+                      {g.sessions.length}
+                    </span>
+                    <span className="visually-hidden">
+                      {t('sidebar.foldedCount', { n: g.sessions.length })}
+                    </span>
+                    {busy + waiting > 0 && (
+                      <>
+                        {' '}
+                        <span className={css.groupDots} aria-hidden="true">
+                          {g.sessions.filter(isRunning).map((s) => (
+                            <LiveDot key={s.id} state={s.live} />
+                          ))}
+                        </span>
+                        <span className="visually-hidden">
+                          {[
+                            busy > 0 && t('sidebar.foldedRunning', { n: busy }),
+                            waiting > 0 && t('sidebar.foldedWaiting', { n: waiting }),
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </span>
+                      </>
+                    )}
+                  </>
+                )}
+              </button>
+              {rows.length > 0 && (
+                <ul id={listId} aria-label={name} className={css.rows}>
+                  {rows.map((s) => (
+                    <li key={s.id} className={css.item}>
+                      <SessionRow
+                        session={s}
+                        selected={s.id === selectedId}
+                        now={now}
+                        failure={failures?.get(s.id)}
+                        roving={rowProps(s.id)}
+                        onSelect={onSelect}
+                      />
+                      {/* Named Pin whether pressed or not: pressed says it is pinned. Not a tab
+                          stop: the rows are one, and P on a row does the same. */}
+                      <button
+                        type="button"
+                        className={css.pin}
+                        tabIndex={-1}
+                        aria-pressed={pinnedSet.has(s.id)}
+                        aria-label={t('sidebar.pin')}
+                        title={`${t(pinnedSet.has(s.id) ? 'sidebar.unpin' : 'sidebar.pin')} · P`}
+                        onClick={() => togglePin(s.id)}
+                      >
+                        <Pin size={12} aria-hidden="true" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          );
+        })}
         {live && hidden > 0 && (
           <p className={css.hidden}>
             {t(HIDDEN[live], { n: hidden })}{' '}
