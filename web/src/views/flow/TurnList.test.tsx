@@ -633,7 +633,11 @@ describe('TurnList styles', () => {
     const caps: string[] = [];
     postcss.parse(sheet).walkAtRules('media', (media) => {
       if (/max-width:\s*900px/.test(media.params))
-        media.walkRules('.results', (r) => r.walkDecls('max-height', (d) => caps.push(d.value)));
+        media.walkRules('.results', (r) =>
+          r.walkDecls('max-height', (d) => {
+            caps.push(d.value);
+          }),
+        );
     });
     expect(caps).toHaveLength(1);
     expect(caps[0]).not.toBe('none');
