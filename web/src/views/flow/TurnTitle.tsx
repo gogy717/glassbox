@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { useId, useLayoutEffect, useRef, useState } from 'react';
+import { type ReactNode, useId, useLayoutEffect, useRef, useState } from 'react';
 import { useI18n } from '../../i18n';
 import css from './TurnTitle.module.css';
 
@@ -8,6 +8,8 @@ interface Props {
   /** Names the turn for screen readers inside the heading, where a visible label sits above it. */
   label?: string;
   className?: string;
+  /** Controls on the toggle's line, after it (the execution chain's Copy as Markdown). */
+  actions?: ReactNode;
 }
 
 /**
@@ -15,7 +17,7 @@ interface Props {
  * when it does not fit, a toggle to read all of it with its line breaks. Callers key it by turn,
  * so opening another turn starts folded.
  */
-export function TurnTitle({ text, label, className }: Props) {
+export function TurnTitle({ text, label, className, actions }: Props) {
   const { t } = useI18n();
   const ref = useRef<HTMLHeadingElement>(null);
   const id = useId();
@@ -45,21 +47,26 @@ export function TurnTitle({ text, label, className }: Props) {
         )}
         {text}
       </h2>
-      {(clamped || expanded) && (
-        <button
-          type="button"
-          className={css.toggle}
-          aria-expanded={expanded}
-          aria-controls={id}
-          onClick={() => setExpanded((e) => !e)}
-        >
-          {expanded ? (
-            <ChevronUp size={12} aria-hidden="true" />
-          ) : (
-            <ChevronDown size={12} aria-hidden="true" />
+      {(clamped || expanded || actions) && (
+        <div className={css.actions}>
+          {(clamped || expanded) && (
+            <button
+              type="button"
+              className={css.toggle}
+              aria-expanded={expanded}
+              aria-controls={id}
+              onClick={() => setExpanded((e) => !e)}
+            >
+              {expanded ? (
+                <ChevronUp size={12} aria-hidden="true" />
+              ) : (
+                <ChevronDown size={12} aria-hidden="true" />
+              )}
+              {t(expanded ? 'flow.promptLess' : 'flow.promptMore')}
+            </button>
           )}
-          {t(expanded ? 'flow.promptLess' : 'flow.promptMore')}
-        </button>
+          {actions}
+        </div>
       )}
     </div>
   );

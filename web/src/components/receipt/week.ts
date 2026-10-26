@@ -43,7 +43,7 @@ export interface WeekReceipt {
   clis: AgentKind[];
   /** The hero: every agent's own turns added up, the grid's sum; 0 when nothing was timed. */
   agentMs: number;
-  /** The main agents' turns, added up: the session receipts' DURATION, printed beside it. */
+  /** The main agents' turns, added up: the session receipts' ACTIVE TIME, printed beside it. */
   sessionMs: number;
   /** 7 rows of 24 hours; `rows[i]` is a time on that row's day (for its weekday). */
   grid: GridCell[][];

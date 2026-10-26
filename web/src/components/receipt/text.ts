@@ -159,14 +159,14 @@ function textLines(
     : d.start !== null
       ? `${clock(d.start)} – ${clock(d.end)}`
       : clock(d.end);
-  // A running session's line can outgrow the block: "still running" then joins the duration.
+  // A running session's line can outgrow the block: "still running" then joins the active time.
   const when = `${day(d.start ?? d.end, L)} · ${span}`;
   const tail = ` · ${w('stillRunning')}`;
   const moved = d.running && cols(when) > COLUMNS;
   out.push(moved ? when.slice(0, -tail.length) : when);
-  const duration = d.durationMs === null ? '—' : dur(d.durationMs);
-  const durationName = moved ? `${head('duration')}${tail}` : head('duration');
-  out.push(zh ? lead(duration, durationName) : spread(durationName, duration));
+  const active = d.durationMs === null ? '—' : dur(d.durationMs);
+  const activeName = moved ? `${head('activeTime')}${tail}` : head('activeTime');
+  out.push(zh ? lead(active, activeName) : spread(activeName, active));
   out.push(rule);
   if (!o.hideNames && d.project) out.push(`${clip(d.project, COLUMNS - 2, cols)} /`);
   out.push(...wrapCols(o.hideNames || !d.title ? w('untitled') : d.title, titleLines));

@@ -7,6 +7,7 @@ import { formatCompact, formatRelative } from '../lib/format';
 import { plainText } from '../lib/preview';
 import { isRunning } from '../lib/sessions';
 import { troubleText } from '../lib/trouble';
+import { waitLabel } from '../lib/waiting';
 import { ActivityLine, TroubleLine } from './ActivityLine';
 import { AgentTag } from './AgentTag';
 import { CompactFigure } from './CompactFigure';
@@ -59,9 +60,12 @@ export function SessionRow({
   const title = s.title ?? t('sidebar.untitled');
   const running = isRunning(s);
   const failed = failure !== undefined && !running;
+  // A wait in the words the row says: "Permission · Bash", "Question", "Your turn".
   const state = failed
     ? [t('status.error'), failure].filter(Boolean).join(': ')
-    : t(`live.${s.live}`);
+    : s.live === 'waiting'
+      ? waitLabel(t, s.activity)
+      : t(`live.${s.live}`);
   const when = formatRelative(s.updatedAt, now, intl);
   // A running session's strongest sign of being stuck, from the server: after what it does.
   const sign = running ? (s.trouble ?? null) : null;

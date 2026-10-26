@@ -3,12 +3,14 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import postcss from 'postcss';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDemoSessions } from '../../../src/core/fixtures/demo.js';
 import type { SessionSummary } from '../../../src/core/model.js';
 import { I18nContext, makeI18n } from '../i18n';
 import { DEMO_NOW } from '../test/demo';
+import { moduleCssValue } from '../test/module-css';
 import { SessionRow } from './SessionRow';
+import css from './SessionRow.module.css';
 
 const [running, idle] = createDemoSessions(DEMO_NOW) as [SessionSummary, SessionSummary];
 
@@ -95,6 +97,25 @@ describe('SessionRow', () => {
   it('never says what it last said on the sidebar’s compact row', () => {
     const row = renderRow({ ...reading, lastReply: 'Found it.' });
     expect(row).not.toHaveTextContent('Found it');
+  });
+
+  it('says what a waiting session waits for, in the words of Home’s board, its tooltip too', () => {
+    const waiting: SessionSummary = {
+      ...running,
+      live: 'waiting',
+      activity: { kind: 'waiting', tool: 'Bash', target: null, agentId: 'main', since: since(20) },
+    };
+    const row = renderRow(waiting);
+    const meta = row.lastElementChild as HTMLElement;
+    expect(meta.firstElementChild).toHaveTextContent(/^Permission · Bash$/);
+    // Cut short, the tooltip repeats the row: in its words, not "Waiting for you".
+    const title = row.querySelector<HTMLElement>(`.${css.title}`) as HTMLElement;
+    Object.defineProperty(title, 'scrollWidth', { configurable: true, value: 400 });
+    Object.defineProperty(title, 'clientWidth', { configurable: true, value: 200 });
+    fireEvent.pointerEnter(row);
+    expect((row.getAttribute('title') ?? '').split('\n')[1]).toMatch(
+      /^Claude Code · Permission · Bash · /,
+    );
   });
 
   it('says a failed run failed, then its age', () => {
@@ -236,6 +257,55 @@ describe('SessionRow', () => {
 
     it('says nothing of it once the session no longer runs', () => {
       expect(renderRow({ ...stuck, live: 'idle' })).not.toHaveTextContent('Retrying');
+    });
+  });
+
+  describe('short of room (the sidebar at 240 px)', () => {
+    // jsdom lays nothing out: what each part of the meta line may do is read from the module's
+    // rules, as matched on the rendered row. "思考中 · 已 0:04 · 输出 9.27万" lost its clock's
+    // last digit: the activity shrank, clipping its own clock, while the tokens stayed whole.
+    const sheet = join(import.meta.dirname, 'SessionRow.module.css');
+    const rule = (el: Element | null | undefined, prop: string) =>
+      el ? moduleCssValue(sheet, css, el, prop) : 'missing';
+    const thinking: SessionSummary = {
+      ...running,
+      activity: { kind: 'thinking', tool: null, target: null, agentId: 'main', since: since(4) },
+    };
+    const parts = (row: HTMLElement) => {
+      const meta = row.lastElementChild as HTMLElement;
+      return { activity: meta.firstElementChild, when: meta.querySelector('[data-clip]') };
+    };
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(DEMO_NOW);
+    });
+    afterEach(() => vi.useRealTimers());
+
+    it('keeps a clock whole: with nothing in the activity to give way, the tokens give way', () => {
+      const { activity, when } = parts(renderRow(thinking, false, vi.fn(), 'zh'));
+      expect(activity).toHaveTextContent('思考中 · 已 0:04');
+      expect(rule(activity, 'flex-shrink')).toBe('0');
+      expect(rule(when, 'flex-shrink')).toBeUndefined();
+      expect(rule(when, 'min-width')).toBe('0');
+      expect(rule(when, 'text-overflow')).toBe('ellipsis');
+    });
+
+    it('keeps a state’s word whole beside its age, which gives way', () => {
+      const { activity, when } = parts(renderRow(idle, false, vi.fn(), 'zh'));
+      expect(rule(activity, 'flex-shrink')).toBe('0');
+      expect(when).toHaveAttribute('data-age');
+      expect(rule(when, 'flex-shrink')).toBeUndefined();
+    });
+
+    it('lets a target give way first, the tokens beside it whole', () => {
+      const { activity, when } = parts(renderRow(reading, false, vi.fn(), 'zh'));
+      expect(rule(activity, 'flex-shrink')).toBe('8');
+      expect(rule(when, 'flex-shrink')).toBe('0');
+    });
+
+    it('leaves Home’s cards as they were', () => {
+      const row = renderRow(thinking, false, vi.fn(), 'zh', { density: 'card' });
+      expect(rule(parts(row).activity, 'flex-shrink')).toBe('8');
     });
   });
 

@@ -1,0 +1,16 @@
+/* A word beside "Show full prompt", drawn as it is. */
+.copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: var(--fs-small);
+  cursor: pointer;
+}
+
+.copy:hover {
+  text-decoration: underline;
+}

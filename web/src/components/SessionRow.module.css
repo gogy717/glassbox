@@ -76,6 +76,13 @@
   overflow: hidden;
 }
 
+/* In the sidebar an activity gives way only through its target or reason (`data-gives-way`): a
+   clock or a state's word has nothing to cut but its end, and a clock cut short reads as another
+   time ("已 0:0" for 0:04). Those stay whole, and the age and tokens give way instead. */
+.row[data-density="compact"] .meta > :first-child:not(:has([data-gives-way])) {
+  flex-shrink: 0;
+}
+
 /* Time and tokens give way next when the row is narrow; the tag stays whole. */
 .when {
   min-width: 0;
@@ -83,8 +90,8 @@
   text-overflow: ellipsis;
 }
 
-/* Tokens alone, beside an activity: the figure stays whole. */
-.when:not([data-age]) {
+/* Tokens beside a target: the target gives way first, the figure stays whole. */
+.meta:has([data-gives-way]) > .when {
   flex-shrink: 0;
 }
 

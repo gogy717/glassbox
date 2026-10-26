@@ -2,7 +2,8 @@
  * The session receipt, byte for byte: every image and text the demo sessions make, at each size,
  * paper and language, names shown and hidden, hashed in one time zone. The hash is what the
  * receipt drew before its pen was shared with the weekly receipt (78cb423), then with WORK's
- * turns line saying "Prompts", not "Conversations" (the UX pass's words). Changing how the
+ * turns line saying "Prompts", not "Conversations" (the UX pass's words), then with its hero
+ * named ACTIVE TIME (活跃时长) as the Summary bar names it, not DURATION (总耗时). Changing how the
  * session receipt looks changes it on purpose: then the hash changes in the same commit, which
  * says why. So does changing what the demo sessions did: the receipt prints their tool calls and
  * the mix of their kinds (the demo's fix grew file work; the pen did not change). WORK then
@@ -10,7 +11,8 @@
  * "1  Test run · last ✓"; with those two lines left out, the hash is the one before.
  * Then TOKENS ended with API EQUIV., what the same tokens would cost at API list prices
  * (proposal 6): the demo's Claude calls are priced, so every one of its receipts prints that
- * line; the hash below is of the receipt with both.
+ * line. Then the headline's word became ACTIVE TIME (活跃时长), as the summary bar says it, not
+ * DURATION; the hash below is of the receipt with all three.
  */
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, expect, it } from 'vitest';
@@ -51,6 +53,6 @@ function receipts(): string {
 
 it('draws the session receipt exactly as it did, with TOKENS ending in its API equivalent', () => {
   expect(createHash('sha256').update(receipts()).digest('hex')).toBe(
-    '73f032eaec8d6b969baf620104f20853c43d9e5e09d5fb85d50b54fcc01eca2f',
+    'c50c7d63be109eaf5fbfed44f91030d280135dfb429bcae5f97f2452a9c8d767',
   );
 });

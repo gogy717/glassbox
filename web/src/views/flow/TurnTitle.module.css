@@ -28,6 +28,14 @@
   white-space: pre-wrap;
 }
 
+/* Show full prompt, then the view's own controls, on one line under the heading. */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 14px;
+}
+
 .toggle {
   display: inline-flex;
   align-items: center;

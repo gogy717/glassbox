@@ -3,19 +3,26 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ModelRequest, ToolCall, Turn } from '../../../../src/core/model.js';
 import type { LivePartial } from '../../../../src/shared/runs.js';
 import type { OpenSession } from '../../data/store';
+import { useDebounced } from '../../data/useDebounced';
 import { useI18n } from '../../i18n';
 import { mayStillRun } from '../../lib/agents';
 import type { Navigate, Route } from '../../router';
 import { useUi } from '../../ui';
 import { LiveOverlay } from '../composer/LiveOverlay';
 import { CallRow } from './CallRow';
+import { CopyMarkdown } from './CopyMarkdown';
 import type { CardKey } from './cards';
 import css from './FlowView.module.css';
 import { FollowPausedBar } from './FollowPausedBar';
 import { requestsOf, toolsOf } from './flow-model';
+import { type SearchHit, searchable, searchSession } from './search';
+import { type SearchScope, useSearchPrefs } from './search-prefs';
 import { TurnHeader } from './TurnHeader';
 import { newestMatch, TurnList, useSelectedTurn, useTurnItems } from './TurnList';
 import { useFollowScroll } from './useFollowScroll';
+
+/** How long typing must pause before everything is searched again. */
+const SEARCH_WAIT_MS = 150;
 
 interface Props {
   open: OpenSession;
@@ -34,7 +41,22 @@ export function FlowView({ open, agentId, route, navigate, live = null }: Props)
   // The list's filter: follow shows the newest prompt that passes it; when none does,
   // the one on stage stays (not the newest, which the filter has just ruled out).
   const [query, setQuery] = useState('');
-  const match = useMemo(() => newestMatch(items, query), [items, query]);
+  // Searching everything, the newest prompt with a hit passes. The search waits for typing to
+  // pause; a cleared field is the whole list again at once.
+  const [{ scope }, setSearchPrefs] = useSearchPrefs();
+  const everything = scope === 'everything';
+  const settled = useDebounced(query, SEARCH_WAIT_MS);
+  const searched = query.trim() === '' ? '' : settled;
+  const results = useMemo(
+    () => (everything && searchable(searched) ? searchSession(open, agentId, searched) : null),
+    [everything, searched, open, agentId],
+  );
+  const match = useMemo(() => {
+    if (!everything) return newestMatch(items, query);
+    if (!results) return items.at(-1);
+    const newest = results.at(-1)?.turn.id;
+    return items.find((it) => it.turn.id === newest);
+  }, [everything, results, items, query]);
   const shownId = useRef<string | null>(null);
   const latest = match ?? items.find((it) => it.turn.id === shownId.current) ?? items.at(-1);
   const current = useSelectedTurn(items, open, agentId, route, follow, latest);
@@ -73,6 +95,23 @@ export function FlowView({ open, agentId, route, navigate, live = null }: Props)
     },
     [navigate, setFollow],
   );
+  // A hit opens where it is: its prompt, and the card of its call that shows it.
+  const openHit = useCallback(
+    (hit: SearchHit, turnId: string) => {
+      setFollow(false);
+      navigate(
+        hit.requestId && hit.card
+          ? { turnId, requestId: hit.requestId, card: hit.card }
+          : { turnId, requestId: null },
+      );
+    },
+    [navigate, setFollow],
+  );
+  const setScope = useCallback((s: SearchScope) => setSearchPrefs({ scope: s }), [setSearchPrefs]);
+  const openCard = useMemo(
+    () => (route.requestId && route.card ? { requestId: route.requestId, card: route.card } : null),
+    [route.requestId, route.card],
+  );
   const backToLatest = () => {
     setFollow(true);
     navigate({ turnId: null, requestId: null });
@@ -86,11 +125,16 @@ export function FlowView({ open, agentId, route, navigate, live = null }: Props)
         onSelect={pickTurn}
         query={query}
         onQuery={setQuery}
+        scope={scope}
+        onScope={setScope}
+        results={results}
+        onHit={openHit}
+        openCard={openCard}
       />
       <section className={css.main}>
         {current ? (
           <>
-            <TurnHeader item={current} />
+            <TurnHeader item={current} actions={<CopyMarkdown open={open} turn={current.turn} />} />
             {!follow && <FollowPausedBar newest={items.at(-1)} onBack={backToLatest} />}
             <CallList
               key={current.turn.id}

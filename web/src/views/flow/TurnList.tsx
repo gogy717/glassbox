@@ -3,6 +3,7 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { Turn } from '../../../../src/core/model.js';
 import { FigureText } from '../../components/FigureText';
 import { StatusMark, type UiStatus } from '../../components/Status';
+import { Switch } from '../../components/Switch';
 import { useApprovalsContext } from '../../data/approvals';
 import { usePriceTable } from '../../data/price-table';
 import { useSessionAgentKind } from '../../data/session-agent';
@@ -13,7 +14,7 @@ import { useRovingFocus } from '../../data/useRovingFocus';
 import { useI18n } from '../../i18n';
 import { formatClock, formatDay, localDayIndex } from '../../lib/format';
 import { type Cost, costTitle, formatUsdShort, sumCost } from '../../lib/prices';
-import type { Route } from '../../router';
+import type { CardKey, Route } from '../../router';
 import {
   callStatus,
   isLocalCommand,
@@ -24,6 +25,9 @@ import {
   turnStatus,
   turnsOf,
 } from './flow-model';
+import { SearchResults } from './SearchResults';
+import { type SearchGroup, type SearchHit, searchable } from './search';
+import type { SearchScope } from './search-prefs';
 import css from './TurnList.module.css';
 
 export interface TurnItem {
@@ -189,7 +193,19 @@ interface Props {
   /** With `onQuery`, a filter field above the list (`filterTurns`). */
   query?: string;
   onQuery?(query: string): void;
+  /**
+   * With `onScope`, what the field searches: the titles, or everything the page holds, whose
+   * hits (`results`) then take the list's place. `results` is null while the query is too short.
+   */
+  scope?: SearchScope;
+  onScope?(scope: SearchScope): void;
+  results?: SearchGroup[] | null;
+  onHit?(hit: SearchHit, turnId: string): void;
+  /** The card open in the selected prompt, if any: its hits are marked. */
+  openCard?: { requestId: string; card: CardKey } | null;
 }
+
+const noop = () => {};
 
 /** A line of the list: a day's heading, a turn (`folded` under a run of commands), or that run. */
 type Row =
@@ -255,10 +271,21 @@ export const TurnList = memo(function TurnList({
   onSelect,
   query = '',
   onQuery,
+  scope = 'titles',
+  onScope,
+  results = null,
+  onHit = noop,
+  openCard = null,
 }: Props) {
   const { t, intl } = useI18n();
   const listRef = useRef<HTMLUListElement>(null);
-  const shown = useMemo(() => filterTurns(items, query), [items, query]);
+  const everything = onScope !== undefined && scope === 'everything';
+  // Searching everything, the list stays whole until there is a search to show in its place.
+  const shown = useMemo(
+    () => (everything ? items : filterTurns(items, query)),
+    [everything, items, query],
+  );
+  const hits = everything ? results : null;
   const newestFirst = useMemo(() => [...shown].reverse(), [shown]);
   // The day headings ("Today", "Yesterday") move at midnight: the clock is read each minute.
   const now = useNow(60_000);
@@ -296,19 +323,24 @@ export const TurnList = memo(function TurnList({
   useCommand('previousPrompt', () => move(-1));
 
   // Follow moves the selection to each new turn and a link may select an old one: keep it in view.
+  // So does clearing a search, under which the list was hidden and not laid out.
+  const listShown = hits === null;
   useEffect(() => {
     const list = listRef.current;
-    if (!list || !selectedId) return;
+    if (!list || !selectedId || !listShown) return;
     for (const li of list.children)
       if (li instanceof HTMLElement && li.dataset.turn === selectedId) reveal(list, li);
-  }, [selectedId]);
+  }, [selectedId, listShown]);
 
+  const field = t(everything ? 'flow.searchAll' : 'flow.filterTurns');
   return (
     <nav className={css.pane} aria-label={t('flow.turns')}>
       <div className={css.head}>
         {t('flow.turns')}
         <span>
-          {shown.length === items.length ? (
+          {hits ? (
+            <FigureText k="flow.hits" params={{ n: hits.reduce((n, g) => n + g.hits.length, 0) }} />
+          ) : shown.length === items.length ? (
             <span className="figure">{items.length}</span>
           ) : (
             <FigureText k="flow.turnsShown" params={{ n: shown.length, total: items.length }} />
@@ -321,8 +353,8 @@ export const TurnList = memo(function TurnList({
           <input
             type="search"
             value={query}
-            placeholder={t('flow.filterTurns')}
-            aria-label={t('flow.filterTurns')}
+            placeholder={field}
+            aria-label={field}
             onChange={(e) => onQuery(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Escape' && query) {
@@ -333,14 +365,48 @@ export const TurnList = memo(function TurnList({
           />
         </label>
       )}
-      {newestFirst.length === 0 && items.length > 0 && (
+      {onScope && (
+        <div className={css.scope}>
+          <Switch<SearchScope>
+            size="small"
+            label={t('flow.searchIn')}
+            value={scope}
+            options={[
+              { value: 'titles', label: t('flow.searchTitles') },
+              { value: 'everything', label: t('flow.searchEverything') },
+            ]}
+            onChange={onScope}
+          />
+        </div>
+      )}
+      {hits && hits.length > 0 && (
+        <SearchResults
+          groups={hits}
+          items={items}
+          selectedId={selectedId}
+          openCard={openCard}
+          onSelect={onSelect}
+          onHit={onHit}
+        />
+      )}
+      {hits?.length === 0 && (
+        <>
+          <p className={css.none}>{t('flow.noHit')}</p>
+          <p className={css.note}>{t('flow.searchScope')}</p>
+        </>
+      )}
+      {everything && !hits && query.trim() !== '' && !searchable(query) && (
+        <p className={css.note}>{t('flow.searchMin')}</p>
+      )}
+      {!hits && newestFirst.length === 0 && items.length > 0 && (
         <p className={css.none}>{t('flow.noTurnMatch')}</p>
       )}
+      {/* Hidden, not gone, under a search: cleared, the list is back as it was left. */}
       <ul
         ref={listRef}
         className={css.list}
         aria-label={t('flow.turns')}
-        hidden={newestFirst.length === 0 && items.length > 0}
+        hidden={hits !== null || (newestFirst.length === 0 && items.length > 0)}
       >
         {rows.map((row) => {
           if (row.kind === 'day')

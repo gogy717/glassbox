@@ -150,7 +150,7 @@ describe('the weekly receipt’s figures', () => {
       expect(w.work.failures).toBe(r1.work.failures);
       expect(w.work.categories).toEqual(r1.work.categories);
       expect(w.tokens).toEqual(r1.tokens);
-      // Session time and the longest session are its DURATION.
+      // Session time and the longest session are its ACTIVE TIME.
       expect(w.sessionMs).toBe(r1.durationMs);
       expect(w.longest?.ms).toBe(r1.durationMs);
       expect(w.longest?.title).toBe(r1.title);
