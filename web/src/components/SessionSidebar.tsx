@@ -10,6 +10,8 @@ import {
   LIVE_FILTERS,
   type LiveFilter,
   liveFilterOf,
+  type SessionGroup,
+  type TimeBucket,
 } from '../lib/sessions';
 import { Delayed } from './Delayed';
 import { SessionRow } from './SessionRow';
@@ -39,6 +41,14 @@ const HIDDEN: Record<LiveFilter, MessageKey> = {
   running: 'sidebar.hiddenRunning',
   idle: 'sidebar.hiddenIdle',
   closed: 'sidebar.hiddenClosed',
+};
+
+/** A time group's word. */
+const TIME_LABEL: Record<TimeBucket, MessageKey> = {
+  today: 'sidebar.today',
+  yesterday: 'sidebar.yesterday',
+  week: 'sidebar.thisWeek',
+  earlier: 'sidebar.earlier',
 };
 
 export function SessionSidebar({
@@ -117,6 +127,13 @@ export function SessionSidebar({
   const listRef = useRef<HTMLDivElement>(null);
   const ids = useMemo(() => groups.flatMap((g) => g.sessions.map((s) => s.id)), [groups]);
   const roving = useRovingFocus(listRef, ids, selectedId);
+  // A project group reads as its name; the pinned and time groups in the UI language.
+  const label = (g: SessionGroup) =>
+    g.kind === 'project'
+      ? g.key
+      : g.kind === 'pinned'
+        ? t('sidebar.pinned')
+        : t(TIME_LABEL[g.bucket]);
 
   return (
     <nav className={css.sidebar} aria-label={t('sidebar.title')}>
@@ -194,9 +211,9 @@ export function SessionSidebar({
             </Delayed>
           ))}
         {groups.map((g) => (
-          <ul key={g.project} aria-label={g.project} className={css.group}>
+          <ul key={g.key} aria-label={label(g)} className={css.group}>
             <li className={`${css.groupTitle} section-label`} aria-hidden="true">
-              {g.project}
+              {label(g)}
             </li>
             {g.sessions.map((s) => (
               <li key={s.id}>

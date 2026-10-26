@@ -1,10 +1,23 @@
 import type { AgentKind, SessionSummary } from '../../../src/core/model.js';
 import { weekStart } from '../../../src/shared/week.js';
 
-export interface SessionGroup {
-  project: string;
-  sessions: SessionSummary[];
-}
+/** How the sidebar groups sessions: by project (the default), or by when each was last active. */
+export type GroupBy = 'project' | 'time';
+
+/** The pinned group's key. Project names are directory names, so none starts with a slash. */
+export const PINNED_KEY = '/pinned';
+
+export type SessionGroup =
+  | { kind: 'pinned'; key: typeof PINNED_KEY; sessions: SessionSummary[] }
+  | {
+      kind: 'project';
+      /** The project's name (`groupNames`), which is the group's key. */
+      key: string;
+      /** The directory every session of the group ran in, when they share one. */
+      cwd: string | null;
+      sessions: SessionSummary[];
+    }
+  | { kind: 'time'; key: `/${TimeBucket}`; bucket: TimeBucket; sessions: SessionSummary[] };
 
 /**
  * Running: busy, or blocked on the user's confirmation, which needs attention as much. The one
@@ -41,12 +54,19 @@ export interface GroupOptions {
   live?: LiveFilter | null;
   /** A session listed whatever the agent and live filters say: the open one keeps its row. */
   keep?: string | null;
+  /** By project (the default), or by when each session was last active, counted from `now`. */
+  groupBy?: GroupBy;
+  now?: number;
+  /** Pinned sessions, by id in the order pinned: a first group of their own, in that order. */
+  pinned?: readonly string[];
 }
 
 /**
- * Sidebar grouping: by project, running sessions first (in groups and within them), then most
- * recently updated. `query` matches title or cwd, case-insensitively, and composes with the
- * agent and live filters.
+ * Sidebar grouping: the pinned sessions first, in the order pinned; then by project, named from
+ * paths (`groupNames`), the groups with a running session first and then the most recently
+ * updated; or by time, today to earlier. Within a group, running sessions first, then the most
+ * recently updated. `query` matches title or cwd, case-insensitively, and composes with the agent
+ * and live filters; pins answer to them like any row.
  */
 export function groupSessions(
   sessions: SessionSummary[],
@@ -62,18 +82,62 @@ export function groupSessions(
     isListed(s, opts.showProbes) &&
     !filtered(s) &&
     (!q || (s.title ?? '').toLowerCase().includes(q) || (s.cwd ?? '').toLowerCase().includes(q));
+  // Names come from every session, not from what the search and the filters leave: a group does
+  // not read differently while typing.
+  const nameOf = groupNames(sessions);
+  const now = opts.now ?? Date.now();
+  const keyOf = (s: SessionSummary) =>
+    opts.groupBy === 'time' ? `/${timeBucket(s.updatedAt, now)}` : nameOf(s);
+  const pinnedIds = new Set(opts.pinned ?? []);
+  const pinnedFound = new Map<string, SessionSummary>();
   const groups = new Map<string, SessionSummary[]>();
   for (const s of sessions) {
     if (!matches(s)) continue;
-    const list = groups.get(s.project);
+    if (pinnedIds.has(s.id)) {
+      pinnedFound.set(s.id, s);
+      continue;
+    }
+    const key = keyOf(s);
+    const list = groups.get(key);
     if (list) list.push(s);
-    else groups.set(s.project, [s]);
+    else groups.set(key, [s]);
   }
-  const out = [...groups].map(([project, list]) => ({ project, sessions: list.sort(busyFirst) }));
+  const out: SessionGroup[] = [];
+  const pins = (opts.pinned ?? []).flatMap((id) => {
+    const s = pinnedFound.get(id);
+    return s ? [s] : [];
+  });
+  if (pins.length > 0) out.push({ kind: 'pinned', key: PINNED_KEY, sessions: pins });
+  if (opts.groupBy === 'time') {
+    for (const bucket of TIME_BUCKETS) {
+      const list = groups.get(`/${bucket}`);
+      if (list)
+        out.push({ kind: 'time', key: `/${bucket}`, bucket, sessions: list.sort(busyFirst) });
+    }
+    return out;
+  }
+  const projects = [...groups].map(([key, list]) => ({
+    kind: 'project' as const,
+    key,
+    cwd: sharedCwd(list),
+    sessions: list.sort(busyFirst),
+  }));
   // Each group's first session is its "best" one after sorting, so it ranks the group.
-  return out.sort((a, b) =>
+  projects.sort((a, b) =>
     busyFirst(a.sessions[0] as SessionSummary, b.sessions[0] as SessionSummary),
   );
+  return [...out, ...projects];
+}
+
+/** The directory the sessions ran in, when every one that names a directory names the same. */
+function sharedCwd(sessions: readonly SessionSummary[]): string | null {
+  let shared: string | null = null;
+  for (const s of sessions) {
+    if (!s.cwd) continue;
+    if (shared === null) shared = s.cwd;
+    else if (segments(s.cwd).join('/') !== segments(shared).join('/')) return null;
+  }
+  return shared;
 }
 
 /** The sidebar's time groups (D, F7): by when a session was last active, the browser's calendar. */

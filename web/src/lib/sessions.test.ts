@@ -37,12 +37,13 @@ const sessions: SessionSummary[] = [
   s('a1', 'alpha', '09:00'),
   s('b1', 'beta', '09:30'),
   s('a2', 'alpha', '08:00', { live: 'busy', title: 'Refactor Parser', cwd: '/w/alpha' }),
-  s('c1', 'gamma', '09:50', { cwd: '/w/gamma-tools' }),
+  s('c1', 'gamma', '09:50', { cwd: '/w/gamma' }),
   s('a3', 'alpha', '09:40', { live: 'closed' }),
 ];
 
+// A project group's key is its name; the pinned and time groups' keys start with a slash.
 const ids = (groups: ReturnType<typeof groupSessions>) =>
-  groups.map((g) => [g.project, g.sessions.map((x) => x.id)]);
+  groups.map((g) => [g.key, g.sessions.map((x) => x.id)]);
 
 // Final review M8: one test of "running", which busy and waiting both are.
 describe('isRunning', () => {
@@ -91,7 +92,7 @@ describe('groupSessions', () => {
 
   it('filters by title or cwd, case-insensitively, dropping empty groups', () => {
     expect(ids(groupSessions(sessions, 'parser'))).toEqual([['alpha', ['a2']]]);
-    expect(ids(groupSessions(sessions, ' GAMMA-T '))).toEqual([['gamma', ['c1']]]);
+    expect(ids(groupSessions(sessions, ' /W/GAM '))).toEqual([['gamma', ['c1']]]);
     expect(groupSessions(sessions, 'nothing matches')).toEqual([]);
   });
 });
@@ -242,5 +243,102 @@ describe('foldClosed', () => {
     const { shown, more } = foldClosed(list.slice(0, 8));
     expect(ids(shown)).toHaveLength(8);
     expect(more).toEqual([]);
+  });
+});
+
+// Branch D (F7): pins, time groups and the names from paths, as the sidebar lists them.
+describe('groupSessions pins, time groups and names', () => {
+  it('names a worktree under its repository, and tells the group its directory', () => {
+    const list = [
+      s('main', 'glassbox', '09:00', { cwd: '/home/dev/src/glassbox' }),
+      s('tree', 'weever', '09:30', { cwd: '/home/dev/work/glassbox/weever' }),
+      s('tree2', 'weever', '08:00', { cwd: '/home/dev/work/glassbox/weever/' }),
+      s('nowhere', 'codex', '07:00'),
+    ];
+    const groups = groupSessions(list, '');
+    expect(ids(groups)).toEqual([
+      ['glassbox/weever', ['tree', 'tree2']],
+      ['glassbox', ['main']],
+      ['codex', ['nowhere']],
+    ]);
+    expect(groups.map((g) => (g.kind === 'project' ? g.cwd : null))).toEqual([
+      '/home/dev/work/glassbox/weever',
+      '/home/dev/src/glassbox',
+      null,
+    ]);
+    // Two repositories of one name read with their parents; the groups still rank by their
+    // newest session.
+    const mixed = groupSessions(
+      [...list, s('main2', 'glassbox', '06:00', { cwd: '/x/glassbox' })],
+      '',
+    );
+    expect(ids(mixed).map(([k]) => k)).toEqual([
+      'glassbox/weever',
+      'src/glassbox',
+      'codex',
+      'x/glassbox',
+    ]);
+  });
+
+  it('keeps the names whatever the search or the filters leave', () => {
+    const list = [
+      s('main', 'glassbox', '09:00', { cwd: '/home/dev/src/glassbox' }),
+      s('tree', 'weever', '09:30', { cwd: '/home/dev/work/glassbox/weever', title: 'Pins' }),
+    ];
+    expect(ids(groupSessions(list, 'pins'))).toEqual([['glassbox/weever', ['tree']]]);
+  });
+
+  it('lists pinned sessions first, in the order pinned, out of their own groups', () => {
+    const groups = groupSessions(sessions, '', { pinned: ['c1', 'a1', 'gone'] });
+    expect(ids(groups)).toEqual([
+      ['/pinned', ['c1', 'a1']],
+      ['alpha', ['a2', 'a3']],
+      ['beta', ['b1']],
+    ]);
+    expect(groups[0]?.kind).toBe('pinned');
+    // Pins answer to the search and the filters like any row.
+    expect(ids(groupSessions(sessions, 'parser', { pinned: ['c1'] }))).toEqual([['alpha', ['a2']]]);
+    expect(ids(groupSessions(sessions, '', { pinned: ['a3'], live: 'running' }))).toEqual([
+      ['alpha', ['a2']],
+    ]);
+    expect(
+      ids(groupSessions(sessions, '', { pinned: ['a3'], live: 'running', keep: 'a3' })),
+    ).toEqual([
+      ['/pinned', ['a3']],
+      ['alpha', ['a2']],
+    ]);
+  });
+
+  it('groups by time when asked: today, yesterday, this week, earlier; running first inside', () => {
+    // A Thursday at noon, local time.
+    const now = new Date(2026, 9, 29, 12, 0, 0).getTime();
+    const at = (d: number, h: number) => new Date(2026, 9, d, h, 0, 0).toISOString();
+    const list = [
+      s('old', 'p', '', { updatedAt: at(20, 9) }),
+      s('mon', 'q', '', { updatedAt: at(26, 9), live: 'closed' }),
+      s('yday', 'p', '', { updatedAt: at(28, 9) }),
+      s('now', 'r', '', { updatedAt: at(29, 11) }),
+      s('busy', 'p', '', { updatedAt: at(29, 8), live: 'busy' }),
+      s('tue', 'p', '', { updatedAt: at(27, 22) }),
+    ];
+    const groups = groupSessions(list, '', { groupBy: 'time', now, pinned: ['mon'] });
+    expect(ids(groups)).toEqual([
+      ['/pinned', ['mon']],
+      ['/today', ['busy', 'now']],
+      ['/yesterday', ['yday']],
+      ['/week', ['tue']],
+      ['/earlier', ['old']],
+    ]);
+    expect(groups.map((g) => (g.kind === 'time' ? g.bucket : g.kind))).toEqual([
+      'pinned',
+      'today',
+      'yesterday',
+      'week',
+      'earlier',
+    ]);
+    // Groups with nothing in them are left out.
+    expect(ids(groupSessions(list.slice(0, 1), '', { groupBy: 'time', now }))).toEqual([
+      ['/earlier', ['old']],
+    ]);
   });
 });
