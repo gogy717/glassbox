@@ -5,7 +5,9 @@
  * turns line saying "Prompts", not "Conversations" (the UX pass's words). Changing how the
  * session receipt looks changes it on purpose: then the hash changes in the same commit, which
  * says why. So does changing what the demo sessions did: the receipt prints their tool calls and
- * the mix of their kinds (the demo's fix grew file work; the pen did not change).
+ * the mix of their kinds (the demo's fix grew file work; the pen did not change). Then TOKENS
+ * ended with API EQUIV., what the same tokens would cost at API list prices (proposal 6): the
+ * demo's Claude calls are priced, so every one of its receipts prints that line.
  */
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, expect, it } from 'vitest';
@@ -44,8 +46,8 @@ function receipts(): string {
   return out.join('\n');
 }
 
-it('draws the session receipt exactly as it did before the weekly receipt shared its pen', () => {
+it('draws the session receipt exactly as it did, with TOKENS ending in its API equivalent', () => {
   expect(createHash('sha256').update(receipts()).digest('hex')).toBe(
-    '3fb162e6b8f315cce07c81bc3b2d466b4db6b9d2ecbb4797f9d5e2e3130fe013',
+    'f9fb0a2909ac53c4db9818e40dc77f03decbe0a3bdb94e82a31bb6c7d66327d5',
   );
 });

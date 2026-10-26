@@ -1,10 +1,11 @@
 /**
  * Lines the image and the text both print, built once so that the two always say the same: TIME's
- * rows with their shares, and the tool categories folded to fit.
+ * rows with their shares, the tool categories folded to fit, the models without a price.
  */
 import { type Locale, type MessageKey, translate } from '../../i18n';
+import type { Cost } from '../../lib/prices';
 import type { ReceiptData } from './data';
-import type { ReceiptKey } from './strings';
+import { type ReceiptKey, rt } from './strings';
 
 /**
  * `units` whole units shared out in proportion to `values`, adding up to exactly `units`: each
@@ -87,4 +88,17 @@ export function clip(s: string, width: number, measure: (s: string) => number): 
   let cut = [...s];
   while (cut.length > 0 && measure(`${cut.join('')}…`) > width) cut = cut.slice(0, -1);
   return `${cut.join('').trimEnd()}…`;
+}
+
+/**
+ * The line under the API equivalent when it leaves tokens out for want of a price, as full as
+ * `fits` allows: "no price · gpt-5.5-codex, grok-5", else "no price · 2 models". Null when every
+ * token was priced.
+ */
+export function noPriceLine(cost: Cost, L: Locale, fits: (line: string) => boolean): string | null {
+  if (!cost.partial) return null;
+  const n = cost.unpriced.length;
+  if (n === 0) return rt(L, 'noPriceNameless');
+  const named = rt(L, 'noPriceFor', { models: cost.unpriced.join(', ') });
+  return fits(named) ? named : rt(L, 'noPriceFold', { n });
 }

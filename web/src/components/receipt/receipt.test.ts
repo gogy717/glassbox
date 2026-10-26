@@ -3,6 +3,7 @@ import { MAIN_AGENT_ID, type ToolCall } from '../../../../src/core/model.js';
 import { totalTokens } from '../../../../src/core/usage.js';
 import type { OpenSession } from '../../data/store';
 import { summarize } from '../../lib/agents';
+import { priceTable } from '../../lib/prices';
 import { type Segment, timeBreakdown } from '../../lib/time-stats';
 import { rollupByAgent } from '../../lib/token-stats';
 import { DEMO_NOW, demoOpen } from '../../test/demo';
@@ -14,7 +15,7 @@ import { clean, printedProject, printedTitle, wellFormed } from './printed';
 import { categoryLine, shares, timeRows } from './rows';
 import { RECEIPT_STRINGS } from './strings';
 import { receiptSvg, SCALE, SIZES, textWidth, WIDTH, wrap } from './svg';
-import { COLUMNS, cols, receiptText } from './text';
+import { COLUMNS, cols, receiptText, spread } from './text';
 
 const NOW = DEMO_NOW.getTime();
 const EN = { paper: 'paper', locale: 'en', hideNames: false } as const;
@@ -203,6 +204,23 @@ describe('the text version (R7)', () => {
       expect(lines.at(-1)).toBe('```');
       expect(lines.filter((l) => cols(l) > COLUMNS)).toEqual([]);
     }
+    // With the API equivalent and a line of models without a price under it, the title gives
+    // up lines to keep the block within 40; a receipt with room keeps all three.
+    const priced = data.tokens.cost;
+    if (!priced) throw new Error('fixture');
+    const partial: ReceiptData = {
+      ...full,
+      tokens: { ...full.tokens, cost: { ...priced, partial: true, unpriced: ['gpt-5.5-codex'] } },
+    };
+    for (const locale of ['en', 'zh'] as const) {
+      const lines = receiptText(partial, { ...EN, locale }).split('\n');
+      expect(lines.length).toBeLessThanOrEqual(40);
+      expect(lines.filter((l) => cols(l) > COLUMNS)).toEqual([]);
+    }
+    expect(receiptText(partial, EN)).toContain('no price · gpt-5.5-codex');
+    expect(receiptText(partial, EN)).toContain('A very long title that needs every one of…');
+    const roomy = receiptText({ ...data, title: full.title }, EN);
+    expect(roomy).toContain('its three lines to fit, and then some more');
     const en = receiptText(full, EN).split('\n');
     // Figures end in one column: the TIME values before their shares, tokens at the margin.
     expect(
@@ -325,6 +343,72 @@ describe('receipt wording', () => {
 
   it('has every word in both languages', () => {
     expect(Object.keys(RECEIPT_STRINGS.zh).sort()).toEqual(Object.keys(RECEIPT_STRINGS.en).sort());
+  });
+});
+
+/** The demo with the calls of every agent but Main made by `model` (all of them with `all`). */
+const madeBy = (model: string, all = false) =>
+  demo((o) => ({
+    ...o,
+    requests: new Map(
+      [...o.requests].map(([id, r]) => [
+        id,
+        all || r.agentId !== MAIN_AGENT_ID ? { ...r, model } : r,
+      ]),
+    ),
+  }));
+
+// Proposal 6: TOKENS ends with what the same tokens would cost on the API.
+describe('the API equivalent', () => {
+  const ZH = { ...EN, locale: 'zh' } as const;
+  const linesAfter = (text: string, start: string, n = 1) => {
+    const lines = text.split('\n');
+    const at = lines.findIndex((l) => l.startsWith(start));
+    return lines.slice(at + 1, at + 1 + n);
+  };
+
+  it('prints what the tokens would cost on the API under TOTAL, as an estimate', () => {
+    const { data } = demo();
+    // 26 calls of claude-opus-5-5 at its list prices, worked out by hand: $3.2099.
+    expect(data.tokens.cost).toMatchObject({ priced: true, partial: false, unpriced: [] });
+    expect(data.tokens.cost?.usd).toBeCloseTo(3.2099, 4);
+    expect(linesAfter(receiptText(data, EN), 'TOTAL')).toEqual([
+      spread('API EQUIV.', '≈ $3.21 (est.)'),
+    ]);
+    expect(svgText(receiptSvg(data, EN, 'tall').svg)).toMatch(
+      /TOTAL [\d.]+[KM] API EQUIV\. ≈ \$3\.21 \(est\.\)/,
+    );
+  });
+
+  it('words it in Chinese, the figure first in the text', () => {
+    const { data } = demo();
+    expect(receiptText(data, ZH)).toContain('\n≈ $3.21  API 折算（估算）\n');
+    expect(svgText(receiptSvg(data, ZH, 'tall').svg)).toContain('API 折算 ≈ $3.21（估算）');
+  });
+
+  it('names the models it leaves out for want of a price, and prices by the table given', () => {
+    const { open, data } = madeBy('gpt-5.5-codex');
+    expect(data.tokens.cost).toMatchObject({ partial: true, unpriced: ['gpt-5.5-codex'] });
+    const lines = linesAfter(receiptText(data, EN), 'TOTAL', 2);
+    expect(lines[0]).toMatch(/^API EQUIV\. +≈ \$0\.61 \(est\.\)$/);
+    expect(lines[1]).toBe('no price · gpt-5.5-codex');
+    expect(svgText(receiptSvg(data, EN, 'tall').svg)).toContain('no price · gpt-5.5-codex');
+    const free = { input: 0, cacheWrite: 0, cacheWrite1h: 0, cacheRead: 0, output: 0 };
+    const own = receiptData(open, NOW, undefined, priceTable({ 'gpt-5.5-codex': free }));
+    expect(own.tokens.cost).toMatchObject({ partial: false, unpriced: [] });
+    expect(own.tokens.cost?.usd).toBeCloseTo(data.tokens.cost?.usd ?? 0, 9);
+  });
+
+  it('prints no API line when no model it used has a price, or no call reported tokens', () => {
+    const { data } = madeBy('gpt-5.5-codex', true);
+    expect(data.tokens.cost).toBeNull();
+    const unmeasured: ReceiptData = {
+      ...demo().data,
+      tokens: { ...demo().data.tokens, measured: false },
+    };
+    for (const d of [data, unmeasured])
+      for (const out of [receiptText(d, EN), svgText(receiptSvg(d, EN, 'tall').svg)])
+        expect(out).not.toContain('API EQUIV.');
   });
 });
 

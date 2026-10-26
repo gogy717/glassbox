@@ -170,6 +170,15 @@ describe('sumCost', () => {
   });
 });
 
+describe('sumCost and costByModel', () => {
+  it('come to the very same figure for the same calls, however they were added up', () => {
+    // Three 10-cent calls: added call by call that is 0.30000000000000004.
+    const call = { model: 'model-a-mini', usage: usage({ input: 100_000 }) };
+    expect(sumCost([call, call, call], TABLE).usd).toBe(0.3);
+    expect(costByModel({ 'model-a-mini': usage({ input: 300_000 }) }, TABLE).usd).toBe(0.3);
+  });
+});
+
 describe('costByModel', () => {
   it('prices usage already added up by model, the calls of no model under ""', () => {
     expect(

@@ -8,10 +8,11 @@
 import type { Locale } from '../../i18n';
 import { agentName } from '../../lib/agent-names';
 import { formatCompact, formatPercent } from '../../lib/format';
+import { formatUsd } from '../../lib/prices';
 import type { ReceiptData } from './data';
 import { clock, day, durationParts, modelName, partsText } from './format';
 import { clean } from './printed';
-import { categoryLine, clip, timed, timeRows } from './rows';
+import { categoryLine, clip, noPriceLine, timed, timeRows } from './rows';
 import type { ReceiptOptions, TokenFigures } from './slip';
 import { type ReceiptKey, rt } from './strings';
 
@@ -69,7 +70,10 @@ export const lead = (figure: string, words: string, gap = '  ') =>
 export const centred = (line: string) =>
   `${' '.repeat(Math.max(0, Math.floor((COLUMNS - cols(line)) / 2)))}${line}`;
 
-/** TOKENS as text lines, `note` under the rows; "Tokens not reported" when no call reported. */
+/**
+ * TOKENS as text lines, `note` under the rows, the API equivalent under TOTAL; "Tokens not
+ * reported" when no call reported.
+ */
 export function tokenLines(t: TokenFigures, L: Locale, note?: string): string[] {
   const zh = L === 'zh';
   const w = (key: ReceiptKey) => rt(L, key);
@@ -87,6 +91,15 @@ export function tokenLines(t: TokenFigures, L: Locale, note?: string): string[] 
   if (t.cacheHit !== null) row('cacheHit', formatPercent(t.cacheHit, 'en'));
   if (note) out.push(note);
   out.push(zh ? lead(count(t.total), w('total')) : spread(head('total'), count(t.total)));
+  // API EQUIV.: the same tokens at API prices, an estimate; the models it could not price.
+  if (t.cost) {
+    const usd = `≈ ${formatUsd(t.cost.usd, 'en')}`;
+    out.push(
+      zh ? lead(usd, `${w('apiEquiv')}${w('est')}`) : spread(head('apiEquiv'), `${usd}${w('est')}`),
+    );
+    const unpriced = noPriceLine(t.cost, L, (line) => cols(line) <= COLUMNS);
+    if (unpriced) out.push(unpriced);
+  }
   return out;
 }
 
@@ -96,7 +109,20 @@ export const footLines = (L: Locale, measured: boolean) =>
     centred,
   );
 
+/** Lines of the block, fences included (R7). */
+const MAX_LINES = 40;
+
 export function receiptText(d: ReceiptData, o: ReceiptOptions): string {
+  const lines = textLines(d, o, 3);
+  // Over 40 lines (the most a receipt can print): the title gives up lines first, down to one.
+  const over = lines.length - MAX_LINES;
+  const fitted = over > 0 ? textLines(d, o, Math.max(1, 3 - over)) : lines;
+  // Well formed whatever the session holds: a lone surrogate would not survive the clipboard.
+  return clean(fitted.join('\n'));
+}
+
+/** The receipt's lines, its title in at most `titleLines`. */
+function textLines(d: ReceiptData, o: ReceiptOptions, titleLines: number): string[] {
   const L = o.locale;
   const zh = L === 'zh';
   const w = (key: ReceiptKey, params?: Record<string, string | number>) => rt(L, key, params);
@@ -128,7 +154,7 @@ export function receiptText(d: ReceiptData, o: ReceiptOptions): string {
   out.push(zh ? lead(duration, durationName) : spread(durationName, duration));
   out.push(rule);
   if (!o.hideNames && d.project) out.push(`${clip(d.project, COLUMNS - 2, cols)} /`);
-  out.push(...wrapCols(o.hideNames || !d.title ? w('untitled') : d.title, 3));
+  out.push(...wrapCols(o.hideNames || !d.title ? w('untitled') : d.title, titleLines));
   out.push(rule);
 
   out.push(head('work'));
@@ -167,6 +193,5 @@ export function receiptText(d: ReceiptData, o: ReceiptOptions): string {
   out.push(...tokenLines(d.tokens, L));
   out.push(...footLines(L, d.tokens.measured));
   out.push('```');
-  // Well formed whatever the session holds: a lone surrogate would not survive the clipboard.
-  return clean(out.join('\n'));
+  return out;
 }

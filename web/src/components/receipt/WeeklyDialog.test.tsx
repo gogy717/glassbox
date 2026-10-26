@@ -1,7 +1,9 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WeekLine, WeekResult } from '../../../../src/shared/week.js';
+import { PriceTableContext } from '../../data/price-table';
 import { I18nContext, makeI18n } from '../../i18n';
+import { priceTable } from '../../lib/prices';
 import { demoOpen } from '../../test/demo';
 import { demoWeek, WEEK_NOW, weekResult } from '../../test/week';
 import { SummaryBar } from '../SummaryBar';
@@ -172,6 +174,38 @@ describe('the weekly receipt dialog', () => {
     expect(calls).toEqual(['/api/week?window=week']);
     fireEvent.click(within(dialog).getByRole('button', { name: 'Refresh' }));
     await waitFor(() => expect(calls).toContain('/api/week?window=week&refresh=1'));
+  });
+
+  // Proposal 6: the week's API equivalent is worked out from the prices set in Settings.
+  it('prints the week’s API equivalent at the prices in force', async () => {
+    serve({ week: demoWeek('week') });
+    const twice = (input: number, read: number) => ({
+      input: input * 2,
+      cacheWrite: input * 2.5,
+      cacheWrite1h: input * 4,
+      cacheRead: read * 2,
+      output: input * 10,
+    });
+    render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <PriceTableContext.Provider
+          value={priceTable({
+            'claude-opus-5-5': twice(4, 0.2),
+            'claude-sonnet-5-5': twice(2, 0.1),
+          })}
+        >
+          <WeeklyReceiptButton showProbes={false} label="Print weekly receipt" />
+        </PriceTableContext.Provider>
+      </I18nContext.Provider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Print weekly receipt' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Weekly receipt' });
+    // Twice the list prices: twice the $140.78 the week comes to at list prices.
+    await waitFor(() =>
+      expect(within(dialog).getByRole('img')).toHaveAccessibleDescription(
+        /API EQUIV\. +≈ \$281\.56 \(est\.\)/,
+      ),
+    );
   });
 
   it('ends its Chinese note with a Chinese full stop, running on without a space (C4)', async () => {

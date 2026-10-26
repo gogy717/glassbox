@@ -7,9 +7,11 @@
  */
 import type { Locale } from '../../i18n';
 import { formatCompact, formatPercent } from '../../lib/format';
+import { type Cost, formatUsd } from '../../lib/prices';
 import { FONTS } from './fonts';
 import type { Parts } from './format';
 import { clean } from './printed';
+import { noPriceLine } from './rows';
 import { type ReceiptKey, rt } from './strings';
 
 export type Paper = 'paper' | 'night';
@@ -185,6 +187,8 @@ export interface TokenFigures {
   thinking: number;
   cacheHit: number | null;
   total: number;
+  /** What the same tokens would cost on the API, an estimate; null when no call was priced. */
+  cost: Cost | null;
 }
 
 /** Draws a slip top to bottom: `y` is the baseline of the line being drawn. */
@@ -336,6 +340,22 @@ export class Pen {
         anchor: 'end',
       }),
     );
+    // API EQUIV.: the same tokens at API prices, an estimate; the models it could not price.
+    if (t.cost) {
+      this.y += 24;
+      this.label('apiEquiv');
+      this.push(
+        text(RIGHT, this.y, runs(`≈ ${formatUsd(t.cost.usd, 'en')}${this.w('est')}`), {
+          fill: c.ink,
+          anchor: 'end',
+        }),
+      );
+      const unpriced = noPriceLine(t.cost, L, (line) => textWidth(line, 11) <= INNER);
+      if (unpriced) {
+        this.y += 17;
+        this.push(text(LEFT, this.y, runs(unpriced), { size: 11, fill: c.soft }));
+      }
+    }
   }
 
   /** A centred serial line, as under the barcode. */

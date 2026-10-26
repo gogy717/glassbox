@@ -2,6 +2,7 @@ import { AlignLeft, Copy, Download } from 'lucide-react';
 import { type ReactNode, type RefObject, useEffect, useMemo, useState } from 'react';
 import { type WeekWindowKind, weekWindow } from '../../../../src/shared/week.js';
 import { useApprovalsContext } from '../../data/approvals';
+import { usePriceTable } from '../../data/price-table';
 import type { OpenSession } from '../../data/store';
 import { type Locale, useI18n } from '../../i18n';
 import { loadPrefs } from '../../prefs';
@@ -317,7 +318,8 @@ function useWeekSheet(
     () => (state?.phase === 'ready' ? listedOnly(state.result, showProbes) : null),
     [state, showProbes],
   );
-  const week = useMemo(() => (ready ? weekReceipt(ready) : null), [ready]);
+  const prices = usePriceTable();
+  const week = useMemo(() => (ready ? weekReceipt(ready, prices) : null), [ready, prices]);
   // An empty or quiet week, or one under a day old, points to the last 7 days: read them too.
   const wantsElsewhere =
     week?.kind === 'week' && (week.sessions === 0 || isQuiet(week) || weekAge(week) < HINT_MS);
@@ -453,9 +455,10 @@ function ReceiptSheet({
   const { choices, options, ui, setStatus } = chosen;
   const [scope, setScope] = useState<Scope>(start);
   const approvals = useApprovalsContext();
+  const prices = usePriceTable();
   // The session as it was when the dialog opened, read once: a running session's receipt says
   // "now" for then, and a live update can never redraw it past the time it prints.
-  const [data] = useState(() => (open ? receiptData(open, Date.now(), approvals) : null));
+  const [data] = useState(() => (open ? receiptData(open, Date.now(), approvals, prices) : null));
   const session = scope === 'session' ? data : null;
   const sessionImage = useMemo(
     () => (session ? receiptSvg(session, options, choices.size) : null),

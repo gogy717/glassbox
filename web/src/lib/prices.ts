@@ -5,6 +5,7 @@
  * A model without a price costs nothing and is said to have none: no number is ever guessed.
  */
 import type { TokenUsage } from '../../../src/core/model.js';
+import { addUsage, emptyUsage } from '../../../src/core/usage.js';
 import type { T } from '../i18n';
 
 /** USD per million tokens. */
@@ -147,35 +148,47 @@ export interface Cost {
   unpriced: string[];
 }
 
-/** The cost of requests, each from its own usage and model. */
-export function sumCost(
-  requests: Iterable<{ usage: TokenUsage | null; model: string | null }>,
+/**
+ * The cost of usage added up by model ('' for calls that name none): each model's tokens, whole
+ * numbers added exactly, priced once, in the order of their ids. However the same calls were
+ * added up (by request, by hour, by week), the figure comes out the same to the last digit.
+ */
+export function costByModel(
+  byModel: Readonly<Record<string, TokenUsage>>,
   table: PriceTable,
 ): Cost {
   let usd = 0;
   let priced = false;
   let partial = false;
-  const unpriced = new Set<string>();
-  for (const r of requests) {
-    if (!r.usage || !usedAny(r.usage)) continue;
-    const c = costOf(r.usage, r.model, table);
+  const unpriced: string[] = [];
+  for (const model of Object.keys(byModel).sort()) {
+    const u = byModel[model];
+    if (!u || !usedAny(u)) continue;
+    const c = costOf(u, model || null, table);
     if (c === null) {
       partial = true;
-      if (r.model) unpriced.add(r.model);
+      if (model) unpriced.push(model);
     } else {
       usd += c;
       priced = true;
     }
   }
-  return { usd, priced, partial, unpriced: [...unpriced].sort() };
+  return { usd, priced, partial, unpriced };
 }
 
-/** The cost of usage already added up by model (`WeekFigures.usageByModel`: '' for no model). */
-export const costByModel = (byModel: Readonly<Record<string, TokenUsage>>, table: PriceTable) =>
-  sumCost(
-    Object.entries(byModel).map(([model, usage]) => ({ model: model || null, usage })),
-    table,
-  );
+/** The cost of requests, from their own usage and model, added up by model first. */
+export function sumCost(
+  requests: Iterable<{ usage: TokenUsage | null; model: string | null }>,
+  table: PriceTable,
+): Cost {
+  const byModel: Record<string, TokenUsage> = {};
+  for (const r of requests) {
+    if (!r.usage) continue;
+    const key = r.model ?? '';
+    byModel[key] = addUsage(byModel[key] ?? emptyUsage(), r.usage);
+  }
+  return costByModel(byModel, table);
+}
 
 /**
  * A cost figure's tooltip: what it is, and what it leaves out ("Left out, no price:
