@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { ModelRequest, RequestDetail, TokenUsage } from '../core/model.js';
 import { emptyUsage } from '../core/usage.js';
-import { type ContextPart, MEDIA_TOKENS, requestBill, textTokens } from './context-bill.js';
+import {
+  ContextLedger,
+  type ContextPart,
+  MEDIA_TOKENS,
+  requestBill,
+  textTokens,
+} from './context-bill.js';
 
 /** A finished request that reported `input`, `cacheRead` and `cacheWrite`. */
 function request(
@@ -340,5 +346,189 @@ describe('requestBill', () => {
       status: 'unavailable',
       reason: 'empty',
     });
+  });
+});
+
+// ── The bill of an agent's requests ───────────────────────────────────────────────────────
+
+/** An agent's conversation as it grows: each request sends what the one before did, and more. */
+function conversation() {
+  const messages: unknown[] = [];
+  let n = 0;
+  const req = (cacheRead: number, over: Partial<ModelRequest> = {}) =>
+    request({ cacheRead }, { id: `r${++n}`, ...over });
+  return {
+    messages,
+    say: (...more: unknown[]) => messages.push(...more),
+    read: (id: string, path: string, chars: number) =>
+      messages.push(
+        assistant([{ type: 'tool_use', id, name: 'Read', input: { file_path: path } }]),
+        user([result(id, text(chars))]),
+      ),
+    /** The request sent now: the system prompt, one tool, the messages so far. */
+    send: (cacheRead: number, over: Partial<ModelRequest> = {}) => ({
+      request: req(cacheRead, over),
+      detail: detail({
+        system: text(4_000),
+        tools: [{ name: 'Bash', description: text(400) }],
+        messages: [...messages],
+      }),
+    }),
+  };
+}
+
+function ledger(entries: { request: ModelRequest; detail: RequestDetail | null }[], cwd = '/w') {
+  const l = new ContextLedger('main', cwd);
+  for (const e of entries) l.add(e.request, e.detail);
+  return l.bill();
+}
+
+describe('ContextLedger', () => {
+  it('counts each tool result in every request that carried it, at its share of each', () => {
+    const c = conversation();
+    c.say(user('Fix the sort'));
+    const first = c.send(2_000);
+    c.say(
+      assistant([{ type: 'tool_use', id: 'tu1', name: 'Bash', input: { command: 'npm test' } }]),
+      user([result('tu1', text(8_000))]),
+    );
+    const sent = [first, c.send(4_000), c.send(4_100), c.send(4_200)];
+    const bill = ledger(sent);
+    expect(bill).toMatchObject({ requests: 4, read: 4, unavailable: null });
+    const item = bill.items.find((i) => i.key === 'result:tu1');
+    expect(item).toMatchObject({ kind: 'result', tool: 'Bash', target: 'npm test', requests: 3 });
+    // As each request's own bill spreads it.
+    const each = sent.slice(1).map((e) => {
+      const b = requestBill(e.request, e.detail);
+      return b.status === 'ok' ? (b.parts.find((p) => p.key === 'result:tu1')?.tokens ?? 0) : 0;
+    });
+    expect(item?.tokens).toBeCloseTo(
+      each.reduce((a, b) => a + b, 0),
+      6,
+    );
+    // Carried later, it is read from the cache.
+    expect(item?.split.cacheRead).toBeCloseTo(item?.tokens ?? 0, 6);
+  });
+
+  it('gathers the reads of one file, however its path was written', () => {
+    const c = conversation();
+    c.say(user('Look at a.ts'));
+    const sent = [];
+    for (let i = 1; i <= 5; i++) {
+      c.read(`tu${i}`, i % 2 ? '/w/src/a.ts' : 'src/a.ts', 2_000);
+      sent.push(c.send(3_000 + i * 600));
+    }
+    const bill = ledger(sent);
+    const file = bill.items.find((i) => i.kind === 'file');
+    expect(file).toMatchObject({
+      key: 'file:/w/src/a.ts',
+      path: '/w/src/a.ts',
+      reads: 5,
+      requests: 5,
+      callId: 'tu5',
+    });
+    // The calls and results of the reads are in it, none of them an item of its own.
+    expect(bill.items.filter((i) => i.kind === 'result' || i.kind === 'call')).toEqual([]);
+    expect(bill.advice).toEqual({ kind: 'rereads', files: 1, reads: 5 });
+  });
+
+  it('says what the system prompt and tools cost, every request', () => {
+    const c = conversation();
+    c.say(user('hi'));
+    const bill = ledger([c.send(2_000), c.send(2_000), c.send(2_000)]);
+    // 1,000 of the system prompt, the tool's JSON, two of "hi": all of 2,000.
+    const tool = textTokens(JSON.stringify({ name: 'Bash', description: text(400) }));
+    const weight = 1_000 + tool + 0.5;
+    expect(bill.fixed?.requests).toBe(3);
+    expect(bill.fixed?.perRequest).toBeCloseTo(((1_000 + tool) / weight) * 2_000, 6);
+    expect(bill.fixed?.system).toBeCloseTo((1_000 / weight) * 2_000, 6);
+    expect(bill.fixed?.toolCount).toBe(1);
+    expect(bill.fixed?.tokens).toBeCloseTo((bill.fixed?.perRequest ?? 0) * 3, 6);
+    expect(bill.tokens).toBe(6_000);
+    expect(bill.advice).toMatchObject({ kind: 'fixed' });
+  });
+
+  it('says what a compaction dropped: the parts before it, gone after, the largest first', () => {
+    const c = conversation();
+    c.say(user('Fix the sort'));
+    c.read('tu1', '/w/a.ts', 4_000);
+    c.say(
+      assistant([{ type: 'tool_use', id: 'tu2', name: 'Bash', input: { command: 'npm test' } }]),
+      user([result('tu2', text(12_000))]),
+    );
+    const before = c.send(6_000);
+    c.messages.splice(0);
+    c.say(user('This session is being continued. Summary: the sort is fixed.'));
+    const after = c.send(1_500, { compactedBefore: true });
+    const bill = ledger([before, after]);
+    expect(bill.compactions).toHaveLength(1);
+    const drop = bill.compactions[0];
+    expect(drop).toMatchObject({ requestId: 'r2', beforeId: 'r1', dropped: 5 });
+    expect(drop?.largest.map((p) => [p.kind, p.tool, p.target])).toEqual([
+      ['result', 'Bash', 'npm test'],
+      ['result', 'Read', 'a.ts'],
+      ['call', 'Read', 'a.ts'],
+    ]);
+    const parts = requestBill(before.request, before.detail);
+    if (parts.status !== 'ok') throw new Error('no bill');
+    const gone = parts.parts.filter((p) => p.kind !== 'system' && p.kind !== 'tool');
+    expect(drop?.tokens).toBeCloseTo(
+      gone.reduce((s, p) => s + p.tokens, 0),
+      6,
+    );
+  });
+
+  it('names one item that held much of the context', () => {
+    const c = conversation();
+    c.say(user('go'));
+    c.say(
+      assistant([{ type: 'tool_use', id: 'tu1', name: 'Bash', input: { command: 'cat big.log' } }]),
+      user([result('tu1', text(80_000))]),
+    );
+    const bill = ledger([c.send(25_000), c.send(25_100)]);
+    expect(bill.advice).toMatchObject({ kind: 'carried', item: { key: 'result:tu1' } });
+    expect(bill.items[0]?.key).toBe('result:tu1');
+  });
+
+  it('skips a request not finished, and says why none could be read', () => {
+    const c = conversation();
+    c.say(user('go'));
+    const live = c.send(0);
+    expect(
+      ledger([{ request: { ...live.request, usage: null }, detail: live.detail }]),
+    ).toMatchObject({
+      requests: 1,
+      read: 0,
+      items: [],
+      fixed: null,
+    });
+    expect(
+      ledger([{ request: { ...live.request, hasDetail: false }, detail: null }]),
+    ).toMatchObject({ read: 0, unavailable: 'not-recorded' });
+    expect(
+      ledger([
+        {
+          request: request({ input: 100 }),
+          detail: detail({ system: 'You are…', messages: null }),
+        },
+      ]),
+    ).toMatchObject({ read: 0, unavailable: 'no-messages', advice: null });
+  });
+
+  it('keeps the costliest items, largest first', () => {
+    const c = conversation();
+    c.say(user('go'));
+    for (let i = 1; i <= 30; i++)
+      c.say(
+        assistant([
+          { type: 'tool_use', id: `t${i}`, name: 'Bash', input: { command: `step ${i}` } },
+        ]),
+        user([result(`t${i}`, text(400 * i))]),
+      );
+    const bill = ledger([c.send(90_000)]);
+    expect(bill.items).toHaveLength(12);
+    expect(bill.items[0]?.key).toBe('result:t30');
+    const tokens = bill.items.map((i) => i.tokens);
+    expect([...tokens].sort((a, b) => b - a)).toEqual(tokens);
   });
 });

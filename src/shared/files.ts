@@ -203,7 +203,7 @@ const OVERWROTE = /has been updated/;
  * is not a file tool (a shell command, a sub-agent, a web fetch, an MCP tool) or whose input
  * names no file. A search counts only the path it was given, never its matches.
  */
-export function touchesOf(tool: ToolCall): RawTouch[] {
+export function touchesOf(tool: Pick<ToolCall, 'name' | 'input' | 'resultPreview'>): RawTouch[] {
   const name = tool.name;
   let input = tool.input;
   // Arguments that arrived as JSON text (OpenCode's raw input); cut short, they name nothing.

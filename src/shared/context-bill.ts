@@ -17,6 +17,7 @@
  */
 import { activityTarget } from '../core/activity.js';
 import type { ModelRequest, RequestDetail } from '../core/model.js';
+import { resolvePath, touchesOf } from './files.js';
 import { type Block, isGap, readMessage, readSystem, readTools } from './request-read.js';
 import { pathField } from './tool-category.js';
 
@@ -397,4 +398,377 @@ export function requestBill(
     };
   });
   return { status: 'ok', parts, total, measured: usage !== null, usage };
+}
+
+// ── The bill of an agent's requests ───────────────────────────────────────────────────────
+
+/** Items a session's bill keeps: its costliest. */
+export const TOP_ITEMS = 12;
+/** Reads of one file worth saying so: "3 files were read 5+ times". */
+export const REREAD = 5;
+/** One item holding this share of all the context is worth naming. */
+const CARRIED_SHARE = 0.15;
+/** The system prompt and tools at this share of all the context are worth saying. */
+const FIXED_SHARE = 0.4;
+
+/** What an agent's requests carried: a file (all its reads), one call or result, a message. */
+export type CarriedKind = 'file' | 'result' | 'call' | 'user' | 'reply' | 'other';
+
+export interface CarriedItem {
+  /** `file:<path>`, else the key of the part (`result:<call id>`, a message's). */
+  key: string;
+  kind: CarriedKind;
+  /** The tool of the call, or of a file's reads. */
+  tool: string | null;
+  /** What the call worked on, short. */
+  target: string | null;
+  /** A file's path, the session's directory resolved. */
+  path: string | null;
+  /** A message's opening words. */
+  text: string | null;
+  role: string | null;
+  /** Estimated tokens, across every request that carried it. */
+  tokens: number;
+  split: TokenSplit;
+  /** How many requests carried it. */
+  requests: number;
+  /** A file's: how many times it was read. */
+  reads: number;
+  /** The call to open: a result's or a call's own, a file's latest read; null for a message. */
+  callId: string | null;
+  /** The first request that carried it. */
+  firstRequestId: string;
+}
+
+/** A part a compaction dropped, as the request before it held it. */
+export interface DroppedPart {
+  key: string;
+  kind: PartKind;
+  tool: string | null;
+  target: string | null;
+  path: string | null;
+  text: string | null;
+  role: string | null;
+  callId: string | null;
+  tokens: number;
+}
+
+export interface CompactionDrop {
+  /** The first request after the compaction, and the last one before it. */
+  requestId: string;
+  beforeId: string;
+  at: string | null;
+  /** Parts the request before held that the one after does not, and their estimated tokens. */
+  dropped: number;
+  tokens: number;
+  /** The three largest of them. */
+  largest: DroppedPart[];
+}
+
+export interface FixedCost {
+  /** The system prompt and tool definitions, across the requests read. */
+  tokens: number;
+  split: TokenSplit;
+  requests: number;
+  /** On average per request, all of it, and the system prompt's and the tools' parts of it. */
+  perRequest: number;
+  system: number;
+  tools: number;
+  /** Tool definitions the latest request sent. */
+  toolCount: number;
+}
+
+/**
+ * One line of advice from the numbers: files read again and again, one item holding much of
+ * the context, or the fixed part sent with every request. The first that applies.
+ */
+export type ContextAdvice =
+  | { kind: 'rereads'; files: number; reads: number }
+  | { kind: 'carried'; share: number; item: CarriedItem }
+  | { kind: 'fixed'; share: number; perRequest: number };
+
+/** The bill of an agent's requests: what recurred in their contexts, and what it cost. */
+export interface SessionContextBill {
+  agentId: string;
+  /** The finished requests fed, and those whose context could be read. */
+  requests: number;
+  read: number;
+  /** Why none could be read, when none could. */
+  unavailable: BillUnavailable | null;
+  /** All the context the requests read sent: their reported totals. */
+  tokens: number;
+  split: TokenSplit;
+  fixed: FixedCost | null;
+  /** What was carried most, the costliest first. */
+  items: CarriedItem[];
+  compactions: CompactionDrop[];
+  advice: ContextAdvice | null;
+}
+
+const zero = (): TokenSplit => ({ cacheRead: 0, cacheWrite: 0, input: 0 });
+const addSplit = (to: TokenSplit, s: TokenSplit) => {
+  to.cacheRead += s.cacheRead;
+  to.cacheWrite += s.cacheWrite;
+  to.input += s.input;
+};
+
+interface Carried {
+  key: string;
+  kind: CarriedKind;
+  /** The part it was first seen as, for its role, text and call. */
+  w: Weighed;
+  tokens: number;
+  split: TokenSplit;
+  requests: number;
+  /** The last request that carried it, so a request counts once. */
+  last: string;
+  first: string;
+  path: string | null;
+  /** A file's reads: their call ids, the latest last. */
+  reads: string[];
+}
+
+interface Held {
+  key: string;
+  w: Weighed;
+  tokens: number;
+}
+
+/**
+ * What an agent's requests carried in their contexts, fed one finished request at a time in
+ * order (so the server can keep one per agent and feed it only what is new): each part spread
+ * as `requestBill` spreads it, gathered by key, a file's reads under its path; the system
+ * prompt and tools as the fixed cost; at each compaction, what the request before held that the
+ * one after does not.
+ */
+export class ContextLedger {
+  /** The requests fed, in order. */
+  readonly fed: string[] = [];
+  private read = 0;
+  private tokens = 0;
+  private readonly split = zero();
+  private readonly reasons = new Map<BillUnavailable, number>();
+  private readonly items = new Map<string, Carried>();
+  /** Every call seen, by id: a result is named by its call, a read by its file. */
+  private readonly calls = new Map<string, Weighed>();
+  private readonly files = new Map<string, string | null>();
+  private readonly fixed = { tokens: 0, split: zero(), system: 0, tools: 0, toolCount: 0 };
+  private before: { id: string; held: Held[] } | null = null;
+  private readonly drops: (Omit<CompactionDrop, 'largest'> & { largest: Held[] })[] = [];
+
+  constructor(
+    readonly agentId: string,
+    /** The session's directory, to resolve the paths of reads written relative to it. */
+    private readonly cwd: string | null = null,
+  ) {}
+
+  add(request: ModelRequest, detail: RequestDetail | null): void {
+    this.fed.push(request.id);
+    const placed =
+      request.hasDetail && detail && detail.completeness !== 'unavailable'
+        ? placeParts(detail)
+        : undefined;
+    const reason: BillUnavailable | null =
+      placed === undefined
+        ? 'not-recorded'
+        : placed === null
+          ? 'no-messages'
+          : placed.every((p) => p.w.weight === 0)
+            ? 'empty'
+            : null;
+    if (reason || !placed) {
+      if (reason) this.reasons.set(reason, (this.reasons.get(reason) ?? 0) + 1);
+      return;
+    }
+    const weights = placed.map((p) => p.w.weight);
+    const u = request.usage;
+    const total = u ? u.input + u.cacheRead + u.cacheWrite : 0;
+    // Not finished, or it reported nothing: there is no total to spread.
+    if (!u || total === 0) return;
+    const usage = { cacheRead: u.cacheRead, cacheWrite: u.cacheWrite, input: u.input };
+    const tokens = spread(
+      weights,
+      placed.findIndex((p) => p.w.kind === 'gap'),
+      total,
+    );
+    this.read += 1;
+    this.tokens += total;
+    addSplit(this.split, usage);
+
+    const held: Held[] = [];
+    let at = 0;
+    let toolCount = 0;
+    placed.forEach((p, i) => {
+      const w = p.w;
+      const n = tokens[i] as number;
+      const split = splitAt(at, n, usage);
+      at += n;
+      if (w.kind === 'system' || w.kind === 'tool') {
+        this.fixed.tokens += n;
+        addSplit(this.fixed.split, split);
+        if (w.kind === 'system') this.fixed.system += n;
+        else {
+          this.fixed.tools += n;
+          toolCount += 1;
+        }
+        return;
+      }
+      if (w.kind === 'gap') return;
+      if (w.kind === 'call' && w.callId && !this.calls.has(w.callId)) this.calls.set(w.callId, w);
+      held.push({ key: p.key, w, tokens: n });
+      const path = this.fileOf(w);
+      const key = path ? `file:${path}` : p.key;
+      let item = this.items.get(key);
+      if (!item) {
+        item = {
+          key,
+          kind: path ? 'file' : (w.kind as CarriedKind),
+          w,
+          tokens: 0,
+          split: zero(),
+          requests: 0,
+          last: '',
+          first: request.id,
+          path,
+          reads: [],
+        };
+        this.items.set(key, item);
+      }
+      item.tokens += n;
+      addSplit(item.split, split);
+      if (item.last !== request.id) {
+        item.requests += 1;
+        item.last = request.id;
+      }
+      if (path && w.callId && !item.reads.includes(w.callId)) item.reads.push(w.callId);
+    });
+    this.fixed.toolCount = toolCount;
+
+    if (request.compactedBefore && this.before) {
+      const now = new Set(placed.map((p) => p.key));
+      const gone = this.before.held.filter((h) => !now.has(h.key));
+      this.drops.push({
+        requestId: request.id,
+        beforeId: this.before.id,
+        at: request.startedAt,
+        dropped: gone.length,
+        tokens: gone.reduce((s, h) => s + h.tokens, 0),
+        largest: [...gone].sort((a, b) => b.tokens - a.tokens).slice(0, 3),
+      });
+    }
+    this.before = { id: request.id, held };
+  }
+
+  /** The file a call or result reads, resolved; null when it is not a read. */
+  private fileOf(w: Weighed): string | null {
+    if (w.kind !== 'call' && w.kind !== 'result') return null;
+    const id = w.callId;
+    if (!id) return null;
+    const known = this.files.get(id);
+    if (known !== undefined) return known;
+    const call = w.kind === 'call' ? w : this.calls.get(id);
+    if (!call?.tool) return null;
+    const read = touchesOf({ name: call.tool, input: call.input, resultPreview: null }).find(
+      (t) => t.verb === 'read',
+    );
+    const path = read ? resolvePath(read.path, this.cwd) : null;
+    this.files.set(id, path);
+    return path;
+  }
+
+  /** A call's tool and what it worked on. */
+  private callName(callId: string | null): { tool: string | null; target: string | null } {
+    const call = callId ? this.calls.get(callId) : undefined;
+    return call?.tool
+      ? { tool: call.tool, target: activityTarget(call.tool, call.input) }
+      : { tool: null, target: null };
+  }
+
+  private dropped(h: Held): DroppedPart {
+    const w = h.w;
+    const call = w.kind === 'call' || w.kind === 'result' ? w.callId : null;
+    return {
+      key: h.key,
+      kind: w.kind,
+      ...this.callName(call),
+      path: this.fileOf(w),
+      text: w.text,
+      role: w.role,
+      callId: call,
+      tokens: h.tokens,
+    };
+  }
+
+  bill(top = TOP_ITEMS): SessionContextBill {
+    const all = [...this.items.values()].sort((a, b) => b.tokens - a.tokens);
+    const items = all.slice(0, top).map((c): CarriedItem => {
+      const callId = c.kind === 'file' ? (c.reads.at(-1) ?? null) : c.w.callId;
+      return {
+        key: c.key,
+        kind: c.kind,
+        ...this.callName(callId),
+        path: c.path,
+        text: c.w.text,
+        role: c.w.role,
+        tokens: c.tokens,
+        split: { ...c.split },
+        requests: c.requests,
+        reads: c.reads.length,
+        callId,
+        firstRequestId: c.first,
+      };
+    });
+    const read = this.read;
+    const fixed: FixedCost | null =
+      read > 0 && this.fixed.tokens > 0
+        ? {
+            tokens: this.fixed.tokens,
+            split: { ...this.fixed.split },
+            requests: read,
+            perRequest: this.fixed.tokens / read,
+            system: this.fixed.system / read,
+            tools: this.fixed.tools / read,
+            toolCount: this.fixed.toolCount,
+          }
+        : null;
+    const rereads = all.filter((c) => c.kind === 'file' && c.reads.length >= REREAD).length;
+    const first = items[0];
+    const advice: ContextAdvice | null =
+      read === 0
+        ? null
+        : rereads > 0
+          ? { kind: 'rereads', files: rereads, reads: REREAD }
+          : first && first.tokens / this.tokens >= CARRIED_SHARE
+            ? { kind: 'carried', share: first.tokens / this.tokens, item: first }
+            : fixed && fixed.tokens / this.tokens >= FIXED_SHARE
+              ? { kind: 'fixed', share: fixed.tokens / this.tokens, perRequest: fixed.perRequest }
+              : null;
+    const reasons = [...this.reasons.entries()].sort((a, b) => b[1] - a[1]);
+    return {
+      agentId: this.agentId,
+      requests: this.fed.length,
+      read,
+      unavailable: read === 0 ? (reasons[0]?.[0] ?? null) : null,
+      tokens: this.tokens,
+      split: { ...this.split },
+      fixed,
+      items,
+      compactions: this.drops.map((d) => ({
+        ...d,
+        largest: d.largest.map((h) => this.dropped(h)),
+      })),
+      advice,
+    };
+  }
+}
+
+/** The bill of an agent's finished requests, in order: a ledger fed them all. */
+export function sessionBill(
+  agentId: string,
+  entries: Iterable<{ request: ModelRequest; detail: RequestDetail | null }>,
+  cwd: string | null = null,
+): SessionContextBill {
+  const ledger = new ContextLedger(agentId, cwd);
+  for (const e of entries) ledger.add(e.request, e.detail);
+  return ledger.bill();
 }
