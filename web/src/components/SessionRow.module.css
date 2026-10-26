@@ -159,3 +159,12 @@
   font-size: var(--fs-meta);
   color: var(--muted);
 }
+
+/* A card with controls under it (Home's answer to a prompt): the hairline runs under both. */
+.card {
+  border-bottom: 1px solid var(--border);
+}
+
+.card > .row {
+  border-bottom: 0;
+}

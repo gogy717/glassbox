@@ -186,6 +186,57 @@ describe('App', () => {
     ).toBeInTheDocument();
   });
 
+  it('answers a prompt from Home through its run, and the row is Working after the next update', async () => {
+    const store = createStore();
+    const [demo, other] = createDemoSessions(DEMO_NOW);
+    if (!demo || !other) throw new Error('fixture');
+    // A glassbox run's process only knows it is busy; the prompt is what makes it wait.
+    const busy = { ...other, live: 'busy' as const };
+    store.applyEvent({ type: 'sessions', sessions: [demo, busy] });
+    const prompt = {
+      id: 'tu_1',
+      toolName: 'Bash',
+      input: { command: 'npm test' },
+      questions: null,
+      requestedAt: new Date(DEMO_NOW.getTime() - 20_000).toISOString(),
+    };
+    const waiting = runState({
+      id: 'run_2',
+      sessionId: other.id,
+      status: 'waiting-permission',
+      pendingPermissions: [prompt],
+    });
+    store.applyEvent({ type: 'run', run: waiting });
+    const runs = fakeRuns();
+    render(<App store={store} connect={noConnect} runs={runs} />);
+    const needsYou = screen.getByRole('region', { name: 'Needs you' });
+    const answer = within(needsYou).getByRole('group', {
+      name: 'Permission for Bash · Fix flaky login test',
+    });
+    expect(answer).toHaveTextContent('npm test');
+    const allow = within(answer).getByRole('button', { name: 'Allow' });
+    await waitFor(() => expect(allow).toBeEnabled());
+    fireEvent.click(allow);
+    await waitFor(() =>
+      expect(runs.decide).toHaveBeenCalledWith('run_2', 'tu_1', { decision: 'allow' }),
+    );
+
+    act(() =>
+      store.applyEvent({
+        type: 'run',
+        run: { ...waiting, status: 'running', pendingPermissions: [] },
+      }),
+    );
+    expect(
+      within(screen.getByRole('region', { name: 'Working' })).getByRole('button', {
+        name: /Fix flaky login test/,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Needs you' })).toHaveTextContent(
+      'Nothing needs you.',
+    );
+  });
+
   it('opens a session when it is clicked in the sidebar', async () => {
     const store = createStore();
     store.applyEvent({ type: 'sessions', sessions: createDemoSessions(DEMO_NOW) });

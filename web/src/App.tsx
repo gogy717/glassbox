@@ -424,6 +424,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
                     navigate({ sessionId: id, agentId: 'main', turnId: null, requestId: null });
                   }}
                   onNewSession={() => setNewSession(true)}
+                  onDecide={(runId, id, d) => runs.decide(runId, id, d)}
                 />
               )}
             </main>

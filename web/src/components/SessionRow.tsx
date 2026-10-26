@@ -1,4 +1,4 @@
-import { type PointerEvent, useState } from 'react';
+import { type PointerEvent, type ReactNode, useState } from 'react';
 import type { SessionSummary } from '../../../src/core/model.js';
 import type { RovingItemProps } from '../data/useRovingFocus';
 import { translateParts, useI18n } from '../i18n';
@@ -21,6 +21,11 @@ interface Props {
   failure?: string | null;
   /** On a card, a muted last line: where to answer what it waits for. */
   note?: string;
+  /**
+   * On a card, controls under the row, outside its button (a button cannot hold buttons): Home's
+   * answer to a prompt. The row's hairline then runs under them.
+   */
+  footer?: ReactNode;
   roving?: RovingItemProps;
   onSelect(id: string): void;
 }
@@ -42,6 +47,7 @@ export function SessionRow({
   density = 'compact',
   failure,
   note,
+  footer,
   roving,
   onSelect,
 }: Props) {
@@ -86,8 +92,8 @@ export function SessionRow({
   // one says since when it waits.
   const showAge = !(running && (s.activity || (density === 'card' && s.live === 'waiting')));
 
-  if (density === 'card')
-    return (
+  if (density === 'card') {
+    const card = (
       <button {...button}>
         <span className={css.head}>
           <AgentTag kind={s.agent} />
@@ -129,6 +135,15 @@ export function SessionRow({
         {note && <span className={css.note}>{note}</span>}
       </button>
     );
+    return footer ? (
+      <div className={css.card}>
+        {card}
+        {footer}
+      </div>
+    ) : (
+      card
+    );
+  }
 
   return (
     <button {...button}>
