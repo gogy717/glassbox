@@ -43,7 +43,7 @@ The first run downloads and builds (about a minute), then opens `http://127.0.0.
 Pin a version (recommended, so the contents do not change with the branch):
 
 ```sh
-npx --yes github:gogy717/glassbox#v0.7.4
+npx --yes github:gogy717/glassbox#v0.8.0
 ```
 
 Common options:
