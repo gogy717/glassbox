@@ -1,4 +1,4 @@
-import { type KeyboardEvent, Suspense } from 'react';
+import { type KeyboardEvent, lazy, Suspense } from 'react';
 import { MAIN_AGENT_ID } from '../../../src/core/model.js';
 import type { LivePartial } from '../../../src/shared/runs.js';
 import { AgentBreadcrumb } from '../components/AgentBreadcrumb';
@@ -21,7 +21,14 @@ const FilesView = lazyView(() => import('./files/FilesView').then((m) => m.Files
 // without: its chunk is asked for as the app loads, so the strip is there when a session opens.
 const outcomeStrip = import('../components/OutcomeStrip');
 outcomeStrip.catch(() => {});
-const OutcomeStrip = lazyView(() => outcomeStrip.then((m) => m.OutcomeStrip));
+// It only adds to the page: a strip whose chunk did not load (an upgrade since the tab opened)
+// leaves the session as it was, without it, where a view would ask for a reload.
+const OutcomeStrip = lazy(() =>
+  outcomeStrip.then(
+    (m) => ({ default: m.OutcomeStrip }),
+    () => ({ default: () => null }),
+  ),
+);
 
 interface Props {
   open: OpenSession;
