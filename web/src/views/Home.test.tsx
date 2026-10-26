@@ -115,13 +115,16 @@ describe('Home', () => {
       'Recent',
     ]);
 
-    // Each says what it waits for, the longest wait first; the clock replaces the age.
+    // Each says what it waits for, the longest wait first; the clock replaces the age. A
+    // terminal holds these prompts, so they say where to answer them; a turn is not answered.
     const needsYou = region('Needs you');
     expect(titles(needsYou)).toEqual(['Session 7', 'Session 6', 'Session 3']);
     expect(rows(needsYou).map((r) => r.textContent)).toEqual([
       expect.stringMatching(/mill \/Session 7Your turn · 3:40$/),
-      expect.stringMatching(/lantern \/Session 6Question · 1:02$/),
-      expect.stringMatching(/shopfront \/Session 3Permission · Bash · 0:20$/),
+      expect.stringMatching(/lantern \/Session 6Question · 1:02Answer it in the terminal$/),
+      expect.stringMatching(
+        /shopfront \/Session 3Permission · Bash · 0:20Answer it in the terminal$/,
+      ),
     ]);
     expect(within(needsYou).getByText('3')).toHaveClass('figure');
     expect(within(needsYou).getByText('3')).toHaveAttribute('data-attention');
@@ -137,6 +140,41 @@ describe('Home', () => {
     expect(within(recent).getByText('3')).toHaveClass('figure');
     // No project headings: the project leads each row instead.
     expect(screen.queryAllByRole('heading', { level: 3 })).toEqual([]);
+  });
+
+  it('says what a terminal’s prompt is about, and that the terminal is where to answer it', () => {
+    const on = (tool: string, target: string, s: number): SessionActivity => ({
+      ...waitingFor(tool, s),
+      target,
+    });
+    renderHome([
+      session('shopfront', 'waiting', 0, { activity: on('Bash', 'git push +1', 20) }),
+      session('lantern', 'waiting', 1, {
+        activity: on('AskUserQuestion', 'Which beds first?', 62),
+      }),
+    ]);
+    const [question, push] = rows(region('Needs you'));
+    expect(push).toHaveTextContent(
+      /shopfront \/Session 1Permission · Bash · git push \+1 · 0:20Answer it in the terminal$/,
+    );
+    expect(question).toHaveTextContent(
+      /lantern \/Session 2Question · Which beds first\? · 1:02Answer it in the terminal$/,
+    );
+    // The target in the mono face, as a running tool's is.
+    expect(within(push as HTMLElement).getByText('git push +1')).toHaveClass(/target/);
+  });
+
+  it('leaves the terminal out of a prompt that glassbox holds', () => {
+    const held = session('glassbox', 'waiting', 0, { activity: waitingFor('Bash', 20) });
+    const request = {
+      id: 'tu_1',
+      toolName: 'Bash',
+      input: { command: 'npm test' },
+      questions: null,
+      requestedAt: ago(20),
+    };
+    renderHome([held], { prompts: new Map([[held.id, { runId: 'run_1', request }]]) });
+    expect(screen.getByRole('listitem')).not.toHaveTextContent('terminal');
   });
 
   it('says a resting session is idle, and since when, on its second line', () => {

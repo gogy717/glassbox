@@ -4,10 +4,11 @@ import type { AgentKind, SessionSummary } from '../../../src/core/model.js';
 import { AgentTag } from '../components/AgentTag';
 import { Delayed } from '../components/Delayed';
 import { SessionRow } from '../components/SessionRow';
+import type { OpenPrompt } from '../data/runs';
 import { useRovingFocus } from '../data/useRovingFocus';
 import { type MessageKey, useI18n } from '../i18n';
 import { isListed } from '../lib/sessions';
-import { longestWaitFirst } from '../lib/waiting';
+import { longestWaitFirst, waitKind } from '../lib/waiting';
 import css from './Home.module.css';
 
 interface Props {
@@ -17,6 +18,8 @@ interface Props {
   showProbes: boolean;
   /** The sessions whose glassbox run failed, with its error (`failedSessions`). */
   failures: ReadonlyMap<string, string | null>;
+  /** The prompts glassbox runs hold open, by session (`openPrompts`); the rest a terminal holds. */
+  prompts?: ReadonlyMap<string, OpenPrompt>;
   /** The session open last: back on Home, its row keeps the tab stop. */
   lastOpened?: string | null;
   onOpen(sessionId: string): void;
@@ -24,6 +27,7 @@ interface Props {
 }
 
 const RECENT = 6;
+const NO_PROMPTS: ReadonlyMap<string, OpenPrompt> = new Map();
 const newestFirst = (a: SessionSummary, b: SessionSummary) =>
   b.updatedAt.localeCompare(a.updatedAt);
 
@@ -58,6 +62,7 @@ export function Home({
   now,
   showProbes,
   failures,
+  prompts = NO_PROMPTS,
   lastOpened = null,
   onOpen,
   onNewSession,
@@ -126,6 +131,9 @@ export function Home({
       </div>
     );
 
+  // A prompt or question a terminal holds is answered there; a turn is not answered at all.
+  const answerInTerminal = (s: SessionSummary) =>
+    s.live === 'waiting' && !prompts.has(s.id) && waitKind(s.activity) !== 'turn';
   const list = (items: SessionSummary[]) => (
     <ul className={css.rows}>
       {items.map((s) => (
@@ -136,6 +144,7 @@ export function Home({
             now={now}
             density="card"
             failure={failures.get(s.id)}
+            note={answerInTerminal(s) ? t('home.answerInTerminal') : undefined}
             roving={roving(s.id)}
             onSelect={onOpen}
           />

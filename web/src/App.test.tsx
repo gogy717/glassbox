@@ -155,6 +155,8 @@ describe('App', () => {
     const needsYou = screen.getByRole('region', { name: 'Needs you' });
     const card = within(needsYou).getByRole('button', { name: /Fix flaky login test/ });
     expect(card).toHaveTextContent('Permission · Bash · 0:20');
+    // glassbox holds this prompt, not a terminal.
+    expect(card).not.toHaveTextContent('terminal');
     expect(
       within(screen.getByRole('region', { name: 'Recent' })).queryByRole('button', {
         name: /Fix flaky login test/,

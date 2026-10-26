@@ -146,9 +146,11 @@
   flex: none;
 }
 
-/* On a card, what a running session's agent last said: one muted line under its activity, cut
-   by the row, whole in the tooltip. */
-.said {
+/* On a card, under its activity: what a running session's agent last said (whole in the
+   tooltip), then where to answer what it waits for ("Answer it in the terminal"). One muted line
+   each, cut by the row. */
+.said,
+.note {
   max-width: 100%;
   min-width: 0;
   overflow: hidden;

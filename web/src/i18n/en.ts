@@ -504,6 +504,7 @@ export const en: Record<MessageKey, string> = {
   'home.recent': 'Recent',
   'home.nothingWaiting': 'Nothing needs you.',
   'home.nothingWorking': 'Nothing is working.',
+  'home.answerInTerminal': 'Answer it in the terminal',
   'activity.reading': 'Reading {x}',
   'activity.searching': 'Searching {x}',
   'activity.editing': 'Editing {x}',

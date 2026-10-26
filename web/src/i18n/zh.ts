@@ -490,6 +490,7 @@ export const zh = {
   'home.recent': '最近的会话',
   'home.nothingWaiting': '没有需要你处理的会话。',
   'home.nothingWorking': '没有会话在工作。',
+  'home.answerInTerminal': '在终端里处理',
   'activity.reading': '正在读取 {x}',
   'activity.searching': '正在搜索 {x}',
   'activity.editing': '正在编辑 {x}',

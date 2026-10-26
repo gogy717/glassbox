@@ -19,6 +19,8 @@ interface Props {
   density?: 'compact' | 'card';
   /** Set when the session's glassbox run failed: its error, or null when it gave none. */
   failure?: string | null;
+  /** On a card, a muted last line: where to answer what it waits for. */
+  note?: string;
   roving?: RovingItemProps;
   onSelect(id: string): void;
 }
@@ -39,6 +41,7 @@ export function SessionRow({
   now,
   density = 'compact',
   failure,
+  note,
   roving,
   onSelect,
 }: Props) {
@@ -123,6 +126,7 @@ export function SessionRow({
             {said}
           </span>
         )}
+        {note && <span className={css.note}>{note}</span>}
       </button>
     );
 

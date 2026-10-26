@@ -21,7 +21,7 @@ import { notifyState, useNeedsYouNotifications } from './data/notifications';
 import {
   createRunsClient,
   failedSessions,
-  pendingPrompts,
+  openPrompts,
   promptsKey,
   type RunsClient,
   runForSession,
@@ -244,7 +244,8 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
   // streamed piece of a reply, so the prompts are read again only when one opens or closes.
   const promptKey = promptsKey(state.runs);
   // biome-ignore lint/correctness/useExhaustiveDependencies: promptKey names every prompt open in state.runs
-  const prompts = useMemo(() => pendingPrompts(state.runs), [promptKey]);
+  const held = useMemo(() => openPrompts(state.runs), [promptKey]);
+  const prompts = useMemo(() => new Map([...held].map(([id, p]) => [id, p.request])), [held]);
   const sessions = useMemo(() => withWaiting(state.sessions, prompts), [state.sessions, prompts]);
   const failures = useMemo(() => failedSessions(state.runs), [state.runs]);
   // The session page as it was last left, agent, tab, turn, request and card: the nav's Session
@@ -415,6 +416,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
                   loaded={state.sessionsLoaded}
                   showProbes={prefs.showProbes}
                   failures={failures}
+                  prompts={held}
                   lastOpened={lastOpened}
                   onOpen={(id) => {
                     // From the board, straight onto the prompt, even one hidden with Escape.
