@@ -42,7 +42,10 @@ describe('troubleText', () => {
       '重复执行 npm test 4 次',
     );
     expect(troubleText(zh, sign('long-turn', { median: 4 * 60_000 }, ago(34)), NOW, 'long')).toBe(
-      '这一轮已运行 34 分钟，其他轮通常 4 分钟',
+      '这一轮已运行 34 分钟，其他轮通常只要 4 分钟',
+    );
+    expect(troubleText(zh, sign('repeat', { x: 'npm test', n: 4 }), NOW, 'short')).toBe(
+      '正在重试 npm test · 4 次',
     );
     expect(troubleText(zh, sign('waiting', {}, ago(95)), NOW, 'short')).toBe('已等 1 小时 35 分钟');
   });
