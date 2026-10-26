@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { QuotaSnapshot, SessionSummary } from '../../../../src/core/model.js';
 import { type WeekWindowKind, weekWindow } from '../../../../src/shared/week.js';
 import { UiCjk } from '../../components/CompactFigure';
@@ -50,6 +50,13 @@ export interface StatsPageProps {
   sessions: SessionSummary[];
   quotas: QuotaSnapshot[];
   now: number;
+  /**
+   * Say under the switch that the last 7 days were chosen because the week is less than a day
+   * old (D, F7; the nav's Stats link chooses so). Shown for this visit once true at mount, and
+   * `onNoteSeen` is called then, so the next visit does without it.
+   */
+  note?: boolean;
+  onNoteSeen?(): void;
 }
 
 /** True once `on` has held for `ms`: a read that ends sooner never says it was reading. */
@@ -80,10 +87,19 @@ export function StatsPage({
   sessions,
   quotas,
   now,
+  note = false,
+  onNoteSeen,
 }: StatsPageProps) {
   const { t, locale } = useI18n();
   const entry = useStatsWeek(kind);
   const cache = useWeekCache();
+  // The note as the page opened: it stays for this visit while the caller remembers it was seen.
+  const [noted] = useState(note);
+  const seen = useRef(onNoteSeen);
+  seen.current = onNoteSeen;
+  useEffect(() => {
+    if (noted) seen.current?.();
+  }, [noted]);
   const w = useMemo(
     () => (entry.result ? statsWeek(entry.result, showProbes) : null),
     [entry.result, showProbes],
@@ -123,6 +139,7 @@ export function StatsPage({
           <WeeklyReceiptButton showProbes={showProbes} start={kind} label={st(locale, 'print')} />
         </span>
       </div>
+      {noted && kind === '7d' && <p className={css.defaultNote}>{st(locale, 'defaultNote')}</p>}
       {!entry.result && entry.reading && (
         <div className={css.progress} aria-hidden="true">
           <span

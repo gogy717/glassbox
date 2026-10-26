@@ -12,7 +12,7 @@ import type { ConnectionState } from '../data/store';
 import { useNow } from '../data/useNow';
 import { useI18n } from '../i18n';
 import type { Prefs } from '../prefs';
-import type { Page } from '../router';
+import { type Page, statsLink } from '../router';
 import { AgentTag } from './AgentTag';
 import { useOnePopover, usePopoverDismiss } from './popover';
 import { QuotaBar } from './QuotaBar';
@@ -193,7 +193,11 @@ function PageNav({ page, here, session, sessionsLoaded }: PageNavProps) {
           {label(t('nav.session'))}
         </a>
       )}
-      <a href={page === 'stats' ? here : '#/stats'} title={t('nav.stats')} {...item('stats')}>
+      <a
+        href={page === 'stats' ? here : statsLink(Date.now())}
+        title={t('nav.stats')}
+        {...item('stats')}
+      >
         <ChartNoAxesColumn size={14} aria-hidden="true" />
         {label(t('nav.stats'))}
       </a>

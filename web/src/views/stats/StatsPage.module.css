@@ -98,6 +98,13 @@
   align-self: flex-start;
 }
 
+/* Why the window is the last 7 days: one line under the switch, early in a week, once (D, F7). */
+.defaultNote {
+  margin: -8px 0 16px;
+  font-size: var(--fs-small);
+  color: var(--muted);
+}
+
 /* A first read: one line of progress under the head. */
 .progress {
   height: 2px;

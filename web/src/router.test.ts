@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { formatRoute, mergeRoute, pageOf, parseRoute, type Route } from './router';
+import {
+  formatRoute,
+  mergeRoute,
+  pageOf,
+  parseRoute,
+  type Route,
+  statsLink,
+  youngWeek,
+} from './router';
 
 const HOME: Route = {
   sessionId: null,
@@ -173,5 +181,27 @@ describe('pageOf', () => {
     [{ ...HOME, stats: '7d' }, 'stats'],
   ])('%j is the %s page', (route, page) => {
     expect(pageOf(route)).toBe(page);
+  });
+});
+
+// Branch D (F7) item 6: the nav's Stats link opens the last 7 days while the week is under a
+// day old; `#/stats` itself keeps meaning this week.
+describe('statsLink', () => {
+  const local = (day: number, h: number, m = 0) => new Date(2026, 9, day, h, m, 0).getTime();
+
+  it('chooses the last 7 days until the week is a day old, this week from then on', () => {
+    // Monday, October 26: from midnight to the last minute of the day.
+    expect(youngWeek(local(26, 0))).toBe(true);
+    expect(statsLink(local(26, 14))).toBe('#/stats?window=7d');
+    expect(statsLink(local(26, 23, 59))).toBe('#/stats?window=7d');
+    // Tuesday 00:00 and a Friday.
+    expect(youngWeek(local(27, 0))).toBe(false);
+    expect(statsLink(local(27, 0))).toBe('#/stats');
+    expect(statsLink(local(23, 10))).toBe('#/stats');
+  });
+
+  it('leaves #/stats meaning this week', () => {
+    expect(parseRoute('#/stats').stats).toBe('week');
+    expect(parseRoute(statsLink(local(26, 14))).stats).toBe('7d');
   });
 });
