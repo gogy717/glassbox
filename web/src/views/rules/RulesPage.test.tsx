@@ -263,6 +263,29 @@ describe('the Rules page', () => {
     expect(screen.getByText('Nothing matches the filters.')).toBeInTheDocument();
   });
 
+  it('forgets a repository or a tool the next window has none of', async () => {
+    const read = vi.fn<ReadRules>(async (kind) =>
+      kind === '7d' ? result([row('Bash(make:*)', [[SHOP, 6]])], '7d') : result(),
+    );
+    const view = renderPage(read, '30d');
+    await screen.findByRole('table');
+    fireEvent.change(screen.getByRole('combobox', { name: 'Repository' }), {
+      target: { value: INFRA },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Tool' }), {
+      target: { value: 'mcp__tracker' },
+    });
+    view.rerender(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <RulesPage window="7d" onWindow={vi.fn()} now={NOW} read={read} />
+      </I18nContext.Provider>,
+    );
+    expect(await screen.findByText('Bash(make:*)')).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Repository' })).toHaveValue('');
+    expect(screen.getByRole('combobox', { name: 'Tool' })).toHaveValue('');
+    expect(screen.queryByText('Nothing matches the filters.')).toBeNull();
+  });
+
   it('names an MCP server and Codex in the tool filter', async () => {
     renderPage(answered());
     await screen.findByRole('table');

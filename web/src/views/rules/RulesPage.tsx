@@ -114,11 +114,14 @@ export function RulesPage({ window: kind, onWindow, now, read = readRules }: Rul
       ),
     [rows],
   );
+  // A choice the window has no rule for, kept from another window, reads as all.
+  const repoOn = repos.some(([root]) => root === repo) ? repo : '';
+  const toolOn = tools.includes(tool) ? tool : '';
   const shown = useMemo(() => {
     const out: { row: RuleRow; counts: RuleCounts }[] = [];
     for (const row of rows) {
-      if (tool && row.tool !== tool) continue;
-      const counts = repo ? row.projects.find((p) => p.root === repo) : row;
+      if (toolOn && row.tool !== toolOn) continue;
+      const counts = repoOn ? row.projects.find((p) => p.root === repoOn) : row;
       if (counts) out.push({ row, counts });
     }
     return out.sort(
@@ -126,7 +129,7 @@ export function RulesPage({ window: kind, onWindow, now, read = readRules }: Rul
         b.counts.asked - a.counts.asked ||
         Date.parse(b.counts.lastAsked) - Date.parse(a.counts.lastAsked),
     );
-  }, [rows, repo, tool]);
+  }, [rows, repoOn, toolOn]);
 
   const toolLabel = (name: string) =>
     name.startsWith('mcp__')
@@ -194,7 +197,7 @@ export function RulesPage({ window: kind, onWindow, now, read = readRules }: Rul
               <span>{t('rules.repo')}</span>
               <select
                 className={css.select}
-                value={repo}
+                value={repoOn}
                 onChange={(e) => narrow(setRepo)(e.target.value)}
               >
                 <option value="">{t('rules.allRepos')}</option>
@@ -209,7 +212,7 @@ export function RulesPage({ window: kind, onWindow, now, read = readRules }: Rul
               <span>{t('rules.tool')}</span>
               <select
                 className={css.select}
-                value={tool}
+                value={toolOn}
                 onChange={(e) => narrow(setTool)(e.target.value)}
               >
                 <option value="">{t('rules.allTools')}</option>
