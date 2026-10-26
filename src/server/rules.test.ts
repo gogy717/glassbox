@@ -214,7 +214,7 @@ describe('the rules service', () => {
         repo: repo('/work/shop', '/work/shop-wt'),
         commands: ['make'],
       }),
-      snap('c', { cwd: '/work/notes', repo: null, commands: ['ls'] }),
+      snap('c', { cwd: '/work/notes', repo: null, commands: ['npm run lint'] }),
       snap('d', { cwd: '/work/quiet', commands: [] }),
     ]);
     const file: SettingsFile = {
@@ -235,7 +235,7 @@ describe('the rules service', () => {
     expect(npm?.inSettings).toEqual([
       { path: file.path, scope: 'global', root: null, list: 'allow', rule: 'Bash(npm:*)' },
     ]);
-    expect(result.rows.find((r) => r.key === 'Bash(ls:*)')?.projects[0]).toMatchObject({
+    expect(result.rows.find((r) => r.key === 'Bash(npm run lint:*)')?.projects[0]).toMatchObject({
       root: '/work/notes',
       name: 'notes',
     });

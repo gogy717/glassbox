@@ -84,6 +84,26 @@ describe('the rule table', () => {
       { from: null, settings: [] },
     );
     expect(rows[0]?.danger).toBe('pipe-to-shell');
+    const reads = ruleRows(
+      [
+        session('s1', SHOP, [
+          ev('Read(~/x/**)', 1, { danger: 'outside' }),
+          ev('Read(~/x/**)', 2, { danger: 'secrets' }),
+        ]),
+      ],
+      { from: null, settings: [] },
+    );
+    expect(reads[0]?.danger).toBe('secrets');
+    const kills = ruleRows(
+      [
+        session('s1', SHOP, [
+          ev('Bash(x:*)', 1, { danger: 'kill' }),
+          ev('Bash(x:*)', 2, { danger: 'delete' }),
+        ]),
+      ],
+      { from: null, settings: [] },
+    );
+    expect(kills[0]?.danger).toBe('delete');
   });
 });
 
@@ -174,10 +194,16 @@ describe('the settings that hold a rule, and the rules to suggest', () => {
 
   it('suggests a rule asked five times and always allowed, and no rule asked fewer', () => {
     const rows = rowsOf([
-      session('s1', SHOP, [...times('Bash(make test:*)', 5), ...times('Bash(make lint:*)', 4)]),
+      session('s1', SHOP, [...times('Bash(make test:*)', 3), ...times('Bash(make lint:*)', 4)]),
+      session('s2', SHOP, times('Bash(make test:*)', 2, 10)),
     ]);
     expect(rows['Bash(make test:*)']?.suggested).toBe(true);
     expect(rows['Bash(make lint:*)']?.suggested).toBe(false);
+  });
+
+  it('suggests no rule asked in one session only, however often: a habit spans sessions', () => {
+    const rows = rowsOf([session('s1', SHOP, times('Bash(make build:*)', 9))]);
+    expect(rows['Bash(make build:*)']?.suggested).toBe(false);
   });
 
   it('suggests none that was ever denied, that may do harm, or that is Codex’s', () => {
@@ -223,7 +249,10 @@ describe('the settings that hold a rule, and the rules to suggest', () => {
     expect(rows['Edit(docs/**)']?.suggested).toBe(false);
     expect(
       rowsOf(
-        [session('s2', SHOP, times('Edit(docs/**)', 5, 40))],
+        [
+          session('s2', SHOP, times('Edit(docs/**)', 3, 40)),
+          session('s3', SHOP, times('Edit(docs/**)', 2, 50)),
+        ],
         [{ ...OTHER, allow: ['Edit(**)'], deny: [] }],
       )['Edit(docs/**)']?.suggested,
     ).toBe(true);

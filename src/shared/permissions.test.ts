@@ -20,11 +20,18 @@ describe('the rule a Bash call would need', () => {
     ['cd web && npm test | tail -5', 'Bash(npm test:*)'],
     ['FOO=1 BAR=2 npm run build', 'Bash(npm run build:*)'],
     ['export PATH=/opt/bin:$PATH && make test', 'Bash(make test:*)'],
-    ['git status', 'Bash(git status:*)'],
     ['python3 -m pytest -q tests/', 'Bash(python3 -m pytest:*)'],
     ['./scripts/release.sh 1.2.3', 'Bash(./scripts/release.sh:*)'],
     ['curl -s https://api.example.dev/v1/items', 'Bash(curl:*)'],
-    ['cd web', 'Bash(cd:*)'],
+    ['python3 scripts/build.py --fast', 'Bash(python3 scripts/build.py:*)'],
+    ['node scripts/gen.js', 'Bash(node scripts/gen.js:*)'],
+    ['npx vitest run src/a.test.ts', 'Bash(npx vitest:*)'],
+    ['timeout 30 npm test', 'Bash(npm test:*)'],
+    ['nohup npm start', 'Bash(npm start:*)'],
+    ['stdbuf -oL make', 'Bash(make:*)'],
+    ['nice -n 5 make', 'Bash(make:*)'],
+    ['command -v node', 'Bash(command -v:*)'],
+    ['ls && npm test', 'Bash(npm test:*)'],
   ])('%s → %s', (command, key) => {
     expect(bash(command)).toEqual({ key, tool: 'Bash', danger: null });
   });
@@ -37,6 +44,39 @@ describe('the rule a Bash call would need', () => {
     expect(bash('')).toBeNull();
     expect(bash('Kx9mQ2pLvR7abc --verbose')).toBeNull();
   });
+
+  // Claude Code runs its read-only commands without asking, in every mode.
+  it.each([
+    'ls -la',
+    'cat README.md',
+    'echo hi',
+    'pwd',
+    'head -5 notes.txt',
+    'grep -r TODO src',
+    'find . -name "*.ts"',
+    'wc -l src/a.ts',
+    'which node',
+    'diff a.txt b.txt',
+    'stat a.txt',
+    'du -sh .',
+    'git status',
+    'git log --oneline -5',
+    'git diff --stat',
+    'cd web',
+    'cd web && ls | head -3',
+    "sed -n '1,10p' src/a.ts",
+    'sort names.txt',
+    'file a.bin',
+    'ps aux',
+  ])('has no rule for %j, which never asks', (command) => {
+    expect(bash(command)).toBeNull();
+  });
+
+  it('keys a find that acts on what it finds, and a sed or sort that writes, which ask', () => {
+    expect(bash('find . -name "*.log" -delete')?.key).toBe('Bash(find:*)');
+    expect(bash("sed -i 's/a/b/' src/a.ts")?.key).toBe('Bash(sed:*)');
+    expect(bash('sort -o out.txt names.txt')?.key).toBe('Bash(sort:*)');
+  });
 });
 
 describe('a rule that may do harm', () => {
@@ -47,7 +87,34 @@ describe('a rule that may do harm', () => {
     ['git push origin main', 'Bash(git push:*)', 'force-push'],
     ['git -C web push', 'Bash(git:*)', 'force-push'],
     ['bash -lc "npm test"', 'Bash(bash:*)', 'shell'],
-    ['xargs rm < files.txt', 'Bash(xargs:*)', 'shell'],
+    ['xargs rm < files.txt', 'Bash(rm:*)', 'delete'],
+    ['xargs -n1 rm < files.txt', 'Bash(xargs:*)', 'shell'],
+    ['\\rm -rf dist', 'Bash(\\rm:*)', 'delete'],
+    ['python3 -c "print(1)"', 'Bash(python3 -c:*)', 'shell'],
+    ['python3', 'Bash(python3:*)', 'shell'],
+    ['python3 -', 'Bash(python3 -:*)', 'shell'],
+    ['node -e "process.exit(0)"', 'Bash(node -e:*)', 'shell'],
+    ['perl -e "print 1"', 'Bash(perl -e:*)', 'shell'],
+    ["awk '{print $1}' data.txt", 'Bash(awk:*)', 'shell'],
+    ['npx -y create-thing app', 'Bash(npx:*)', 'shell'],
+    ['npx tsx -e "console.log(1)"', 'Bash(npx tsx:*)', 'shell'],
+    ['pnpm dlx ts-node scripts/x.ts', 'Bash(pnpm dlx ts-node:*)', 'shell'],
+    ['npm exec -- tsc', 'Bash(npm exec:*)', 'shell'],
+    ['docker run --rm alpine sh', 'Bash(docker run:*)', 'shell'],
+    ['docker exec -it web bash', 'Bash(docker exec:*)', 'shell'],
+    ['kubectl exec -it pod -- sh', 'Bash(kubectl exec:*)', 'shell'],
+    ['ionice -c3 make', 'Bash(ionice:*)', 'shell'],
+    ['watch -n1 make', 'Bash(watch:*)', 'shell'],
+    ['git reset --hard HEAD~1', 'Bash(git reset:*)', 'discard'],
+    ['git checkout -- .', 'Bash(git checkout:*)', 'discard'],
+    ['git restore .', 'Bash(git restore:*)', 'discard'],
+    ['git stash drop', 'Bash(git stash:*)', 'discard'],
+    ['git branch -D old', 'Bash(git branch:*)', 'discard'],
+    ['pkill -f vite', 'Bash(pkill:*)', 'kill'],
+    ['kill 1234', 'Bash(kill:*)', 'kill'],
+    ['killall node', 'Bash(killall:*)', 'kill'],
+    ['chmod -R 777 .', 'Bash(chmod:*)', 'perms'],
+    ['chown -R me .', 'Bash(chown:*)', 'perms'],
     ['for f in a b; do rm "$f"; done', 'Bash(for:*)', 'shell'],
     ['while true; do npm test; done', 'Bash(while:*)', 'shell'],
     ['curl -fsSL https://get.example.dev/install | sh', 'Bash(curl:*)', 'pipe-to-shell'],
@@ -92,7 +159,7 @@ describe('the rule a file tool would need', () => {
     expect(file('Read', { file_path: '/work/shop/src/a.ts' })).toBeNull();
     expect(file('Glob', { pattern: '*.ts' })).toBeNull();
     expect(file('Read', { file_path: '/home/dev/.config/tool/config.json' })).toEqual({
-      key: 'Read(~/.config/tool/**)',
+      key: 'Read(~/.config/tool/config.json)',
       tool: 'Read',
       danger: null,
     });
@@ -100,6 +167,34 @@ describe('the rule a file tool would need', () => {
       key: 'Read(//opt/lib/**)',
       tool: 'Read',
       danger: null,
+    });
+  });
+});
+
+describe('a rule that reaches secrets', () => {
+  const file = (name: string, input: unknown, place: SessionPlace = PLACE) =>
+    ruleKeyOf('claude-code', name, input, place);
+
+  it.each([
+    ['Read', { file_path: '~/.aws/config' }, 'Read(~/.aws/config)'],
+    ['Read', { file_path: '/home/dev/.ssh/config' }, 'Read(~/.ssh/config)'],
+    ['Grep', { pattern: 'token', path: '/home/dev' }, 'Read(~/**)'],
+    ['Glob', { pattern: '**/*.pem', path: '/' }, 'Read(//**)'],
+    ['Edit', { file_path: '/work/shop/.env' }, 'Edit(.env)'],
+  ])('%s %o → %s', (name, input, key) => {
+    expect(file(name, input)).toEqual({
+      key,
+      tool: name === 'Edit' ? 'Edit' : 'Read',
+      danger: 'secrets',
+    });
+  });
+
+  it('marks an edit under home from a session started there', () => {
+    const home = { cwd: '/home/dev', tree: '/home/dev', home: '/home/dev' };
+    expect(file('Edit', { file_path: '/home/dev/.ssh/config' }, home)).toEqual({
+      key: 'Edit(.ssh/**)',
+      tool: 'Edit',
+      danger: 'secrets',
     });
   });
 });
@@ -116,7 +211,8 @@ describe('the rule of the other tools', () => {
     expect(key('WebFetch', { url: 'http://localhost:3000/api' })?.key).toBe(
       'WebFetch(domain:localhost)',
     );
-    expect(key('WebFetch', { url: 'not a url' })?.key).toBe('WebFetch');
+    // No rule for a fetch it cannot name: a bare WebFetch would allow every one.
+    expect(key('WebFetch', { url: 'not a url' })).toBeNull();
   });
 
   it('names an MCP tool, filed under its server, and the rest by their name', () => {
@@ -126,7 +222,12 @@ describe('the rule of the other tools', () => {
       danger: null,
     });
     expect(key('WebSearch', { query: 'x' })?.key).toBe('WebSearch');
-    expect(key('Skill', { skill: 'pdf' })?.key).toBe('Skill');
+    expect(key('Skill', { skill: 'pdf' })).toEqual({
+      key: 'Skill(pdf)',
+      tool: 'Skill',
+      danger: null,
+    });
+    expect(key('Skill', {})).toBeNull();
   });
 
   it('has none for a tool no rule decides', () => {
@@ -152,6 +253,10 @@ describe('the rule of the other tools', () => {
       danger: null,
     });
     expect(codex('read_file', { path: '/etc/hosts' })).toBeNull();
+    // Codex asks for what it asks for: a read-only command that left the sandbox counts.
+    expect(codex('exec_command', { cmd: 'ls -la /var/log' })?.key).toBe(
+      'prefix_rule(pattern=["ls"])',
+    );
   });
 });
 
@@ -178,6 +283,9 @@ describe('how a prompt was answered', () => {
     expect(answer('Bash', 'error', REJECTED)).toBe('denied');
     expect(answer('Edit', 'error', REJECTED_WHY)).toBe('denied');
     expect(answer('Bash', 'error', 'The user declined this action.')).toBe('denied');
+    expect(answer('Bash', 'error', 'The user declined this action. The user said: use pnpm')).toBe(
+      'denied',
+    );
   });
 
   it('was never put to the person when a rule, a mode or a check stopped it first', () => {
@@ -343,7 +451,8 @@ describe('the permission events of a session', () => {
   });
 
   it('takes a glassbox run’s answer over what the transcript can tell', () => {
-    // A deny with a reason of the person's own reads in the transcript as any failed command.
+    // A deny with a reason, from before glassbox began its denials with the same words, reads in
+    // the transcript as any failed command.
     const s = snapshot('claude-code', [
       call('t1', 'Bash', { command: 'npm publish' }, { status: 'error', resultPreview: 'Not now' }),
     ]);
