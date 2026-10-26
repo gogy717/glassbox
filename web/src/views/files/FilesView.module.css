@@ -1,0 +1,403 @@
+/* Files: a head line, the filters, then the files directory by directory as rows that unfold
+   into the calls behind them and the edits themselves. No cards. */
+.view {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  height: 100%;
+  padding: 20px 32px 32px;
+  overflow-y: auto;
+}
+
+.empty {
+  margin: 48px auto 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+.emptyControls {
+  margin: 0 auto;
+  text-align: center;
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* The takeaway as the section's lede, its figures in mono. */
+.headline {
+  margin: 0;
+  font-size: var(--fs-readout);
+  font-weight: 500;
+  line-height: var(--lh);
+  color: var(--text);
+}
+
+.headAgent {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Chips and the sub-agents toggle: bordered words, pressed in ink, as the timeline's tools. */
+.chip,
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-l);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--fs-small);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color var(--motion),
+    border-color var(--motion);
+}
+
+.chip:hover,
+.toggle:hover {
+  color: var(--text);
+}
+
+.chip[aria-pressed="true"],
+.toggle[aria-pressed="true"] {
+  border-color: var(--ink);
+  color: var(--text);
+}
+
+.chipCount {
+  color: var(--faint);
+}
+
+.chip[aria-pressed="true"] .chipCount {
+  color: var(--muted);
+}
+
+.toggle {
+  margin-left: auto;
+}
+
+/* "Filter by path": the turn list's field. */
+.filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(280px, 100%);
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-l);
+  background: var(--layer-1);
+  color: var(--faint);
+}
+
+.filter:focus-within {
+  outline: var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.filter input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-body);
+}
+
+.filter input::placeholder {
+  color: var(--faint);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* A directory: a path, so mono, muted. */
+.dir {
+  margin: 0 0 4px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  font-weight: 500;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Rows, not cards: a hairline between them. */
+.rows > li + li {
+  border-top: 1px solid var(--border);
+}
+
+.rowHead {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--radius-m);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--motion);
+}
+
+.rowHead:hover,
+.rowHead[aria-expanded="true"] {
+  background: var(--layer-2);
+}
+
+.chevron {
+  color: var(--faint);
+  transition: rotate var(--motion);
+}
+
+.rowHead[aria-expanded="true"] .chevron {
+  rotate: 90deg;
+}
+
+.what {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  min-width: 0;
+}
+
+.name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--fs-body);
+}
+
+.verbs {
+  font-size: var(--fs-small);
+  color: var(--muted);
+}
+
+/* What changed the file stands out from what only looked at it. */
+.verbs [data-changed] {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.failedWord {
+  color: var(--error);
+  font-weight: 500;
+}
+
+.runningWord {
+  color: var(--accent);
+}
+
+.when {
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+
+.rowBody {
+  padding: 2px 10px 12px 34px;
+}
+
+.calls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A call behind the file, as a link to it in the execution chain. */
+.call {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-height: 26px;
+  padding: 2px 8px 2px 6px;
+  border: 0;
+  border-radius: var(--radius-m);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--fs-small);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--motion),
+    color var(--motion);
+}
+
+.call:hover {
+  background: var(--layer-2);
+  color: var(--text);
+}
+
+.call b {
+  font-weight: 500;
+  color: var(--text);
+}
+
+.call code {
+  font-family: var(--font-mono);
+}
+
+.arrow {
+  color: var(--faint);
+}
+
+.call:hover .arrow {
+  color: var(--text);
+}
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 6px 0 4px 26px;
+}
+
+/* A diff, a patch, a file written, a cell: a bordered block on the code surface. */
+.block {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  background: var(--layer-2);
+  overflow: hidden;
+}
+
+.meta {
+  margin: 0;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+
+/* Verbatim text: a file's first lines (a pre), or the lines of a diff (a list, one line an item). */
+.pre {
+  max-height: 320px;
+  margin: 0;
+  padding: 6px 8px;
+  overflow: auto;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* One line of a diff: what went on the error tint, what came on the success tint, each with
+   its mark drawn in the margin, so a copy of the lines carries no marks. */
+.line {
+  display: block;
+  margin: 0 -8px;
+  padding: 0 8px 0 22px;
+  text-indent: -14px;
+}
+
+.line del,
+.line ins {
+  text-decoration: none;
+}
+
+.line::before {
+  display: inline-block;
+  width: 14px;
+  color: var(--faint);
+  text-indent: 0;
+  user-select: none;
+}
+
+.line[data-kind="same"]::before {
+  content: " ";
+}
+
+.line[data-kind="del"] {
+  background: var(--error-tint);
+}
+
+.line[data-kind="del"]::before {
+  content: "−";
+  color: var(--error);
+}
+
+.line[data-kind="add"] {
+  background: var(--success-tint);
+}
+
+.line[data-kind="add"]::before {
+  content: "+";
+  color: var(--success);
+}
+
+.more {
+  padding: 0 8px 8px;
+}
+
+@media (max-width: 560px) {
+  .view {
+    padding: 12px 16px 24px;
+  }
+
+  .toggle {
+    margin-left: 0;
+  }
+
+  .rowBody {
+    padding-left: 10px;
+  }
+
+  .detail {
+    margin-left: 0;
+  }
+}
