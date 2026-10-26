@@ -230,6 +230,26 @@
   color: var(--text);
 }
 
+/* "API prices (estimate)": opens the price table, a row of the menu like the boxes above it. */
+.pricesButton {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-meta);
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.pricesButton:hover {
+  text-decoration-color: currentColor;
+}
+
 /* Why a box cannot be ticked, under it, in line with its word. */
 .popover .note {
   margin: -6px 0 0;

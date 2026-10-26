@@ -102,7 +102,7 @@
 .agentRow,
 .groupRow {
   display: grid;
-  grid-template-columns: minmax(110px, 38%) minmax(60px, 1fr) minmax(72px, auto);
+  grid-template-columns: minmax(110px, 36%) minmax(60px, 1fr) minmax(72px, auto) minmax(52px, auto);
   align-items: center;
   gap: 12px;
   width: 100%;
@@ -177,6 +177,14 @@
   color: var(--muted);
 }
 
+/* What the row's calls would cost on the API: muted, right-aligned in its own column. */
+.rowCost {
+  font-size: var(--fs-meta);
+  color: var(--muted);
+  text-align: right;
+  white-space: nowrap;
+}
+
 .top {
   display: flex;
   flex-direction: column;
@@ -206,6 +214,7 @@
 
 .topWho {
   display: flex;
+  flex: 1;
   flex-direction: column;
   min-width: 0;
 }
@@ -226,6 +235,15 @@
 .topValue {
   flex: none;
   font-size: var(--fs-body);
+}
+
+/* The request's cost beside its tokens, in a column of its own. */
+.topCost {
+  flex: none;
+  min-width: 52px;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+  text-align: right;
 }
 
 /* Context chart */
@@ -332,6 +350,6 @@
 
   .agentRow,
   .groupRow {
-    grid-template-columns: minmax(90px, 42%) minmax(40px, 1fr) auto;
+    grid-template-columns: minmax(90px, 40%) minmax(40px, 1fr) auto auto;
   }
 }

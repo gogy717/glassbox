@@ -78,6 +78,7 @@ function windowOf(bucket: Bucket, key: 'primary' | 'secondary'): QuotaWindow | n
         : resetsIn !== null
           ? msToIso(bucket.at + resetsIn * 1000)
           : null,
+    ...(minutes !== null && minutes > 0 ? { durationMs: minutes * 60_000 } : {}),
   };
   const kind = windowKind(minutes);
   if (bucket.id === PLAN_BUCKET) return { id: key, kind, label: null, model: null, ...window };

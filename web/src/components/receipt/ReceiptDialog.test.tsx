@@ -1,6 +1,8 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { PriceTableContext } from '../../data/price-table';
 import { I18nContext, makeI18n } from '../../i18n';
+import { priceTable } from '../../lib/prices';
 import { demoOpen } from '../../test/demo';
 import { SummaryBar } from '../SummaryBar';
 
@@ -54,6 +56,23 @@ describe('the receipt dialog', () => {
     // The choices are W1's switches: one radio group each.
     for (const name of ['Size', 'Paper', 'Language', 'Hide names'])
       expect(within(dialog).getByRole('radiogroup', { name })).toBeInTheDocument();
+  });
+
+  // Proposal 6: the receipt's API equivalent is worked out from the prices set in Settings.
+  it('prints the API equivalent at the prices in force', async () => {
+    const doubled = { input: 8, cacheWrite: 10, cacheWrite1h: 16, cacheRead: 0.4, output: 40 };
+    render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <PriceTableContext.Provider value={priceTable({ 'claude-opus-5-5': doubled })}>
+          <SummaryBar open={demoOpen()} agentId="main" rate={null} />
+        </PriceTableContext.Provider>
+      </I18nContext.Provider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Receipt' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Receipt' });
+    expect(within(dialog).getByRole('img')).toHaveAccessibleDescription(
+      /API EQUIV\. +≈ \$6\.42 \(est\.\)/,
+    );
   });
 
   it('remembers its choices, and shows the size chosen (R1)', async () => {

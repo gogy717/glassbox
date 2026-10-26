@@ -17,7 +17,7 @@ import { receiptData } from './data';
 import { weekFileName } from './exportImage';
 import { isoWeek, weekSerial } from './format';
 import { INNER, type ReceiptOptions, textWidth } from './slip';
-import { COLUMNS, cols } from './text';
+import { COLUMNS, cols, spread } from './text';
 import { isQuiet, weekReceipt } from './week';
 import { inkOf, weekSvg, windowLine } from './weekSvg';
 import { weekText } from './weekText';
@@ -87,6 +87,7 @@ function made(kind: WeekWindowKind, now: number, sessions: Made[]): WeekResult {
           subAgents: m.subAgents ?? 0,
           failures: 0,
           usage: emptyUsage(),
+          usageByModel: {},
         },
         hours: window.hourStarts.map((h) => (h === hourStart(now) ? m.ms : 0)),
       }),
@@ -440,6 +441,7 @@ describe('the last 7 days across a change of the clocks (C3)', () => {
           webSearch: 0,
           webFetch: 0,
         },
+        usageByModel: {},
       },
       hours,
     };
@@ -738,5 +740,51 @@ describe('a quiet week, and one of which nothing was timed (DR2, R26, R27)', () 
       expect(shown).toContain(label);
     expect(shown.filter((t) => t === '—').length).toBeGreaterThanOrEqual(4);
     expect(svgText(weekSvg(w, ZH, 'tall').svg)).toContain('—');
+  });
+});
+
+// Proposal 6: the week's tokens as the API would have billed them.
+describe('the weekly receipt’s API equivalent', () => {
+  it('prices the week by model, and names the models it leaves out for want of a price', () => {
+    const w = weekReceipt(demoWeek());
+    // Its Claude sessions at list prices, worked out by hand from their usage by model; Codex's
+    // model has no price, and Grok reports no tokens (said on its own line).
+    expect(w.tokens.cost).toMatchObject({
+      priced: true,
+      partial: true,
+      unpriced: ['gpt-5.5-codex'],
+    });
+    expect(w.tokens.cost?.usd).toBeCloseTo(140.7783, 3);
+    const lines = weekText(w, EN).split('\n');
+    const at = lines.findIndex((l) => l.startsWith('TOTAL'));
+    expect(lines.slice(at + 1, at + 3)).toEqual([
+      spread('API EQUIV.', '≈ $140.78 (est.)'),
+      'no price · gpt-5.5-codex',
+    ]);
+    expect(svgText(weekSvg(w, EN, 'tall').svg)).toContain(
+      'API EQUIV. ≈ $140.78 (est.) no price · gpt-5.5-codex',
+    );
+    expect(weekReceipt(demoWeek('7d')).tokens.cost?.usd).toBeCloseTo(163.1816, 3);
+  });
+
+  it('says how many models have no price when their names do not fit the line', () => {
+    const r = demoWeek();
+    const names = ['an-unpriced-model-with-a-long-name', 'another-unpriced-model', 'third'];
+    const sessions = r.sessions.map((s) =>
+      s.agent === 'codex'
+        ? {
+            ...s,
+            inWindow: {
+              ...s.inWindow,
+              usageByModel: Object.fromEntries(
+                names.map((n) => [n, Object.values(s.inWindow.usageByModel)[0] ?? emptyUsage()]),
+              ),
+            },
+          }
+        : s,
+    );
+    const w = weekReceipt({ ...r, sessions });
+    expect(weekText(w, EN)).toContain('\nno price · 3 models\n');
+    expect(weekText(w, ZH)).toContain('\n无价格 · 3 个模型\n');
   });
 });

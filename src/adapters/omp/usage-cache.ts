@@ -59,6 +59,15 @@ function kindOf(window: Obj | null): QuotaWindow['kind'] {
   return m ? windowKind(Number(m[1]) * (UNIT_MINUTES[m[2] ?? ''] ?? 0)) : 'other';
 }
 
+/** The window's length: its duration, else what its id says ("5h", "1w"); a month ("1mo") has none. */
+function lengthOf(window: Obj | null): number | null {
+  const ms = num(window?.durationMs);
+  if (ms !== null && ms > 0) return ms;
+  const m = /^(\d+)(m|h|d|w)$/.exec(str(window?.id)?.toLowerCase() ?? '');
+  const minutes = m ? Number(m[1]) * (UNIT_MINUTES[m[2] ?? ''] ?? 0) : 0;
+  return minutes > 0 ? minutes * 60_000 : null;
+}
+
 /**
  * 0..100 from whichever amount the provider filled in, in oh-my-pi's own order: the used
  * fraction, used / limit, a used percentage, what remains. Null when none is usable (e.g.
@@ -95,6 +104,7 @@ function windowOf(limit: unknown, provider: string): QuotaWindow | null {
   if (!l || !id || used === null || l.status === 'unknown') return null;
   const window = obj(l.window);
   const prefix = `${provider}:`;
+  const length = lengthOf(window);
   return {
     id: id.startsWith(prefix) && id.length > prefix.length ? id.slice(prefix.length) : id,
     kind: kindOf(window),
@@ -102,6 +112,7 @@ function windowOf(limit: unknown, provider: string): QuotaWindow | null {
     model: null,
     usedPercent: used,
     resetsAt: msToIso(num(window?.resetsAt)),
+    ...(length !== null ? { durationMs: length } : {}),
   };
 }
 

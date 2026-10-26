@@ -8,6 +8,9 @@
  * the mix of their kinds (the demo's fix grew file work; the pen did not change). WORK then
  * gained the outcome's test runs and commits: the flaky-login session's `npm test` prints
  * "1  Test run · last ✓"; with those two lines left out, the hash is the one before.
+ * Then TOKENS ended with API EQUIV., what the same tokens would cost at API list prices
+ * (proposal 6): the demo's Claude calls are priced, so every one of its receipts prints that
+ * line; the hash below is of the receipt with both.
  */
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, expect, it } from 'vitest';
@@ -46,8 +49,8 @@ function receipts(): string {
   return out.join('\n');
 }
 
-it('draws the session receipt exactly as it did before the weekly receipt shared its pen', () => {
+it('draws the session receipt exactly as it did, with TOKENS ending in its API equivalent', () => {
   expect(createHash('sha256').update(receipts()).digest('hex')).toBe(
-    '0b18280509eedcf568d85753df8c24fcfcc545d95b40fed7b21e8b1788e39f79',
+    '73f032eaec8d6b969baf620104f20853c43d9e5e09d5fb85d50b54fcc01eca2f',
   );
 });

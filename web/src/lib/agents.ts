@@ -2,6 +2,7 @@ import type { AgentNode, WorkflowRun } from '../../../src/core/model.js';
 import { MAIN_AGENT_ID } from '../../../src/core/model.js';
 import { contextSize } from '../../../src/core/usage.js';
 import type { OpenSession } from '../data/store';
+import { type Cost, type PriceTable, sumCost } from './prices';
 import { isRunning } from './sessions';
 
 export type PathItem =
@@ -169,6 +170,15 @@ export function summarize(open: OpenSession, agentId: string, now: number): Summ
   for (const t of open.toolCalls.values()) if (ids.has(t.agentId)) s.toolCalls++;
   s.cacheHitRate = s.input > 0 ? cacheRead / s.input : null;
   return s;
+}
+
+/** What the calls `summarize` counts (the agent's and its sub-agents') would cost on the API. */
+export function subtreeCost(open: OpenSession, agentId: string, table: PriceTable): Cost {
+  const ids = subtreeIds(open, agentId);
+  return sumCost(
+    [...open.requests.values()].filter((r) => ids.has(r.agentId)),
+    table,
+  );
 }
 
 /** The session is live or the agent is running, so turns and calls may still arrive. */

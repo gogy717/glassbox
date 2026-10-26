@@ -1,10 +1,15 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, renderHook, screen, within } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Turn } from '../../../../src/core/model.js';
 import { I18nContext, makeI18n } from '../../i18n';
-import { newestMatch, type TurnItem, TurnList } from './TurnList';
+import type { Cost } from '../../lib/prices';
+import { demoOpen } from '../../test/demo';
+import { newestMatch, type TurnItem, TurnList, useTurnItems } from './TurnList';
+
+const NO_COST: Cost = { usd: 0, priced: false, partial: false, unpriced: [] };
 
 function item(n: number): TurnItem {
   const turn = {
@@ -27,6 +32,7 @@ function item(n: number): TurnItem {
     tools: 0,
     status: 'complete',
     command: false,
+    cost: NO_COST,
   };
 }
 
@@ -432,5 +438,41 @@ describe('TurnList styles', () => {
     expect(/\n\.row\[data-command\] \.clock \{([^}]*)\}/.exec(sheet)?.[1]).toMatch(
       /grid-column: 4;/,
     );
+  });
+});
+
+// Proposal 6: each prompt's calls as dollars, as the API would have billed them.
+describe('TurnList API cost', () => {
+  afterEach(cleanup);
+
+  it('puts a prompt’s cost at the right of its call count, compact, with what it is', () => {
+    const priced = { ...item(2), cost: { ...NO_COST, usd: 0.834, priced: true } };
+    render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <TurnList items={[item(1), priced]} selectedId="turn_2" onSelect={vi.fn()} />
+      </I18nContext.Provider>,
+    );
+    const row = screen.getByRole('button', { name: /Prompt 2/ });
+    const cost = within(row).getByText('≈$0.83');
+    expect(cost).toHaveAttribute(
+      'title',
+      'What these tokens would cost on the API, estimated from the price table in Settings',
+    );
+    expect(cost.previousElementSibling).toHaveTextContent('1 call · 0 tools');
+    // Nothing priced, nothing said.
+    expect(screen.getByRole('button', { name: /Prompt 1/ })).not.toHaveTextContent('$');
+  });
+
+  it('works out each prompt’s cost from its own calls', () => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <I18nContext.Provider value={makeI18n('en')}>{children}</I18nContext.Provider>
+    );
+    const { result } = renderHook(() => useTurnItems(demoOpen(), 'main'), { wrapper });
+    const [first, second, third] = result.current;
+    // claude-opus-5-5 at its list prices, worked out by hand from the demo's usage.
+    expect(first?.cost.usd).toBeCloseTo(0.3658, 4);
+    expect(second?.cost.usd).toBeCloseTo(0.2485, 4);
+    // The running prompt's one call has reported no usage yet.
+    expect(third?.cost).toEqual(NO_COST);
   });
 });

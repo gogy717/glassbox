@@ -5,12 +5,13 @@
  * the longest session and WORK and TOKENS keep the session receipt's meaning, so a week of one
  * session prints that session's numbers. The receipt ends at `asOf`, when it was put together.
  */
-import type { AgentKind } from '../../../../src/core/model.js';
+import type { AgentKind, TokenUsage } from '../../../../src/core/model.js';
 import { addUsage, contextSize, emptyUsage, totalTokens } from '../../../../src/core/usage.js';
 import type { ToolCategory } from '../../../../src/shared/tool-category.js';
 import type { WeekResult, WeekWindowKind } from '../../../../src/shared/week.js';
 import type { Locale } from '../../i18n';
 import { agentName } from '../../lib/agent-names';
+import { costByModel, DEFAULT_PRICES, type PriceTable } from '../../lib/prices';
 import { isListed } from '../../lib/sessions';
 import { printedProject, printedTitle } from './printed';
 import { apportion, shares } from './rows';
@@ -142,7 +143,8 @@ export const listedOnly = (r: WeekResult, showProbes: boolean): WeekResult => ({
   sessions: r.sessions.filter((s) => isListed(s, showProbes)),
 });
 
-export function weekReceipt(r: WeekResult): WeekReceipt {
+/** `prices`: the API price table for the API equivalent (the person's, from Settings). */
+export function weekReceipt(r: WeekResult, prices: PriceTable = DEFAULT_PRICES): WeekReceipt {
   const { hourStarts } = r.window;
   const end = r.asOf;
   const totals = hourStarts.map((_, i) => r.sessions.reduce((n, s) => n + (s.hours[i] ?? 0), 0));
@@ -158,6 +160,7 @@ export function weekReceipt(r: WeekResult): WeekReceipt {
 
   const byAgent = new Map<AgentKind, { ms: number; n: number }>();
   const usage = emptyUsage();
+  const usageByModel: Record<string, TokenUsage> = {};
   let measured = false;
   const cats = new Map<ToolCategory, number>();
   const unreported = new Map<AgentKind, number>();
@@ -177,6 +180,11 @@ export function weekReceipt(r: WeekResult): WeekReceipt {
     if (s.reportsUsage) {
       measured = true;
       addUsage(usage, f.usage);
+      for (const [model, u] of Object.entries(f.usageByModel)) {
+        const held = usageByModel[model];
+        if (held) addUsage(held, u);
+        else usageByModel[model] = addUsage(emptyUsage(), u);
+      }
     } else unreported.set(s.agent, (unreported.get(s.agent) ?? 0) + 1);
     const project = printedProject(s.cwd, s.project);
     if (project) projects.add(project);
@@ -202,6 +210,7 @@ export function weekReceipt(r: WeekResult): WeekReceipt {
   const big = clis.filter(([, v]) => cliTotal > 0 && v.ms / cliTotal >= 0.01);
   const pct = new Map(big.map(([agent], i) => [agent, shares(big.map(([, v]) => v.ms))[i] ?? 0]));
   const ctx = contextSize(usage);
+  const cost = costByModel(usageByModel, prices);
   const top = longest as (typeof r.sessions)[number] | null;
   return {
     kind: r.window.kind,
@@ -240,6 +249,7 @@ export function weekReceipt(r: WeekResult): WeekReceipt {
       thinking: usage.thinking,
       cacheHit: ctx > 0 ? usage.cacheRead / ctx : null,
       total: totalTokens(usage),
+      cost,
     },
     unreported: [...unreported].sort((a, b) => b[1] - a[1]).map(([agent, n]) => ({ agent, n })),
   };

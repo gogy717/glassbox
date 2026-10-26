@@ -8,6 +8,7 @@ import { rt } from '../../components/receipt/strings';
 import { listedOnly } from '../../components/receipt/week';
 import { Switch } from '../../components/Switch';
 import { WeeklyReceiptButton } from '../../components/WeeklyReceiptButton';
+import { usePriceTable } from '../../data/price-table';
 import { useWeekCache } from '../../data/store';
 import type { WeekEntry } from '../../data/weeks';
 import { type Locale, useI18n } from '../../i18n';
@@ -100,9 +101,10 @@ export function StatsPage({
   useEffect(() => {
     if (noted) seen.current?.();
   }, [noted]);
+  const prices = usePriceTable();
   const w = useMemo(
-    () => (entry.result ? statsWeek(entry.result, showProbes) : null),
-    [entry.result, showProbes],
+    () => (entry.result ? statsWeek(entry.result, showProbes, prices) : null),
+    [entry.result, showProbes, prices],
   );
   const listed = useMemo(() => new Set(sessions.map((s) => s.id)), [sessions]);
   const updating = useHeld(!!entry.result && !!entry.reading, WAIT_MS);

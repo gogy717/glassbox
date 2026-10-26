@@ -2,10 +2,11 @@ import { Receipt } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Suspense, useMemo, useRef, useState } from 'react';
 import type { TokenRate } from '../../../src/shared/rate.js';
+import { usePriceTable } from '../data/price-table';
 import { type OpenSession, useRate } from '../data/store';
 import { useNow } from '../data/useNow';
 import { useI18n } from '../i18n';
-import { summarize } from '../lib/agents';
+import { subtreeCost, summarize } from '../lib/agents';
 import {
   calendarDays,
   DASH,
@@ -15,6 +16,7 @@ import {
   formatPercent,
 } from '../lib/format';
 import { lazyView } from '../lib/lazy-view';
+import { costTitle, formatUsd } from '../lib/prices';
 import type { Navigate } from '../router';
 import { CompactFigure, UiCjk } from './CompactFigure';
 import { Diagnostics } from './Diagnostics';
@@ -35,6 +37,8 @@ interface Figure {
   aside?: ReactNode;
   /** Only below 900px, where the top bar gives it up: the token rate. */
   narrowOnly?: boolean;
+  /** The tooltip, when it is not `exact`: what an estimate is made from. */
+  title?: string;
 }
 
 // The receipt's dialog, drawing and export are loaded on first use: the app's first load stays.
@@ -98,6 +102,8 @@ export function SummaryBar({
   const [more, setMore] = useState(false);
   // Counts only change with the data; the clock only moves the running duration.
   const s = useMemo(() => summarize(open, agentId, now), [open, agentId, now]);
+  const prices = usePriceTable();
+  const cost = useMemo(() => subtreeCost(open, agentId, prices), [open, agentId, prices]);
   // No call reported usage yet (Grok before a turn total): unknown, not zero. A token count is
   // read compact ("1.84M", "184万"), the exact count in the tooltip and for screen readers.
   const tokens = (n: number) =>
@@ -134,6 +140,14 @@ export function SummaryBar({
         </>
       ) : undefined,
     },
+    // What the same tokens would cost on the API: an estimate, so "≈", and a dash when no model
+    // used has a price.
+    {
+      label: t('summary.cost'),
+      value: cost.priced ? `≈ ${formatUsd(cost.usd, intl)}` : DASH,
+      title: costTitle(cost, t),
+      more: true,
+    },
   ];
   if (rate)
     figures.push({
@@ -152,7 +166,7 @@ export function SummaryBar({
             className={css.metric}
             data-extra={f.more || undefined}
             data-narrow-only={f.narrowOnly || undefined}
-            title={f.exact}
+            title={f.title ?? f.exact}
           >
             {/* A compact figure is for the eye; the exact one beside it is what is read out. */}
             <span className={css.value} data-value aria-hidden={f.exact ? 'true' : undefined}>

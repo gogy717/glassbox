@@ -55,6 +55,11 @@ export interface WeekFigures {
   /** Failed requests and failed tool calls. */
   failures: number;
   usage: TokenUsage;
+  /**
+   * `usage` by the model of each call (`ModelRequest.model`, '' for a call that names none), so
+   * the client can price it at its API price table. Adds up to `usage`.
+   */
+  usageByModel: Record<string, TokenUsage>;
 }
 
 export interface WeekSession {

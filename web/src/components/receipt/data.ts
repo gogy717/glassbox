@@ -9,7 +9,8 @@ import { totalTokens } from '../../../../src/core/usage.js';
 import { sessionOutcome, type TestVerdict } from '../../../../src/shared/outcome.js';
 import type { Approvals } from '../../data/approvals';
 import type { OpenSession } from '../../data/store';
-import { mayStillRun, subtreeIds, summarize } from '../../lib/agents';
+import { mayStillRun, subtreeCost, subtreeIds, summarize } from '../../lib/agents';
+import { type Cost, DEFAULT_PRICES, type PriceTable } from '../../lib/prices';
 import { type Segment, timeBreakdown, timeSegments } from '../../lib/time-stats';
 import { rollupByAgent } from '../../lib/token-stats';
 import { type ToolCategory, toolCategory } from '../../lib/tool-category';
@@ -69,6 +70,8 @@ export interface ReceiptData {
     thinking: number;
     cacheHit: number | null;
     total: number;
+    /** What the same tokens would cost on the API, an estimate: printed once any call was priced. */
+    cost: Cost;
   };
   /** The main agent's timeline, each sub-agent's span and each one's timeline: the barcode. */
   segments: Segment[];
@@ -82,8 +85,15 @@ const ms = (iso: string | null | undefined) => {
   return Number.isFinite(t) ? t : null;
 };
 
-export function receiptData(open: OpenSession, now: number, approvals?: Approvals): ReceiptData {
+/** `prices`: the API price table for the API equivalent (the person's, from Settings). */
+export function receiptData(
+  open: OpenSession,
+  now: number,
+  approvals?: Approvals,
+  prices: PriceTable = DEFAULT_PRICES,
+): ReceiptData {
   const s = summarize(open, MAIN_AGENT_ID, now);
+  const cost = subtreeCost(open, MAIN_AGENT_ID, prices);
   const running = mayStillRun(open, MAIN_AGENT_ID);
   const breakdown = timeBreakdown(open, MAIN_AGENT_ID, now, approvals);
   const lanes = timeSegments(open, now, approvals);
@@ -168,6 +178,7 @@ export function receiptData(open: OpenSession, now: number, approvals?: Approval
       thinking: usage?.thinking ?? 0,
       cacheHit: s.cacheHitRate,
       total: usage ? totalTokens(usage) : 0,
+      cost,
     },
     segments,
     subAgents,

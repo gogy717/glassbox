@@ -8,6 +8,7 @@ import { MAIN_AGENT_ID, type SessionSnapshot } from '../../../../src/core/model.
 import { HOUR_MS, sessionBuckets, sliceSession } from '../../../../src/server/week-buckets.js';
 import { createStore, type OpenSession } from '../../data/store';
 import { subtreeIds, summarize } from '../../lib/agents';
+import { costByModel, DEFAULT_PRICES } from '../../lib/prices';
 import { toolCategory } from '../../lib/tool-category';
 import { DEMO_NOW } from '../../test/demo';
 import { receiptData } from './data';
@@ -101,6 +102,9 @@ describe('a session alone in its week prints its own receipt’s figures (W3)', 
       expect(f.usage.input).toBe(r1.tokens.uncached);
       expect(f.usage.output).toBe(r1.tokens.output);
       expect(f.usage.thinking).toBe(r1.tokens.thinking);
+      // Priced from usage summed by model, as from each call: the same API equivalent.
+      const cost = costByModel(f.usageByModel, DEFAULT_PRICES);
+      expect(cost).toEqual(r1.tokens.cost);
       // Categories before the receipt folds them into its top three and "other".
       const cats: Record<string, number> = {};
       for (const t of open.toolCalls.values()) {

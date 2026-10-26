@@ -9,10 +9,11 @@
 import type { Locale } from '../../i18n';
 import { agentName } from '../../lib/agent-names';
 import { formatCompact, formatPercent } from '../../lib/format';
+import { formatUsd } from '../../lib/prices';
 import type { ReceiptData } from './data';
 import { clock, day, durationParts, modelName, partsText } from './format';
 import { clean } from './printed';
-import { categoryLine, clip, testRunWords, timed, timeRows } from './rows';
+import { categoryLine, clip, noPriceLine, testRunWords, timed, timeRows } from './rows';
 import type { ReceiptOptions, TokenFigures } from './slip';
 import { type ReceiptKey, rt } from './strings';
 
@@ -70,7 +71,10 @@ export const lead = (figure: string, words: string, gap = '  ') =>
 export const centred = (line: string) =>
   `${' '.repeat(Math.max(0, Math.floor((COLUMNS - cols(line)) / 2)))}${line}`;
 
-/** TOKENS as text lines, `note` under the rows; "Tokens not reported" when no call reported. */
+/**
+ * TOKENS as text lines, `note` under the rows, the API equivalent under TOTAL; "Tokens not
+ * reported" when no call reported.
+ */
 export function tokenLines(t: TokenFigures, L: Locale, note?: string): string[] {
   const zh = L === 'zh';
   const w = (key: ReceiptKey) => rt(L, key);
@@ -88,6 +92,15 @@ export function tokenLines(t: TokenFigures, L: Locale, note?: string): string[] 
   if (t.cacheHit !== null) row('cacheHit', formatPercent(t.cacheHit, 'en'));
   if (note) out.push(note);
   out.push(zh ? lead(count(t.total), w('total')) : spread(head('total'), count(t.total)));
+  // API EQUIV.: the same tokens at API prices, an estimate; the models it could not price.
+  if (t.cost.priced) {
+    const usd = `≈ ${formatUsd(t.cost.usd, 'en')}`;
+    out.push(
+      zh ? lead(usd, `${w('apiEquiv')}${w('est')}`) : spread(head('apiEquiv'), `${usd}${w('est')}`),
+    );
+    const unpriced = noPriceLine(t.cost, L, (line) => cols(line) <= COLUMNS);
+    if (unpriced) out.push(unpriced);
+  }
   return out;
 }
 
@@ -97,25 +110,34 @@ export const footLines = (L: Locale, measured: boolean) =>
     centred,
   );
 
-/** The block's most lines, its fences counted. */
+/** The block's most lines, its fences counted (R7). */
 export const MAX_LINES = 40;
 
 /**
  * Details that give way, in this order, when a session fills more lines than the block has:
- * the longest think, the thinking share of output, the tool categories. Never a count.
+ * the longest think, the thinking share of output, the tool categories. Never a count. When
+ * they are not enough, the title gives up lines next, one at a time, down to one.
  */
 const DETAILS = ['longestThink', 'ofThinking', 'categories'] as const;
 type Detail = (typeof DETAILS)[number];
 
 export function receiptText(d: ReceiptData, o: ReceiptOptions): string {
-  let lines = textLines(d, o, new Set());
+  let lines = textLines(d, o, new Set(), 3);
   for (let i = 1; lines.length > MAX_LINES && i <= DETAILS.length; i++)
-    lines = textLines(d, o, new Set(DETAILS.slice(0, i)));
+    lines = textLines(d, o, new Set(DETAILS.slice(0, i)), 3);
+  for (let titleLines = 2; lines.length > MAX_LINES && titleLines >= 1; titleLines--)
+    lines = textLines(d, o, new Set(DETAILS), titleLines);
   // Well formed whatever the session holds: a lone surrogate would not survive the clipboard.
   return clean(lines.join('\n'));
 }
 
-function textLines(d: ReceiptData, o: ReceiptOptions, omit: ReadonlySet<Detail>): string[] {
+/** The receipt's lines without the details in `omit`, its title in at most `titleLines`. */
+function textLines(
+  d: ReceiptData,
+  o: ReceiptOptions,
+  omit: ReadonlySet<Detail>,
+  titleLines: number,
+): string[] {
   const L = o.locale;
   const zh = L === 'zh';
   const w = (key: ReceiptKey, params?: Record<string, string | number>) => rt(L, key, params);
@@ -147,7 +169,7 @@ function textLines(d: ReceiptData, o: ReceiptOptions, omit: ReadonlySet<Detail>)
   out.push(zh ? lead(duration, durationName) : spread(durationName, duration));
   out.push(rule);
   if (!o.hideNames && d.project) out.push(`${clip(d.project, COLUMNS - 2, cols)} /`);
-  out.push(...wrapCols(o.hideNames || !d.title ? w('untitled') : d.title, 3));
+  out.push(...wrapCols(o.hideNames || !d.title ? w('untitled') : d.title, titleLines));
   out.push(rule);
 
   out.push(head('work'));

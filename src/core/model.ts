@@ -158,6 +158,11 @@ export interface QuotaWindow {
   /** 0..100. */
   usedPercent: number;
   resetsAt: IsoTime | null;
+  /**
+   * The window's length when its source states it (Codex's `window_minutes`, oh-my-pi's window);
+   * absent when only `kind` says it: 5 hours, a week, a calendar month.
+   */
+  durationMs?: number;
 }
 
 /** Plan quota of one provider account. */

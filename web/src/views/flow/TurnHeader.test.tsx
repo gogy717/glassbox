@@ -32,6 +32,7 @@ function item(n: number, status: UiStatus = 'complete', prompt = `Research ${n}`
     tools: 2,
     status,
     command: false,
+    cost: { usd: 0, priced: false, partial: false, unpriced: [] },
   };
 }
 
