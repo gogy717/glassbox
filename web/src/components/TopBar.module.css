@@ -51,6 +51,14 @@
   background: var(--warning);
 }
 
+/* What waits for you, on the Inbox: its count in the waiting amber, as Home's is. */
+.badge {
+  flex: none;
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  color: var(--warning);
+}
+
 .session {
   display: flex;
   align-items: center;

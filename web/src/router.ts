@@ -7,7 +7,7 @@ export const TABS = ['flow', 'steps', 'tokens', 'time', 'files'] as const;
 export type Tab = (typeof TABS)[number];
 
 /** The pages of the top bar's nav. */
-export type Page = 'home' | 'session' | 'stats' | 'rules';
+export type Page = 'home' | 'session' | 'stats' | 'inbox' | 'rules';
 
 /** Which card of a call is open: its request, its response, or one of its tools (`tool:<id>`). */
 export type CardKey = 'request' | 'response' | `tool:${string}`;
@@ -28,6 +28,11 @@ export interface Route {
   card?: CardKey;
   /** The Stats page, over this window; absent on the other pages. */
   stats?: WeekWindowKind;
+  /**
+   * The Inbox page, opening at the item of this session (a notification's), or null; absent on
+   * the other pages.
+   */
+  inbox?: { item: string | null };
   /** The Rules page, over this window; absent on the other pages. */
   rules?: RulesWindowKind;
 }
@@ -40,11 +45,14 @@ const HOME: Route = {
   requestId: null,
 };
 
-/** The page a route shows: Rules or Stats, else the session it names, else Home. */
+/** The page a route shows: the Inbox, Rules or Stats, else the session it names, else Home. */
 export const pageOf = (r: Route): Page =>
-  r.rules ? 'rules' : r.stats ? 'stats' : r.sessionId ? 'session' : 'home';
+  r.inbox ? 'inbox' : r.rules ? 'rules' : r.stats ? 'stats' : r.sessionId ? 'session' : 'home';
 
 export function parseRoute(hash: string): Route {
+  const inbox = /^#\/inbox(?:\?(.*))?$/.exec(hash);
+  if (inbox)
+    return { ...HOME, inbox: { item: new URLSearchParams(inbox[1] ?? '').get('item') || null } };
   const rules = /^#\/rules(?:\?(.*))?$/.exec(hash);
   if (rules) {
     const kind = new URLSearchParams(rules[1] ?? '').get('window');
@@ -79,6 +87,7 @@ export function parseRoute(hash: string): Route {
 }
 
 export function formatRoute(r: Route): string {
+  if (r.inbox) return r.inbox.item ? `#/inbox?item=${encodeURIComponent(r.inbox.item)}` : '#/inbox';
   // The last 30 days are Rules' own default, and this week Stats', as the flow tab is a session's.
   if (r.rules) return r.rules === '30d' ? '#/rules' : `#/rules?window=${r.rules}`;
   if (r.stats) return r.stats === 'week' ? '#/stats' : `#/stats?window=${r.stats}`;
@@ -115,6 +124,9 @@ export const callLink = (
     requestId: tool.requestId,
     card: `tool:${tool.id}`,
   });
+/** A link to the Inbox, opening at the item of `sessionId` when one is named. */
+export const inboxLink = (sessionId: string | null = null) =>
+  formatRoute({ ...HOME, inbox: { item: sessionId } });
 
 const DAY_MS = 86_400_000;
 
@@ -135,14 +147,20 @@ const CARD_OWNERS = ['sessionId', 'agentId', 'turnId', 'requestId'] as const;
  * `next` over `current`. A card is one request's, so a move to another request, turn, agent or
  * session that does not name a card closes it, rather than opening the same card of a request
  * nobody asked about (a Response panel left open, then a step clicked in the steps view). A
- * session named without `stats` or `rules` is opened: a click on one leaves Stats or Rules for it.
+ * session named without `stats`, `inbox` or `rules` is opened: a click on one leaves that page for
+ * it. One page at a time: Stats, the Inbox or Rules named leaves the other two.
  */
 export function mergeRoute(current: Route, next: Partial<Route>): Route {
   const merged = { ...current, ...next };
   const moved = CARD_OWNERS.some((k) => k in next && next[k] !== current[k]);
   if (moved && !('card' in next)) delete merged.card;
   if ('sessionId' in next && !('stats' in next)) delete merged.stats;
+  if ('sessionId' in next && !('inbox' in next)) delete merged.inbox;
   if ('sessionId' in next && !('rules' in next)) delete merged.rules;
+  for (const page of ['stats', 'inbox', 'rules'] as const)
+    if (page in next)
+      for (const other of ['stats', 'inbox', 'rules'] as const)
+        if (other !== page && !(other in next)) delete merged[other];
   return merged;
 }
 

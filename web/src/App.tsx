@@ -19,6 +19,7 @@ import { ShortcutsHelp } from './components/ShortcutsHelp';
 import { TopBar } from './components/TopBar';
 import { ApprovalsContext, useApprovals } from './data/approvals';
 import { connectEvents } from './data/events';
+import { needsYou } from './data/needs-you';
 import { notifyState, useNeedsYouNotifications } from './data/notifications';
 import { PriceTableContext } from './data/price-table';
 import {
@@ -42,6 +43,7 @@ import { isListed, isRunning } from './lib/sessions';
 import { applyTheme, loadPrefs, type Prefs, savePrefs, type ThemePref } from './prefs';
 import {
   formatRoute,
+  inboxLink,
   pageOf,
   parseRoute,
   RULES_LINK,
@@ -56,6 +58,7 @@ import { Composer } from './views/composer/Composer';
 import { NewSessionDialog } from './views/composer/NewSessionDialog';
 import { PermissionDialog } from './views/composer/PermissionDialog';
 import { Home } from './views/Home';
+import { Inbox } from './views/inbox/Inbox';
 import { pageItems, promptItems, sessionItems } from './views/palette-items';
 import type { RulesPageProps } from './views/rules/RulesPage';
 import { SessionView } from './views/SessionView';
@@ -278,6 +281,9 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
   const prompts = useMemo(() => new Map([...held].map(([id, p]) => [id, p.request])), [held]);
   const sessions = useMemo(() => withWaiting(state.sessions, prompts), [state.sessions, prompts]);
   const failures = useMemo(() => failedSessions(state.runs), [state.runs]);
+  // The sessions that need you, as the board lists them: the tab's title and the Inbox's badge
+  // count them.
+  const waiting = useMemo(() => needsYou(sessions, prefs.showProbes), [sessions, prefs.showProbes]);
   // The session page as it was last left, agent, tab, turn, request and card: the nav's Session
   // goes back to it, and back on Home that session's row keeps the tab stop.
   const [lastSession, setLastSession] = useState<string | null>(null);
@@ -294,6 +300,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
       ? { href: target, waiting: sessions.some((s) => s.id === targetId && s.live === 'waiting') }
       : null,
     sessionsLoaded: state.sessionsLoaded,
+    inbox: waiting.length,
   };
   // Escape collapses a prompt without answering it; a newer prompt shows itself again.
   const [dismissed, setDismissed] = useState<string | null>(null);
@@ -302,31 +309,29 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
 
   const open = state.open;
   const summary = open?.session ?? state.sessions.find((s) => s.id === route.sessionId) ?? null;
-  // The sessions that need you, as the board lists them: the tab's title counts them.
-  const needsYou = useMemo(
-    () => sessions.filter((s) => isListed(s, prefs.showProbes) && s.live === 'waiting'),
-    [sessions, prefs.showProbes],
-  );
   const sessionTitle =
     page === 'session' && summary ? (summary.title ?? t('sidebar.untitled')) : null;
   useEffect(() => {
-    document.title = documentTitle(needsYou.length, sessionTitle);
-  }, [needsYou.length, sessionTitle]);
+    document.title = documentTitle(waiting.length, sessionTitle);
+  }, [waiting.length, sessionTitle]);
   // The running sessions, watched for a sign of trouble from the server.
   const running = useMemo(
     () => sessions.filter((s) => isListed(s, prefs.showProbes) && isRunning(s)),
     [sessions, prefs.showProbes],
   );
-  // And, when asked for, a desktop notification as each one begins to wait or to look stuck.
+  // And, when asked for, a desktop notification as each one begins to wait or to look stuck; a
+  // click opens the Inbox at its item, where y answers it. Each click counts: its link may be the
+  // one already open, and the Inbox goes back to the item all the same.
+  const [inboxCall, setInboxCall] = useState(0);
   useNeedsYouNotifications({
     enabled: prefs.notify && notifyState() === 'granted',
-    waiting: needsYou,
+    waiting,
     running,
     loaded: state.sessionsLoaded,
     t,
     onOpen: (id) => {
-      setDismissed(null);
-      navigate({ sessionId: id, agentId: 'main', turnId: null, requestId: null });
+      setInboxCall((n) => n + 1);
+      window.location.hash = inboxLink(id);
     },
   });
   const sidebarShown = floating ? floatOpen : !sidebarCollapsed;
@@ -349,7 +354,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
   useShortcuts();
   const [help, setHelp] = useState(false);
   useCommand('help', () => setHelp(true));
-  // As the nav's links go: Home, the session page as it was left, Stats, Rules.
+  // As the nav's links go: Home, the session page as it was left, Stats, the Inbox, Rules.
   const goHome = () => {
     window.location.hash = '#/';
   };
@@ -361,6 +366,10 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
     if (target) window.location.hash = target;
   });
   useCommand('goStats', goStats);
+  const goInbox = () => {
+    if (page !== 'inbox') window.location.hash = inboxLink();
+  };
+  useCommand('goInbox', goInbox);
   const goRules = () => {
     if (page !== 'rules') window.location.hash = RULES_LINK;
   };
@@ -416,7 +425,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
     return [
       ...sessionItems(sessions, prefs.showProbes, t, openSession),
       ...promptItems(open, t, selectPrompt),
-      ...pageItems(t, { home: goHome, stats: goStats, rules: goRules, tab: goTab }),
+      ...pageItems(t, { home: goHome, stats: goStats, inbox: goInbox, rules: goRules, tab: goTab }),
       action('new', t('composer.newSession'), () => setNewSession(true)),
       ...(canRun('receipt')
         ? [action('receipt', t('palette.receipt'), () => runCommand('receipt'))]
@@ -495,7 +504,18 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
               />
             </aside>
             <main ref={mainRef} tabIndex={-1} className={css.main} inert={modal}>
-              {route.rules ? (
+              {route.inbox ? (
+                <InboxContainer
+                  sessions={sessions}
+                  prompts={held}
+                  showProbes={prefs.showProbes}
+                  loaded={state.sessionsLoaded}
+                  at={route.inbox.item}
+                  call={inboxCall}
+                  onOpen={openSession}
+                  onDecide={(runId, id, d) => runs.decide(runId, id, d)}
+                />
+              ) : route.rules ? (
                 <ErrorBoundary key="rules">
                   <Suspense
                     fallback={
@@ -615,6 +635,12 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
 function HomeContainer(props: Omit<Parameters<typeof Home>[0], 'now'>) {
   const now = useNow(30_000);
   return <Home {...props} now={now} />;
+}
+
+function InboxContainer(props: Omit<Parameters<typeof Inbox>[0], 'now'>) {
+  // A sign's minutes move by the half minute at most; the waits' clocks tick on their own.
+  const now = useNow(30_000);
+  return <Inbox {...props} now={now} />;
 }
 
 function StatsContainer({

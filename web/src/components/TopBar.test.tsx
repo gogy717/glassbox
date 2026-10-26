@@ -33,11 +33,12 @@ function baseRules(css: string): string {
 
 type Props = Parameters<typeof TopBar>[0];
 
-const navOf = (page: Props['nav']['page']): Props['nav'] => ({
+const navOf = (page: Props['nav']['page'], inbox = 0): Props['nav'] => ({
   page,
   here: page === 'home' ? '#/' : page === 'session' ? '#/s/x' : `#/${page}`,
   session: { href: '#/s/x', waiting: false },
   sessionsLoaded: true,
+  inbox,
 });
 
 function renderBar(over: Partial<Props> = {}) {
@@ -93,6 +94,45 @@ describe('the top bar by page', () => {
     expect(open).toHaveAttribute('data-state', 'open');
     expect(baseRules(sheet)).toMatch(/\.conn\[data-state="open"\] \{[^}]*clip-path: inset\(50%\)/);
     for (const block of mediaBlocks(sheet)) expect(block.body).not.toMatch(/\.conn\b/);
+  });
+});
+
+describe('the Inbox in the page nav', () => {
+  const nav = (bar: ReturnType<typeof renderBar>) => bar.getByRole('navigation', { name: 'Pages' });
+
+  it('comes after Stats, linking the Inbox, marked while it is open', () => {
+    const bar = renderBar({ nav: navOf('home') });
+    expect(
+      within(nav(bar))
+        .getAllByRole('link')
+        .map((a) => a.textContent),
+    ).toEqual(['Home', 'Session', 'Stats', 'Inbox']);
+    const inbox = within(nav(bar)).getByRole('link', { name: 'Inbox' });
+    expect(inbox).toHaveAttribute('href', '#/inbox');
+    expect(inbox).not.toHaveAttribute('aria-current');
+    const open = renderBar({ nav: { ...navOf('inbox'), here: '#/inbox?item=s1' } });
+    const here = within(nav(open)).getByRole('link', { name: 'Inbox' });
+    expect(here).toHaveAttribute('aria-current', 'page');
+    expect(here).toHaveAttribute('href', '#/inbox?item=s1');
+  });
+
+  it('counts what waits for you on it, in the mono face, and says so to a screen reader', () => {
+    const bar = renderBar({ nav: navOf('home', 3) });
+    const inbox = within(nav(bar)).getByRole('link', { name: 'Inbox' });
+    const badge = within(inbox).getByText('3');
+    expect(badge).toHaveClass('figure');
+    expect(badge).toHaveAttribute('data-badge');
+    expect(inbox).toHaveAccessibleDescription('3 waiting for you');
+    expect(inbox).toHaveAttribute('title', 'Inbox · 3 waiting for you');
+  });
+
+  it('shows no count while nothing waits', () => {
+    const inbox = within(nav(renderBar({ nav: navOf('home', 0) }))).getByRole('link', {
+      name: 'Inbox',
+    });
+    expect(inbox.querySelector('[data-badge]')).toBeNull();
+    expect(inbox).not.toHaveAttribute('aria-describedby');
+    expect(inbox).toHaveAttribute('title', 'Inbox');
   });
 });
 

@@ -1,19 +1,18 @@
 import { Plus } from 'lucide-react';
-import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useMemo, useRef } from 'react';
 import type { AgentKind, SessionSummary } from '../../../src/core/model.js';
 import type { PermissionDecision } from '../../../src/shared/runs.js';
-import { shellCommand } from '../../../src/shared/tool-category.js';
 import { AgentTag } from '../components/AgentTag';
+import { Answer, useArmed } from '../components/Answer';
 import { Delayed } from '../components/Delayed';
 import { projectTreeNames } from '../components/receipt/printed';
 import { SessionRow } from '../components/SessionRow';
+import { needsYou } from '../data/needs-you';
 import type { OpenPrompt } from '../data/runs';
 import { useRovingFocus } from '../data/useRovingFocus';
 import { type MessageKey, useI18n } from '../i18n';
 import { isListed } from '../lib/sessions';
-import { summarizeInput } from '../lib/tool-category';
-import { longestWaitFirst, waitKind } from '../lib/waiting';
-import promptCss from './composer/Composer.module.css';
+import { waitKind } from '../lib/waiting';
 import { PROMPT_ARM_MS } from './composer/PermissionDialog';
 import css from './Home.module.css';
 
@@ -85,10 +84,7 @@ export function Home({
     () => sessions.filter((s) => isListed(s, showProbes)),
     [sessions, showProbes],
   );
-  const needsYou = useMemo(
-    () => visible.filter((s) => s.live === 'waiting').sort(longestWaitFirst),
-    [visible],
-  );
+  const waiting = useMemo(() => needsYou(sessions, showProbes), [sessions, showProbes]);
   const working = useMemo(
     () => visible.filter((s) => s.live === 'busy').sort(newestFirst),
     [visible],
@@ -101,7 +97,7 @@ export function Home({
         .slice(0, RECENT),
     [visible],
   );
-  const rows = [...needsYou, ...working, ...recent];
+  const rows = [...waiting, ...working, ...recent];
   // A worktree's session reads "glassbox · weever", named from every session as the sidebar names them.
   const place = useMemo(() => projectTreeNames(sessions), [sessions]);
   const roving = useRovingFocus(
@@ -111,9 +107,9 @@ export function Home({
   );
   // The rows and the prompts on them: a run that asks again at once changes its row in place.
   const armed = useArmed(
-    needsYou.map((s) => `${s.id} ${prompts.get(s.id)?.request.id ?? ''}`).join('\n'),
+    waiting.map((s) => `${s.id} ${prompts.get(s.id)?.request.id ?? ''}`).join('\n'),
     armMs,
-    needsYou.some((s) => prompts.has(s.id)),
+    waiting.some((s) => prompts.has(s.id)),
   );
 
   if (!loaded)
@@ -212,121 +208,9 @@ export function Home({
   return (
     <div className={css.home} ref={ref}>
       <h1 className="visually-hidden">{t('nav.home')}</h1>
-      {section('needsYou', needsYou, 'home.nothingWaiting', newSession)}
+      {section('needsYou', waiting, 'home.nothingWaiting', newSession)}
       {section('working', working, 'home.nothingWorking')}
       {recent.length > 0 && section('recent', recent, null)}
-    </div>
-  );
-}
-
-/**
- * Whether the Needs-you rows (`key`, their ids in order) have stood still for `armMs`: deciding
- * one moves the rows under it up, and a session that starts to wait pushes them down, so the
- * second click of a double-click must not land on the next row's Allow. The dialog arms its
- * buttons the same way. Only counts while `active`, a row there to answer.
- */
-function useArmed(key: string, armMs: number, active: boolean): boolean {
-  const [seen, setSeen] = useState(key);
-  const [armedFor, setArmedFor] = useState<string | null>(null);
-  if (seen !== key) {
-    setSeen(key);
-    setArmedFor(null);
-  }
-  useEffect(() => {
-    if (!active || armMs <= 0) return;
-    const id = setTimeout(() => setArmedFor(key), armMs);
-    return () => clearTimeout(id);
-  }, [key, armMs, active]);
-  return armMs <= 0 || (seen === key && armedFor === key);
-}
-
-interface AnswerProps {
-  session: SessionSummary;
-  prompt: OpenPrompt;
-  armed: boolean;
-  onDecide?: Props['onDecide'];
-  onOpen(sessionId: string): void;
-}
-
-/**
- * A glassbox run's prompt answered from its row: what it wants as its call card will say it (the
- * whole command in the tooltip), then Deny and Allow, sent through the run that holds it as the
- * dialog sends them; Deny without a reason, which the dialog can give. A question and a plan to
- * approve keep Open: the question's options, and the plan read whole, need the dialog. Answered,
- * the row moves on with the next update, and nothing more can be pressed until then; a failure
- * says why and lets it be sent again.
- */
-function Answer({ session: s, prompt, armed, onDecide, onOpen }: AnswerProps) {
-  const { t } = useI18n();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const { runId, request } = prompt;
-  const title = s.title ?? t('sidebar.untitled');
-  const wants = summarizeInput({ name: request.toolName, input: request.input });
-  const question = request.toolName === 'AskUserQuestion' && request.questions;
-  if (question || request.toolName === 'ExitPlanMode')
-    return (
-      // biome-ignore lint/a11y/useSemanticElements: a row's answer buttons, not a form fieldset
-      <div
-        className={css.answer}
-        role="group"
-        aria-label={t(question ? 'home.question' : 'home.plan', { title })}
-      >
-        <span className={css.wants}>{question ? (question[0]?.question ?? '') : wants}</span>
-        <button
-          type="button"
-          className={promptCss.button}
-          data-size="small"
-          onClick={() => onOpen(s.id)}
-        >
-          {t('home.open')}
-        </button>
-      </div>
-    );
-  const decide = async (d: PermissionDecision) => {
-    setBusy(true);
-    setError(null);
-    try {
-      await onDecide?.(runId, request.id, d);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setBusy(false);
-    }
-  };
-  return (
-    // biome-ignore lint/a11y/useSemanticElements: a row's answer buttons, not a form fieldset
-    <div
-      className={css.answer}
-      role="group"
-      aria-label={t('home.decide', { tool: request.toolName, title })}
-    >
-      <code className={css.wants} title={shellCommand(request.input) ?? wants}>
-        {wants || request.toolName}
-      </code>
-      {error && (
-        <span role="alert" className={css.error}>
-          {t('perm.error', { msg: error })}
-        </span>
-      )}
-      <button
-        type="button"
-        className={promptCss.button}
-        data-size="small"
-        disabled={!armed || busy}
-        onClick={() => void decide({ decision: 'deny' })}
-      >
-        {t('perm.deny')}
-      </button>
-      <button
-        type="button"
-        className={promptCss.button}
-        data-size="small"
-        data-kind="primary"
-        disabled={!armed || busy}
-        onClick={() => void decide({ decision: 'allow' })}
-      >
-        {t('perm.allow')}
-      </button>
     </div>
   );
 }

@@ -136,6 +136,19 @@ export interface OpenPrompt {
 }
 
 /**
+ * What a prompt asks for: a tool's permission, answers to its questions (an ask tool's prompt
+ * that carries them), or approval of a plan.
+ */
+export type PromptKind = 'permission' | 'question' | 'plan';
+
+export const promptKind = (r: PermissionRequest): PromptKind =>
+  r.toolName === 'AskUserQuestion' && r.questions
+    ? 'question'
+    : r.toolName === 'ExitPlanMode'
+      ? 'plan'
+      : 'permission';
+
+/**
  * The permission prompt or question each session's glassbox runs hold open, by session, with the
  * run that holds it: the prompt the composer shows (`pendingPermissions`), the oldest when there
  * are several, on any run that has not closed. Their process only knows it is busy.

@@ -1,0 +1,65 @@
+/* A glassbox run's prompt answered where it is listed: what it wants, then Deny and Allow at the
+   right edge, under the row's lines and inside its hairline. */
+.answer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 10px 12px;
+}
+
+/* The command, the file or the pattern: the mono face, cut before the buttons are. */
+.wants {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  color: var(--text);
+}
+
+.error {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-meta);
+  color: var(--error);
+}
+
+/* A plan's answers have no command to lead them: the buttons keep to the right edge. */
+.end {
+  justify-content: flex-end;
+}
+
+/* Inline, in the Inbox: a question's groups or a plan, then the buttons, as the dialog stacks
+   them. */
+.inline {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* Checked native inputs in the steel accent, as in the dialog. */
+.inline input[type="radio"],
+.inline input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
+/* The plan read whole, in a box of its own that scrolls past a screenful. */
+.plan {
+  max-height: 50vh;
+  overflow-y: auto;
+  padding: 8px 12px;
+  border-radius: var(--radius-m);
+  background: var(--layer-2);
+}
+
+/* Inline, the answer is flush with the item it is in, which has its own padding. */
+.flush {
+  padding: 0;
+}

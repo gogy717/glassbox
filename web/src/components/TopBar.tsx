@@ -2,6 +2,7 @@ import {
   ChartNoAxesColumn,
   Eye,
   House,
+  Inbox,
   Menu,
   Search,
   ShieldCheck,
@@ -16,7 +17,7 @@ import type { ConnectionState } from '../data/store';
 import { useNow } from '../data/useNow';
 import { useI18n } from '../i18n';
 import type { Prefs } from '../prefs';
-import { type Page, RULES_LINK, statsLink } from '../router';
+import { inboxLink, type Page, RULES_LINK, statsLink } from '../router';
 import { AgentTag } from './AgentTag';
 import { PricesDialog } from './PricesDialog';
 import { useOnePopover, usePopoverDismiss } from './popover';
@@ -35,6 +36,8 @@ export interface PageNavProps {
   session: { href: string; waiting: boolean } | null;
   /** The session list has arrived: until it has, no session is not yet "no sessions". */
   sessionsLoaded: boolean;
+  /** How many sessions wait for you (`needsYou`), as Home and the tab's title count them. */
+  inbox: number;
 }
 
 interface Props {
@@ -170,15 +173,18 @@ function TopQuota({ quotas, sessionOpen }: { quotas: QuotaSnapshot[]; sessionOpe
 }
 
 /**
- * Home · Session · Stats · Rules (D4): the Switch's segmented family, one level above a session's
- * underlined view tabs. Links, so Back, Forward and a new tab work as anywhere; the current
- * page's item links to where you are. Session opens the session page as it was last left, else
- * the most recently active session, with the amber dot while that session waits for you; with
- * no session to open it is unavailable, still reachable, its title saying why.
+ * Home · Session · Stats · Inbox · Rules (D4): the Switch's segmented family, one level above a
+ * session's underlined view tabs. Links, so Back, Forward and a new tab work as anywhere; the
+ * current page's item links to where you are. Session opens the session page as it was last
+ * left, else the most recently active session, with the amber dot while that session waits for
+ * you; with no session to open it is unavailable, still reachable, its title saying why. The
+ * Inbox counts what waits for you, in the waiting amber.
  */
-function PageNav({ page, here, session, sessionsLoaded }: PageNavProps) {
+function PageNav({ page, here, session, sessionsLoaded, inbox }: PageNavProps) {
   const { t } = useI18n();
   const waitingId = useId();
+  const countId = useId();
+  const count = inbox > 0 ? t('nav.inboxCount', { n: inbox }) : null;
   const item = (p: Page) => ({
     className: `${switchCss.word} ${css.page}`,
     'aria-current': p === page ? ('page' as const) : undefined,
@@ -229,6 +235,19 @@ function PageNav({ page, here, session, sessionsLoaded }: PageNavProps) {
         <ChartNoAxesColumn size={14} aria-hidden="true" />
         {label(t('nav.stats'))}
       </a>
+      <a
+        href={page === 'inbox' ? here : inboxLink()}
+        title={count ? `${t('nav.inbox')} · ${count}` : t('nav.inbox')}
+        aria-describedby={count ? countId : undefined}
+        {...item('inbox')}
+      >
+        <Inbox size={14} aria-hidden="true" />
+        {label(t('nav.inbox'))}
+        {count && (
+          <span className={`${css.badge} figure`} data-badge aria-hidden="true">
+            {inbox}
+          </span>
+        )}
       <a href={page === 'rules' ? here : RULES_LINK} title={t('nav.rules')} {...item('rules')}>
         <ShieldCheck size={14} aria-hidden="true" />
         {label(t('nav.rules'))}
@@ -236,6 +255,11 @@ function PageNav({ page, here, session, sessionsLoaded }: PageNavProps) {
       {waiting && (
         <span id={waitingId} hidden>
           {t('live.waiting')}
+        </span>
+      )}
+      {count && (
+        <span id={countId} hidden>
+          {count}
         </span>
       )}
     </nav>

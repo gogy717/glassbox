@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   formatRoute,
+  inboxLink,
   mergeRoute,
   pageOf,
   parseRoute,
@@ -178,6 +179,50 @@ describe('the Stats page (#/stats)', () => {
   });
 });
 
+describe('the Inbox page (#/inbox)', () => {
+  it.each([
+    ['#/inbox', null],
+    ['#/inbox?', null],
+    ['#/inbox?item=', null],
+    ['#/inbox?item=claude-code%3As1', 'claude-code:s1'],
+    ['#/inbox?item=codex%3Aa%26b', 'codex:a&b'],
+  ] as const)('reads %s as the Inbox at the item %s', (hash, item) => {
+    expect(parseRoute(hash)).toEqual({ ...HOME, inbox: { item } });
+  });
+
+  it.each(['#/inboxx', '#/inbox/s1', '#/s/inbox'])('does not read %j as the Inbox', (hash) => {
+    expect(parseRoute(hash)).not.toHaveProperty('inbox');
+  });
+
+  it('writes the bare page, or the item it opens at, and round-trips both', () => {
+    expect(formatRoute({ ...HOME, inbox: { item: null } })).toBe('#/inbox');
+    expect(inboxLink()).toBe('#/inbox');
+    expect(inboxLink('claude-code:s1')).toBe('#/inbox?item=claude-code%3As1');
+    for (const item of [null, 'codex:a&b'])
+      expect(parseRoute(formatRoute({ ...HOME, inbox: { item } }))).toEqual({
+        ...HOME,
+        inbox: { item },
+      });
+  });
+
+  it('leaves the Inbox for a session named without it, as a click on an item does', () => {
+    const next = { sessionId: 's1', agentId: 'main', turnId: null, requestId: null };
+    const merged = mergeRoute({ ...HOME, inbox: { item: 's1' } }, next);
+    expect(merged).not.toHaveProperty('inbox');
+    expect(formatRoute(merged)).toBe('#/s/s1');
+  });
+
+  it('is one page at a time: the Inbox over a session or Stats, Stats over the Inbox', () => {
+    const inbox = { inbox: { item: null } };
+    expect(formatRoute(mergeRoute({ ...HOME, sessionId: 's1', tab: 'time' }, inbox))).toBe(
+      '#/inbox',
+    );
+    expect(mergeRoute({ ...HOME, stats: '7d' }, inbox)).toEqual({ ...HOME, ...inbox });
+    expect(mergeRoute({ ...HOME, ...inbox }, { stats: 'week' })).toEqual({
+      ...HOME,
+      stats: 'week',
+    });
+  });
 describe('the Rules page (#/rules)', () => {
   it.each([
     ['#/rules', '30d'],
@@ -214,6 +259,8 @@ describe('pageOf', () => {
     [{ ...HOME, sessionId: 's1' }, 'session'],
     [{ ...HOME, stats: 'week' }, 'stats'],
     [{ ...HOME, stats: '7d' }, 'stats'],
+    [{ ...HOME, inbox: { item: null } }, 'inbox'],
+    [{ ...HOME, inbox: { item: 's1' } }, 'inbox'],
     [{ ...HOME, rules: '30d' }, 'rules'],
   ])('%j is the %s page', (route, page) => {
     expect(pageOf(route)).toBe(page);

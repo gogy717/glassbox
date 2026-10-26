@@ -76,14 +76,24 @@ export function promptItems(
     });
 }
 
-/** Home, Stats and Rules, then the session page's tabs when there is a session to show them (`tab`). */
+/**
+ * Home, Stats, the Inbox and Rules, then the session page's tabs when there is a session to show
+ * them (`tab`).
+ */
 export function pageItems(
   t: T,
-  go: { home(): void; stats(): void; rules(): void; tab: ((tab: Tab) => void) | null },
+  go: {
+    home(): void;
+    stats(): void;
+    inbox(): void;
+    rules(): void;
+    tab: ((tab: Tab) => void) | null;
+  },
 ): PaletteItem[] {
   const pages: PaletteItem[] = [
     { id: 'page:home', kind: 'page', label: t('nav.home'), run: go.home },
     { id: 'page:stats', kind: 'page', label: t('nav.stats'), run: go.stats },
+    { id: 'page:inbox', kind: 'page', label: t('nav.inbox'), run: go.inbox },
     { id: 'page:rules', kind: 'page', label: t('nav.rules'), run: go.rules },
   ];
   const { tab } = go;

@@ -42,6 +42,7 @@ export interface NeedsYouOptions {
   /** The session list has arrived: before that, nothing is known. */
   loaded: boolean;
   t: T;
+  /** Where a click goes: the Inbox at the session's item, in the app. */
   onOpen(sessionId: string): void;
 }
 
@@ -50,8 +51,8 @@ export interface NeedsYouOptions {
  * what it waits for ("Permission · Bash"); silent. None on page load: what already waits when
  * the list arrives, or began to wait before then (a glassbox run's prompt replayed after the
  * list), is not news. Never twice for the same wait, and none while the setting is off, with no
- * catching up when it is turned on. A click focuses the tab and opens the session; a wait that
- * ends takes its notification with it.
+ * catching up when it is turned on. A click focuses the tab and hands the session to `onOpen`; a
+ * wait that ends takes its notification with it.
  *
  * And one per running session and kind of sign that it looks stuck, the sign at length as its
  * body ("Repeated npm test 4×"): never twice for one kind of one session, none for the sign the

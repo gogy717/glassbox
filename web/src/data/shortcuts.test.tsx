@@ -58,9 +58,13 @@ const ALL: Command[] = [
   'search',
   'goHome',
   'goStats',
+  'goInbox',
   'goRules',
   'tab:steps',
   'nextPrompt',
+  'allowItem',
+  'denyItem',
+  'openItem',
 ];
 
 function setup(commands = ALL) {
@@ -89,12 +93,30 @@ describe('useShortcuts', () => {
     expect(ran).toEqual(['help', 'search', 'tab:steps', 'nextPrompt']);
   });
 
+  it('answers the Inbox’s item with y and n, opens it with o, and goes there with g i', () => {
+    const ran = setup();
+    press('y');
+    press('n');
+    press('o');
+    press('g');
+    press('i');
+    expect(ran).toEqual(['allowItem', 'denyItem', 'openItem', 'goInbox']);
+  });
+
+  it('answers once for a key held down, while a held j goes on down the list', () => {
+    const ran = setup();
+    for (const key of ['y', 'n', 'o']) press(key, { repeat: true });
+    press('j', { repeat: true });
+    press('j', { repeat: true });
+    expect(ran).toEqual(['nextPrompt', 'nextPrompt']);
+  });
+
   it('does nothing while typing in a field, a text area or an editable element', () => {
     const ran = setup();
     for (const name of ['Search', 'Message', 'Editor']) {
       const field = screen.getByRole('textbox', { name });
       field.focus();
-      for (const key of ['?', '/', '2', 'j', 'g', 'h']) press(key, {}, field);
+      for (const key of ['?', '/', '2', 'j', 'y', 'n', 'o', 'g', 'h']) press(key, {}, field);
     }
     expect(ran).toEqual([]);
     // Off the field again, a key works.
@@ -208,7 +230,11 @@ describe('KEYMAP', () => {
         'g h',
         'g s',
         'g t',
+        'g i',
         'g r',
+        'y',
+        'n',
+        'o',
         '?',
         'Escape',
       ]),
