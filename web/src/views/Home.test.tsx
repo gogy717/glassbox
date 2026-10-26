@@ -250,6 +250,19 @@ describe('Home', () => {
       expect(onOpen).toHaveBeenCalledWith(sessions[0]?.id);
     });
 
+    it('keeps Open for a plan to approve, which is read whole in the dialog', () => {
+      const plan = '## Plan\n\n1. Split the parser\n2. Add the tests';
+      const { sessions, prompts } = held(['run_7', ask('tu_6', 'ExitPlanMode', { plan })]);
+      const { onOpen } = renderHome(sessions, { prompts, onDecide: vi.fn(), armMs: 0 });
+      const answer = within(screen.getByRole('listitem')).getByRole('group', {
+        name: 'Plan to approve · Session 1',
+      });
+      expect(answer).toHaveTextContent('## Plan 1. Split the parser 2. Add the tests');
+      expect(within(answer).queryByRole('button', { name: 'Allow' })).toBeNull();
+      fireEvent.click(within(answer).getByRole('button', { name: 'Open' }));
+      expect(onOpen).toHaveBeenCalledWith(sessions[0]?.id);
+    });
+
     it('arms its buttons only once the rows have stood still', () => {
       const { sessions, prompts } = held(['run_7', ask('tu_3', 'Bash', { command: 'ls' })]);
       const props = { prompts, onDecide: vi.fn() };

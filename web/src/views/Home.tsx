@@ -247,9 +247,10 @@ interface AnswerProps {
 /**
  * A glassbox run's prompt answered from its row: what it wants as its call card will say it (the
  * whole command in the tooltip), then Deny and Allow, sent through the run that holds it as the
- * dialog sends them; Deny without a reason, which the dialog can give. A question keeps Open: its
- * options need the dialog. Answered, the row moves on with the next update, and nothing more can
- * be pressed until then; a failure says why and lets it be sent again.
+ * dialog sends them; Deny without a reason, which the dialog can give. A question and a plan to
+ * approve keep Open: the question's options, and the plan read whole, need the dialog. Answered,
+ * the row moves on with the next update, and nothing more can be pressed until then; a failure
+ * says why and lets it be sent again.
  */
 function Answer({ session: s, prompt, armed, onDecide, onOpen }: AnswerProps) {
   const { t } = useI18n();
@@ -257,11 +258,17 @@ function Answer({ session: s, prompt, armed, onDecide, onOpen }: AnswerProps) {
   const [error, setError] = useState<string | null>(null);
   const { runId, request } = prompt;
   const title = s.title ?? t('sidebar.untitled');
-  if (request.toolName === 'AskUserQuestion' && request.questions)
+  const wants = summarizeInput({ name: request.toolName, input: request.input });
+  const question = request.toolName === 'AskUserQuestion' && request.questions;
+  if (question || request.toolName === 'ExitPlanMode')
     return (
       // biome-ignore lint/a11y/useSemanticElements: a row's answer buttons, not a form fieldset
-      <div className={css.answer} role="group" aria-label={t('home.question', { title })}>
-        <span className={css.wants}>{request.questions[0]?.question ?? ''}</span>
+      <div
+        className={css.answer}
+        role="group"
+        aria-label={t(question ? 'home.question' : 'home.plan', { title })}
+      >
+        <span className={css.wants}>{question ? (question[0]?.question ?? '') : wants}</span>
         <button
           type="button"
           className={promptCss.button}
@@ -272,7 +279,6 @@ function Answer({ session: s, prompt, armed, onDecide, onOpen }: AnswerProps) {
         </button>
       </div>
     );
-  const wants = summarizeInput({ name: request.toolName, input: request.input });
   const decide = async (d: PermissionDecision) => {
     setBusy(true);
     setError(null);

@@ -1127,7 +1127,6 @@ describe('App top-bar popovers', () => {
   });
 });
 
-// F1: a background tab says how many sessions need you.
 describe('App keyboard shortcuts', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] });
@@ -1217,7 +1216,7 @@ describe('App keyboard shortcuts', () => {
       'Jump to a session, prompt, page or action',
       'Search the session list',
       'Switch the session page’s tab',
-      'Next / previous prompt',
+      'Down / up the prompt list',
       'Go Home',
       'Go to the session page',
       'Go to Stats',
@@ -1390,6 +1389,7 @@ describe('App palette', () => {
   });
 });
 
+// F1: a background tab says how many sessions need you.
 describe('documentTitle', () => {
   it('counts the sessions that need you, before the open session’s title', () => {
     expect(documentTitle(0, null)).toBe('glassbox');
