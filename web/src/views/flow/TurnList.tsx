@@ -4,12 +4,14 @@ import type { Turn } from '../../../../src/core/model.js';
 import { FigureText } from '../../components/FigureText';
 import { StatusMark, type UiStatus } from '../../components/Status';
 import { useApprovalsContext } from '../../data/approvals';
+import { usePriceTable } from '../../data/price-table';
 import { useSessionAgentKind } from '../../data/session-agent';
 import type { OpenSession } from '../../data/store';
 import { useNow } from '../../data/useNow';
 import { useRovingFocus } from '../../data/useRovingFocus';
 import { useI18n } from '../../i18n';
 import { formatClock, formatDay, localDayIndex } from '../../lib/format';
+import { type Cost, costTitle, formatUsdShort, sumCost } from '../../lib/prices';
 import type { Route } from '../../router';
 import {
   callStatus,
@@ -36,6 +38,8 @@ export interface TurnItem {
   status: UiStatus;
   /** A local slash command (no model call): listed compactly. */
   command: boolean;
+  /** What its calls would cost on the API, an estimate from the price table. */
+  cost: Cost;
 }
 
 /** The agent's turns with display titles, counts and statuses (shared by the flow and steps tabs). */
@@ -43,6 +47,7 @@ export function useTurnItems(open: OpenSession, agentId: string): TurnItem[] {
   const { t } = useI18n();
   const approvals = useApprovalsContext();
   const agent = useSessionAgentKind();
+  const prices = usePriceTable();
   return useMemo(
     () =>
       turnsOf(open, agentId).map((turn) => {
@@ -65,9 +70,10 @@ export function useTurnItems(open: OpenSession, agentId: string): TurnItem[] {
           tools,
           status,
           command: isLocalCommand(turn, reqs.length, status, agent),
+          cost: sumCost(reqs, prices),
         };
       }),
-    [open, agentId, t, approvals, agent],
+    [open, agentId, t, approvals, agent, prices],
   );
 }
 
@@ -411,6 +417,11 @@ export const TurnList = memo(function TurnList({
                           params={{ calls: it.calls, tools: it.tools }}
                         />
                       </span>
+                      {it.cost.priced && (
+                        <span className={`${css.cost} figure`} title={costTitle(it.cost, t)}>
+                          ≈{formatUsdShort(it.cost.usd, intl)}
+                        </span>
+                      )}
                       <span className={css.markSub}>{mark}</span>
                     </span>
                   </>

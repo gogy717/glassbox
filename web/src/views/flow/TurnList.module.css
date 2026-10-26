@@ -182,6 +182,12 @@
   white-space: nowrap;
 }
 
+/* What the prompt's calls would cost on the API, right after their count: it never gives way. */
+.cost {
+  flex: none;
+  white-space: nowrap;
+}
+
 /* At the row's right edge: the marks make a column under the clocks. */
 .markSub {
   display: inline-flex;
