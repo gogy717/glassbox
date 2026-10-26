@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { ToolCall } from '../../../../src/core/model.js';
+import { demoRepo } from '../../../../src/server/week-demo.js';
 import type { OpenSession } from '../../data/store';
 import { subtreeIds } from '../../lib/agents';
 import { demoOpen } from '../../test/demo';
+import { demoWeek } from '../../test/week';
 import {
   buildFiles,
+  crossingKeys,
   type FileVerb,
   filterFiles,
   lineDiff,
@@ -642,5 +645,31 @@ describe('lineDiff', () => {
     expect(kinds.slice(-99)).toEqual(Array(99).fill('same'));
     const middle = kinds.slice(7, -99);
     expect(middle).toEqual([...Array(1094).fill('del'), ...Array(1093).fill('add')]);
+  });
+});
+
+describe('crossingKeys', () => {
+  const open = demoOpen();
+  const repo = demoRepo(open.session.cwd as string);
+
+  it('names the other worktrees that changed each of the session’s files in the week', () => {
+    expect([...crossingKeys(open, repo, demoWeek('7d'))]).toEqual([
+      ['/Users/demo/Dev/glassbox/src/server/store.ts', ['glassbox-sidebar']],
+      ['/Users/demo/Dev/glassbox/src/server/sessions.ts', ['glassbox-sidebar']],
+    ]);
+  });
+
+  it('finds nothing without the week, nor when the other tree changed none of the session’s files', () => {
+    expect(crossingKeys(open, repo, null).size).toBe(0);
+    const week = demoWeek('7d');
+    const quiet = {
+      ...week,
+      sessions: week.sessions.map((s) =>
+        s.repo?.dir.includes('/worktrees/')
+          ? { ...s, inWindow: { ...s.inWindow, files: undefined } }
+          : s,
+      ),
+    };
+    expect(crossingKeys(open, repo, quiet).size).toBe(0);
   });
 });

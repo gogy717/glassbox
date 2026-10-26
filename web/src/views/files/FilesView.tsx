@@ -1,10 +1,20 @@
 import { ArrowUpRight, ChevronRight, Search } from 'lucide-react';
-import { Fragment, useCallback, useId, useMemo, useRef, useState } from 'react';
-import { MAIN_AGENT_ID, type ToolCall } from '../../../../src/core/model.js';
+import {
+  Fragment,
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
+import { MAIN_AGENT_ID, type SessionSummary, type ToolCall } from '../../../../src/core/model.js';
 import { CategoryIcon } from '../../components/CategoryIcon';
 import { FigureText } from '../../components/FigureText';
 import { StatusMark } from '../../components/Status';
-import type { OpenSession } from '../../data/store';
+import { type OpenSession, StoreContext, useWeekCache } from '../../data/store';
 import { type RovingItemProps, useRovingFocus } from '../../data/useRovingFocus';
 import { type MessageKey, useI18n } from '../../i18n';
 import { subtreeIds } from '../../lib/agents';
@@ -16,6 +26,7 @@ import { EditDetailView } from './details';
 import css from './FilesView.module.css';
 import {
   buildFiles,
+  crossingKeys,
   type FileGroup,
   type FileRow,
   type FilesSummary,
@@ -48,6 +59,55 @@ const HEAD: { key: MessageKey; count: keyof FilesSummary; always: boolean }[] = 
   { key: 'files.headSearched', count: 'searched', always: false },
 ];
 
+const NO_SESSIONS: SessionSummary[] = [];
+const noSubscription = () => () => {};
+/** A directory as its segments, whichever separator: "/w/x" and "/w/x/" alike. */
+const dirKey = (dir: string) =>
+  dir
+    .split(/[\\/]+/)
+    .filter(Boolean)
+    .join('/');
+
+/**
+ * The session's files another worktree of its repository changed too in the last 7 days, by row
+ * key, each with those trees' names. Read from the week only while the session list holds a
+ * session in another tree of the repository; null otherwise, and before the week is read.
+ */
+function useCrossing(open: OpenSession): Map<string, string[]> | null {
+  const store = useContext(StoreContext);
+  const sessions = useSyncExternalStore(store ? store.subscribe : noSubscription, () =>
+    store ? store.getState().sessions : NO_SESSIONS,
+  );
+  const repo = (sessions.find((s) => s.id === open.id) ?? open.session).repo ?? null;
+  const elsewhere =
+    !!repo &&
+    sessions.some(
+      (s) =>
+        !!s.repo &&
+        dirKey(s.repo.root) === dirKey(repo.root) &&
+        dirKey(s.repo.dir) !== dirKey(repo.dir),
+    );
+  const cache = useWeekCache();
+  const week = useSyncExternalStore(cache.subscribe, () => cache.get()['7d']?.result ?? null);
+  useEffect(() => {
+    if (!elsewhere) return;
+    const release = cache.retain('7d');
+    cache.request('7d');
+    return release;
+  }, [cache, elsewhere]);
+  // By the repository's place, not its object: the session list arrives anew every few seconds.
+  const root = repo?.root ?? null;
+  const dir = repo?.dir ?? null;
+  const name = repo?.name ?? '';
+  return useMemo(
+    () =>
+      elsewhere && root !== null && dir !== null && week
+        ? crossingKeys(open, { root, dir, name }, week)
+        : null,
+    [elsewhere, root, dir, name, week, open],
+  );
+}
+
 export function FilesView({ open, agentId, navigate }: Props) {
   const { t } = useI18n();
   const { setFollow } = useUi();
@@ -61,17 +121,24 @@ export function FilesView({ open, agentId, navigate }: Props) {
   const files = useMemo(() => buildFiles(open, ids), [open, ids]);
   const [chips, setChips] = useState<ReadonlySet<string>>(new Set());
   const [query, setQuery] = useState('');
+  const crossing = useCrossing(open);
+  const [crossingOnly, setCrossingOnly] = useState(false);
   const verbs = useMemo(
     () => new Set(CHIPS.filter((c) => chips.has(c.key)).flatMap((c) => c.verbs)),
     [chips],
   );
-  const shown = useMemo(() => filterFiles(files.rows, verbs, query), [files, verbs, query]);
+  const shown = useMemo(() => {
+    const rows = filterFiles(files.rows, verbs, query);
+    return crossing && crossingOnly ? rows.filter((r) => crossing.has(r.key)) : rows;
+  }, [files, verbs, query, crossing, crossingOnly]);
   const groups = useMemo(() => groupFiles(shown), [shown]);
   const name =
     agentId === MAIN_AGENT_ID ? t('crumb.main') : (open.agents.get(agentId)?.label ?? agentId);
   // The files a chip stands for, counted on the unfiltered rows, so a chip says what it holds.
   const chipCount = (chipVerbs: readonly FileVerb[]) =>
     files.rows.filter((r) => r.touches.some((x) => chipVerbs.includes(x.verb))).length;
+  const crossed = crossing ? files.rows.filter((r) => crossing.has(r.key)) : [];
+  const crossedTrees = [...new Set(crossed.flatMap((r) => crossing?.get(r.key) ?? []))];
 
   const toggleChip = (key: string) =>
     setChips((prev) => {
@@ -138,6 +205,21 @@ export function FilesView({ open, agentId, navigate }: Props) {
                 <span className={`${css.chipCount} figure`}>{chipCount(c.verbs)}</span>
               </button>
             ))}
+            {crossing && (
+              <button
+                type="button"
+                className={css.chip}
+                aria-pressed={crossingOnly}
+                title={t('files.crossingTitle', {
+                  n: crossed.length,
+                  trees: crossedTrees.join(', '),
+                })}
+                onClick={() => setCrossingOnly((on) => !on)}
+              >
+                {t('files.chip.crossing')}
+                <span className={`${css.chipCount} figure`}>{crossed.length}</span>
+              </button>
+            )}
           </div>
           <label className={css.filter}>
             <Search size={14} aria-hidden="true" />
@@ -163,7 +245,7 @@ export function FilesView({ open, agentId, navigate }: Props) {
       {groups.length === 0 ? (
         <p className={css.empty}>{t('files.noMatch')}</p>
       ) : (
-        <FileList groups={groups} onOpen={openCall} />
+        <FileList groups={groups} crossing={crossing} onOpen={openCall} />
       )}
     </div>
   );
@@ -179,7 +261,16 @@ function SubAgentsToggle({ on, onChange }: { on: boolean; onChange(on: boolean):
 }
 
 /** The rows, directory by directory: one tab stop, the arrow keys move between files. */
-function FileList({ groups, onOpen }: { groups: FileGroup[]; onOpen(tool: ToolCall): void }) {
+function FileList({
+  groups,
+  crossing,
+  onOpen,
+}: {
+  groups: FileGroup[];
+  /** The files another worktree changed too, with those trees' names. */
+  crossing: Map<string, string[]> | null;
+  onOpen(tool: ToolCall): void;
+}) {
   const { t } = useI18n();
   const listRef = useRef<HTMLDivElement>(null);
   const keys = useMemo(() => groups.flatMap((g) => g.rows.map((r) => r.key)), [groups]);
@@ -209,6 +300,7 @@ function FileList({ groups, onOpen }: { groups: FileGroup[]; onOpen(tool: ToolCa
               <FileItem
                 key={row.key}
                 row={row}
+                also={crossing?.get(row.key)}
                 expanded={expanded.has(row.key)}
                 onToggle={() => toggle(row.key)}
                 onOpen={onOpen}
@@ -226,12 +318,15 @@ const CHANGED = new Set<FileVerb>(['edited', 'created', 'deleted']);
 
 function FileItem({
   row,
+  also,
   expanded,
   onToggle,
   onOpen,
   roving,
 }: {
   row: FileRow;
+  /** The other worktrees that changed this file too. */
+  also?: string[];
   expanded: boolean;
   onToggle(): void;
   onOpen(tool: ToolCall): void;
@@ -267,6 +362,13 @@ function FileItem({
       ? [
           <span key="running" className={css.runningWord}>
             <FigureText k="files.running" params={{ n: row.running }} />
+          </span>,
+        ]
+      : []),
+    ...(also && also.length > 0
+      ? [
+          <span key="also" className={css.alsoWord}>
+            {t('files.alsoIn', { trees: also.join(', ') })}
           </span>,
         ]
       : []),

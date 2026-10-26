@@ -1,8 +1,13 @@
 /**
- * The Files tab's view of the model in `src/shared/files.ts`: which rows a filter shows, and an
- * edit as lines that went and came.
+ * The Files tab's view of the model in `src/shared/files.ts`: which rows a filter shows, which
+ * files another worktree changed too, and an edit as lines that went and came.
  */
+import { MAIN_AGENT_ID, type RepoIdentity } from '../../../../src/core/model.js';
+import { crossings, fileOpsOf } from '../../../../src/shared/crossing.js';
 import type { FileRow, FileVerb } from '../../../../src/shared/files.js';
+import type { WeekResult } from '../../../../src/shared/week.js';
+import type { OpenSession } from '../../data/store';
+import { subtreeIds } from '../../lib/agents';
 
 export * from '../../../../src/shared/files.js';
 
@@ -21,6 +26,42 @@ export function filterFiles(
       (verbs.size === 0 || row.touches.some((t) => verbs.has(t.verb))) &&
       (q === '' || row.path.toLowerCase().includes(q)),
   );
+}
+
+/**
+ * The session's files another worktree of its repository changed too in `week` (the Crossing
+ * chip): each file's key, as its row is keyed, with the names of the trees that did. The
+ * session's own changes are read from it, whole; the other sessions' from the week.
+ */
+export function crossingKeys(
+  open: OpenSession,
+  repo: RepoIdentity,
+  week: WeekResult | null,
+): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  if (!week) return out;
+  const mine = fileOpsOf(
+    open.toolCalls.values(),
+    open.session.cwd,
+    subtreeIds(open, MAIN_AGENT_ID),
+    0,
+  );
+  const others = week.sessions
+    .filter((s) => s.id !== open.id)
+    .map((s) => ({ id: s.id, repo: s.repo, files: s.inWindow.files }));
+  const found = crossings([{ id: open.id, repo, files: mine }, ...others]).find(
+    (r) => r.root === repo.root,
+  );
+  for (const p of found?.paths ?? []) {
+    const own = p.sides.find((side) => side.sessions.some((s) => s.id === open.id));
+    const key = own?.sessions.find((s) => s.id === open.id)?.path;
+    if (key)
+      out.set(
+        key,
+        p.sides.filter((side) => side !== own).map((side) => side.tree.name),
+      );
+  }
+  return out;
 }
 
 // ── Diff ──────────────────────────────────────────────────────────────────────────────────

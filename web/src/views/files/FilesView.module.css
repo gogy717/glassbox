@@ -236,6 +236,11 @@
   color: var(--accent);
 }
 
+/* Another worktree of the repository changed this file too: it may meet this one at merge time. */
+.alsoWord {
+  color: var(--warning);
+}
+
 .when {
   font-size: var(--fs-meta);
   color: var(--muted);

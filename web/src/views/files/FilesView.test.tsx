@@ -1,9 +1,12 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ToolCall } from '../../../../src/core/model.js';
-import type { OpenSession } from '../../data/store';
+import { demoRepo } from '../../../../src/server/week-demo.js';
+import type { WeekLine } from '../../../../src/shared/week.js';
+import { createStore, type OpenSession, StoreContext } from '../../data/store';
 import { I18nContext, makeI18n } from '../../i18n';
 import { demoOpen } from '../../test/demo';
+import { demoWeek } from '../../test/week';
 import { UiContext } from '../../ui';
 import { FilesView } from './FilesView';
 import { resetFilesPrefs } from './prefs';
@@ -301,5 +304,82 @@ describe('FilesView', () => {
     );
     expect(screen.getByRole('heading', { level: 3, name: '项目根目录' })).toBeInTheDocument();
     expect(row(/^store\.ts/)).toHaveTextContent('修改 ×2 · 读取 ×2 · 1 次失败');
+  });
+});
+
+describe('the Crossing chip', () => {
+  const TREE = '/Users/demo/Dev/worktrees/glassbox-sidebar';
+  beforeEach(() => {
+    localStorage.clear();
+    resetFilesPrefs();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** The demo session open, a session of `other` listed (glassbox's other worktree), the week served. */
+  function renderCrossing(locale: 'en' | 'zh' = 'en', other = TREE) {
+    const open = demoOpen();
+    const store = createStore();
+    store.applyEvent({
+      type: 'sessions',
+      sessions: [
+        { ...open.session, repo: demoRepo(open.session.cwd as string) },
+        { ...open.session, id: 'claude-code:sidebar', cwd: other, repo: demoRepo(other) },
+      ],
+    });
+    const lines: WeekLine[] = [{ type: 'result', result: demoWeek('7d') }];
+    const fetched = vi.fn(
+      async (_url: string) => new Response(lines.map((l) => `${JSON.stringify(l)}\n`).join('')),
+    );
+    vi.stubGlobal('fetch', fetched);
+    render(
+      <StoreContext.Provider value={store}>
+        <I18nContext.Provider value={makeI18n(locale)}>
+          <UiContext.Provider value={{ follow: true, setFollow: vi.fn() }}>
+            <FilesView open={open} agentId="main" navigate={vi.fn()} />
+          </UiContext.Provider>
+        </I18nContext.Provider>
+      </StoreContext.Provider>,
+    );
+    return { fetched };
+  }
+
+  it('is not there outside a repository with another worktree at work, and reads no week', () => {
+    const fetched = vi.fn();
+    vi.stubGlobal('fetch', fetched);
+    renderFiles();
+    expect(screen.queryByRole('button', { name: /^Crossing/ })).toBeNull();
+    expect(fetched).not.toHaveBeenCalled();
+  });
+
+  it('is not there when the repository’s other sessions ran in the same worktree', async () => {
+    const { fetched } = renderCrossing('en', '/Users/demo/Dev/glassbox');
+    // Time for a week read, had one started, to arrive and draw the chip.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 30)));
+    expect(fetched).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /^Crossing/ })).toBeNull();
+  });
+
+  it('counts the files another worktree changed too, names it, and shows only those when pressed', async () => {
+    const { fetched } = renderCrossing();
+    const chip = await screen.findByRole('button', { name: /^Crossing/ });
+    expect(fetched.mock.calls[0]?.[0]).toBe('/api/week?window=7d');
+    expect(chip).toHaveTextContent('Crossing2');
+    expect(chip).toHaveAttribute('title', '2 files also changed in glassbox-sidebar');
+    expect(chip).toHaveAttribute('aria-pressed', 'false');
+    // Each such file says where else it changed.
+    expect(row(/^store\.ts/)).toHaveTextContent('also changed in glassbox-sidebar');
+    expect(row(/^store\.test\.ts/)).not.toHaveTextContent('also changed');
+    fireEvent.click(chip);
+    expect(chip).toHaveAttribute('aria-pressed', 'true');
+    expect(rowNames()).toEqual(['sessions.ts', 'store.ts']);
+    fireEvent.click(chip);
+    expect(rows()).toHaveLength(6);
+  });
+
+  it('speaks Chinese', async () => {
+    renderCrossing('zh');
+    const chip = await screen.findByRole('button', { name: /^交叉/ });
+    expect(chip).toHaveAttribute('title', '2 个文件也在 glassbox-sidebar 里改过');
+    expect(row(/^store\.ts/)).toHaveTextContent('glassbox-sidebar 也改过');
   });
 });
