@@ -11,6 +11,8 @@ interface Props {
   item: TurnItem;
   /** What the view shows under the prompt (the Steps view's phase shares). */
   children?: ReactNode;
+  /** Controls beside the prompt's Show full prompt (the execution chain's Copy as Markdown). */
+  actions?: ReactNode;
 }
 
 /**
@@ -18,7 +20,7 @@ interface Props {
  * then the prompt (clamped, readable in full), with the duration, counts and status on the
  * label's line.
  */
-export function TurnHeader({ item, children }: Props) {
+export function TurnHeader({ item, children, actions }: Props) {
   const now = useNow();
   const { turn } = item;
   const end = turn.endedAt ? Date.parse(turn.endedAt) : item.status === 'running' ? now : null;
@@ -41,7 +43,7 @@ export function TurnHeader({ item, children }: Props) {
           <StatusMark status={item.status} />
         </span>
       </div>
-      <TurnTitle key={turn.id} label={item.label} text={item.prompt} />
+      <TurnTitle key={turn.id} label={item.label} text={item.prompt} actions={actions} />
       {children}
     </div>
   );

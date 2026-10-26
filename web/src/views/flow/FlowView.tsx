@@ -10,6 +10,7 @@ import type { Navigate, Route } from '../../router';
 import { useUi } from '../../ui';
 import { LiveOverlay } from '../composer/LiveOverlay';
 import { CallRow } from './CallRow';
+import { CopyMarkdown } from './CopyMarkdown';
 import type { CardKey } from './cards';
 import css from './FlowView.module.css';
 import { FollowPausedBar } from './FollowPausedBar';
@@ -133,7 +134,7 @@ export function FlowView({ open, agentId, route, navigate, live = null }: Props)
       <section className={css.main}>
         {current ? (
           <>
-            <TurnHeader item={current} />
+            <TurnHeader item={current} actions={<CopyMarkdown open={open} turn={current.turn} />} />
             {!follow && <FollowPausedBar newest={items.at(-1)} onBack={backToLatest} />}
             <CallList
               key={current.turn.id}

@@ -715,3 +715,62 @@ describe('FlowView search', () => {
     );
   });
 });
+
+describe('FlowView: Copy as Markdown', () => {
+  useFakeLayout();
+  afterEach(() => vi.unstubAllGlobals());
+
+  function stubClipboard(writeText: (text: string) => Promise<void>) {
+    const spy = vi.fn(writeText);
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText: spy } });
+    return spy;
+  }
+
+  it('copies the open prompt from its header: the prompt, the final reply, the calls', async () => {
+    const writeText = stubClipboard(async () => {});
+    renderFlow({ route: { turnId: 'turn_m1' }, follow: false });
+    fireEvent.click(screen.getByRole('button', { name: 'Copy as Markdown' }));
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    const md = String(writeText.mock.calls[0]?.[0]);
+    expect(md.split('\n\n').slice(0, 2)).toEqual([
+      '> Busy sessions should be listed first in the sidebar',
+      'Fixed: busy sessions now sort first, then by most recent update.',
+    ]);
+    expect(md).toContain('\n- `Bash` rg -n "sortSessions" src · 400ms\n- `Read` store.ts · ');
+    expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument();
+  });
+
+  it('says so when the clipboard refuses', async () => {
+    stubClipboard(async () => {
+      throw new Error('denied');
+    });
+    renderFlow({ route: { turnId: 'turn_m1' }, follow: false });
+    fireEvent.click(screen.getByRole('button', { name: 'Copy as Markdown' }));
+    expect(await screen.findByRole('button', { name: 'Could not copy' })).toBeInTheDocument();
+  });
+
+  it('sits beside Show full prompt, on the line under the prompt', () => {
+    clampHeadings();
+    renderFlow({ route: { turnId: 'turn_m1' }, follow: false });
+    const toggle = screen.getByRole('button', { name: 'Show full prompt' });
+    expect(toggle.parentElement).toBe(
+      screen.getByRole('button', { name: 'Copy as Markdown' }).parentElement,
+    );
+  });
+
+  it('is worded in Chinese too', () => {
+    render(
+      <I18nContext.Provider value={makeI18n('zh')}>
+        <UiContext.Provider value={{ follow: true, setFollow: vi.fn() }}>
+          <FlowView
+            open={demoOpen()}
+            agentId="main"
+            route={{ sessionId: 'x', agentId: 'main', tab: 'flow', turnId: null, requestId: null }}
+            navigate={vi.fn()}
+          />
+        </UiContext.Provider>
+      </I18nContext.Provider>,
+    );
+    expect(screen.getByRole('button', { name: '复制为 Markdown' })).toBeInTheDocument();
+  });
+});
