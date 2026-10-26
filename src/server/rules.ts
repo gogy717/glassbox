@@ -30,6 +30,8 @@ export interface RulesOptions {
    * (`readRuleSettings`); none when absent.
    */
   readSettings?: (projects: { root: string; dirs: string[] }[]) => Promise<SettingsFile[]>;
+  /** Where your own settings file is (`<claudeDir>/settings.json`), there or not. */
+  yourSettings?: string;
   /** The answers glassbox runs keep (`runDecisions`), asked at each read; none when absent. */
   decisions?: () => ReadonlyMap<string, 'allow' | 'deny'>;
   /** The home directory, for keys of files under it (`~/…`). */
@@ -294,6 +296,7 @@ export class RulesService {
       window: { kind: job.kind, from, now },
       rows: ruleRows(sessions, { from, settings }),
       settings,
+      yourSettings: this.opts.yourSettings ?? null,
       asOf: now,
       stats: {
         considered: total,

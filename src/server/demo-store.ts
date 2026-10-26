@@ -202,7 +202,11 @@ export class DemoStore implements AppStore, WeekStore {
           return behind ? { snapshot: structuredClone(behind), bytes: 0 } : this.readSession(id);
         },
       },
-      { home: DEMO_HOME, readSettings: async (projects) => history.settings(projects) },
+      {
+        home: DEMO_HOME,
+        readSettings: async (projects) => history.settings(projects),
+        yourSettings: `${DEMO_HOME}/.claude/settings.json`,
+      },
     );
     const inFlight = this.snap.requests.find(
       (r) => r.agentId === MAIN_AGENT_ID && r.status === 'in-flight',

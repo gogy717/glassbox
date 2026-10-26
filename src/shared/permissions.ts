@@ -461,6 +461,8 @@ export interface RulesResult {
   rows: RuleRow[];
   /** The settings files found, with their two lists: nothing else of them is read. */
   settings: SettingsFile[];
+  /** Where your own settings are, whether the file is there or not; null when not known. */
+  yourSettings: string | null;
   /** When it was put together (epoch ms). */
   asOf: number;
   stats: RulesStats;

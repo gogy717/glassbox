@@ -171,6 +171,7 @@ async function main(): Promise<void> {
     ? undefined
     : new RulesService(store, {
         readSettings: (projects) => readRuleSettings({ claudeDir: opts.claudeDir, projects }),
+        yourSettings: join(opts.claudeDir, 'settings.json'),
         decisions: () => runDecisions(runs?.list() ?? []),
         home: homedir(),
         log,
