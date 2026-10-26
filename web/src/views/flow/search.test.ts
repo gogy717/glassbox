@@ -184,6 +184,24 @@ describe('searchSession', () => {
     ]);
   });
 
+  it('reads an input’s strings as written: a quote, a line break or a backslash hides nothing', () => {
+    const open = session();
+    // Its one-line summary is the file's name: the edit's text is in its JSON alone.
+    const edit = { old_string: 'import x from "react";\n\tconst a = 1;', file_path: 'a.ts' };
+    const write = { file_path: 'x.txt', content: 'C:\\temp\\new' };
+    open.toolCalls = new Map(open.toolCalls)
+      .set('tu2', tool('tu2', 'r3', 'Edit', edit, 'Edited'))
+      .set('tu1', tool('tu1', 'r1', 'Write', write, 'Written'));
+    expect(seen(open, 'from "react"')[0]?.hits).toEqual([
+      ['tool', 'Edit', '{"old_string":"import x [from "react"]; const a = 1;","file_path":"a.ts"}'],
+    ]);
+    expect(seen(open, '"react"; const')[0]?.hits).toHaveLength(1);
+    // A backslash is a backslash: "\n" in the file's text is not a line break.
+    expect(seen(open, 'C:\\temp\\new')[0]?.hits).toEqual([
+      ['tool', 'Write', '{"file_path":"x.txt","content":"[C:\\temp\\new]"}'],
+    ]);
+  });
+
   it('cuts the context 40 characters either side of the first match, on one line', () => {
     const open = session();
     const long = `${'a'.repeat(50)}\n\nneedle in it\n${'b'.repeat(50)}`;

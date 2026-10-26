@@ -52,14 +52,25 @@ function cachedLines(of: object, make: () => string[]): string[] {
   return l;
 }
 
-/** The input as recorded; '' for one too deep to serialise (adapters keep those). */
+const ESCAPES: Record<string, string> = { n: '\n', t: '\t', r: '\r', b: '\b', f: '\f' };
+
+/**
+ * The input as recorded, its JSON's strings as written: an escaped quote or line break in an
+ * edit would otherwise hide the very words searched for. One pass, so an escaped backslash
+ * before an n stays a backslash and an n. '' for an input too deep to serialise (adapters keep
+ * those).
+ */
 function rawJson(input: unknown): string {
   if (typeof input === 'string') return input;
+  let json: string;
   try {
-    return JSON.stringify(input) ?? '';
+    json = JSON.stringify(input) ?? '';
   } catch {
     return '';
   }
+  return json.replace(/\\(?:u([0-9a-fA-F]{4})|(.))/g, (_, hex?: string, c = '') =>
+    hex ? String.fromCharCode(Number.parseInt(hex, 16)) : (ESCAPES[c] ?? c),
+  );
 }
 
 /** A tool's summary line, its raw input and its result preview. */
