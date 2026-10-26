@@ -7,7 +7,7 @@ import { agentName } from '../../lib/agent-names';
 import { BAR_HEIGHT, type BarKind, barcode } from './barcode';
 import type { ReceiptData } from './data';
 import { clock, day, durationParts, modelName, serial } from './format';
-import { categoryLine, clip, timed, timeRows } from './rows';
+import { categoryLine, clip, testRunWords, timed, timeRows } from './rows';
 import {
   EDGE,
   frame,
@@ -118,15 +118,15 @@ export function drawReceipt(d: ReceiptData, o: ReceiptOptions): { body: string; 
     ),
   );
   const numRight = LEFT + Math.max(30, textWidth('0'.repeat(digits), 12));
-  const workRow = (n: number, key: ReceiptKey, fail = false) => {
+  const workRow = (n: number, words: string, fail = false) => {
     p.y += 19;
     const fill = fail ? c.fail : c.ink;
     p.push(text(numRight, p.y, runs(String(n)), { fill, anchor: 'end' }));
-    p.push(text(numRight + 8, p.y, runs(w(key, { n })), { fill }));
+    p.push(text(numRight + 8, p.y, runs(words), { fill }));
   };
   for (const [n, key] of counts) {
     if (n <= 0) continue;
-    workRow(n, key);
+    workRow(n, w(key, { n }));
     if (key === 'toolCalls' && d.work.categories.length > 0) {
       p.y += 17;
       const room = RIGHT - (numRight + 8);
@@ -134,10 +134,15 @@ export function drawReceipt(d: ReceiptData, o: ReceiptOptions): { body: string; 
       p.push(text(numRight + 8, p.y, runs(cats), { size: 11, fill: c.soft }));
     }
   }
-  if (d.work.subAgents > 0) workRow(d.work.subAgents, 'subAgents');
-  if (d.work.turns > 0) workRow(d.work.turns, 'prompts');
-  if (d.work.failures > 0) workRow(d.work.failures, 'failures', true);
-  if (d.work.compactions > 0) workRow(d.work.compactions, 'compactions');
+  // The outcome's test runs, a last one that failed in red, and its commits.
+  const { tests, commits } = d.work;
+  if (tests) workRow(tests.runs, testRunWords(tests, L), tests.verdict === 'failed');
+  if (commits > 0) workRow(commits, w('commits', { n: commits }));
+  if (d.work.subAgents > 0) workRow(d.work.subAgents, w('subAgents', { n: d.work.subAgents }));
+  if (d.work.turns > 0) workRow(d.work.turns, w('prompts', { n: d.work.turns }));
+  if (d.work.failures > 0) workRow(d.work.failures, w('failures', { n: d.work.failures }), true);
+  if (d.work.compactions > 0)
+    workRow(d.work.compactions, w('compactions', { n: d.work.compactions }));
   p.y += 22;
   p.rule();
 

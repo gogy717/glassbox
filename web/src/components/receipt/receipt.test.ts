@@ -186,6 +186,76 @@ describe('the receipt', () => {
   });
 });
 
+describe('test runs and commits (P2)', () => {
+  let serial = 0;
+  /** The demo with shell calls of the main agent, each a minute after the clock. */
+  const withShell =
+    (...calls: { command: string; preview?: string; failed?: boolean }[]) =>
+    (o: OpenSession): OpenSession => {
+      const toolCalls = new Map(o.toolCalls);
+      for (const c of calls) {
+        const at = new Date(NOW + ++serial * 60_000).toISOString();
+        const id = `t_sh${serial}`;
+        const base = o.toolCalls.get('tu_m1a') as ToolCall;
+        toolCalls.set(id, {
+          ...base,
+          id,
+          input: { command: c.command },
+          status: c.failed ? 'error' : 'complete',
+          startedAt: at,
+          endedAt: at,
+          resultPreview: c.preview ?? null,
+        });
+      }
+      return { ...o, toolCalls };
+    };
+
+  it('counts them as the outcome strip does, over the whole session', () => {
+    expect(demo().data.work).toMatchObject({ tests: null, commits: 0 });
+    const { data } = demo(
+      withShell(
+        { command: 'npm test', preview: '2 failed', failed: true },
+        { command: 'npm test', preview: 'Tests  12 passed (12)' },
+        { command: 'git commit -m "Busy sessions first"' },
+      ),
+    );
+    expect(data.work).toMatchObject({ tests: { runs: 2, verdict: 'passed' }, commits: 1 });
+  });
+
+  it('prints a line for each in WORK, image and text, and none at zero', () => {
+    const { data } = demo();
+    const d: ReceiptData = {
+      ...data,
+      work: { ...data.work, tests: { runs: 4, verdict: 'passed' }, commits: 2 },
+    };
+    const text = receiptText(d, EN);
+    expect(text).toMatch(/^ {4}4 {2}Test runs · last ✓$/m);
+    expect(text).toMatch(/^ {4}2 {2}Commits$/m);
+    const image = svgText(receiptSvg(d, EN, 'tall').svg);
+    expect(image).toContain('Test runs · last ✓');
+    expect(image).toContain('2 Commits');
+    const zh = receiptText(d, { ...EN, locale: 'zh' });
+    expect(zh).toMatch(/^ {4}4 {2}测试 · 最后一次 ✓$/m);
+    expect(zh).toMatch(/^ {4}2 {2}提交$/m);
+    for (const out of [receiptText(data, EN), svgText(receiptSvg(data, EN, 'tall').svg)])
+      expect(out).not.toMatch(/Test run|Commit/);
+    // A run of unknown outcome says nothing about it.
+    const unknown = { ...d, work: { ...d.work, tests: { runs: 1, verdict: 'unknown' as const } } };
+    expect(receiptText(unknown, EN)).toMatch(/^ {4}1 {2}Test run$/m);
+  });
+
+  it('prints a last run that failed with a cross, in the failure red', () => {
+    const { data } = demo();
+    const d: ReceiptData = {
+      ...data,
+      work: { ...data.work, failures: 0, tests: { runs: 3, verdict: 'failed' } },
+    };
+    expect(receiptText(d, EN)).toMatch(/^ {4}3 {2}Test runs · last ✗$/m);
+    const svg = receiptSvg(d, EN, 'tall').svg;
+    expect(svg).toMatch(/fill="#b21e25"[^>]*><tspan[^>]*>Test runs · last ✗/);
+  });
+});
+
 describe('the text version (R7)', () => {
   it('stays within 40 lines and 44 columns, every line aligned, in English and Chinese', () => {
     const { data } = demo();
@@ -193,7 +263,14 @@ describe('the text version (R7)', () => {
       ...data,
       title:
         'A very long title that needs every one of its three lines to fit, and then some more words beyond that',
-      work: { ...data.work, failures: 2, compactions: 3, subAgents: 4 },
+      work: {
+        ...data.work,
+        failures: 2,
+        compactions: 3,
+        subAgents: 4,
+        tests: { runs: 4, verdict: 'failed' },
+        commits: 2,
+      },
       time: { ...data.time, approval: 40 * 60_000, queued: 90_000, longestThink: 252_000 },
     };
     for (const locale of ['en', 'zh'] as const) {
@@ -204,6 +281,10 @@ describe('the text version (R7)', () => {
       expect(lines.filter((l) => cols(l) > COLUMNS)).toEqual([]);
     }
     const en = receiptText(full, EN).split('\n');
+    // Every line of a session that fills them all is 42: the details give way, never a count.
+    expect(en).toHaveLength(40);
+    expect(en.join('\n')).not.toMatch(/Longest think|of which thinking/);
+    expect(en.join('\n')).toMatch(/Test runs · last ✗[\s\S]*Commits[\s\S]*Compactions/);
     // Figures end in one column: the TIME values before their shares, tokens at the margin.
     expect(
       new Set(en.filter((l) => / \d+%$/.test(l) && l.includes('..')).map((l) => cols(l))),

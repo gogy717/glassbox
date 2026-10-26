@@ -1,13 +1,15 @@
 /**
  * What a session's receipt says, taken from the functions behind the app's own figures: the
  * Summary bar's `summarize`, the Timeline's `timeBreakdown` and segments, the Tokens tab's
- * `rollupByAgent`. Nothing here counts anything new, so the receipt always agrees with the app.
+ * `rollupByAgent`, the outcome strip's `sessionOutcome`. Nothing here counts anything new, so
+ * the receipt always agrees with the app.
  */
 import { type AgentKind, MAIN_AGENT_ID } from '../../../../src/core/model.js';
 import { totalTokens } from '../../../../src/core/usage.js';
+import { sessionOutcome, type TestVerdict } from '../../../../src/shared/outcome.js';
 import type { Approvals } from '../../data/approvals';
 import type { OpenSession } from '../../data/store';
-import { mayStillRun, summarize } from '../../lib/agents';
+import { mayStillRun, subtreeIds, summarize } from '../../lib/agents';
 import { type Segment, timeBreakdown, timeSegments } from '../../lib/time-stats';
 import { rollupByAgent } from '../../lib/token-stats';
 import { type ToolCategory, toolCategory } from '../../lib/tool-category';
@@ -45,6 +47,9 @@ export interface ReceiptData {
     turns: number;
     failures: number;
     compactions: number;
+    /** The outcome strip's test runs and commits, over the whole session; none: null and 0. */
+    tests: { runs: number; verdict: TestVerdict } | null;
+    commits: number;
   };
   time: {
     thinking: number;
@@ -110,6 +115,8 @@ export function receiptData(open: OpenSession, now: number, approvals?: Approval
     }
   }
 
+  const outcome = sessionOutcome(open, subtreeIds(open, MAIN_AGENT_ID));
+
   const root = rollupByAgent(open).find((r) => r.kind === 'agent' && r.id === MAIN_AGENT_ID);
   const usage = root?.total;
   const subAgents: [number, number][] = [];
@@ -138,6 +145,8 @@ export function receiptData(open: OpenSession, now: number, approvals?: Approval
       turns: s.turns,
       failures,
       compactions,
+      tests: outcome.tests && { runs: outcome.tests.runs, verdict: outcome.tests.verdict },
+      commits: outcome.commits?.count ?? 0,
     },
     time: {
       thinking: breakdown.model.thinking,
