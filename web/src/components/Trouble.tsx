@@ -10,6 +10,7 @@ import { SHELL_TOOLS } from '../../../src/shared/tool-category.js';
 import { detectTrouble } from '../../../src/shared/trouble.js';
 import type { OpenSession } from '../data/store';
 import { translateParts, useI18n } from '../i18n';
+import { mayStillRun } from '../lib/agents';
 import { summarizeInput } from '../lib/tool-category';
 import { troublePhrase } from '../lib/trouble';
 import type { Navigate, Route } from '../router';
@@ -75,7 +76,8 @@ function Phrase({ s, now }: { s: TroubleSignal; now: number }) {
 /**
  * The signs that the agent, or a sub-agent of it still running, is stuck: "No trouble", or "2
  * signs of trouble" with a red dot, opening a list of them, each a link to the call, model call
- * or prompt it points at. Beside Data complete, in its manner.
+ * or prompt it points at. Read while the session or the agent may still run, as the server reads
+ * a session's. Beside Data complete, in its manner.
  */
 export function Trouble({ open, agentId, now, navigate }: Props) {
   const { t } = useI18n();
@@ -86,7 +88,11 @@ export function Trouble({ open, agentId, now, navigate }: Props) {
   const buttonRef = useRef<HTMLButtonElement>(null);
   usePopoverDismiss(ref, shown, close, buttonRef);
 
-  const signals = useMemo(() => detectTrouble(open, agentId, now, label), [open, agentId, now]);
+  // Signs of being stuck now: none for a session that no longer runs, however it ended.
+  const signals = useMemo(
+    () => (mayStillRun(open, agentId) ? detectTrouble(open, agentId, now, label) : []),
+    [open, agentId, now],
+  );
   const count = signals.length > 0 ? t('trouble.count', { n: signals.length }) : t('trouble.none');
   const whose = (id: string) =>
     id === MAIN_AGENT_ID ? t('crumb.main') : (open.agents.get(id)?.label ?? id);

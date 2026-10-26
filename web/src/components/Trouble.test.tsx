@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { ModelRequest, ToolCall } from '../../../src/core/model.js';
+import type { AgentNode, ModelRequest, ToolCall } from '../../../src/core/model.js';
 import type { OpenSession } from '../data/store';
 import { I18nContext, makeI18n } from '../i18n';
 import { cjkInMono } from '../test/cjk';
@@ -104,6 +104,17 @@ describe('Trouble', () => {
     });
     // Gone once followed.
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('says nothing of a session that no longer runs, however it ended', () => {
+    const open = looping(demoOpen(), 4);
+    const main = open.agents.get('main') as AgentNode;
+    renderTrouble({
+      ...open,
+      session: { ...open.session, live: 'closed' },
+      agents: new Map(open.agents).set('main', { ...main, status: 'complete' }),
+    });
+    expect(screen.getByRole('button', { name: 'Signs of trouble · No trouble' })).toBeVisible();
   });
 
   it('names the sub-agent a sign belongs to', () => {
