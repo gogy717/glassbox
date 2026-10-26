@@ -66,6 +66,16 @@
   flex-shrink: 8;
 }
 
+/* A sign of trouble gives way after the activity, before the age and tokens. */
+.sign {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  min-width: 0;
+  flex-shrink: 4;
+  overflow: hidden;
+}
+
 /* Time and tokens give way next when the row is narrow; the tag stays whole. */
 .when {
   min-width: 0;

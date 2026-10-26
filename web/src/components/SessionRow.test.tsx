@@ -163,6 +163,50 @@ describe('SessionRow', () => {
     });
   });
 
+  describe('of a running session that looks stuck', () => {
+    const stuck: SessionSummary = {
+      ...reading,
+      trouble: { kind: 'repeat', params: { x: 'npm test', n: 4 }, at: null, since: since(240) },
+    };
+
+    it('says its sign after what it does, in the error tone, the call in mono', () => {
+      const meta = renderRow(stuck).lastElementChild as HTMLElement;
+      const sign = meta.children[1] as HTMLElement;
+      expect(sign).toHaveTextContent(/^· Retrying npm test · 4×$/);
+      const line = sign.querySelector('[data-trouble]') as HTMLElement;
+      expect(line).toHaveAttribute('data-trouble', 'repeat');
+      expect(line.querySelector('[class*="target"]')).toHaveTextContent('npm test');
+    });
+
+    it('on a card too, after the activity and its clock', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(DEMO_NOW);
+      try {
+        const row = renderRow(stuck, false, vi.fn(), 'en', { density: 'card' });
+        expect(row.lastElementChild).toHaveTextContent(
+          /^Reading tokens\.css · 0:04 · Retrying npm test · 4× · 42K out42K output tokens$/,
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('says how long a wait has gone on, in Chinese too', () => {
+      const waiting: SessionSummary = {
+        ...running,
+        live: 'waiting',
+        trouble: { kind: 'waiting', params: {}, at: null, since: since(14 * 60) },
+      };
+      expect(renderRow(waiting)).toHaveTextContent('Waiting 14 min');
+      cleanup();
+      expect(renderRow(waiting, false, vi.fn(), 'zh')).toHaveTextContent('已等 14 分钟');
+    });
+
+    it('says nothing of it once the session no longer runs', () => {
+      expect(renderRow({ ...stuck, live: 'idle' })).not.toHaveTextContent('Retrying');
+    });
+  });
+
   it('words its age in Chinese too', () => {
     const row = renderRow(
       { ...idle, updatedAt: new Date(DEMO_NOW.getTime() - 2 * 3_600_000).toISOString() },
