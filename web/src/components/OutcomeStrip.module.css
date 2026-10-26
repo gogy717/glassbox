@@ -1,0 +1,48 @@
+/* One quiet line under the summary bar: what the agents did, each part a link. */
+.strip {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: baseline;
+  row-gap: 2px;
+  min-height: 30px;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--layer-1);
+  font-size: var(--fs-small);
+  line-height: 1.4;
+}
+
+.item {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.item:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+/* Failures in red, as the receipt prints them. */
+.item[data-failed] {
+  color: var(--error);
+}
+
+.sep {
+  color: var(--faint);
+  white-space: pre;
+}
+
+/* The last test run's verdict: a check in green, a cross in red. */
+.mark[data-verdict="passed"] {
+  color: var(--success);
+}
+
+.mark[data-verdict="failed"] {
+  color: var(--error);
+}

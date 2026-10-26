@@ -347,9 +347,12 @@ describe('App', () => {
     expect(screen.getByRole('tabpanel')).toContainElement(
       await screen.findByRole('heading', { level: 3, name: 'src/server' }),
     );
-    expect(screen.getByText(/files edited/).closest('p')).toHaveTextContent(
-      '3 files edited · 1 created · 3 read · Main',
-    );
+    // The tab's own head; the outcome strip above the tabs counts the same files.
+    expect(
+      within(screen.getByRole('tabpanel'))
+        .getByText(/files edited/)
+        .closest('p'),
+    ).toHaveTextContent('3 files edited · 1 created · 3 read · Main');
   });
 
   it('hides probe sessions until the settings toggle shows them', () => {

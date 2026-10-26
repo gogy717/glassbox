@@ -3,6 +3,7 @@ import { MAIN_AGENT_ID } from '../../../src/core/model.js';
 import type { LivePartial } from '../../../src/shared/runs.js';
 import { AgentBreadcrumb } from '../components/AgentBreadcrumb';
 import { Delayed } from '../components/Delayed';
+import { OutcomeStrip } from '../components/OutcomeStrip';
 import { SummaryBar } from '../components/SummaryBar';
 import type { OpenSession } from '../data/store';
 import { useI18n } from '../i18n';
@@ -56,6 +57,7 @@ export function SessionView({ open, route, navigate, live = null, rateAgent = nu
   return (
     <div className={css.view}>
       <SummaryBar open={open} agentId={agentId} rateAgent={rateAgent} />
+      <OutcomeStrip open={open} agentId={agentId} navigate={navigate} />
       <div className={css.toolbar}>
         <AgentBreadcrumb
           open={open}

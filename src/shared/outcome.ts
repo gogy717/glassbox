@@ -33,13 +33,25 @@ export interface OutcomeSource extends FilesSource {
 /** Shell tools of every agent glassbox reads, and of the agents that call theirs so. */
 const SHELL_TOOLS = new Set([...SHELLS, 'execute_command']);
 
+type Commands = ReturnType<typeof simpleCommands>;
+
+/**
+ * Each call's commands, read once: a session holds thousands of shell calls, the strip reads
+ * them again on every patch, and a patch keeps the calls it does not change.
+ */
+const read = new WeakMap<ToolCall, Commands>();
+
 /** The simple commands a shell call runs, each with its summary; none for another tool. */
-function commandsOf(tool: ToolCall): { words: string[]; summary: string | null }[] {
+function commandsOf(tool: ToolCall): Commands {
   if (!SHELL_TOOLS.has(tool.name)) return [];
-  const line = shellCommand(tool.input);
-  return line === null
-    ? []
-    : simpleCommands(line, { powershell: /powershell|pwsh/i.test(tool.name) });
+  let commands = read.get(tool);
+  if (!commands) {
+    const line = shellCommand(tool.input);
+    commands =
+      line === null ? [] : simpleCommands(line, { powershell: /powershell|pwsh/i.test(tool.name) });
+    read.set(tool, commands);
+  }
+  return commands;
 }
 
 /**
@@ -186,7 +198,9 @@ export function sessionOutcome(open: OutcomeSource, agentIds: ReadonlySet<string
     // A commit a hook refused, or one with nothing to commit, committed nothing.
     if (tool.status !== 'error' && commitMessage(tool) !== undefined)
       commits = tally(commits, tool);
-    if (toolCategory(tool.name, tool.input) === 'ask') questions = tally(questions, tool);
+    // A shell call is never a question, and reading its line to say so costs.
+    if (!SHELL_TOOLS.has(tool.name) && toolCategory(tool.name, tool.input) === 'ask')
+      questions = tally(questions, tool);
   }
   for (const request of open.requests.values())
     if (agentIds.has(request.agentId) && request.status === 'error')

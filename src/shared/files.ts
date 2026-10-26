@@ -319,10 +319,8 @@ export interface FilesSource {
 
 const ms = (iso: IsoTime | null) => (iso === null ? Number.NaN : Date.parse(iso));
 
-/** By start; a call with no start, or one that does not parse, goes last. */
-function byStart(a: ToolCall, b: ToolCall): number {
-  const x = ms(a.startedAt);
-  const y = ms(b.startedAt);
+/** By start (epoch ms); a call with no start, or one that does not parse, goes last. */
+function byStart(x: number, y: number): number {
   if (Number.isNaN(x)) return Number.isNaN(y) ? 0 : 1;
   if (Number.isNaN(y)) return -1;
   return x - y;
@@ -374,7 +372,12 @@ function summarize(rows: FileRow[]): FilesSummary {
 export function buildFiles(open: FilesSource, agentIds: ReadonlySet<string>): Files {
   const cwd = open.session.cwd;
   const byKey = new Map<string, FileRow>();
-  const tools = [...open.toolCalls.values()].filter((t) => agentIds.has(t.agentId)).sort(byStart);
+  // Each start parsed once, not twice a comparison: a session can hold thousands of calls.
+  const tools = [...open.toolCalls.values()]
+    .filter((t) => agentIds.has(t.agentId))
+    .map((t) => [ms(t.startedAt), t] as const)
+    .sort(([x], [y]) => byStart(x, y))
+    .map(([, t]) => t);
   for (const tool of tools) {
     for (const raw of touchesOf(tool)) {
       const key = resolvePath(raw.path, cwd);
