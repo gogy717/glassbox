@@ -224,8 +224,11 @@ describe('the Rules page', () => {
     renderPage(answered());
     await screen.findByRole('table');
     const align = (el: Element | undefined) =>
-      el && moduleCssValue(join(import.meta.dirname, 'RulesPage.module.css'), classes, el, 'text-align');
-    const [, rule, asked, , , repos, , held] = within(rowOf('Bash(npm test:*)')).getAllByRole('cell');
+      el &&
+      moduleCssValue(join(import.meta.dirname, 'RulesPage.module.css'), classes, el, 'text-align');
+    const [, rule, asked, , , repos, , held] = within(rowOf('Bash(npm test:*)')).getAllByRole(
+      'cell',
+    );
     expect([rule, repos, held].map(align)).toEqual(['left', 'left', 'left']);
     expect(align(asked)).toBe('right');
     expect(align(within(table()).getByRole('columnheader', { name: 'Rule' }))).toBe('left');
