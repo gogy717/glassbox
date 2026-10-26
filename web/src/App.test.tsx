@@ -676,6 +676,199 @@ describe('App', () => {
   });
 });
 
+// F1: optional desktop notifications, off by default.
+describe('App notifications', () => {
+  class FakeNotification {
+    static permission: NotificationPermission = 'granted';
+    static requestPermission = vi.fn(async () => FakeNotification.permission);
+    static shown: FakeNotification[] = [];
+    onclick: (() => void) | null = null;
+    constructor(
+      public title: string,
+      public options?: NotificationOptions,
+    ) {
+      FakeNotification.shown.push(this);
+    }
+    close() {}
+  }
+  const notifyBox = () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    return screen.getByRole('checkbox', { name: 'Notify me when a session needs me' });
+  };
+  const saved = () => JSON.parse(localStorage.getItem('glassbox.prefs') ?? '{}');
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(DEMO_NOW);
+    window.location.hash = '';
+    localStorage.clear();
+    FakeNotification.permission = 'granted';
+    FakeNotification.requestPermission = vi.fn(async () => FakeNotification.permission);
+    FakeNotification.shown = [];
+    vi.stubGlobal('Notification', FakeNotification);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+    window.location.hash = '';
+    localStorage.clear();
+  });
+
+  it('asks the browser once when turned on, and stays off, saying so, when it refuses', async () => {
+    FakeNotification.permission = 'default';
+    FakeNotification.requestPermission = vi.fn(async () => {
+      FakeNotification.permission = 'denied';
+      return 'denied' as const;
+    });
+    render(<App store={createStore()} connect={noConnect} runs={fakeRuns()} />);
+    const box = notifyBox();
+    expect(box).not.toBeChecked();
+    expect(box).toBeEnabled();
+    expect(box).not.toHaveAccessibleDescription();
+    fireEvent.click(box);
+    await waitFor(() =>
+      expect(box).toHaveAccessibleDescription('Blocked in the browser’s site settings'),
+    );
+    expect(box).not.toBeChecked();
+    expect(saved()).toMatchObject({ notify: false });
+    // Refused once: the browser remembers, so it is not asked again.
+    fireEvent.click(box);
+    await act(async () => {});
+    expect(FakeNotification.requestPermission).toHaveBeenCalledTimes(1);
+    expect(box).not.toBeChecked();
+  });
+
+  it('turns on once the browser allows it, remembers, and turns off again', async () => {
+    FakeNotification.permission = 'default';
+    FakeNotification.requestPermission = vi.fn(async () => {
+      FakeNotification.permission = 'granted';
+      return 'granted' as const;
+    });
+    render(<App store={createStore()} connect={noConnect} runs={fakeRuns()} />);
+    const box = notifyBox();
+    fireEvent.click(box);
+    await waitFor(() => expect(box).toBeChecked());
+    expect(saved()).toMatchObject({ notify: true });
+    expect(box).not.toHaveAccessibleDescription();
+    fireEvent.click(box);
+    expect(box).not.toBeChecked();
+    expect(saved()).toMatchObject({ notify: false });
+  });
+
+  it('says so, and cannot be turned on, when the browser offers no notifications', () => {
+    vi.stubGlobal('Notification', undefined);
+    render(<App store={createStore()} connect={noConnect} runs={fakeRuns()} />);
+    const box = notifyBox();
+    expect(box).toBeDisabled();
+    expect(box).toHaveAccessibleDescription('Not offered by this browser');
+  });
+
+  it('notifies once as a session begins to wait, not on page load, and opens it from the notification', async () => {
+    localStorage.setItem('glassbox.prefs', JSON.stringify({ notify: true }));
+    const store = createStore();
+    const all = createDemoSessions(DEMO_NOW);
+    const [, idle, closed] = all;
+    if (!idle || !closed) throw new Error('fixture');
+    const prompt = (requestedAt: string) => ({
+      id: 'tu_1',
+      toolName: 'Bash',
+      input: { command: 'ls' },
+      questions: null,
+      requestedAt,
+    });
+    // Already waiting when the page loads: one a terminal holds, one with a prompt open.
+    store.applyEvent({
+      type: 'sessions',
+      sessions: [all[0] as (typeof all)[0], idle, { ...closed, live: 'waiting' }],
+    });
+    store.applyEvent({
+      type: 'run',
+      run: runState({
+        id: 'run_old',
+        sessionId: idle.id,
+        status: 'waiting-permission',
+        pendingPermissions: [prompt(new Date(DEMO_NOW.getTime() - 20_000).toISOString())],
+      }),
+    });
+    render(<App store={store} connect={noConnect} runs={fakeRuns()} />);
+    expect(screen.getByRole('region', { name: 'Needs you' })).toHaveTextContent(
+      'Permission · Bash',
+    );
+    expect(FakeNotification.shown).toEqual([]);
+
+    // Answered, then asked again: a new wait.
+    act(() =>
+      store.applyEvent({ type: 'run', run: runState({ id: 'run_old', sessionId: idle.id }) }),
+    );
+    act(() =>
+      store.applyEvent({
+        type: 'run',
+        run: runState({
+          id: 'run_old',
+          sessionId: idle.id,
+          status: 'waiting-permission',
+          pendingPermissions: [prompt(new Date(DEMO_NOW.getTime() + 1000).toISOString())],
+        }),
+      }),
+    );
+    expect(
+      FakeNotification.shown.map((x) => [x.title, x.options?.body, x.options?.silent]),
+    ).toEqual([['shopfront / Fix flaky login test', 'Permission · Bash', true]]);
+    // The reply streams on: every run event repeats the prompt, and none is a new wait.
+    act(() =>
+      store.applyEvent({
+        type: 'run',
+        run: runState({
+          id: 'run_old',
+          sessionId: idle.id,
+          status: 'waiting-permission',
+          pendingPermissions: [prompt(new Date(DEMO_NOW.getTime() + 1000).toISOString())],
+          updatedAt: new Date(DEMO_NOW.getTime() + 2000).toISOString(),
+        }),
+      }),
+    );
+    expect(FakeNotification.shown).toHaveLength(1);
+
+    const focus = vi.spyOn(window, 'focus').mockImplementation(() => {});
+    act(() => FakeNotification.shown[0]?.onclick?.());
+    expect(focus).toHaveBeenCalled();
+    await waitFor(() => expect(window.location.hash).toBe(`#/s/${encodeURIComponent(idle.id)}`));
+    expect(
+      await screen.findByRole('dialog', { name: 'Claude Code wants to use Bash' }),
+    ).toBeInTheDocument();
+    focus.mockRestore();
+  });
+
+  it('notifies nothing while the setting is off', () => {
+    const store = createStore();
+    const [, idle] = createDemoSessions(DEMO_NOW);
+    if (!idle) throw new Error('fixture');
+    store.applyEvent({ type: 'sessions', sessions: createDemoSessions(DEMO_NOW) });
+    render(<App store={store} connect={noConnect} runs={fakeRuns()} />);
+    act(() =>
+      store.applyEvent({
+        type: 'run',
+        run: runState({
+          id: 'run_2',
+          sessionId: idle.id,
+          status: 'waiting-permission',
+          pendingPermissions: [
+            {
+              id: 'tu_1',
+              toolName: 'Bash',
+              input: {},
+              questions: null,
+              requestedAt: new Date(DEMO_NOW.getTime() + 1000).toISOString(),
+            },
+          ],
+        }),
+      }),
+    );
+    expect(FakeNotification.shown).toEqual([]);
+    expect(document.title).toBe('(1) glassbox');
+  });
+});
+
 describe('App · permission prompts in the views', () => {
   useFakeLayout();
   beforeEach(() => {

@@ -230,6 +230,15 @@
   color: var(--text);
 }
 
+/* Why a box cannot be ticked, under it, in line with its word. */
+.popover .note {
+  margin: -6px 0 0;
+  padding-left: 19px;
+  font-size: var(--fs-meta);
+  line-height: 1.4;
+  color: var(--faint);
+}
+
 /* What gives way as the bar narrows, in order (D4): Follow latest's word (a session's), the
    page nav's words (all below 1200); the quota's full form (its own sheet); the wordmark's word
    and the rate's line (below 900). Never: the menu, the mark, the three page icons, the rate

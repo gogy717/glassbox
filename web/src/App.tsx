@@ -17,6 +17,7 @@ import { SessionSidebar } from './components/SessionSidebar';
 import { TopBar } from './components/TopBar';
 import { ApprovalsContext, useApprovals } from './data/approvals';
 import { connectEvents } from './data/events';
+import { notifyState, useNeedsYouNotifications } from './data/notifications';
 import {
   createRunsClient,
   failedSessions,
@@ -280,6 +281,17 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
   useEffect(() => {
     document.title = documentTitle(needsYou.length, sessionTitle);
   }, [needsYou.length, sessionTitle]);
+  // And, when asked for, a desktop notification as each one begins to wait.
+  useNeedsYouNotifications({
+    enabled: prefs.notify && notifyState() === 'granted',
+    waiting: needsYou,
+    loaded: state.sessionsLoaded,
+    t,
+    onOpen: (id) => {
+      setDismissed(null);
+      navigate({ sessionId: id, agentId: 'main', turnId: null, requestId: null });
+    },
+  });
   const sidebarShown = floating ? floatOpen : !sidebarCollapsed;
   // A session picked from the overlay: carry on in it once <main> is no longer inert (a browser
   // refuses focus inside an inert subtree, so not in the click handler).

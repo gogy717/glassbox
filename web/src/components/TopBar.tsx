@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { type Ref, useCallback, useId, useRef, useState } from 'react';
 import type { AgentKind, LiveState, QuotaSnapshot } from '../../../src/core/model.js';
+import { askToNotify, notifyState } from '../data/notifications';
 import type { ConnectionState } from '../data/store';
 import { useNow } from '../data/useNow';
 import { useI18n } from '../i18n';
@@ -263,8 +264,52 @@ function SettingsMenu({ prefs, onPrefs }: { prefs: Prefs; onPrefs(p: Prefs): voi
             />
             <span>{t('settings.showProbes')}</span>
           </label>
+          <NotifySetting prefs={prefs} onPrefs={onPrefs} />
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * "Notify me when a session needs me" (F1), off by default. Turning it on asks the browser's
+ * permission once; refused, the box stays off and says so, as it does when the browser offers no
+ * notifications. On only while the browser allows it: a permission withdrawn since turns it off.
+ */
+function NotifySetting({ prefs, onPrefs }: { prefs: Prefs; onPrefs(p: Prefs): void }) {
+  const { t } = useI18n();
+  const noteId = useId();
+  // The browser's answer, read again after asking.
+  const [state, setState] = useState(notifyState);
+  const toggle = async (on: boolean) => {
+    if (!on) return onPrefs({ ...prefs, notify: false });
+    const answer = await askToNotify();
+    setState(answer);
+    if (answer === 'granted') onPrefs({ ...prefs, notify: true });
+  };
+  const note =
+    state === 'unsupported'
+      ? t('settings.notifyUnsupported')
+      : state === 'denied'
+        ? t('settings.notifyBlocked')
+        : null;
+  return (
+    <>
+      <label className={css.check}>
+        <input
+          type="checkbox"
+          checked={prefs.notify && state === 'granted'}
+          disabled={state === 'unsupported'}
+          aria-describedby={note ? noteId : undefined}
+          onChange={(e) => void toggle(e.target.checked)}
+        />
+        <span>{t('settings.notify')}</span>
+      </label>
+      {note && (
+        <p id={noteId} className={css.note}>
+          {note}
+        </p>
+      )}
+    </>
   );
 }
