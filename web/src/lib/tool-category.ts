@@ -5,13 +5,20 @@ import {
   isObj,
   isUrl,
   type Obj,
+  PATH_KEYS,
+  pathField,
   SHELLS,
   shellCommand,
   toolCategory,
 } from '../../../src/shared/tool-category.js';
 import { quotedValue } from './preview';
 
-export { mcpTool, type ToolCategory, toolCategory } from '../../../src/shared/tool-category.js';
+export {
+  mcpTool,
+  pathField,
+  type ToolCategory,
+  toolCategory,
+} from '../../../src/shared/tool-category.js';
 
 export const basename = (path: string) => path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
 
@@ -39,17 +46,6 @@ function patchFiles(patch: string): string | null {
   return files.length ? clip(files.join(', ')) : null;
 }
 
-/** Where a file lives, whatever the agent calls the key. */
-const PATH_KEYS = [
-  'file_path',
-  'filePath',
-  'path',
-  'target_file',
-  'notebook_path',
-  'target_notebook',
-  'dir_path',
-  'target_directory',
-];
 /** What a call says it is for: an agent's task label, or oh-my-pi's intent (`i`). */
 const LABEL_KEYS = ['description', 'task_name', 'i'];
 
@@ -83,15 +79,6 @@ function stringInput(tool: ToolCall, input: string): string {
     }
   }
   return clip(quotedValue(input) ?? '');
-}
-
-/**
- * The path a call's input names, whatever the agent calls the key (`file_path`, `filePath`,
- * `path`, `target_file`…), as written: a search's directory as much as a read's file, a URL as
- * much as a path. Null when the input names none.
- */
-export function pathField(input: unknown): string | null {
-  return PATH_KEYS.map((k) => field(input, k)).find(Boolean) ?? null;
 }
 
 /**
