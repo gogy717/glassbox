@@ -1,6 +1,8 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createDemoSnapshot } from '../../../../src/core/fixtures/demo.js';
+import { demoRequestDetail } from '../../../../src/core/fixtures/demo-detail.js';
 import type { LivePartial } from '../../../../src/shared/runs.js';
 import { SessionAgentContext } from '../../data/session-agent';
 import type { OpenSession } from '../../data/store';
@@ -10,6 +12,7 @@ import { DEMO_NOW, demoOpen } from '../../test/demo';
 import { clampHeadings, useFakeLayout } from '../../test/layout';
 import { moduleCssValue } from '../../test/module-css';
 import { UiContext } from '../../ui';
+import { resetDetailPrefs } from './detail/prefs';
 import { FlowView } from './FlowView';
 import css from './FlowView.module.css';
 import { resetSearchPrefs } from './search-prefs';
@@ -562,6 +565,33 @@ describe('FlowView', () => {
       { replace: true },
     );
     vi.unstubAllGlobals();
+  });
+
+  it('opens the call a result in a request’s context answers, in that call’s prompt', async () => {
+    const sent = demoRequestDetail(createDemoSnapshot(DEMO_NOW), 'req_m4');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify(sent), { status: 200 })),
+    );
+    const { navigate, setFollow } = renderFlow({
+      route: { turnId: 'turn_m2', requestId: 'req_m4', card: 'request' },
+      follow: false,
+    });
+    const panel = within(row(1)).getByRole('region', { name: 'Request details' });
+    fireEvent.click(await within(panel).findByRole('radio', { name: 'Context' }));
+    const link = (await within(panel).findAllByRole('button', { name: 'Read store.ts' }))[0];
+    fireEvent.click(link as HTMLElement);
+    expect(setFollow).toHaveBeenCalledWith(false);
+    // The call is in the prompt before: the link goes there, its card open.
+    expect(navigate).toHaveBeenLastCalledWith({
+      agentId: 'main',
+      turnId: 'turn_m1',
+      requestId: 'req_m2',
+      card: 'tool:tu_m2a',
+    });
+    vi.unstubAllGlobals();
+    localStorage.clear();
+    resetDetailPrefs();
   });
 
   it('opens the card a link names, in its call', () => {

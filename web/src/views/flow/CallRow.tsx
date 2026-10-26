@@ -22,6 +22,8 @@ interface Props {
   selected: CardKey | null;
   onSelect(req: ModelRequest, card: CardKey): void;
   onEnterAgent(agentId: string): void;
+  /** Opens a call's card, wherever it is: a result in the request's context links to its call. */
+  onOpenCall?(call: ToolCall): void;
 }
 
 /** A word and its compact figure ("context 195K", "上下文 19.5万"): a CJK unit out of the mono face. */
@@ -171,6 +173,8 @@ export const CallRow = memo(function CallRow(p: Props) {
             tools={tools}
             card={p.selected}
             onClose={() => p.onSelect(req, p.selected as CardKey)}
+            calls={p.open.toolCalls}
+            onOpenCall={p.onOpenCall}
           />
         </div>
       )}
@@ -189,6 +193,7 @@ function sameRow(a: Props, b: Props): boolean {
     a.selected === b.selected &&
     a.onSelect === b.onSelect &&
     a.onEnterAgent === b.onEnterAgent &&
+    a.onOpenCall === b.onOpenCall &&
     a.tools.length === b.tools.length &&
     a.tools.every((t, i) => t === b.tools[i]) &&
     a.open.id === b.open.id &&

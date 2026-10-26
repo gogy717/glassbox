@@ -1,9 +1,11 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createDemoSnapshot } from '../../../../src/core/fixtures/demo.js';
+import { demoRequestDetail } from '../../../../src/core/fixtures/demo-detail.js';
 import type { ModelRequest, RequestDetail, ToolCall } from '../../../../src/core/model.js';
 import { SessionAgentContext } from '../../data/session-agent';
 import { I18nContext, makeI18n } from '../../i18n';
-import { demoOpen } from '../../test/demo';
+import { DEMO_NOW, demoOpen } from '../../test/demo';
 import { useFakeLayout } from '../../test/layout';
 import { moduleCssValue } from '../../test/module-css';
 import type { CardKey } from './cards';
@@ -134,6 +136,57 @@ describe('DetailPanel', () => {
     // One Readable | JSON switch for the panel, in its head.
     expect(within(panel).getAllByRole('radiogroup', { name: 'Show as' })).toHaveLength(1);
     expect(within(head).getByRole('radiogroup', { name: 'Show as' })).toBeInTheDocument();
+  });
+
+  it('shows the request’s context a click away, from what was sent, and remembers it', async () => {
+    const fetch = stubFetch(demoRequestDetail(createDemoSnapshot(DEMO_NOW), 'req_m3'));
+    const onOpenCall = vi.fn();
+    render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <DetailPanel
+          sessionId={open.id}
+          req={req('req_m3')}
+          tools={[]}
+          card="request"
+          onClose={vi.fn()}
+          calls={open.toolCalls}
+          onOpenCall={onOpenCall}
+        />
+      </I18nContext.Provider>,
+    );
+    const panel = screen.getByRole('region', { name: 'Request details' });
+    await within(panel).findByText('Fully reconstructed');
+    const tabs = within(panel).getByRole('radiogroup', { name: 'Show' });
+    expect(within(tabs).getByRole('radio', { name: 'Details' })).toBeChecked();
+    fireEvent.click(within(tabs).getByRole('radio', { name: 'Context' }));
+    expect(within(panel).getByText(/About/)).toHaveTextContent('About 37,800 tokens in context');
+    // Readable | JSON is for what was sent, not for its bill.
+    expect(within(panel).queryByRole('radiogroup', { name: 'Show as' })).toBeNull();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(localStorage.getItem('glassbox.detail') ?? '{}')).toMatchObject({
+      request: 'context',
+    });
+    // A result links to the call it answers.
+    fireEvent.click(
+      within(panel).getAllByRole('button', { name: 'Read store.ts' })[0] as HTMLElement,
+    );
+    expect(onOpenCall).toHaveBeenCalledWith(open.toolCalls.get('tu_m2a'));
+  });
+
+  it('copies the context bill when it is shown', async () => {
+    const writeText = vi.fn(async (_text: string) => {});
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+    stubFetch(demoRequestDetail(createDemoSnapshot(DEMO_NOW), 'req_m3'));
+    renderPanel(req('req_m3'), 'request');
+    const panel = screen.getByRole('region', { name: 'Request details' });
+    await within(panel).findByText('Fully reconstructed');
+    fireEvent.click(within(panel).getByRole('radio', { name: 'Context' }));
+    await act(async () => {
+      fireEvent.click(within(panel).getByRole('button', { name: 'Copy' }));
+    });
+    const copied = JSON.parse(writeText.mock.calls[0]?.[0] ?? '');
+    expect(copied).toMatchObject({ status: 'ok', total: 37_800, measured: true });
+    expect(copied.parts).toHaveLength(36);
   });
 
   it('copies what the panel shows, as JSON', async () => {

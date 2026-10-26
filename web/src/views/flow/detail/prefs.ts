@@ -8,10 +8,17 @@ export interface DetailPrefs {
   order: 'newest' | 'oldest';
   /** Model replies' markdown rendered, or shown as written. */
   markdown: 'rendered' | 'source';
+  /** A request's card: what it sent, or the bill of its context. */
+  request: 'details' | 'context';
 }
 
 const KEY = 'glassbox.detail';
-const DEFAULTS: DetailPrefs = { view: 'readable', order: 'newest', markdown: 'rendered' };
+const DEFAULTS: DetailPrefs = {
+  view: 'readable',
+  order: 'newest',
+  markdown: 'rendered',
+  request: 'details',
+};
 
 /** Storage can be unavailable (private windows, blocked site data); prefs are a convenience. */
 function load(): DetailPrefs {
@@ -21,6 +28,7 @@ function load(): DetailPrefs {
       view: raw?.view === 'json' ? 'json' : 'readable',
       order: raw?.order === 'oldest' ? 'oldest' : 'newest',
       markdown: raw?.markdown === 'source' ? 'source' : 'rendered',
+      request: raw?.request === 'context' ? 'context' : 'details',
     };
   } catch {
     return DEFAULTS;

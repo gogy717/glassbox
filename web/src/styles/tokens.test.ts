@@ -218,6 +218,24 @@ describe('tokens.css', () => {
     },
   );
 
+  // The context bill colours a request's parts by who put them there (ContextView's GROUP): the
+  // agent's fixed prompt and tools in the quiet neutral, the person, the model, the tools. Its bar
+  // is sorted by size, so any two may touch: every pair keeps the chart standard.
+  const PART_COLOURS = ['--seg-waiting', '--cat-explore', '--cat-run', '--cat-ask'];
+  it.each(NAMES.map((name, i) => [name, i] as const))(
+    'the context bill’s four groups stay apart for every eye (%s)',
+    (_, i) => {
+      const t = tokens(i);
+      for (const [n, a] of PART_COLOURS.entries())
+        for (const b of PART_COLOURS.slice(n + 1))
+          for (const v of VISIONS)
+            expect(
+              deltaE(t.get(a) as string, t.get(b) as string, v),
+              `${a} vs ${b} (${v})`,
+            ).toBeGreaterThanOrEqual(RESERVED[v]);
+    },
+  );
+
   // Agent tags are a quiet tint of the agent's hue (--agent-tint of it over the surface) inside an
   // edge of the same hue (--agent-edge), with text in a deep (light) or pale (dark) shade of it.
   // Until U3c the tag was a solid fill, and the fills alone kept agents 14 / 7.5 / 7.5 apart.
