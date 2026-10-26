@@ -176,7 +176,7 @@ class TroubleWatch {
   }
 }
 
-/** An agent's requests in the order they were sent; one without a start keeps its place. */
+/** An agent's requests in the order they were sent; one without a recorded start comes first. */
 const byStart = (a: ModelRequest, b: ModelRequest) =>
   (a.startedAt ?? '').localeCompare(b.startedAt ?? '');
 
