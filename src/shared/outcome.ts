@@ -54,59 +54,88 @@ function commandsOf(tool: ToolCall): Commands {
 /**
  * A command that runs tests, by its summary (wrappers, variables and options already left out):
  * a package script (`npm test`, `npm run test:unit`, `npm run check`), a runner (`vitest`,
- * `pytest`, `rspec`, `phpunit`, as `npx vitest`, `uv run pytest`, `bundle exec rspec` or
- * `python -m pytest` too) or a build tool's test task (`go test`, `cargo test`, `mvn test`,
- * `./gradlew :app:test`, `dotnet test`, `make test`, `bun test`, `deno test`).
+ * `pytest`, `rspec`, `phpunit`, as `npx vitest`, `yarn jest`, `uv run pytest`, `bundle exec
+ * rspec` or `python -m pytest` too) or a build tool's test task (`go test`, `cargo test`, `mvn
+ * test`, `./gradlew :app:test`, `dotnet test`, `make test`, `bun test`, `deno test`).
  */
 const TEST_COMMAND = new RegExp(
   [
     '^(?:(?:npx|pnpx|bunx|(?:uv|poetry|pipenv|pdm|hatch) run|bundle exec|(?:npm|pnpm|yarn) (?:exec|dlx)|python[\\d.]* -m|py -m) )*',
     '(?:vitest|jest|mocha|pytest|py\\.test|rspec|phpunit',
     '|(?:npm|pnpm|yarn|bun) (?:t|tst|test(?::\\S+)?|run(?:-script)? (?:test\\S*|check))',
-    '|(?:pnpm|yarn) test\\S*',
-    '|(?:go|cargo|mvnw?|gradlew?|dotnet|make|deno|bun|playwright) (?:\\S+:)?test',
+    '|(?:pnpm|yarn) (?:test\\S*|vitest|jest|mocha)',
+    '|(?:go|cargo|mvnw?|gradlew?|dotnet|make|deno|bun) (?:\\S+:)?test',
     ')(?: |$)',
   ].join(''),
 );
 
-/** Whether a shell call runs a test runner, wherever in its line. */
-export function isTestRun(tool: ToolCall): boolean {
-  return commandsOf(tool).some((c) => c.summary !== null && TEST_COMMAND.test(c.summary));
+/** Build tools whose test task can follow options the summary does not read (`mvn -q test`). */
+const BUILD_TOOL = /(?:^|[\\/])(?:mvnw?|gradlew?)(?:\.cmd|\.bat)?$/;
+
+/**
+ * What the summary leaves out: a build tool's `test` task past its options, and Playwright's
+ * runner, which `npx playwright test` sums up as `npx playwright`.
+ */
+function wordsRunTests(words: string[]): boolean {
+  const at = words.findIndex((w) => !/^\w+=/.test(w));
+  if (BUILD_TOOL.test(words[at] ?? ''))
+    return words.slice(at + 1).some((w) => w === 'test' || w.endsWith(':test'));
+  const pw = words.indexOf('playwright');
+  return pw !== -1 && words[pw + 1] === 'test';
 }
 
-/** Each mention of the words with its count, as "3 failed" or "Failed: 3"; NaN when it has none. */
+/** Whether a shell call runs a test runner, wherever in its line. */
+export function isTestRun(tool: ToolCall): boolean {
+  return commandsOf(tool).some(
+    (c) => (c.summary !== null && TEST_COMMAND.test(c.summary)) || wordsRunTests(c.words),
+  );
+}
+
+/**
+ * Each mention of the words with its count, as "3 failed", "0 tests failed" or "Failed: 3"; NaN
+ * when it has none.
+ */
 function counted(text: string, words: string): number[] {
   const out: number[] = [];
-  const re = new RegExp(`(?:\\b(\\d+)\\s+)?\\b(?:${words})\\b(?:!|:?\\s*(\\d+))?`, 'gi');
+  const noun = '(?:(?:tests?|specs?|examples?|cases?|suites?|files?)\\s+)?';
+  const re = new RegExp(`(?:\\b(\\d+)\\s+${noun})?\\b(?:${words})\\b(?:!|:?\\s*(\\d+))?`, 'gi');
   for (const m of text.matchAll(re)) out.push((m[1] ?? m[2]) ? Number(m[1] ?? m[2]) : Number.NaN);
   return out;
 }
 
-/** A failure the output names: a mark, FAIL, an error, a count of failures that is not 0. */
-function saysFailed(text: string): boolean {
-  if (/[✖✗✕]/.test(text) || /\bFAIL(?:ED|URES?)?\b/.test(text) || /\b\w*Error\b/.test(text))
-    return true;
-  // "failed" said without a count is a failure; "0 failed" or "Failures: 0" is not.
-  return counted(text, 'failed|failing|failures?').some((n) => n !== 0);
-}
-
-function saysPassed(text: string): boolean {
-  if (/[✓✔]/.test(text) || /\bok\b/i.test(text)) return true;
-  return counted(text, 'passed|passing').some((n) => n !== 0);
+/**
+ * What the start of a run's output says: first its counts ("1 failed | 3 passed", "5 examples, 0
+ * failures"), which no test's name or stray stderr line outweighs; without any, a runner's
+ * marks and words, a failure before a pass (✗ × FAIL, then ✓ PASS, then an Error, "failed",
+ * "ok", "passed").
+ */
+function outputVerdict(text: string): TestVerdict {
+  const failures = counted(text, 'failed|failing|failures?|errors?');
+  const passes = counted(text, 'passed|passing');
+  if (failures.some((n) => n > 0)) return 'failed';
+  if (passes.some((n) => n > 0)) return 'passed';
+  // None failed, said so, and not because none ran.
+  if (failures.length > 0 && failures.every((n) => n === 0) && !passes.includes(0)) return 'passed';
+  if (/(?:^|\s)[✖✗✕×](?=\s|$)/m.test(text) || /\bFAIL(?:ED|URES?)?\b/.test(text)) return 'failed';
+  if (/[✓✔]/.test(text) || /\bPASS(?:ED)?\b/.test(text)) return 'passed';
+  if (/\b\w*Error\b/.test(text) || counted(text, 'failed|failing').some(Number.isNaN))
+    return 'failed';
+  if (/\bok\b/i.test(text) || passes.some(Number.isNaN)) return 'passed';
+  return 'unknown';
 }
 
 /**
- * A test run's verdict: failed when its call failed; else what the start of its output says, a
- * failure before a pass ("1 failed | 3 passed"); else unknown. Running while it runs.
+ * A test run's verdict: failed when its call failed; else what the start of its output says
+ * (`outputVerdict`); else unknown. Running while it runs.
  */
 export function testVerdict(tool: ToolCall): TestVerdict {
   if (tool.status === 'error') return 'failed';
   if (tool.status === 'running') return 'running';
-  const text = tool.resultPreview ?? '';
-  if (saysFailed(text)) return 'failed';
-  if (saysPassed(text)) return 'passed';
-  return 'unknown';
+  return outputVerdict(tool.resultPreview ?? '');
 }
+
+/** The line git prints for a commit it made: `[main 1a2b3c4] Fix it`, `[main (root-commit) …]`. */
+const COMMITTED = /^\[[^\]\n]*\b[0-9a-f]{7,40}\] /m;
 
 /** A message as `cat <<'EOF' … EOF` gives it inside `$(…)`: the heredoc's body. */
 const HEREDOC = /^\$\(\s*cat\s+<<-?\s*(['"]?)(\w+)\1[ \t]*\n([\s\S]*?)\n\s*\2\s*\)\s*$/;
@@ -192,9 +221,10 @@ export function sessionOutcome(open: OutcomeSource, agentIds: ReadonlySet<string
     if (tool.status === 'error')
       failures = failure(failures, { kind: 'tool', tool }, startOf(tool));
     if (isTestRun(tool)) tests = tally(tests, tool);
-    // A commit a hook refused, or one with nothing to commit, committed nothing.
-    if (tool.status !== 'error' && commitMessage(tool) !== undefined)
-      commits = tally(commits, tool);
+    // A commit a hook refused, or one with nothing to commit, committed nothing; one whose push
+    // was refused did, and git said so first.
+    const committed = tool.status !== 'error' || COMMITTED.test(tool.resultPreview ?? '');
+    if (committed && commitMessage(tool) !== undefined) commits = tally(commits, tool);
     // A shell call is never a question, and reading its line to say so costs.
     if (!SHELL_TOOLS.has(tool.name) && toolCategory(tool.name, tool.input) === 'ask')
       questions = tally(questions, tool);

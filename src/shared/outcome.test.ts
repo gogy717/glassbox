@@ -102,6 +102,12 @@ describe('isTestRun', () => {
     'cd web && npm test 2>&1 | tail -20',
     'npm run build && npm test',
     'timeout 600 npm test',
+    // Runners a package manager or a build tool starts, and options the summary does not read.
+    'yarn jest',
+    'pnpm vitest run',
+    'npx playwright test',
+    'mvn -q test',
+    './mvnw test',
   ])('%j runs tests', (command) => {
     expect(isTestRun(bash(command))).toBe(true);
   });
@@ -115,6 +121,8 @@ describe('isTestRun', () => {
     'make build',
     'go build ./...',
     'npm run typecheck',
+    'npx playwright install',
+    'mvn -q package',
   ])('%j does not', (command) => {
     expect(isTestRun(bash(command))).toBe(false);
   });
@@ -150,6 +158,26 @@ describe('testVerdict', () => {
     expect(run('ok  \tgithub.com/x/app\t0.02s')).toBe('passed');
     expect(run(' ✓ src/a.test.ts (3 tests) 4ms')).toBe('passed');
     expect(run('test result: ok. 12 passed; 0 failed; 0 ignored')).toBe('passed');
+  });
+
+  it('goes by the counts a runner prints before any loose word or mark', () => {
+    // Routine jsdom noise on stderr, a test named for an error, a test named for a failure.
+    expect(
+      run(
+        'stderr | src/a.test.tsx > draws\nError: Not implemented: HTMLCanvasElement\n ✓ src/a.test.tsx (3 tests)',
+      ),
+    ).toBe('passed');
+    expect(run(' ✓ src/net.test.ts > maps NetworkError to a retry')).toBe('passed');
+    expect(run(' ✓ src/up.test.ts > reports failed uploads')).toBe('passed');
+    expect(run('Tests:       1 failed, 12 passed, 13 total')).toBe('failed');
+    // None failed, said so.
+    expect(run('0 tests failed')).toBe('passed');
+    expect(run('5 examples, 0 failures')).toBe('passed');
+  });
+
+  it('reads the marks of vitest and jest', () => {
+    expect(run(' × src/a.test.ts > adds 3ms')).toBe('failed');
+    expect(run('PASS src/a.test.js\nPASS src/b.test.js')).toBe('passed');
   });
 
   it('is unknown when the output says neither, and running while it runs', () => {
@@ -214,6 +242,19 @@ describe('sessionOutcome', () => {
     const last = bash('git commit -m "Second"');
     const o = sessionOutcome(source([last, refused, first]), MAIN);
     expect(o.commits).toEqual({ count: 2, last, message: 'Second' });
+  });
+
+  it('counts a commit whose push was refused: git printed the commit before the call failed', () => {
+    const pushed = bash('git commit -m "Fix it" && git push', {
+      status: 'error',
+      resultPreview:
+        '[main 1a2b3c4] Fix it\n 1 file changed\n ! [rejected]  main -> main (fetch first)',
+    });
+    expect(sessionOutcome(source([pushed]), MAIN).commits).toEqual({
+      count: 1,
+      last: pushed,
+      message: 'Fix it',
+    });
   });
 
   it('counts the questions asked, and the last', () => {
