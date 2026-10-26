@@ -2,7 +2,8 @@
  * The session receipt, byte for byte: every image and text the demo sessions make, at each size,
  * paper and language, names shown and hidden, hashed in one time zone. The hash is what the
  * receipt drew before its pen was shared with the weekly receipt (78cb423), then with WORK's
- * turns line saying "Prompts", not "Conversations" (the UX pass's words). Changing how the
+ * turns line saying "Prompts", not "Conversations" (the UX pass's words), then with its hero
+ * named ACTIVE TIME (活跃时长) as the Summary bar names it, not DURATION (总耗时). Changing how the
  * session receipt looks changes it on purpose: then the hash changes in the same commit, which
  * says why. So does changing what the demo sessions did: the receipt prints their tool calls and
  * the mix of their kinds (the demo's fix grew file work; the pen did not change).
@@ -46,6 +47,6 @@ function receipts(): string {
 
 it('draws the session receipt exactly as it did before the weekly receipt shared its pen', () => {
   expect(createHash('sha256').update(receipts()).digest('hex')).toBe(
-    '3fb162e6b8f315cce07c81bc3b2d466b4db6b9d2ecbb4797f9d5e2e3130fe013',
+    '6d219f4dae0da4fcbab873876eed4de1f7d91ebf3db1ff1e15fe5856ed12dd6c',
   );
 });

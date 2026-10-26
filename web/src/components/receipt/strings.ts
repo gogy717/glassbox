@@ -8,7 +8,7 @@ import type { Locale } from '../../i18n';
 const en = {
   // On the receipt.
   heading: 'RECEIPT',
-  duration: 'DURATION',
+  activeTime: 'ACTIVE TIME',
   work: 'WORK',
   time: 'TIME',
   tokens: 'TOKENS',
@@ -115,7 +115,7 @@ type Key = keyof typeof en;
 
 const zh: Record<Key, string> = {
   heading: '小票',
-  duration: '总耗时',
+  activeTime: '活跃时长',
   work: '工作',
   time: '时间',
   tokens: 'TOKEN',

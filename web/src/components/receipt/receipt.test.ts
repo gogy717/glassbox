@@ -163,7 +163,8 @@ describe('the receipt', () => {
       subSegments: [],
       time: { thinking: 0, generating: 0, tools: 0, approval: 0, queued: 0, longestThink: 0 },
     };
-    expect(svgText(receiptSvg(untimed, EN, 'tall').svg)).not.toMatch(/\bTIME\b/);
+    // The TIME section, not the ACTIVE TIME at the top.
+    expect(svgText(receiptSvg(untimed, EN, 'tall').svg)).not.toMatch(/(?<!ACTIVE )\bTIME\b/);
     expect(receiptText(untimed, EN)).not.toMatch(/^TIME$/m);
     const big = { ...data, work: { ...data.work, toolCalls: 12_345 } };
     const svg = receiptSvg(big, EN, 'tall').svg;
@@ -175,13 +176,27 @@ describe('the receipt', () => {
     expect(Number(at?.[1])).toBeCloseTo(22 + 5 * 7.2, 1);
   });
 
+  it('heads its figure as the Summary bar does: ACTIVE TIME, 活跃时长', () => {
+    const { data } = demo();
+    const zh = { ...EN, locale: 'zh' } as const;
+    // The demo session still runs: "still running" joins the name when the date line is full.
+    expect(receiptText(data, EN)).toMatch(/^ACTIVE TIME( · still running)? +\d/m);
+    expect(svgText(receiptSvg(data, EN, 'tall').svg)).toContain('ACTIVE TIME');
+    expect(receiptText(data, zh)).toMatch(/\d\S* +活跃时长$/m);
+    expect(svgText(receiptSvg(data, zh, 'tall').svg)).toContain('活跃时长');
+    for (const o of [EN, zh]) {
+      expect(receiptText(data, o)).not.toMatch(/DURATION|总耗时/);
+      expect(svgText(receiptSvg(data, o, 'tall').svg)).not.toMatch(/DURATION|总耗时/);
+    }
+  });
+
   it('says a running session runs on, up to now', () => {
     const { data } = demo();
     const running = { ...data, running: true };
     const text = receiptText(running, EN);
     expect(text).toMatch(/\d\d:\d\d → now/);
-    // On the date line when it fits the block, else beside the duration.
-    expect(text).toMatch(/→ now · still running|DURATION · still running/);
+    // On the date line when it fits the block, else beside the active time.
+    expect(text).toMatch(/→ now · still running|ACTIVE TIME · still running/);
     expect(svgText(receiptSvg(running, EN, 'tall').svg)).toContain('still running');
   });
 });

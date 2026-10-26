@@ -115,7 +115,7 @@ export function drawWeek(
     // The hero: the grid's sum, every agent's working time (parallel agents pass the clock).
     p.y += 37;
     p.hero('agentTime', partsBody(timeParts(d.agentMs, L)));
-    // With sub-agents at work, the main agents' own clock too: the session receipts' DURATION.
+    // With sub-agents at work, the main agents' own clock too: the session receipts' ACTIVE TIME.
     if (d.work.subAgents > 0) {
       p.y += 24;
       p.row(w('sessionTime'), timeParts(d.sessionMs, L), { size: 11, fill: c.soft });

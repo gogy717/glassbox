@@ -72,9 +72,9 @@ export function drawReceipt(d: ReceiptData, o: ReceiptOptions): { body: string; 
       fill: c.soft,
     }),
   );
-  // The hero: how long it worked.
+  // The hero: how long it worked, named as the Summary bar names it.
   p.y += 37;
-  p.label('duration');
+  p.label('activeTime');
   p.push(
     text(
       RIGHT,
