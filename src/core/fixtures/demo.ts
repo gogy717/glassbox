@@ -906,14 +906,25 @@ export function createDemoQuota(now: Date = new Date()): QuotaSnapshot {
 export function createDemoQuotas(now: Date = new Date()): QuotaSnapshot[] {
   const inMin = (min: number) => new Date(now.getTime() + min * 60_000).toISOString();
   const ago = (min: number) => new Date(now.getTime() - min * 60_000).toISOString();
+  // `minutes`: the window's length, where its source states one (Codex, oh-my-pi).
   const window = (
     id: string,
     kind: QuotaWindow['kind'],
     label: string | null,
     usedPercent: number,
     resetsInMin: number,
-  ): QuotaWindow => ({ id, kind, label, model: null, usedPercent, resetsAt: inMin(resetsInMin) });
+    minutes?: number,
+  ): QuotaWindow => ({
+    id,
+    kind,
+    label,
+    model: null,
+    usedPercent,
+    resetsAt: inMin(resetsInMin),
+    ...(minutes ? { durationMs: minutes * 60_000 } : {}),
+  });
   const empty = { stale: false, extraUsage: null, balance: null };
+  const WEEK = 7 * 24 * 60;
   return [
     createDemoQuota(now),
     {
@@ -923,8 +934,8 @@ export function createDemoQuotas(now: Date = new Date()): QuotaSnapshot[] {
       plan: 'Plus',
       fetchedAt: ago(12),
       windows: [
-        window('primary', 'session', null, 23, 168),
-        window('secondary', 'weekly', null, 41, 4 * 24 * 60),
+        window('primary', 'session', null, 23, 168, 300),
+        window('secondary', 'weekly', null, 41, 4 * 24 * 60, WEEK),
       ],
       source: 'codex-session',
     },
@@ -935,9 +946,16 @@ export function createDemoQuotas(now: Date = new Date()): QuotaSnapshot[] {
       plan: 'SuperGrok',
       fetchedAt: ago(9),
       windows: [
-        window('xai-oauth:credits:1w', 'weekly', 'SuperGrok Weekly Credits', 25, 2 * 24 * 60),
-        window('xai-oauth:product:grokbot:1w', 'weekly', 'GrokBot (Weekly)', 16, 2 * 24 * 60),
-        window('xai-oauth:product:grokbuild:1w', 'weekly', 'Grok Build (Weekly)', 9, 2 * 24 * 60),
+        window('xai-oauth:credits:1w', 'weekly', 'SuperGrok Weekly Credits', 25, 2 * 24 * 60, WEEK),
+        window('xai-oauth:product:grokbot:1w', 'weekly', 'GrokBot (Weekly)', 16, 2 * 24 * 60, WEEK),
+        window(
+          'xai-oauth:product:grokbuild:1w',
+          'weekly',
+          'Grok Build (Weekly)',
+          9,
+          2 * 24 * 60,
+          WEEK,
+        ),
       ],
       source: 'oh-my-pi-cache',
     },

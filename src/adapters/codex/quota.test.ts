@@ -36,6 +36,7 @@ describe('quotaFromRolloutLines', () => {
           model: null,
           usedPercent: 12.5,
           resetsAt: '2026-01-01T02:00:00.000Z',
+          durationMs: 300 * 60_000,
         },
         {
           id: 'secondary',
@@ -44,6 +45,7 @@ describe('quotaFromRolloutLines', () => {
           model: null,
           usedPercent: 40,
           resetsAt: '2026-01-07T00:00:00.000Z',
+          durationMs: 10080 * 60_000,
         },
       ],
       extraUsage: null,
@@ -86,6 +88,8 @@ describe('quotaFromRolloutLines', () => {
           model: null,
           usedPercent: 0,
           resetsAt: new Date(1800000000 * 1000).toISOString(),
+          // An hour long, though a 'session' by kind: the length is the source's, not the kind's.
+          durationMs: 60 * 60_000,
         },
         {
           id: 'secondary',
@@ -94,6 +98,7 @@ describe('quotaFromRolloutLines', () => {
           model: null,
           usedPercent: 12.5,
           resetsAt: new Date(1800100000 * 1000).toISOString(),
+          durationMs: 10080 * 60_000,
         },
       ],
       extraUsage: null,
@@ -175,6 +180,7 @@ describe('quotaFromRolloutLines', () => {
         model: 'GPT-5.3-Codex-Spark',
         usedPercent: 20,
         resetsAt: '2026-01-07T00:00:00.000Z',
+        durationMs: 10080 * 60_000,
       },
       {
         id: 'codex_bengalfox:primary',
@@ -183,6 +189,7 @@ describe('quotaFromRolloutLines', () => {
         model: 'GPT-5.3-Codex-Spark',
         usedPercent: 50,
         resetsAt: '2026-01-01T02:00:00.000Z',
+        durationMs: 300 * 60_000,
       },
     ]);
   });

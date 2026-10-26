@@ -84,6 +84,7 @@ describe('quotasFromCacheValues', () => {
             model: null,
             usedPercent: 25,
             resetsAt: '2026-10-26T02:00:00.000Z',
+            durationMs: 7 * DAY,
           },
           {
             id: 'product:grokbuild:1w',
@@ -92,6 +93,7 @@ describe('quotasFromCacheValues', () => {
             model: null,
             usedPercent: 9,
             resetsAt: '2026-10-26T02:00:00.000Z',
+            durationMs: 7 * DAY,
           },
         ],
         extraUsage: null,
@@ -207,6 +209,21 @@ describe('quotasFromCacheValues', () => {
     expect(kind({ id: '30d' })).toBe('monthly');
     expect(kind({ id: 'primary' })).toBe('other');
     expect(kind(undefined)).toBe('other');
+  });
+
+  it('keeps the window length its duration or its id gives; a month has no one length', () => {
+    const length = (window: LimitSpec['window']) =>
+      single({ id: 'l', label: 'L', window, amount: pct(1) })?.durationMs;
+    expect(length({ id: 'x', durationMs: 90 * 60_000 })).toBe(90 * 60_000);
+    expect(length({ id: '5h', durationMs: 7 * DAY })).toBe(7 * DAY);
+    expect(length({ id: '5h' })).toBe(5 * HOUR);
+    expect(length({ id: '1w' })).toBe(7 * DAY);
+    expect(length({ id: '30d' })).toBe(30 * DAY);
+    expect(length({ id: '90m' })).toBe(90 * 60_000);
+    for (const id of ['1mo', 'monthly', 'weekly', 'primary'])
+      expect(length({ id }), id).toBeUndefined();
+    expect(length({ id: 'x', durationMs: 0 })).toBeUndefined();
+    expect(length(undefined)).toBeUndefined();
   });
 
   it('takes the used fraction first, then used / limit, then a percent, then what remains', () => {
