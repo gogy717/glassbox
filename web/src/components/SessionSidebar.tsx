@@ -225,6 +225,31 @@ export function SessionSidebar({
       },
     };
   };
+  // One row with its pin. The pin is named Pin whether pressed or not: pressed says it is
+  // pinned. Not a tab stop: the rows are one, and P on a row does the same.
+  const rowItem = (s: SessionSummary) => (
+    <li key={s.id} className={css.item}>
+      <SessionRow
+        session={s}
+        selected={s.id === selectedId}
+        now={now}
+        failure={failures?.get(s.id)}
+        roving={rowProps(s.id)}
+        onSelect={onSelect}
+      />
+      <button
+        type="button"
+        className={css.pin}
+        tabIndex={-1}
+        aria-pressed={pinnedSet.has(s.id)}
+        aria-label={t('sidebar.pin')}
+        title={`${t(pinnedSet.has(s.id) ? 'sidebar.unpin' : 'sidebar.pin')} · P`}
+        onClick={() => togglePin(s.id)}
+      >
+        <Pin size={12} aria-hidden="true" />
+      </button>
+    </li>
+  );
   // A project group reads as its name; the pinned and time groups in the UI language.
   const label = (g: SessionGroup) =>
     g.kind === 'project'
@@ -377,35 +402,36 @@ export function SessionSidebar({
                   </>
                 )}
               </button>
-              {rows.length > 0 && (
-                <ul id={listId} aria-label={name} className={css.rows}>
-                  {rows.map((s) => (
-                    <li key={s.id} className={css.item}>
-                      <SessionRow
-                        session={s}
-                        selected={s.id === selectedId}
-                        now={now}
-                        failure={failures?.get(s.id)}
-                        roving={rowProps(s.id)}
-                        onSelect={onSelect}
-                      />
-                      {/* Named Pin whether pressed or not: pressed says it is pinned. Not a tab
-                          stop: the rows are one, and P on a row does the same. */}
-                      <button
-                        type="button"
-                        className={css.pin}
-                        tabIndex={-1}
-                        aria-pressed={pinnedSet.has(s.id)}
-                        aria-label={t('sidebar.pin')}
-                        title={`${t(pinnedSet.has(s.id) ? 'sidebar.unpin' : 'sidebar.pin')} · P`}
-                        onClick={() => togglePin(s.id)}
-                      >
-                        <Pin size={12} aria-hidden="true" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              {rows.length > 0 &&
+                (g.kind === 'project' && g.worktrees ? (
+                  // A repository worked in from several working trees: each tree its own list
+                  // under its directory's name, the main one first; the fold is the group's.
+                  <ul id={listId} aria-label={name} className={css.rows}>
+                    {g.worktrees.map((w) => {
+                      const shown = new Set(rows.map((s) => s.id));
+                      const own = w.sessions.filter((s) => shown.has(s.id));
+                      if (own.length === 0) return null;
+                      const treeName = w.main ? `${w.name} · ${t('sidebar.mainTree')}` : w.name;
+                      return (
+                        <li key={w.dir} className={css.tree}>
+                          <div className={`${css.treeName} figure`} title={w.dir}>
+                            {w.name}
+                            {w.main && (
+                              <span className={css.treeNote}> · {t('sidebar.mainTree')}</span>
+                            )}
+                          </div>
+                          <ul aria-label={`${name} · ${treeName}`} className={css.rows}>
+                            {own.map(rowItem)}
+                          </ul>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <ul id={listId} aria-label={name} className={css.rows}>
+                    {rows.map(rowItem)}
+                  </ul>
+                ))}
               {more[0] && (
                 <button
                   type="button"

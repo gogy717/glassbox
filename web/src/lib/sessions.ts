@@ -1,4 +1,4 @@
-import type { AgentKind, SessionSummary } from '../../../src/core/model.js';
+import type { AgentKind, RepoIdentity, SessionSummary } from '../../../src/core/model.js';
 import { weekStart } from '../../../src/shared/week.js';
 
 /** How the sidebar groups sessions: by project (the default), or by when each was last active. */
@@ -13,11 +13,30 @@ export type SessionGroup =
       kind: 'project';
       /** The project's name (`groupNames`), which is the group's key. */
       key: string;
-      /** The directory every session of the group ran in, when they share one. */
+      /**
+       * The directory every session of the group ran in, when they share one; else the
+       * repository's root when the group is a repository's.
+       */
       cwd: string | null;
+      /**
+       * The group's working trees, when its sessions come from more than one of one repository
+       * (`worktreesOf`): the main one first, then the others, running first. Null otherwise.
+       */
+      worktrees: Worktree[] | null;
       sessions: SessionSummary[];
     }
   | { kind: 'time'; key: `/${TimeBucket}`; bucket: TimeBucket; sessions: SessionSummary[] };
+
+/** One working tree of a repository group and its sessions, in the group's order. */
+export interface Worktree {
+  /** The working tree's directory, as its sessions' `repo.dir`. */
+  dir: string;
+  /** The directory's last segment: the repository's name for the main one. */
+  name: string;
+  /** The repository's main working tree, whose `.git` is a directory. */
+  main: boolean;
+  sessions: SessionSummary[];
+}
 
 /**
  * Running: busy, or blocked on the user's confirmation, which needs attention as much. The one
@@ -116,17 +135,50 @@ export function groupSessions(
     }
     return out;
   }
-  const projects = [...groups].map(([key, list]) => ({
-    kind: 'project' as const,
-    key,
-    cwd: sharedCwd(list),
-    sessions: list.sort(busyFirst),
-  }));
+  const projects = [...groups].map(([key, list]) => {
+    const sorted = list.sort(busyFirst);
+    const root = sorted.find((s) => s.repo)?.repo?.root ?? null;
+    return {
+      kind: 'project' as const,
+      key,
+      cwd: sharedCwd(sorted) ?? root,
+      worktrees: worktreesOf(sorted),
+      sessions: sorted,
+    };
+  });
   // Each group's first session is its "best" one after sorting, so it ranks the group.
   projects.sort((a, b) =>
     busyFirst(a.sessions[0] as SessionSummary, b.sessions[0] as SessionSummary),
   );
   return [...out, ...projects];
+}
+
+/**
+ * A repository group's working trees, when its sessions ran in more than one: the main one
+ * first, then the others as their first (running-first) session ranks them. Null for one tree
+ * or when a session's repository is not known: nothing to split by.
+ */
+export function worktreesOf(sessions: readonly SessionSummary[]): Worktree[] | null {
+  const trees = new Map<string, Worktree>();
+  for (const s of sessions) {
+    if (!s.repo) return null;
+    const key = segments(s.repo.dir).join('/');
+    const tree = trees.get(key);
+    if (tree) tree.sessions.push(s);
+    else
+      trees.set(key, {
+        dir: s.repo.dir,
+        name: segments(s.repo.dir).at(-1) ?? s.repo.name,
+        main: key === segments(s.repo.root).join('/'),
+        sessions: [s],
+      });
+  }
+  if (trees.size < 2) return null;
+  return [...trees.values()].sort(
+    (a, b) =>
+      Number(b.main) - Number(a.main) ||
+      busyFirst(a.sessions[0] as SessionSummary, b.sessions[0] as SessionSummary),
+  );
 }
 
 /** The directory the sessions ran in, when every one that names a directory names the same. */
@@ -172,27 +224,34 @@ export function timeBucket(updatedAt: string, now: number): TimeBucket {
 /** A directory's segments, whichever separator, without empties: "C:\w\x\" and "/w/x/" alike. */
 const segments = (dir: string) => dir.split(/[\\/]+/).filter(Boolean);
 
+type Named = Pick<SessionSummary, 'cwd' | 'project' | 'repo'>;
+
 /**
- * The name each session's group reads as, from paths alone (no project file is read): its
- * directory's last segment, as the server names it, but with the parent directory's name before
- * it ("glassbox/weever") in two cases:
- * - a worktree: the parent is named like another session's own directory (the repository,
- *   `…/src/glassbox`) without being one itself (`…/work/glassbox/weever`). Worktrees whose
- *   repository has no session of its own keep their directory's name: from paths alone, a folder
- *   of worktrees and a folder of unrelated projects look the same;
- * - two directories that would read alike (`…/work/api` and `…/home/api`), which take as many
- *   parent segments as tell them apart.
+ * What a session groups by: its repository's root when the server read one (every worktree of
+ * a repository gathers under it, wherever it is), else its own directory; null without either.
+ */
+const identityOf = (s: Named): string[] | null =>
+  s.repo ? segments(s.repo.root) : s.cwd ? segments(s.cwd) : null;
+
+/**
+ * The name each session's group reads as (no project file is read): the repository's name
+ * when the server knows the repository, else its directory's last segment, as the server names
+ * it, but with the parent directory's name before it ("glassbox/weever") in two cases:
+ * - a worktree the server could not tell: the parent is named like another session's own
+ *   directory (the repository, `…/src/glassbox`) without being one itself
+ *   (`…/work/glassbox/weever`). Worktrees whose repository has no session of its own keep their
+ *   directory's name: from paths alone, a folder of worktrees and a folder of unrelated projects
+ *   look the same;
+ * - two directories (or repositories) that would read alike (`…/work/api` and `…/home/api`),
+ *   which take as many parent segments as tell them apart.
  * A session without a directory keeps the server's name.
  */
-export function groupNames(
-  sessions: readonly Pick<SessionSummary, 'cwd' | 'project'>[],
-): (s: Pick<SessionSummary, 'cwd' | 'project'>) => string {
-  // Each distinct directory once, by its segments joined: "/w/x" and "/w/x/" are one.
+export function groupNames(sessions: readonly Named[]): (s: Named) => string {
+  // Each distinct identity once, by its segments joined: "/w/x" and "/w/x/" are one.
   const dirs = new Map<string, string[]>();
   for (const s of sessions) {
-    if (!s.cwd) continue;
-    const segs = segments(s.cwd);
-    dirs.set(segs.join('/'), segs);
+    const segs = identityOf(s);
+    if (segs) dirs.set(segs.join('/'), segs);
   }
   const bases = new Map<string, number>();
   for (const segs of dirs.values()) {
@@ -224,7 +283,10 @@ export function groupNames(
       }
     }
   }
-  return (s) => (s.cwd && names.get(segments(s.cwd).join('/'))) || s.project;
+  return (s) => {
+    const segs = identityOf(s);
+    return (segs && names.get(segs.join('/'))) || s.project;
+  };
 }
 
 /** How many closed sessions a group lists before "N more". */

@@ -74,6 +74,7 @@ export const en: Record<MessageKey, string> = {
   'sidebar.pinned': 'Pinned',
   'sidebar.pin': 'Pin',
   'sidebar.unpin': 'Unpin',
+  'sidebar.mainTree': 'main working tree',
   'sidebar.foldedCount': '{n} {n|session|sessions}',
   'sidebar.foldedRunning': '{n} running',
   'sidebar.foldedWaiting': '{n} waiting for you',

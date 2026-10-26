@@ -5,6 +5,7 @@ import type {
   LiveState,
   QuotaSnapshot,
   QuotaStaleReason,
+  RepoIdentity,
   RequestDetail,
   SessionPatch,
   SessionSnapshot,
@@ -17,6 +18,7 @@ import { isActive } from './live.js';
 import { errorText, OpenSession } from './open-session.js';
 import { adapterQuotaSources, QuotaWatcher } from './quota.js';
 import { RateTracker } from './rate.js';
+import { createRepoLookup } from './repo.js';
 import { type WeekRead, WeekService, type WeekStore } from './week.js';
 
 export interface SessionStoreOptions {
@@ -25,6 +27,8 @@ export interface SessionStoreOptions {
   quotaSources?: QuotaSource[];
   /** Why a stale quota is stale, when the caller can tell (see `QuotaWatcherOptions`). */
   quotaStaleReason?: (q: QuotaSnapshot) => QuotaStaleReason | undefined;
+  /** The git repository of a directory, for the session list's groups; `repo.ts` by default. */
+  repoOf?: (cwd: string) => RepoIdentity | null;
   /** Parsed sessions kept in memory; busy/waiting and subscribed ones don't count against it. */
   maxOpen?: number;
   /** How often to look for new or updated sessions on disk. */
@@ -111,6 +115,14 @@ export function listedSummary(summary: SessionSummary, live = summary.live): Ses
   return { ...next, activity: idleActivity(next.updatedAt) };
 }
 
+/** `summary` with the repository of its directory, as `repoOf` answers; unchanged without one. */
+export function withRepo(
+  summary: SessionSummary,
+  repoOf: (cwd: string) => RepoIdentity | null,
+): SessionSummary {
+  return summary.cwd ? { ...summary, repo: repoOf(summary.cwd) } : summary;
+}
+
 export function compareSessions(a: SessionSummary, b: SessionSummary): number {
   return (
     Number(isActive(b.live)) - Number(isActive(a.live)) ||
@@ -172,6 +184,7 @@ export class SessionStore implements WeekStore {
       now: Date.now,
       quotaSources: [],
       quotaStaleReason: () => undefined,
+      repoOf: createRepoLookup(),
       log: () => {},
       ...opts,
     };
@@ -249,7 +262,7 @@ export class SessionStore implements WeekStore {
 
   listSessions(): SessionSummary[] {
     return [...this.entries.values()]
-      .map((e) => listedSummary(e.summary, e.live))
+      .map((e) => withRepo(listedSummary(e.summary, e.live), this.opts.repoOf))
       .sort(compareSessions);
   }
 

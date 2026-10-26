@@ -20,6 +20,12 @@ afterEach(async () => {
 });
 
 describe('DemoStore', () => {
+  it('gives each demo session its directory as a repository of its own name', () => {
+    const repos = store.listSessions().map((s) => [s.cwd, s.repo?.name, s.repo?.root === s.cwd]);
+    expect(repos.every(([cwd, name, own]) => cwd && name && own)).toBe(true);
+    expect(repos.map(([, name]) => name)).toContain('glassbox');
+  });
+
   it('serves the demo session list with the busy demo session first', () => {
     const list = store.listSessions();
     expect(list.map((s) => s.id)[0]).toBe(DEMO_SESSION_ID);

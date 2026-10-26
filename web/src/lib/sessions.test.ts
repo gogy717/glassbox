@@ -208,6 +208,95 @@ describe('groupNames', () => {
 
 // Branch D (F7) item 4: a group lists its running and idle sessions and the 5 most recently
 // closed; the rest wait behind "N more".
+describe('groupSessions by repository', () => {
+  const repo = (root: string, dir = root) => ({
+    root,
+    dir,
+    name: root.split('/').at(-1) as string,
+  });
+  const list = [
+    s('main', 'glassbox', '09:00', {
+      cwd: '/home/dev/src/glassbox',
+      repo: repo('/home/dev/src/glassbox'),
+    }),
+    s('w1', 'weever', '09:30', {
+      cwd: '/home/dev/work/glassbox/weever',
+      repo: repo('/home/dev/src/glassbox', '/home/dev/work/glassbox/weever'),
+      live: 'busy',
+    }),
+    s('w1b', 'weever', '08:00', {
+      cwd: '/home/dev/work/glassbox/weever/web',
+      repo: repo('/home/dev/src/glassbox', '/home/dev/work/glassbox/weever'),
+    }),
+    s('w2', 'opaleye', '09:40', {
+      cwd: '/home/dev/work/glassbox/opaleye',
+      repo: repo('/home/dev/src/glassbox', '/home/dev/work/glassbox/opaleye'),
+    }),
+    s('notes', 'notes', '09:50', { cwd: '/home/dev/notes', repo: null }),
+    s('old', 'blog', '09:20', { cwd: '/home/dev/src/blog' }),
+  ];
+
+  it('gathers every worktree of a repository under its name, wherever the worktrees are', () => {
+    const groups = groupSessions(list, '');
+    expect(ids(groups)).toEqual([
+      ['glassbox', ['w1', 'w2', 'main', 'w1b']],
+      ['notes', ['notes']],
+      ['blog', ['old']],
+    ]);
+    const g = groups[0];
+    if (g?.kind !== 'project') throw new Error('project group');
+    // Several directories: the group names the repository's root.
+    expect(g.cwd).toBe('/home/dev/src/glassbox');
+  });
+
+  it('splits such a group by working tree: the main one first, then by their running sessions', () => {
+    const g = groupSessions(list, '')[0];
+    if (g?.kind !== 'project') throw new Error('project group');
+    expect(g.worktrees?.map((w) => [w.name, w.main, w.sessions.map((x) => x.id)])).toEqual([
+      ['glassbox', true, ['main']],
+      ['weever', false, ['w1', 'w1b']],
+      ['opaleye', false, ['w2']],
+    ]);
+  });
+
+  it('has no working trees to show for one tree, or when a session’s repository is unknown', () => {
+    const groups = groupSessions(list, '');
+    expect(groups.slice(1).map((g) => (g.kind === 'project' ? g.worktrees : 'x'))).toEqual([
+      null,
+      null,
+    ]);
+    const one = groupSessions([list[0] as SessionSummary], '')[0];
+    expect(one?.kind === 'project' && one.worktrees).toBeNull();
+  });
+
+  it('tells two repositories of one name apart by their parents, like directories', () => {
+    const two = groupSessions(
+      [...list, s('other', 'glassbox', '07:00', { cwd: '/x/glassbox', repo: repo('/x/glassbox') })],
+      '',
+    );
+    expect(ids(two).map(([k]) => k)).toEqual(['src/glassbox', 'notes', 'blog', 'x/glassbox']);
+  });
+
+  it('groups a worktree the server read with the repository even when paths say otherwise', () => {
+    // A session in the repository, one in a worktree far away, and a stranger named like it.
+    const groups = groupSessions(
+      [
+        list[0] as SessionSummary,
+        s('far', 'tree', '09:10', {
+          cwd: '/tmp/tree',
+          repo: repo('/home/dev/src/glassbox', '/tmp/tree'),
+        }),
+        s('stranger', 'glassbox', '09:05', { cwd: '/elsewhere/glassbox' }),
+      ],
+      '',
+    );
+    expect(ids(groups)).toEqual([
+      ['src/glassbox', ['far', 'main']],
+      ['elsewhere/glassbox', ['stranger']],
+    ]);
+  });
+});
+
 describe('foldClosed', () => {
   const closed = (id: string, hhmm: string) => s(id, 'p', hhmm, { live: 'closed' });
   const list = [

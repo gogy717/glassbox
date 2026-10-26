@@ -73,6 +73,7 @@ export const zh = {
   'sidebar.pinned': '已置顶',
   'sidebar.pin': '置顶',
   'sidebar.unpin': '取消置顶',
+  'sidebar.mainTree': '主工作树',
   'sidebar.foldedCount': '{n} 个会话',
   'sidebar.foldedRunning': '{n} 个运行中',
   'sidebar.foldedWaiting': '{n} 个等你确认',

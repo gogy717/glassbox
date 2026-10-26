@@ -12,6 +12,7 @@ import type {
   IsoTime,
   ModelRequest,
   QuotaSnapshot,
+  RepoIdentity,
   RequestDetail,
   SessionPatch,
   SessionSnapshot,
@@ -33,9 +34,16 @@ import { detectTrouble } from '../shared/trouble.js';
 import type { AppStore } from './app.js';
 import { troubleLabel } from './open-session.js';
 import { RateTracker } from './rate.js';
-import { compareSessions, isActive, listedSummary } from './store.js';
+import { compareSessions, isActive, listedSummary, withRepo } from './store.js';
 import { type WeekRead, WeekService, type WeekStore } from './week.js';
 import { createDemoWeek } from './week-demo.js';
+
+/** The demo's directories are each the main working tree of a repository of their own name. */
+const demoRepo = (cwd: string): RepoIdentity => ({
+  root: cwd,
+  dir: cwd,
+  name: cwd.split('/').filter(Boolean).at(-1) ?? cwd,
+});
 
 const TICK_MS = 2000;
 
@@ -234,7 +242,7 @@ export class DemoStore implements AppStore, WeekStore {
   listSessions(): SessionSummary[] {
     // Listed as the real store lists them: idle sessions say since when.
     return [structuredClone(this.snap.session), ...this.others]
-      .map((s) => listedSummary(s))
+      .map((s) => withRepo(listedSummary(s), demoRepo))
       .sort(compareSessions);
   }
 

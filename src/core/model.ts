@@ -37,6 +37,17 @@ export interface TokenUsage {
   webFetch: number;
 }
 
+/**
+ * A working directory's git repository. `root` is the main working tree's directory (the one
+ * whose `.git` is a directory); `dir` the working tree that holds the session's `cwd`, equal to
+ * `root` for the main one and the worktree's directory otherwise; `name` the root's last segment.
+ */
+export interface RepoIdentity {
+  root: string;
+  dir: string;
+  name: string;
+}
+
 export interface SessionCounts {
   turns: number;
   requests: number;
@@ -54,6 +65,12 @@ export interface SessionSummary {
   cwd: string | null;
   /** Short display name used to group sessions, e.g. the last path segment of `cwd`. */
   project: string;
+  /**
+   * The git repository `cwd` belongs to, read by the server from the `.git` entry of `cwd` or a
+   * parent (`src/server/repo.ts`): null when `cwd` is in no repository, absent when the server
+   * has not looked (no `cwd`, an older server). Worktrees of one repository share its `root`.
+   */
+  repo?: RepoIdentity | null;
   startedAt: IsoTime | null;
   updatedAt: IsoTime;
   live: LiveState;

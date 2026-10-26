@@ -33,7 +33,7 @@ import {
   lines,
   rec,
 } from './__tests__/fake-adapter.js';
-import { listedSummary, SessionStore, type SessionStoreOptions } from './store.js';
+import { listedSummary, SessionStore, type SessionStoreOptions, withRepo } from './store.js';
 
 let root: string;
 let fake: FakeAdapter;
@@ -82,6 +82,18 @@ async function startStore(opts: Partial<SessionStoreOptions> = {}) {
 }
 
 const ids = (items: { id: string }[]) => items.map((i) => i.id).sort();
+
+describe('withRepo', () => {
+  it('adds the repository of a session’s directory, and nothing for a session without one', () => {
+    const repoOf = (cwd: string) =>
+      cwd === '/w/tree' ? { root: '/w/repo', dir: '/w/tree', name: 'repo' } : null;
+    const base = { id: 'x', cwd: '/w/tree' } as unknown as SessionSummary;
+    expect(withRepo(base, repoOf).repo).toEqual({ root: '/w/repo', dir: '/w/tree', name: 'repo' });
+    expect(withRepo({ ...base, cwd: '/w/none' }, repoOf).repo).toBeNull();
+    const none = { ...base, cwd: null };
+    expect(withRepo(none, repoOf)).toBe(none);
+  });
+});
 
 describe('SessionStore', () => {
   it('lists busy and waiting sessions first, then the most recently updated', async () => {

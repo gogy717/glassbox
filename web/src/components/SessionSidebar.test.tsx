@@ -618,6 +618,71 @@ const pinOf = (row: HTMLElement) =>
   within(row.parentElement as HTMLElement).getByRole('button', { name: 'Pin' });
 
 // Branch D (F7) item 2: pins, a first group of their own, kept in the prefs by id.
+describe('SessionSidebar worktrees', () => {
+  const repo = (root: string, dir = root) => ({
+    root,
+    dir,
+    name: root.split('/').at(-1) as string,
+  });
+  const trees: SessionSummary[] = [
+    {
+      ...(sessions[0] as SessionSummary),
+      id: 'main',
+      title: 'In the repository',
+      cwd: '/home/dev/src/glassbox',
+      repo: repo('/home/dev/src/glassbox'),
+    },
+    {
+      ...(sessions[1] as SessionSummary),
+      id: 'tree',
+      title: 'In a worktree',
+      cwd: '/home/dev/work/glassbox/weever',
+      repo: repo('/home/dev/src/glassbox', '/home/dev/work/glassbox/weever'),
+    },
+    { ...(sessions[2] as SessionSummary), id: 'other', title: 'Elsewhere', repo: null },
+  ];
+  const renderTrees = (locale: 'en' | 'zh' = 'en') =>
+    render(
+      <I18nContext.Provider value={makeI18n(locale)}>
+        <SessionSidebar
+          sessions={trees}
+          selectedId="main"
+          now={DEMO_NOW.getTime()}
+          onSelect={vi.fn()}
+        />
+      </I18nContext.Provider>,
+    );
+
+  it('lists one group for the repository, its working trees as named sub-lists, main first', () => {
+    renderTrees();
+    const group = screen.getByRole('list', { name: 'glassbox' });
+    const lists = within(group).getAllByRole('list');
+    expect(lists.map((l) => l.getAttribute('aria-label'))).toEqual([
+      'glassbox · glassbox · main working tree',
+      'glassbox · weever',
+    ]);
+    expect(within(lists[0] as HTMLElement).getByText('In the repository')).toBeInTheDocument();
+    expect(within(lists[1] as HTMLElement).getByText('In a worktree')).toBeInTheDocument();
+    // The tree's name carries its directory, and the group's title the repository's root.
+    expect(
+      screen.getAllByTitle('/home/dev/work/glassbox/weever').map((el) => el.textContent),
+    ).toContain('weever');
+    expect(screen.getByRole('button', { name: /^glassbox/ })).toHaveAttribute(
+      'title',
+      '/home/dev/src/glassbox',
+    );
+    // A session of no repository keeps a plain group of its own.
+    expect(screen.getByRole('list', { name: 'blog' })).toBeInTheDocument();
+  });
+
+  it('names the main working tree in Chinese too', () => {
+    renderTrees('zh');
+    expect(
+      screen.getByRole('list', { name: 'glassbox · glassbox · 主工作树' }),
+    ).toBeInTheDocument();
+  });
+});
+
 describe('SessionSidebar pins', () => {
   it('pins a session from the button beside its row into a first Pinned group, in the order pinned', () => {
     const onPrefs = vi.fn();
