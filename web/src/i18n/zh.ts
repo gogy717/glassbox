@@ -339,6 +339,8 @@ export const zh = {
   'rate.row': '{agent}：每分钟 {rate}，占 {share}',
   'rate.coverage': '统计了 {running} 个运行中会话里的 {counted} 个。',
   'rate.coverageNone': '没有正在运行的会话。',
+  'rate.perTurn':
+    '{agent} 在一轮结束时才报这一轮的 token：到那时才补进折线（摊到这一轮的每分钟），轮进行中什么都不显示。',
   'rate.footer':
     '按各 CLI 写入的会话记录统计，包括子代理：未缓存输入、缓存读取、缓存写入和输出。会话第一次被看到时只作基线，不会算成突增。只在内存里保留 60 分钟。',
   'quota.source': '来源：{source}',

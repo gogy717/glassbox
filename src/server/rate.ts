@@ -10,7 +10,9 @@
  *   read for the first time (`absorbNext`: a sub-agent or workflow transcript classified late, a
  *   rebuild), growth is history being read, not tokens being spent: it joins the baseline.
  * - Otherwise growth counts in the minute it is observed, which is when it was written to within
- *   a second or two.
+ *   a second or two; or, when the observation says the growth was spent over a span (an agent
+ *   that reports a whole turn as it ends), over the span's minutes in proportion to the time
+ *   each held, whole tokens, the remainder in the span's last minute.
  */
 import type { AgentKind, TokenUsage } from '../core/model.js';
 import {
@@ -54,7 +56,12 @@ export class RateTracker {
    * One observation of a session's cumulative usage. True when it counted anything. A null
    * usage (the session is not parsed) is no observation at all.
    */
-  observe(sessionId: string, agent: AgentKind, usage: TokenUsage | null): boolean {
+  observe(
+    sessionId: string,
+    agent: AgentKind,
+    usage: TokenUsage | null,
+    span?: { from: number; to: number } | null,
+  ): boolean {
     if (!usage) return false;
     const totals = totalsOf(usage);
     const before = this.seen.get(sessionId);
@@ -64,20 +71,56 @@ export class RateTracker {
     // A kind that shrank means the totals were recomputed from different data (a rebuild, a file
     // dropped), and the other kinds' growth may be part of that too: none of it is trusted.
     if (RATE_KINDS.some((k) => totals[k] < before[k])) return false;
-    const minute = Math.floor(this.now() / MINUTE_MS);
+    const now = this.now();
+    const minute = Math.floor(now / MINUTE_MS);
     let counted = false;
     for (const k of RATE_KINDS) {
       const grew = totals[k] - before[k];
       if (grew <= 0) continue;
-      const agents = this.buckets.get(minute) ?? new Map<AgentKind, Totals>();
-      this.buckets.set(minute, agents);
-      const bucket = agents.get(agent) ?? zero();
-      agents.set(agent, bucket);
-      bucket[k] += grew;
+      for (const [m, part] of this.shares(grew, span, now)) this.add(m, agent, k, part);
       counted = true;
     }
     if (counted) this.prune(minute);
     return counted;
+  }
+
+  private add(minute: number, agent: AgentKind, k: RateKind, n: number): void {
+    const agents = this.buckets.get(minute) ?? new Map<AgentKind, Totals>();
+    this.buckets.set(minute, agents);
+    const bucket = agents.get(agent) ?? zero();
+    agents.set(agent, bucket);
+    bucket[k] += n;
+  }
+
+  /**
+   * `grew` tokens by minute: all in the current minute, or, over `span`, each minute's share of
+   * the span's time, in whole tokens, the remainder with the last minute. A span that ends in
+   * the future or starts before the hour is clipped to what the hour keeps; an empty span counts
+   * now.
+   */
+  private shares(
+    grew: number,
+    span: { from: number; to: number } | null | undefined,
+    now: number,
+  ): [number, number][] {
+    const minute = Math.floor(now / MINUTE_MS);
+    if (!span) return [[minute, grew]];
+    const first = (minute - RATE_MINUTES + 1) * MINUTE_MS;
+    const to = Math.min(span.to, now);
+    const from = Math.max(span.from, first);
+    if (!(from < to)) return [[Math.min(Math.floor(to / MINUTE_MS), minute), grew]];
+    const out: [number, number][] = [];
+    let given = 0;
+    for (let m = Math.floor(from / MINUTE_MS); m <= Math.floor((to - 1) / MINUTE_MS); m++) {
+      const start = Math.max(from, m * MINUTE_MS);
+      const end = Math.min(to, (m + 1) * MINUTE_MS);
+      const part = Math.floor((grew * (end - start)) / (to - from));
+      out.push([m, part]);
+      given += part;
+    }
+    const last = out.at(-1) as [number, number];
+    last[1] += grew - given;
+    return out.filter(([, n]) => n > 0);
   }
 
   /** The session is no longer watched: its next observation is a baseline again. */

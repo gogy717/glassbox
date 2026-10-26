@@ -57,7 +57,11 @@ export interface OpenSessionOptions {
   /** Upper bound on bytes read (and parsed) before yielding to the event loop. */
   chunkBytes: number;
   live: LiveState;
-  onSummary: (summary: SessionSummary) => void;
+  /**
+   * The session's summary as it changes, with the span of the main agent's latest ended turn,
+   * for a token rate that spreads a turn's usage over its minutes (`usageReporting: 'turn'`).
+   */
+  onSummary: (summary: SessionSummary, turn: TurnSpan | null) => void;
   /**
    * The next summary brings content read for the first time (a file classified after the load,
    * or a rebuild): its usage is history being read, not tokens being spent now.
@@ -87,6 +91,12 @@ type Slim<K extends 'agents' | 'turns' | 'requests' | 'toolCalls'> =
  * What the signs of trouble are read from, kept by id from the parser's snapshots and patches:
  * the few fields they need of each entity, so a long session is not held twice.
  */
+/** When a turn ran, in epoch ms. */
+export interface TurnSpan {
+  from: number;
+  to: number;
+}
+
 class TroubleWatch {
   session: SessionSummary | null = null;
   readonly agents = new Map<string, Slim<'agents'>>();
@@ -97,6 +107,19 @@ class TroubleWatch {
   reset(snapshot: SessionSnapshot): void {
     for (const map of [this.agents, this.turns, this.requests, this.toolCalls]) map.clear();
     this.apply(snapshot);
+  }
+
+  /** The span of the main agent's latest turn that has ended, or null. */
+  lastTurn(): TurnSpan | null {
+    let best: TurnSpan | null = null;
+    for (const t of this.turns.values()) {
+      if (t.agentId !== MAIN_AGENT_ID || !t.endedAt) continue;
+      const to = Date.parse(t.endedAt);
+      const from = Date.parse(t.startedAt);
+      if (Number.isNaN(to) || Number.isNaN(from)) continue;
+      if (!best || to > best.to) best = { from, to };
+    }
+    return best;
   }
 
   apply(p: SessionPatch | SessionSnapshot): void {
@@ -231,7 +254,7 @@ export class OpenSession {
       const snapshot = parser.snapshot();
       this.watch.reset(snapshot);
       this.trouble = this.readTrouble();
-      this.opts.onSummary(this.withTrouble(snapshot.session));
+      this.opts.onSummary(this.withTrouble(snapshot.session), this.watch.lastTurn());
       const ms = Math.round(performance.now() - started);
       this.opts.log(`opened ${this.id}: ${stats.files} files, ${stats.lines} lines in ${ms} ms`);
     });
@@ -267,7 +290,7 @@ export class OpenSession {
     const next = this.readTrouble();
     if (JSON.stringify(next) === JSON.stringify(this.trouble)) return;
     this.trouble = next;
-    this.opts.onSummary(this.withTrouble(this.latest));
+    this.opts.onSummary(this.withTrouble(this.latest), this.watch.lastTurn());
   }
 
   private readTrouble(): TroubleSignal | null {
@@ -385,7 +408,7 @@ export class OpenSession {
     this.trouble = this.readTrouble();
     const session = this.withTrouble(snapshot.session);
     this.opts.onBackfill?.();
-    this.opts.onSummary(session);
+    this.opts.onSummary(session, this.watch.lastTurn());
     this.opts.onReset({ ...snapshot, session });
     const ms = Math.round(performance.now() - started);
     this.opts.log(`rebuilt ${this.id} after a file was truncated or replaced (${ms} ms)`);
@@ -535,7 +558,7 @@ export class OpenSession {
       const patch = this.parser.patch(changes);
       this.watch.apply(patch);
       const session = this.withTrouble(patch.session);
-      this.opts.onSummary(session);
+      this.opts.onSummary(session, this.watch.lastTurn());
       this.opts.onPatch({ ...patch, session });
     } catch (err) {
       this.opts.log(`session ${this.id}: patch failed: ${errorText(err)}`);

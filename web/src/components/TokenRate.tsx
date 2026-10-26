@@ -8,6 +8,7 @@ import {
   lastMinute,
   RATE_MINUTES,
   type TokenRate as Rate,
+  type RateCoverage,
   type RateKind,
   rateAgents,
   rateCoverage,
@@ -449,9 +450,22 @@ function Details({
         {f.running > 0
           ? t('rate.coverage', { counted: f.counted, running: f.running })
           : t('rate.coverageNone')}{' '}
+        {perTurn(rate.coverage, agent).map((a) => (
+          <span key={a}>{t('rate.perTurn', { agent: agentName(a) })} </span>
+        ))}
         {t('rate.footer')}
       </p>
     </>
+  );
+}
+
+/** Running agents that report a turn's tokens only as it ends, in scope, in tag order. */
+function perTurn(coverage: RateCoverage, agent: AgentKind | null): AgentKind[] {
+  return sortAgents(
+    (Object.keys(coverage.agents) as AgentKind[]).filter((a) => {
+      const c = coverage.agents[a];
+      return !!c && c.reporting === 'turn' && c.running > 0 && (agent === null || agent === a);
+    }),
   );
 }
 

@@ -252,3 +252,10 @@ describe('live status details', () => {
     });
   });
 });
+
+describe('the Grok adapter', () => {
+  it('reports usage per turn: a turn’s tokens arrive only as it ends', async () => {
+    const { createGrokAdapter } = await import('./index.js');
+    expect(createGrokAdapter({ grokDir: '/nowhere' }).usageReporting).toBe('turn');
+  });
+});

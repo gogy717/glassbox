@@ -62,8 +62,28 @@ function renderRate(
 }
 
 describe('TokenRate', () => {
+  it('says when an agent reports a turn’s tokens only as it ends, in scope only', () => {
+    const { button } = renderRate(
+      rate({
+        coverage: {
+          running: 2,
+          counted: 2,
+          agents: {
+            'claude-code': { running: 1, counted: 1 },
+            grok: { running: 1, counted: 1, reporting: 'turn' },
+          },
+        },
+      }),
+    );
+    fireEvent.click(button());
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveTextContent(/Grok reports a turn’s tokens as the turn ends/);
+    expect(dialog).not.toHaveTextContent(/Claude Code reports a turn/);
+  });
+
   // I3b M4: zh compact figures read "144万" and the unit "/分钟": the digits stay figures, the
   // CJK never goes into the mono face, in the bar, the popover, its chart and its rows.
+
   it('keeps Chinese units and words out of the mono face, bar and popover alike', () => {
     const { button } = renderRate(rate(), null, vi.fn(), 'zh');
     expect(button()).toHaveTextContent(/万/);

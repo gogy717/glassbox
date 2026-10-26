@@ -103,6 +103,13 @@ export interface AgentAdapter {
   classify(source: SessionSource, path: string): SourceFile | null | 'later';
   /** Live state of running sessions, keyed by native session id. Missing ⇒ 'closed'. */
   liveStatus(): Promise<Map<string, LiveState>>;
+  /**
+   * How often a session's cumulative usage moves: after every model call (the default, as
+   * Claude Code writes usage with each response), or once per turn, when the agent reports a
+   * turn's tokens only as it ends (Grok). The token rate spreads a per-turn report over the
+   * turn's minutes instead of counting it in the minute it lands.
+   */
+  readonly usageReporting?: 'request' | 'turn';
   createParser(source: SessionSource): SessionParser;
   /**
    * The plan's current quota: what the agent caches, and what glassbox fetches with its sign-in

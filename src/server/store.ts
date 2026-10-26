@@ -243,7 +243,11 @@ export class SessionStore implements WeekStore {
     const c: RateCoverage = { running: 0, counted: 0, agents: {} };
     for (const e of this.entries.values()) {
       if (!isActive(e.live)) continue;
-      const agent = c.agents[e.summary.agent] ?? { running: 0, counted: 0 };
+      const agent = c.agents[e.summary.agent] ?? {
+        running: 0,
+        counted: 0,
+        ...(e.adapter.usageReporting === 'turn' ? { reporting: 'turn' as const } : {}),
+      };
       c.agents[e.summary.agent] = agent;
       const counted = e.open !== null && this.rate.isCounting(e.summary.id) ? 1 : 0;
       c.running++;
@@ -431,10 +435,12 @@ export class SessionStore implements WeekStore {
       log: this.opts.log,
       now: this.opts.now,
       onBackfill: () => this.rate.absorbNext(id),
-      onSummary: (summary) => {
+      onSummary: (summary, turn) => {
         if (entry.open !== session && entry.opening === null) return;
         entry.summary = summary;
-        if (this.rate.observe(id, summary.agent, summary.usage)) this.notifyRate();
+        // An agent that reports a turn's tokens as it ends: spread them over the turn.
+        const span = entry.adapter.usageReporting === 'turn' ? turn : null;
+        if (this.rate.observe(id, summary.agent, summary.usage, span)) this.notifyRate();
         this.notifySessions();
       },
       onPatch: (patch) => {

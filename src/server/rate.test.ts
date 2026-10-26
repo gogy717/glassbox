@@ -21,6 +21,46 @@ function tracker(start = T0) {
   };
 }
 
+describe('RateTracker spreading a turn over its minutes', () => {
+  it('shares a span’s growth over its minutes by the time each held, whole tokens', () => {
+    const { t, at } = tracker();
+    t.observe('g', 'grok', usage({ output: 0 }));
+    // A turn from 10:00:30 to 10:03:00 reported at 10:03:05: 30 s, 60 s, 60 s of 150 s.
+    at(T0 + 185_000);
+    t.observe('g', 'grok', usage({ output: 1000 }), { from: T0 + 30_000, to: T0 + 180_000 });
+    const series = rateSeries(t.snapshot(), { kind: 'output' });
+    expect(series.slice(-4)).toEqual([200, 400, 400, 0]);
+    expect(hourTotal(t.snapshot())).toBe(1000);
+  });
+
+  it('puts the remainder with the last minute, counts an empty span now, clips the future', () => {
+    const { t, at } = tracker();
+    t.observe('g', 'grok', usage({ input: 0 }));
+    at(T0 + 125_000);
+    // 10 tokens over three minutes of 60 s, 60 s and 5 s: 4 + 4 + 0 by floor, the rest (2) last.
+    t.observe('g', 'grok', usage({ input: 10 }), { from: T0, to: T0 + 125_000 });
+    expect(rateSeries(t.snapshot(), { kind: 'input' }).slice(-3)).toEqual([4, 4, 2]);
+    at(T0 + 130_000);
+    t.observe('g', 'grok', usage({ input: 15 }), { from: T0 + 130_000, to: T0 + 130_000 });
+    expect(rateSeries(t.snapshot(), { kind: 'input' }).at(-1)).toBe(7);
+    at(T0 + 135_000);
+    t.observe('g', 'grok', usage({ input: 25 }), { from: T0 + 120_000, to: T0 + 999_000 });
+    expect(hourTotal(t.snapshot())).toBe(25);
+  });
+
+  it('clips a span that starts before the hour the rate keeps', () => {
+    const { t, at } = tracker();
+    t.observe('g', 'grok', usage({ output: 0 }));
+    at(T0 + 70 * MINUTE_MS);
+    t.observe('g', 'grok', usage({ output: 600 }), {
+      from: T0,
+      to: T0 + 70 * MINUTE_MS,
+    });
+    // The hour's 60 minutes each hold a minute of the 70: all 600 land inside it.
+    expect(hourTotal(t.snapshot())).toBe(600);
+  });
+});
+
 describe('RateTracker', () => {
   it('takes the first sighting of a session as a baseline, not a spike', () => {
     const { t } = tracker();

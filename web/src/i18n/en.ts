@@ -334,6 +334,8 @@ export const en: Record<MessageKey, string> = {
   'rate.row': '{agent}: {rate} tokens a minute, {share} of the total',
   'rate.coverage': 'Counting {counted} of {running} running {running|session|sessions}.',
   'rate.coverageNone': 'No session is running.',
+  'rate.perTurn':
+    '{agent} reports a turn’s tokens as the turn ends: its line fills in then, spread over the turn, and shows nothing while one runs.',
   'rate.footer':
     'Counted from the transcripts each CLI writes, sub-agents included: uncached input, cache reads, cache writes and output. The first sighting of a session is a baseline, never a spike. Kept for 60 minutes, in memory.',
   'quota.windowSession': '5-hour window',

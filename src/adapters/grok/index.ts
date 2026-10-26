@@ -19,6 +19,9 @@ export function createGrokAdapter({ grokDir }: GrokAdapterOptions): AgentAdapter
   const live: LiveCache = { pidOk: new Map() };
   return {
     kind: 'grok',
+    // Grok writes a turn's tokens when the turn ends (turn_completed, usage.json); nothing
+    // during it.
+    usageReporting: 'turn',
     discover: () => discoverSessions(grokDir, live),
     listFiles: listSessionFiles,
     watchDirs: sessionWatchDirs,

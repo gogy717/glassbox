@@ -24,7 +24,17 @@ export interface RateCoverage {
   running: number;
   /** Of those, the ones being counted. */
   counted: number;
-  agents: Partial<Record<AgentKind, { running: number; counted: number }>>;
+  agents: Partial<Record<AgentKind, AgentCoverage>>;
+}
+
+export interface AgentCoverage {
+  running: number;
+  counted: number;
+  /**
+   * 'turn' when the agent reports a turn's tokens only as it ends: its line fills in then,
+   * spread over the turn's minutes, and shows nothing while a turn runs. Absent: per model call.
+   */
+  reporting?: 'turn';
 }
 
 export interface TokenRate {

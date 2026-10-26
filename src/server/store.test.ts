@@ -585,6 +585,21 @@ describe('SessionStore signs of trouble', () => {
 });
 
 describe('SessionStore token rate', () => {
+  it('says in the coverage which running agents report a turn’s tokens only as it ends', async () => {
+    await session('a', rec.req('ra', T(10)));
+    await setLive({ a: 'busy' });
+    (fake as { usageReporting?: 'turn' }).usageReporting = 'turn';
+    try {
+      const s = await startStore();
+      expect(s.getRate().coverage.agents[fake.kind]).toMatchObject({
+        running: 1,
+        reporting: 'turn',
+      });
+    } finally {
+      delete (fake as { usageReporting?: 'turn' }).usageReporting;
+    }
+  });
+
   // The store's clock is the test's, moved only by the test. The wall clock can turn the minute
   // between two reads, or step back while a session settles (WSL steps it back ~0.8 s every half
   // minute), and then no fixed wait is long enough.
