@@ -292,6 +292,26 @@ describe('Inbox', () => {
     expect(onDecide).toHaveBeenCalledWith('run_tu_1', 'tu_1', { decision: 'allow' });
   });
 
+  it('leaves a key with a modifier held to the browser: Alt+← goes Back, ⌘Enter allows nothing', async () => {
+    const a = held(ask('tu_1', 'Bash', 90, { command: 'npm test' }));
+    const { onDecide } = renderInbox({
+      sessions: [a.session, session('waiting', { activity: waitingOn('Bash', 30) })],
+      prompts: new Map([[a.session.id, a.prompt]]),
+    });
+    const first = items()[0] as HTMLElement;
+    // fireEvent says false when the page took the key (its default prevented).
+    expect(fireEvent.keyDown(first, { key: 'ArrowLeft', altKey: true })).toBe(true);
+    expect(fireEvent.keyDown(first, { key: 'ArrowDown', metaKey: true })).toBe(true);
+    expect(fireEvent.keyDown(first, { key: 'End', ctrlKey: true })).toBe(true);
+    expect(document.activeElement).toBe(first);
+    for (const held of [{ metaKey: true }, { ctrlKey: true }, { altKey: true }, { shiftKey: true }])
+      expect(fireEvent.keyDown(first, { key: 'Enter', ...held })).toBe(true);
+    await act(async () => {});
+    expect(onDecide).not.toHaveBeenCalled();
+    // Alone, the keys are the list's.
+    expect(fireEvent.keyDown(first, { key: 'ArrowDown' })).toBe(false);
+  });
+
   it('is one tab stop: the arrows move between the items, across the sections', () => {
     renderInbox({
       sessions: [

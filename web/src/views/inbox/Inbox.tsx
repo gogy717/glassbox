@@ -221,7 +221,8 @@ export function Inbox({
     if (next && !ref.current?.contains(next)) setCurrent(null);
   };
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.nativeEvent.isComposing) return;
+    // With a modifier held a key is the browser's (Alt+← goes Back) or another command's.
+    if (e.nativeEvent.isComposing || e.altKey || e.ctrlKey || e.metaKey) return;
     const target = e.target as HTMLElement;
     const item = target.closest<HTMLElement>('[data-item]');
     if (!item) return;
@@ -234,6 +235,7 @@ export function Inbox({
     // Inside an item its controls keep their keys: a question's options move with the arrows.
     if (target !== item) return;
     if (e.key === 'Enter') {
+      if (e.shiftKey) return;
       e.preventDefault();
       item.querySelector<HTMLButtonElement>('button[data-kind="primary"]')?.click();
       return;
