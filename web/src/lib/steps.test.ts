@@ -12,7 +12,7 @@ describe('buildSteps', () => {
       phases.map((p) => [p.category, p.steps.map((s) => s.requestId), p.durationMs, p.tokens]),
     ).toEqual([
       ['explore', ['req_m1'], 14_400, 32_070],
-      ['edit', ['req_m2'], 21_200, 36_440],
+      ['edit', ['req_m2'], 21_820, 36_440],
       ['answer', ['req_m3'], 9_000, 38_220],
     ]);
     expect(phases[1]?.steps[0]?.outcome).toBe('error');
@@ -55,6 +55,14 @@ describe('buildSteps', () => {
     expect(edit?.steps[0]?.did.map((d) => [d.name, d.category, d.summary, d.status])).toEqual([
       ['Read', 'explore', 'store.ts', 'complete'],
       ['Edit', 'edit', 'store.ts', 'error'],
+      ['Read', 'explore', 'store.ts:36-65', 'complete'],
+      ['Edit', 'edit', 'store.ts', 'complete'],
+      ['Edit', 'edit', 'store.ts', 'complete'],
+      ['Write', 'edit', 'store.test.ts', 'complete'],
+      ['MultiEdit', 'edit', 'sessions.ts', 'complete'],
+      ['NotebookEdit', 'edit', 'sorting.ipynb', 'complete'],
+      ['Read', 'explore', 'model.ts', 'complete'],
+      ['Read', 'explore', 'README.md:1-40', 'complete'],
     ]);
     expect(answer?.steps[0]).toMatchObject({
       said: 'Fixed: busy sessions now sort first, then by most recent update.',

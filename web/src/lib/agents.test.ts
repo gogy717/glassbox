@@ -56,7 +56,7 @@ describe('summarize', () => {
     expect(s).toEqual({
       turns: 3,
       requests: 28,
-      toolCalls: 24,
+      toolCalls: 32,
       activeMs: 184_000,
       input: 1_838_850,
       cacheHitRate: 1_582_194 / 1_838_850,

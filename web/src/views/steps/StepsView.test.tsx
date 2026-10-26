@@ -140,7 +140,8 @@ describe('StepsView', () => {
 
     const second = step(2);
     expect(within(second).getByText('Thought for 12s; content not recorded')).toBeInTheDocument();
-    const edit = within(second).getByText('Edit').closest('li') as HTMLElement;
+    // The first Edit of the step is the one that missed; the two after it landed.
+    const edit = within(second).getAllByText('Edit')[0]?.closest('li') as HTMLElement;
     expect(edit).toHaveAttribute('data-status', 'error');
     expect(edit).toHaveTextContent('Failed');
     // What the tool said, under the did list, without Claude Code's wrapper.

@@ -3,7 +3,8 @@
  * paper and language, names shown and hidden, hashed in one time zone. The hash is what the
  * receipt drew before its pen was shared with the weekly receipt (78cb423). Changing how the
  * session receipt looks changes it on purpose: then the hash changes in the same commit, which
- * says why.
+ * says why. So does changing what the demo sessions did: the receipt prints their tool calls and
+ * the mix of their kinds (the demo's fix grew file work; the pen did not change).
  */
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, expect, it } from 'vitest';
@@ -44,6 +45,6 @@ function receipts(): string {
 
 it('draws the session receipt exactly as it did before the weekly receipt shared its pen', () => {
   expect(createHash('sha256').update(receipts()).digest('hex')).toBe(
-    'cc53a5c7ff14fe86cd6c03d431f84d97a6a32f17cc3e4cbb748fb798aab5869a',
+    '6414e8494606f5d157b738b322ad462d33154b3ee1d0b95dde5e0aeb1d8dc453',
   );
 });

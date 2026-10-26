@@ -220,7 +220,7 @@ describe('App', () => {
       within(summary).getByText(label).parentElement?.querySelector('[data-value]')?.textContent;
     expect(value('Conversations')).toBe('3');
     expect(value('Model calls')).toBe('28');
-    expect(value('Tool calls')).toBe('24');
+    expect(value('Tool calls')).toBe('32');
     expect(value('Duration')).toBe('3m4s');
     expect(value('Input')).toBe('1,838,850');
     expect(value('Cache hit')).toBe('86.0%');

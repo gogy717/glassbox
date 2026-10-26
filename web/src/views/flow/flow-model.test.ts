@@ -74,7 +74,18 @@ describe('turnsOf / requestsOf / toolsOf', () => {
 
   it('lists a request’s tools in block order', () => {
     const open = demoOpen();
-    expect(toolsOf(open, req(open, 'req_m2')).map((t) => t.name)).toEqual(['Read', 'Edit']);
+    expect(toolsOf(open, req(open, 'req_m2')).map((t) => t.name)).toEqual([
+      'Read',
+      'Edit',
+      'Read',
+      'Edit',
+      'Edit',
+      'Write',
+      'MultiEdit',
+      'NotebookEdit',
+      'Read',
+      'Read',
+    ]);
   });
 });
 
