@@ -66,6 +66,12 @@ export const en: Record<MessageKey, string> = {
   'summary.input': 'Input',
   'summary.cacheHit': 'Cache hit',
   'summary.output': 'Output (thinking)',
+  'summary.cost': 'API cost (est.)',
+  'cost.title':
+    'What these tokens would cost on the API, estimated from the price table in Settings',
+  'cost.leftOut': 'Left out, no price: {models}',
+  'cost.noModel': 'calls that name no model',
+  'cost.noPrice': 'no price',
   'summary.title': 'Summary',
   'summary.rate': 'Token rate',
   'summary.more': 'More figures',

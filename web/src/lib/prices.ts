@@ -5,6 +5,7 @@
  * A model without a price costs nothing and is said to have none: no number is ever guessed.
  */
 import type { TokenUsage } from '../../../src/core/model.js';
+import type { T } from '../i18n';
 
 /** USD per million tokens. */
 export interface Price {
@@ -175,6 +176,16 @@ export const costByModel = (byModel: Readonly<Record<string, TokenUsage>>, table
     Object.entries(byModel).map(([model, usage]) => ({ model: model || null, usage })),
     table,
   );
+
+/**
+ * A cost figure's tooltip: what it is, and what it leaves out ("Left out, no price:
+ * gpt-5.5-codex"). The Stats page and the receipts word it in their own dictionaries.
+ */
+export function costTitle(cost: Cost, t: T): string {
+  if (!cost.partial) return t('cost.title');
+  const models = cost.unpriced.length > 0 ? cost.unpriced.join(', ') : t('cost.noModel');
+  return `${t('cost.title')} · ${t('cost.leftOut', { models })}`;
+}
 
 const usd = (digits: number, locale: string) =>
   new Intl.NumberFormat(locale, {

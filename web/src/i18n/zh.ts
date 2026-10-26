@@ -65,6 +65,11 @@ export const zh = {
   'summary.input': '输入',
   'summary.cacheHit': '缓存命中率',
   'summary.output': '输出(思考)',
+  'summary.cost': 'API 费用（估）',
+  'cost.title': '这些 token 按 API 计价约值多少，按设置里的价格表估算',
+  'cost.leftOut': '未计入（无价格）：{models}',
+  'cost.noModel': '未注明模型的调用',
+  'cost.noPrice': '无价格',
   'summary.title': '汇总',
   'summary.rate': 'Token 速率',
   'summary.more': '更多数字',
@@ -324,7 +329,8 @@ export const zh = {
   'settings.prices': 'API 价格（估算）',
   'prices.intro':
     '同样的 token 按 API 计价要花多少：每百万 token 的美元价格。订阅并不按此收费，glassbox 显示的费用都是按这张表的估算。',
-  'prices.asOf': '默认价格取自 Anthropic 价目表（{date}）。表中没有的模型没有价格，它的 token 不计入费用。',
+  'prices.asOf':
+    '默认价格取自 Anthropic 价目表（{date}）。表中没有的模型没有价格，它的 token 不计入费用。',
   'prices.model': '模型',
   'prices.input': '输入',
   'prices.cacheWrite': '缓存写入（5 分钟）',

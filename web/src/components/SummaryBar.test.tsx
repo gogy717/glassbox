@@ -1,7 +1,10 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Turn } from '../../../src/core/model.js';
+import { PriceTableContext } from '../data/price-table';
+import type { OpenSession } from '../data/store';
 import { I18nContext, makeI18n } from '../i18n';
+import { priceTable } from '../lib/prices';
 import { cjkInMono } from '../test/cjk';
 import { DEMO_NOW, demoOpen } from '../test/demo';
 import { SummaryBar } from './SummaryBar';
@@ -129,7 +132,7 @@ describe('SummaryBar', () => {
     const extra = [...bar.querySelectorAll('[data-extra]')].map(
       (m) => m.querySelector('.section-label')?.textContent,
     );
-    expect(extra).toEqual(['Tool calls', 'Input', 'Cache hit']);
+    expect(extra).toEqual(['Tool calls', 'Input', 'Cache hit', 'API cost (est.)']);
     const more = within(bar).getByRole('button', { name: 'More figures' });
     expect(more).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(more);
@@ -176,6 +179,87 @@ describe('SummaryBar', () => {
       </I18nContext.Provider>,
     );
     expect(screen.getByRole('region', { name: '汇总' })).toHaveTextContent('≈9万/分钟');
+    expect(cjkInMono(document.body)).toEqual([]);
+  });
+});
+
+/** The demo with the model of every `n`th request (all of them by default) set to `model`. */
+function withModel(model: string, n = 1): OpenSession {
+  const open = demoOpen();
+  const requests = new Map(
+    [...open.requests].map(([id, r], i) => [id, i % n === 0 ? { ...r, model } : r]),
+  );
+  return { ...open, requests };
+}
+
+const TITLE = 'What these tokens would cost on the API, estimated from the price table in Settings';
+
+// Proposal 6: the tokens as dollars, as the API would have billed them.
+describe('SummaryBar API cost', () => {
+  const cost = () =>
+    within(screen.getByRole('region', { name: 'Summary' })).getByText('API cost (est.)')
+      .parentElement as HTMLElement;
+
+  it('estimates what the tokens would cost on the API, after Output, behind More figures', () => {
+    render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <SummaryBar open={demoOpen()} agentId="main" />
+      </I18nContext.Provider>,
+    );
+    // 26 calls of claude-opus-5-5 at its list prices.
+    expect(value('API cost (est.)')).toBe('≈ $3.21');
+    expect(cost()).toHaveAttribute('title', TITLE);
+    expect(cost()).toHaveAttribute('data-extra');
+    const labels = [
+      ...screen.getByRole('region', { name: 'Summary' }).querySelectorAll('.section-label'),
+    ].map((l) => l.textContent);
+    expect(labels.slice(-2)).toEqual(['Output (thinking)', 'API cost (est.)']);
+  });
+
+  it('prices by the table in force, Settings’ prices over the defaults', () => {
+    const doubled = { input: 8, cacheWrite: 10, cacheWrite1h: 16, cacheRead: 0.4, output: 40 };
+    render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <PriceTableContext.Provider value={priceTable({ 'claude-opus-5-5': doubled })}>
+          <SummaryBar open={demoOpen()} agentId="main" />
+        </PriceTableContext.Provider>
+      </I18nContext.Provider>,
+    );
+    expect(value('API cost (est.)')).toBe('≈ $6.42');
+  });
+
+  it('shows a dash when no model has a price, and names the models left out', () => {
+    render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <SummaryBar open={withModel('gpt-5.5-codex')} agentId="main" />
+      </I18nContext.Provider>,
+    );
+    expect(value('API cost (est.)')).toBe('—');
+    expect(cost()).toHaveAttribute('title', `${TITLE} · Left out, no price: gpt-5.5-codex`);
+    cleanup();
+    render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <SummaryBar open={withModel('gpt-5.5-codex', 2)} agentId="main" />
+      </I18nContext.Provider>,
+    );
+    expect(value('API cost (est.)')).toMatch(/^≈ \$\d\.\d\d$/);
+    expect(cost()).toHaveAttribute('title', `${TITLE} · Left out, no price: gpt-5.5-codex`);
+  });
+
+  it('shows a dash before any call reported usage, and speaks Chinese', () => {
+    render(
+      <I18nContext.Provider value={makeI18n('zh')}>
+        <SummaryBar open={demoOpen()} agentId="nobody" />
+      </I18nContext.Provider>,
+    );
+    expect(value('API 费用（估）', '汇总')).toBe('—');
+    cleanup();
+    render(
+      <I18nContext.Provider value={makeI18n('zh')}>
+        <SummaryBar open={demoOpen()} agentId="main" />
+      </I18nContext.Provider>,
+    );
+    expect(value('API 费用（估）', '汇总')).toBe('≈ $3.21');
     expect(cjkInMono(document.body)).toEqual([]);
   });
 });
