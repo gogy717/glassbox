@@ -499,6 +499,13 @@ describe('TurnList search', () => {
     ]);
     // A result says whose it is, where the line has no room for it.
     expect(lines[2]?.querySelector('[data-kind]')).toHaveAttribute('title', 'Bash result');
+    // Where the search cut the words before the match, its "…" stands apart from them, ahead of
+    // the box that cuts them further when the line is short of room.
+    const reply = within(groups[0] as HTMLElement).getAllByRole('button')[1] as HTMLElement;
+    expect(reply).toHaveTextContent('…the login');
+    expect(reply.querySelector('[data-cut]')).toHaveTextContent(/^…$/);
+    expect(reply.querySelector('[data-cut]')?.nextElementSibling?.textContent).toBe('the ');
+    expect(lines[0]?.querySelector('[data-cut]')).toBeNull();
     expect(screen.getByRole('navigation', { name: 'Prompts' })).toHaveTextContent('4 hits');
   });
 

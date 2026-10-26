@@ -47,6 +47,30 @@ function Kind({ hit }: { hit: SearchHit }) {
 }
 
 /**
+ * A hit's match amid its context, kept in view on one line: what follows gives way at its end,
+ * what comes before at its start. That part is aligned to its box's end, so it overflows to the
+ * left, where the box cuts it. The search's own "…" (it cut there already) stands ahead of the
+ * box, where the box cannot cut it.
+ */
+function Snippet({ hit }: { hit: SearchHit }) {
+  const cut = hit.before.startsWith('…');
+  return (
+    <span className={css.snippet}>
+      {cut && (
+        <span className={css.cut} data-cut>
+          …
+        </span>
+      )}
+      <span className={css.before}>
+        <span>{cut ? hit.before.slice(1) : hit.before}</span>
+      </span>
+      <mark className={css.match}>{hit.match}</mark>
+      <span className={css.after}>{hit.after}</span>
+    </span>
+  );
+}
+
+/**
  * Everything the page holds that matches, newest prompt first like the list it replaces: each
  * prompt's head ("Prompt 12 · 3 hits", then its title), then a line a hit, its match marked in
  * the middle of what surrounds it. A head opens its prompt; a hit opens where it is. One tab
@@ -119,15 +143,7 @@ export const SearchResults = memo(function SearchResults({
                   >
                     <Kind hit={h} />
                     <span className="visually-hidden">: </span>
-                    {/* The match stays in view: what comes before it gives way at its start,
-                        what follows at its end. */}
-                    <span className={css.snippet}>
-                      <span className={css.before}>
-                        <bdi>{h.before}</bdi>
-                      </span>
-                      <mark className={css.match}>{h.match}</mark>
-                      <span className={css.after}>{h.after}</span>
-                    </span>
+                    <Snippet hit={h} />
                   </button>
                 </li>
               ))}

@@ -109,14 +109,24 @@
   white-space: pre;
 }
 
-/* Cut at its start, so the words next to the match stay: right to left outside, the words kept
-   in their own order inside (bdi). */
+/* The search's "…": ahead of the part it cut, never cut itself. */
+.cut {
+  flex: none;
+}
+
+/* Cut at its start, so the words next to the match stay: its text keeps its width at the box's
+   end and overflows to the left, where the box clips it. No change of direction, so no space or
+   punctuation is reordered. */
 .before {
+  display: flex;
+  justify-content: flex-end;
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  direction: rtl;
+}
+
+.before > span {
+  flex: none;
 }
 
 .match {
