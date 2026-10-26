@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ModelRequest, ResponseBlock, ToolCall, Turn } from '../../../../src/core/model.js';
 import type { OpenSession } from '../../data/store';
 import { demoOpen } from '../../test/demo';
-import { searchSession } from './search';
+import { searchable, searchSession } from './search';
 
 const AT = '2026-10-23T09:00:00.000Z';
 
@@ -116,6 +116,19 @@ const seen = (open: OpenSession, query: string, agentId = 'main') =>
     turn: g.turn.id,
     hits: g.hits.map((h) => [h.kind, h.tool, `${h.before}[${h.match}]${h.after}`]),
   }));
+
+describe('searchable', () => {
+  it('is two characters or more, once the spaces around them are gone', () => {
+    expect(['', '  ', 'l', ' l ', '😀'].map(searchable)).toEqual([
+      false,
+      false,
+      false,
+      false,
+      false,
+    ]);
+    expect(['lo', ' l o ', '😀😀', '错误'].map(searchable)).toEqual([true, true, true, true]);
+  });
+});
 
 describe('searchSession', () => {
   it('finds a prompt, a reply, a tool’s input and its result, each typed and in page order', () => {

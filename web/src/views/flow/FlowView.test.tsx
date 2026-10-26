@@ -12,6 +12,7 @@ import { moduleCssValue } from '../../test/module-css';
 import { UiContext } from '../../ui';
 import { FlowView } from './FlowView';
 import css from './FlowView.module.css';
+import { resetSearchPrefs } from './search-prefs';
 import headerCss from './TurnHeader.module.css';
 
 const EXPLORE = 'a1b2c3d4e5f60718';
@@ -615,5 +616,102 @@ describe('FlowView', () => {
       turnId: 'turn_missing',
     });
     expect(() => renderFlow({ open })).not.toThrow();
+  });
+});
+
+describe('FlowView search', () => {
+  useFakeLayout();
+  afterEach(() => {
+    vi.useRealTimers();
+    localStorage.clear();
+    resetSearchPrefs();
+  });
+
+  /** Everything chosen, `query` typed, and the 150 ms it waits for typing to pause. */
+  function search(query: string) {
+    fireEvent.click(screen.getByRole('radio', { name: 'Everything' }));
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search everything' }), {
+      target: { value: query },
+    });
+    act(() => vi.advanceTimersByTime(150));
+  }
+
+  const results = () => screen.getByRole('list', { name: 'Search results' });
+
+  it('searches once the words have held for 150 ms, and counts what it finds', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    renderFlow();
+    fireEvent.click(screen.getByRole('radio', { name: 'Everything' }));
+    const field = screen.getByRole('searchbox', { name: 'Search everything' });
+    fireEvent.change(field, { target: { value: 'discover' } });
+    act(() => vi.advanceTimersByTime(149));
+    expect(screen.queryByRole('list', { name: 'Search results' })).toBeNull();
+    act(() => vi.advanceTimersByTime(1));
+    expect(
+      within(results()).getByRole('button', { name: /^Prompt 1 · 1 hit/ }),
+    ).toBeInTheDocument();
+    expect(within(results()).getByRole('button', { name: /^Reply/ })).toHaveTextContent(
+      'Let me look at how sessions are discovered first.',
+    );
+    expect(screen.getByRole('navigation', { name: 'Prompts' })).toHaveTextContent('1 hit');
+    // Cleared, the list is back at once.
+    fireEvent.keyDown(field, { key: 'Escape' });
+    expect(screen.queryByRole('list', { name: 'Search results' })).toBeNull();
+    expect(
+      within(screen.getByRole('list', { name: 'Prompts' })).getAllByRole('button'),
+    ).toHaveLength(3);
+  });
+
+  it('opens a tool’s hit in its call with its card open, and pauses follow', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const { navigate, setFollow } = renderFlow();
+    search('sortsessions');
+    const [bash] = within(results()).getAllByRole('button', { name: /^Bash/ });
+    fireEvent.click(bash as HTMLElement);
+    expect(setFollow).toHaveBeenCalledWith(false);
+    expect(navigate).toHaveBeenLastCalledWith({
+      turnId: 'turn_m1',
+      requestId: 'req_m1',
+      card: 'tool:tu_m1a',
+    });
+  });
+
+  it('opens a reply’s hit in its response, and a prompt’s hit as its prompt', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const { navigate } = renderFlow();
+    search('discovered');
+    fireEvent.click(within(results()).getByRole('button', { name: /^Reply/ }));
+    expect(navigate).toHaveBeenLastCalledWith({
+      turnId: 'turn_m1',
+      requestId: 'req_m1',
+      card: 'response',
+    });
+    search('design document');
+    fireEvent.click(within(results()).getByRole('button', { name: /^Prompt:/ }));
+    expect(navigate).toHaveBeenLastCalledWith({ turnId: 'turn_m3', requestId: null });
+  });
+
+  it('follows the newest prompt with a hit, and keeps the stage when nothing matches', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    renderFlow();
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Prompt 3: /);
+    search('discovered');
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Prompt 1: Busy/);
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'nothing like this' } });
+    act(() => vi.advanceTimersByTime(150));
+    expect(screen.getByText('Nothing matches')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Prompt 1: Busy/);
+  });
+
+  it('keeps Everything for the next visit', () => {
+    renderFlow();
+    fireEvent.click(screen.getByRole('radio', { name: 'Everything' }));
+    cleanup();
+    resetSearchPrefs();
+    renderFlow();
+    expect(screen.getByRole('radio', { name: 'Everything' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
   });
 });

@@ -65,6 +65,23 @@
   font-size: var(--fs-small);
 }
 
+/* Titles · Everything: what the field searches, under it. */
+.scope {
+  flex: none;
+  margin: -4px 14px 8px;
+}
+
+/* A line about the search: from how many characters it starts, or what it does not search. */
+.note {
+  margin: -8px 16px 12px;
+  color: var(--faint);
+  font-size: var(--fs-meta);
+}
+
+.scope + .note {
+  margin-top: 0;
+}
+
 /* Rows, not cards: a hairline between them, an ink bar on the open one. */
 .list {
   display: flex;
@@ -278,6 +295,10 @@
 
   .filter {
     margin: 6px 8px;
+  }
+
+  .scope {
+    margin: -2px 10px 6px;
   }
 
   .list {

@@ -1,0 +1,138 @@
+/* The hits, in place of the prompt list: a group a prompt, a hairline between groups. */
+.results {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.results > li {
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* "Prompt 12 · 3 hits", whole, then the prompt's title, cut. An ink bar on the open prompt's. */
+.head {
+  /* Holds its visually hidden text, as the list's rows do. */
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: 8px;
+  width: 100%;
+  padding: 10px 14px 4px 12px;
+  border: 0;
+  border-left: 2px solid transparent;
+  background: transparent;
+  font-size: var(--fs-small);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--motion);
+}
+
+.head[aria-current="true"] {
+  border-left-color: var(--ink);
+}
+
+.label {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.hits {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A hit on one line: what it is in, then the match amid its context. */
+.hit {
+  position: relative;
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: 8px;
+  width: 100%;
+  padding: 3px 14px 3px 26px;
+  border: 0;
+  background: transparent;
+  font-size: var(--fs-small);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--motion);
+}
+
+.head:hover,
+.hit:hover {
+  background: var(--layer-3);
+}
+
+/* Where the page is: the hit whose card is open. */
+.hit[aria-current="true"] {
+  background: var(--layer-1);
+}
+
+.head:focus-visible,
+.hit:focus-visible {
+  outline-offset: -2px;
+}
+
+/* Prompt, Reply, Result: muted words; a tool by its name, in the mono face, as code. */
+.kind {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+
+.kind[data-kind="tool"] {
+  font-family: var(--font-mono);
+}
+
+.snippet {
+  display: flex;
+  min-width: 0;
+  white-space: pre;
+}
+
+/* Cut at its start, so the words next to the match stay: right to left outside, the words kept
+   in their own order inside (bdi). */
+.before {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+}
+
+.match {
+  flex: none;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-radius: 2px;
+  background: var(--accent-tint);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.after {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

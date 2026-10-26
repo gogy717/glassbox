@@ -140,13 +140,16 @@ function toolHits(t: ToolCall, re: RegExp): SearchHit[] {
   ];
 }
 
+/** Whether `query` is long enough to search: `MIN_QUERY` characters, spaces around them aside. */
+export const searchable = (query: string) => [...oneLine(query)].length >= MIN_QUERY;
+
 /**
  * The agent's prompts that hold `query` (case-insensitive, whitespace as one space), in the
- * order of the prompts, each with its hits. A query under `MIN_QUERY` characters finds nothing.
+ * order of the prompts, each with its hits. A query that is not `searchable` finds nothing.
  */
 export function searchSession(open: OpenSession, agentId: string, query: string): SearchGroup[] {
+  if (!searchable(query)) return [];
   const q = oneLine(query);
-  if ([...q].length < MIN_QUERY) return [];
   const re = new RegExp(literal(q), 'i');
   const groups: SearchGroup[] = [];
   for (const turn of turnsOf(open, agentId)) {
