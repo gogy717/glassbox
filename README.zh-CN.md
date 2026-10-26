@@ -43,7 +43,7 @@ npx --yes github:gogy717/glassbox
 固定版本（推荐，避免内容随分支变化）：
 
 ```sh
-npx --yes github:gogy717/glassbox#v0.7.3
+npx --yes github:gogy717/glassbox#v0.7.4
 ```
 
 常用参数：
