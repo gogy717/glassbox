@@ -59,9 +59,10 @@ describe('readMessages', () => {
     });
     expect(assistant?.blocks).toEqual([
       { kind: 'thinking', text: 'Look first' },
-      { kind: 'thinking', text: null },
+      // What stands in for text kept back is measured, so the context bill can weigh it.
+      { kind: 'thinking', text: null, sealed: 2 },
       // Claude Code keeps the block but not its text.
-      { kind: 'thinking', text: null },
+      { kind: 'thinking', text: null, sealed: 3 },
       { kind: 'text', text: 'On it.' },
       { kind: 'tool-use', name: 'Bash', id: 'tu_1', input: { command: 'ls' } },
     ]);

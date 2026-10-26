@@ -16,8 +16,11 @@ const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 
 export type Block =
   | { kind: 'text'; text: string }
-  /** `text` null: not recorded (the agent keeps none, or the provider withheld it). */
-  | { kind: 'thinking'; text: string | null }
+  /**
+   * `text` null: not recorded (the agent keeps none, or the provider withheld it). `sealed`: the
+   * length of what was kept instead (a signature, redacted data), which grows with the thinking.
+   */
+  | { kind: 'thinking'; text: string | null; sealed?: number }
   | { kind: 'tool-use'; name: string; id: string | null; input: unknown }
   /** `content` null: the result is not part of the record (only its id is). */
   | { kind: 'tool-result'; toolUseId: string | null; content: Block[] | null; isError: boolean }
@@ -67,6 +70,10 @@ function media(b: Obj, what: 'image' | 'document'): Block {
   };
 }
 
+/** The size of what stands in for thinking kept back, when there is any. */
+const sealed = (v: unknown): { sealed?: number } =>
+  typeof v === 'string' && v.length > 0 ? { sealed: v.length } : {};
+
 /** Function arguments arrive as JSON text in OpenAI formats. */
 function args(v: unknown): unknown {
   if (typeof v !== 'string') return v;
@@ -95,11 +102,15 @@ export function readBlock(b: unknown): Block {
     case 'output_text':
       if (typeof b.text === 'string') return { kind: 'text', text: b.text };
       break;
-    case 'thinking':
+    case 'thinking': {
       // Claude Code keeps thinking blocks with their signature but empty text.
-      return { kind: 'thinking', text: str(b.thinking) || str(b.text) || null };
+      const text = str(b.thinking) || str(b.text) || null;
+      return text === null
+        ? { kind: 'thinking', text, ...sealed(b.signature) }
+        : { kind: 'thinking', text };
+    }
     case 'redacted_thinking':
-      return { kind: 'thinking', text: null };
+      return { kind: 'thinking', text: null, ...sealed(b.data) };
     case 'tool_use':
     case 'server_tool_use':
     case 'mcp_tool_use':
