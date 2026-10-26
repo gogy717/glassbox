@@ -404,8 +404,9 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
                 {t('perm.reopen')}
               </button>
             )}
-            {/* Stats talks to no one: no composer there. */}
-            {page !== 'stats' && (
+            {/* Only a session can be written to: Home's header offers a new one, Stats talks to
+                no one. */}
+            {page === 'session' && (
               <Composer
                 session={summary}
                 run={run}

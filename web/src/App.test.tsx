@@ -1192,6 +1192,18 @@ describe('App pages: Home · Session · Stats', () => {
     expect(page('Session')).toHaveAttribute('title', 'Reading local sessions…');
   });
 
+  // F1: the composer had nothing to send to on Home ("Pick a session first"); the board's header
+  // offers New session instead, and the composer appears with the session.
+  it('shows no composer on Home, only on the session page', async () => {
+    render(<App store={listed()} connect={noConnect} runs={fakeRuns()} />);
+    expect(screen.queryByRole('textbox', { name: 'Message' })).toBeNull();
+    expect(document.getElementById('composer-slot')).toBeEmptyDOMElement();
+    expect(screen.getAllByRole('button', { name: 'New session' })).toHaveLength(1);
+    fireEvent.click(within(sidebar()).getByRole('button', { name: /Fix flaky login test/ }));
+    await waitFor(() => expect(page('Session')).toHaveAttribute('aria-current', 'page'));
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBeInTheDocument();
+  });
+
   it('shows no composer on Stats, and opens a session picked from the list there', async () => {
     window.location.hash = '#/stats';
     render(<App store={listed()} connect={noConnect} runs={fakeRuns()} />);
