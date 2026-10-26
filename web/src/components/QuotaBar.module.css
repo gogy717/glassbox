@@ -164,11 +164,17 @@
 }
 
 .reset,
+.pace,
 .meta,
 .why {
   margin: 0;
   font-size: 11px;
   color: var(--muted);
+}
+
+/* The limit before the reset: said in the row's colour, as its track is. */
+.pace[data-verdict="limit"] {
+  color: var(--level);
 }
 
 /* Why a stale provider's numbers are old: the line to act on, so in the text colour. */

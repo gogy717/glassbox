@@ -71,6 +71,17 @@ function spanOf(w: QuotaWindow, length: number): Pace['span'] {
   }
 }
 
+export type QuotaLevel = 'ok' | 'warn' | 'danger';
+
+/**
+ * A window's colour: red from 95%, amber from 80%, and amber below that too when its limit comes
+ * before its reset at this pace. Colour is for a limit that is near.
+ */
+export function quotaLevel(w: QuotaWindow, pace: Pace | null): QuotaLevel {
+  if (w.usedPercent >= 95) return 'danger';
+  return w.usedPercent >= 80 || pace?.verdict === 'limit' ? 'warn' : 'ok';
+}
+
 /**
  * Where `w` stands at `now`: the share of it gone, and the verdict on the share used, judged by
  * the whole percentages shown. Null when there is nothing to judge: stale numbers, no reset time,

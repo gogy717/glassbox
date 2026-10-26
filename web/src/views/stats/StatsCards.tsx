@@ -21,6 +21,7 @@ import { agentName } from '../../lib/agent-names';
 import { formatCompact, formatPercent, formatResetTime } from '../../lib/format';
 import { providerShortName } from '../../lib/provider-names';
 import { quotaWindowName } from '../../lib/quota';
+import { paceOf, quotaLevel } from '../../lib/quota-pace';
 import { sessionLink } from '../../router';
 import css from './StatsPage.module.css';
 import {
@@ -366,9 +367,6 @@ export const TokensCard = memo(function TokensCard({
   );
 });
 
-/** Amber from 80%, red from 95%, as the top bar's meters. */
-const levelOf = (pct: number) => (pct >= 95 ? 'danger' : pct >= 80 ? 'warn' : 'ok');
-
 /** A weekday's short name in the app's language, its formatter made once. */
 const weekdays = new Map<string, Intl.DateTimeFormat>();
 const weekdayIn = (intl: string) => {
@@ -411,6 +409,8 @@ export const NowCard = memo(function NowCard({
         name: providerShortName(q.provider),
         window: quotaWindowName(top, t),
         pct: Math.round(Math.min(100, Math.max(0, top.usedPercent))),
+        // Coloured as the top bar's meter: near the limit, or reaching it before the reset.
+        level: quotaLevel(top, paceOf(top, now, q.stale)),
         stale: q.stale,
         reset: top.resetsAt ? resets(top.resetsAt) : st(locale, 'noReset'),
       },
@@ -443,7 +443,7 @@ export const NowCard = memo(function NowCard({
             <li
               key={r.key}
               className={css.quotaRow}
-              data-level={levelOf(r.pct)}
+              data-level={r.level}
               data-stale={r.stale || undefined}
               title={r.window}
             >

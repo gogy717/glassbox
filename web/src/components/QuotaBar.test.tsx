@@ -59,12 +59,94 @@ describe('QuotaBar', () => {
     expect(levels).toEqual(['warn', 'danger', 'ok']);
   });
 
-  it('puts the plan, the window and its reset countdown in the tooltip', () => {
+  it('puts the plan, the window, its reset countdown and its pace in the tooltip', () => {
     renderBar([createDemoQuota(DEMO_NOW)]);
+    // 97 minutes of 5 hours left: 68% of the window gone, 62% used.
     expect(screen.getByRole('meter')).toHaveAttribute(
       'title',
-      'Anthropic · Max 5x · 5-hour window 62% used · resets in 1h37m',
+      'Anthropic · Max 5x · 5-hour window 62% used · resets in 1h37m · 68% of the 5 hours gone · on pace',
     );
+    expect(screen.getByRole('meter')).toHaveAttribute(
+      'aria-valuetext',
+      'Claude 62% · 68% of the 5 hours gone · on pace',
+    );
+  });
+
+  it('turns a meter amber when its limit comes before its reset, and says when', () => {
+    renderBar([withWindow(0, { usedPercent: 75 })]);
+    const meter = screen.getByRole('meter');
+    // 75% used with 68% gone: under 80%, but the limit comes about 70 minutes from now.
+    expect(meter).toHaveAttribute('data-level', 'warn');
+    expect(meter.getAttribute('title')).toMatch(
+      / · 68% of the 5 hours gone · at this pace, the limit around \d\d:\d\d$/,
+    );
+    expect(meter.getAttribute('aria-valuetext')).toMatch(
+      /^Claude 75% · 68% of the 5 hours gone · at this pace, the limit around \d\d:\d\d$/,
+    );
+  });
+
+  it('keeps red for 95% and over, and amber from 80%, whatever the pace', () => {
+    renderBar([
+      withWindow(0, { usedPercent: 96 }),
+      { ...withWindow(0, { usedPercent: 82 }), provider: 'openai' },
+    ]);
+    expect(screen.getAllByRole('meter').map((m) => m.getAttribute('data-level'))).toEqual([
+      'danger',
+      'warn',
+    ]);
+  });
+
+  it('gives each window a pace line under its reset, the forecast in its row’s colour', () => {
+    renderBar(createDemoQuotas(DEMO_NOW));
+    const details = openDetails();
+    const paces = (name: string) =>
+      [...within(details).getByRole('region', { name }).querySelectorAll(`.${css.pace}`)].map(
+        (p) => p.textContent,
+      );
+    expect(paces('Anthropic · Max 5x')).toEqual([
+      '68% of the 5 hours gone · on pace',
+      '57% of the week gone · on pace',
+      '57% of the week gone · on pace',
+    ]);
+    // Copilot's month runs to its reset on 1 November: 22 of 31 days gone, 74% used.
+    const [premium, ...rest] = paces('GitHub Copilot · Individual');
+    expect(premium).toMatch(
+      /^71% of the month gone · at this pace, the limit around [A-Z][a-z]{2}, [A-Z][a-z]{2} \d+, \d\d:\d\d$/,
+    );
+    expect(rest).toEqual(['71% of the month gone · on pace', '71% of the month gone · on pace']);
+    const copilot = within(details).getByRole('region', { name: 'GitHub Copilot · Individual' });
+    expect(copilot.querySelector(`.${css.row}`)).toHaveAttribute('data-level', 'warn');
+    expect(screen.getAllByRole('meter')[3]).toHaveAttribute('data-level', 'warn');
+    // The figure in the mono face, its words in the UI face.
+    expect(within(copilot).getAllByText('71%')[0]).toHaveClass('figure');
+  });
+
+  it('says a window has just reset in its first 5%, and gives stale numbers no pace', () => {
+    const fresh = withWindow(1, {
+      resetsAt: new Date(NOW + 7 * 24 * 3_600_000 - 5 * 60_000).toISOString(),
+    });
+    const old = { ...demo('xai'), stale: true };
+    renderBar([fresh, old]);
+    const details = openDetails();
+    const anthropic = within(details).getByRole('region', { name: 'Anthropic · Max 5x' });
+    expect([...anthropic.querySelectorAll(`.${css.pace}`)].map((p) => p.textContent)).toEqual([
+      '68% of the 5 hours gone · on pace',
+      '0% of the week gone · just reset',
+      '57% of the week gone · on pace',
+    ]);
+    const xai = within(details).getByRole('region', { name: 'xAI · SuperGrok' });
+    expect(xai.querySelector(`.${css.pace}`)).toBeNull();
+    expect(screen.getAllByRole('meter')[1]?.getAttribute('title')).not.toMatch(/gone/);
+  });
+
+  it('says the pace in Chinese, its figures in the mono face', () => {
+    renderBar([demo('anthropic')], 'zh');
+    fireEvent.click(screen.getByRole('button', { name: /额度/ }));
+    const details = screen.getByRole('dialog', { name: '额度' });
+    const paces = [...details.querySelectorAll(`.${css.pace}`)].map((p) => p.textContent);
+    expect(paces[0]).toBe('5 小时已过 68% · 用量正常');
+    expect(paces[1]).toBe('一周已过 57% · 用量正常');
+    expect(cjkInMono(details)).toEqual([]);
   });
 
   it('skips a window whose reset time has passed, and says "reset" once all have', () => {

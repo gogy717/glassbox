@@ -6,6 +6,7 @@ import { agentName } from '../lib/agent-names';
 import { formatCountdown, formatRelative, formatResetTime } from '../lib/format';
 import { providerName, providerShortName } from '../lib/provider-names';
 import { quotaWindowName } from '../lib/quota';
+import { type Pace, paceOf, quotaLevel } from '../lib/quota-pace';
 import { FigureText } from './FigureText';
 import { useOnePopover, usePopoverDismiss } from './popover';
 import css from './QuotaBar.module.css';
@@ -17,11 +18,15 @@ interface Props {
   sessionOpen?: boolean;
 }
 
-type Level = 'ok' | 'warn' | 'danger';
-/** Amber from 80%, red from 95%: colour is for a limit that is near. */
-const levelOf = (pct: number): Level => (pct >= 95 ? 'danger' : pct >= 80 ? 'warn' : 'ok');
-
 const pct = (w: QuotaWindow) => Math.round(Math.min(100, Math.max(0, w.usedPercent)));
+
+/** "29% of the week gone", by what the window spans. */
+const GONE: Record<Pace['span'], MessageKey> = {
+  hours5: 'quota.goneHours5',
+  week: 'quota.goneWeek',
+  month: 'quota.goneMonth',
+  window: 'quota.goneWindow',
+};
 
 /** From this many providers on, the top bar shows only the top one below a wider breakpoint. */
 const MANY = 4;
@@ -133,6 +138,16 @@ export function QuotaBar({ quotas, now, sessionOpen = false }: Props) {
     const { date, clock } = formatResetTime(resetsAt, now, intl);
     return date ? t('quota.resetsOn', { date, clock }) : t('quota.resetsAt', { clock });
   };
+  const paceOfIn = (q: QuotaSnapshot, w: QuotaWindow) => paceOf(w, now, q.stale);
+  const gonePct = (p: Pace) => `${Math.round(p.elapsed * 100)}%`;
+  // On pace, just reset, or when the limit comes: "at this pace, the limit around Thu 14:00".
+  const verdict = (p: Pace) => {
+    if (p.verdict === 'early') return t('quota.justReset');
+    if (p.verdict === 'on-pace' || p.limitAt === null) return t('quota.onPace');
+    const { date, clock } = formatResetTime(new Date(p.limitAt).toISOString(), now, intl);
+    return date ? t('quota.limitOn', { date, clock }) : t('quota.limitAt', { clock });
+  };
+  const paceText = (p: Pace) => `${t(GONE[p.span], { pct: gonePct(p) })} · ${verdict(p)}`;
   const sourceName = (id: string) => {
     const key = SOURCES[id];
     return key ? t(key) : id;
@@ -176,10 +191,12 @@ export function QuotaBar({ quotas, now, sessionOpen = false }: Props) {
             : q.windows.length > 0 || !q.balance
               ? t('quota.reset')
               : formatBalance(q.balance, intl);
+          const pace = top && paceOfIn(q, top);
           const title = [
             heading(q),
             top && `${windowName(top)} ${t('quota.used', { pct: `${pct(top)}%` })}`,
             top && resetText(top),
+            pace && paceText(pace),
             q.balance && t('quota.balance', { amount: formatBalance(q.balance, intl) }),
             q.stale && age(q),
             staleReasonText(q, t),
@@ -199,11 +216,11 @@ export function QuotaBar({ quotas, now, sessionOpen = false }: Props) {
               {...shared}
               role="meter"
               aria-label={name}
-              aria-valuetext={`${name} ${value}`}
+              aria-valuetext={`${name} ${value}${pace ? ` · ${paceText(pace)}` : ''}`}
               aria-valuenow={top ? pct(top) : 0}
               aria-valuemin={0}
               aria-valuemax={100}
-              data-level={top ? levelOf(top.usedPercent) : 'ok'}
+              data-level={top ? quotaLevel(top, pace ?? null) : 'ok'}
               data-reset={!top || undefined}
             >
               {reading(name, value)}
@@ -233,24 +250,34 @@ export function QuotaBar({ quotas, now, sessionOpen = false }: Props) {
               data-stale={q.stale || undefined}
             >
               <h3 className={css.provider}>{heading(q)}</h3>
-              {q.windows.map((w) => (
-                <div key={w.id} className={css.row} data-level={levelOf(w.usedPercent)}>
-                  <div className={css.rowHead}>
-                    <span className={css.rowLabel}>{windowName(w)}</span>
-                    <span>
-                      <FigureText k="quota.used" params={{ pct: `${pct(w)}%` }} />
+              {q.windows.map((w) => {
+                const pace = paceOfIn(q, w);
+                return (
+                  <div key={w.id} className={css.row} data-level={quotaLevel(w, pace)}>
+                    <div className={css.rowHead}>
+                      <span className={css.rowLabel}>{windowName(w)}</span>
+                      <span>
+                        <FigureText k="quota.used" params={{ pct: `${pct(w)}%` }} />
+                      </span>
+                    </div>
+                    <span className={css.track} aria-hidden="true">
+                      <span style={{ width: `${pct(w)}%` }} />
                     </span>
+                    {w.resetsAt && (
+                      <span className={css.reset}>
+                        {resetText(w)} · {resetAt(w.resetsAt)}
+                      </span>
+                    )}
+                    {/* "57% of the week gone · on pace": the used share above, against the clock. */}
+                    {pace && (
+                      <span className={css.pace} data-verdict={pace.verdict}>
+                        <FigureText k={GONE[pace.span]} params={{ pct: gonePct(pace) }} /> ·{' '}
+                        {verdict(pace)}
+                      </span>
+                    )}
                   </div>
-                  <span className={css.track} aria-hidden="true">
-                    <span style={{ width: `${pct(w)}%` }} />
-                  </span>
-                  {w.resetsAt && (
-                    <span className={css.reset}>
-                      {resetText(w)} · {resetAt(w.resetsAt)}
-                    </span>
-                  )}
-                </div>
-              ))}
+                );
+              })}
               {q.balance && (
                 <p className={css.balance}>
                   {t('quota.balance', { amount: formatBalance(q.balance, intl) })}
