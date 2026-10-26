@@ -1,0 +1,31 @@
+/* A glassbox run's prompt answered where it is listed: what it wants, then Deny and Allow at the
+   right edge, under the row's lines and inside its hairline. */
+.answer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 10px 12px;
+}
+
+/* The command, the file or the pattern: the mono face, cut before the buttons are. */
+.wants {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  color: var(--text);
+}
+
+.error {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-meta);
+  color: var(--error);
+}
