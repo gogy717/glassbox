@@ -1,9 +1,14 @@
+import { join } from 'node:path';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { SessionSummary } from '../../../src/core/model.js';
 import type { PermissionRequest } from '../../../src/shared/runs.js';
 import { I18nContext, makeI18n } from '../i18n';
+import { moduleCssValue } from '../test/module-css';
 import { Answer } from './Answer';
+import classes from './Answer.module.css';
+
+const CSS_FILE = join(import.meta.dirname, 'Answer.module.css');
 
 const session: SessionSummary = {
   id: 'claude-code:s1',
@@ -133,6 +138,8 @@ describe('Answer, inline (the Inbox)', () => {
   it('allows and denies a tool with the keys on its buttons', () => {
     renderAnswer(bash);
     const group = screen.getByRole('group', { name: 'Permission for Bash · Plant the beds' });
+    // Flush with the item it is in, not inset as under a row's lines.
+    expect(moduleCssValue(CSS_FILE, classes, group, 'padding')).toBe('0');
     expect(within(group).getByRole('button', { name: 'Allow' })).toHaveAttribute(
       'aria-keyshortcuts',
       'y',
@@ -199,5 +206,9 @@ describe('Answer, on a row (Home)', () => {
     );
     for (const b of screen.getAllByRole('button'))
       expect(b).not.toHaveAttribute('aria-keyshortcuts');
+    // Under a row's lines, inside its hairline.
+    expect(moduleCssValue(CSS_FILE, classes, screen.getByRole('group'), 'padding')).toBe(
+      '0 10px 12px',
+    );
   });
 });

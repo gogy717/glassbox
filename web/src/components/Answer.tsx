@@ -126,7 +126,7 @@ export function Answer({ session: s, prompt, armed, onDecide, onOpen, inline = f
         <div className={css.plan}>
           <Markdown text={planOf(request.input)} label={t('home.plan', { title })} />
         </div>
-        <div className={`${css.answer} ${css.end}`}>
+        <div className={`${css.answer} ${css.end} ${css.flush}`}>
           {failure}
           <button
             type="button"
@@ -153,7 +153,7 @@ export function Answer({ session: s, prompt, armed, onDecide, onOpen, inline = f
   return (
     // biome-ignore lint/a11y/useSemanticElements: a row's answer buttons, not a form fieldset
     <div
-      className={css.answer}
+      className={inline ? `${css.answer} ${css.flush}` : css.answer}
       role="group"
       aria-label={t('home.decide', { tool: request.toolName, title })}
     >

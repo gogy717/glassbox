@@ -59,6 +59,7 @@
   background: var(--layer-2);
 }
 
-.inline .answer {
+/* Inline, the answer is flush with the item it is in, which has its own padding. */
+.flush {
   padding: 0;
 }
