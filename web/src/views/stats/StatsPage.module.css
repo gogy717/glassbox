@@ -580,7 +580,7 @@ a.sessionTitle:hover {
 
 /* Two columns beside the session list: the columns and the pair dissolve, and every card is
    the grid's own, in reading order; the wide cards and the hour take a row, By CLI and Top
-   projects share one (D4). */
+   projects share one (D4), Crossing follows them across. */
 @media (max-width: 1199px) {
   .cards {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -594,6 +594,7 @@ a.sessionTitle:hover {
 
   .card[data-area="grid"],
   .card[data-area="hour"],
+  .card[data-area="crossing"],
   .card[data-area="longest"],
   .card[data-area="tokens"],
   .card[data-area="now"] {
@@ -613,6 +614,11 @@ a.sessionTitle:hover {
   }
 
   .card[data-area="projects"] {
+    order: 4;
+  }
+
+  /* Top projects' order: the page's own order then puts it right after that card. */
+  .card[data-area="crossing"] {
     order: 4;
   }
 

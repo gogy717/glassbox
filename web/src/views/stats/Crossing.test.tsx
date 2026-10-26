@@ -106,6 +106,8 @@ describe('the Crossing card', () => {
     ]);
     const app = rows[1]?.closest('tr') as HTMLElement;
     expect(within(app).getAllByRole('cell')[0]).toHaveTextContent(/lines not known/);
+    // A narrow column breaks a path after a slash, never inside a name.
+    expect(rows[0]?.querySelectorAll('wbr')).toHaveLength(2);
   });
 
   it('unfolds a file into each worktree’s changes side by side, each a link to its call', async () => {

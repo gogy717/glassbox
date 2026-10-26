@@ -206,7 +206,20 @@ function PathRows({
             onClick={() => setOpen((o) => !o)}
           >
             <ChevronRight size={14} className={css.chevron} aria-hidden="true" />
-            <span className={css.path}>{path.path}</span>
+            <span className={css.path}>
+              {/* A narrow column breaks the path after a slash, not inside a name. */}
+              {path.path.split('/').map((segment, i, all) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: a path's segments, in order
+                <Fragment key={i}>
+                  {segment}
+                  {i < all.length - 1 && (
+                    <>
+                      /<wbr />
+                    </>
+                  )}
+                </Fragment>
+              ))}
+            </span>
           </button>
           <span className={css.verdict} data-overlap={String(path.overlap)}>
             {st(locale, VERDICT[String(path.overlap) as keyof typeof VERDICT])}

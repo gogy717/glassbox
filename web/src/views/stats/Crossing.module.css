@@ -101,7 +101,7 @@
 
 .path {
   font-family: var(--font-mono);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .verdict {
