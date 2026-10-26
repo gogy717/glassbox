@@ -654,6 +654,7 @@ export const en: Record<MessageKey, string> = {
   'files.chip.read': 'Read',
   'files.chip.crossing': 'Crossing',
   'files.crossingTitle': '{n} {n|file|files} also changed in {trees}',
+  'files.crossingNone': 'No file also changed in another worktree',
   'files.alsoIn': 'also changed in {trees}',
   'files.filterPath': 'Filter by path',
   'files.includeSub': 'Include sub-agents',

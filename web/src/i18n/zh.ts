@@ -639,6 +639,7 @@ export const zh = {
   'files.chip.read': '读过',
   'files.chip.crossing': '交叉',
   'files.crossingTitle': '{n} 个文件也在 {trees} 里改过',
+  'files.crossingNone': '没有文件也在别的工作树里改过',
   'files.alsoIn': '{trees} 也改过',
   'files.filterPath': '按路径筛选',
   'files.includeSub': '包括子代理',

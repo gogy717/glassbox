@@ -1,12 +1,13 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ToolCall } from '../../../../src/core/model.js';
 import { demoRepo } from '../../../../src/server/week-demo.js';
-import type { WeekLine } from '../../../../src/shared/week.js';
+import type { EditMark } from '../../../../src/shared/crossing.js';
+import type { WeekLine, WeekResult, WeekSession } from '../../../../src/shared/week.js';
 import { createStore, type OpenSession, StoreContext } from '../../data/store';
 import { I18nContext, makeI18n } from '../../i18n';
 import { demoOpen } from '../../test/demo';
-import { demoWeek } from '../../test/week';
+import { demoWeek, WEEK_NOW } from '../../test/week';
 import { UiContext } from '../../ui';
 import { FilesView } from './FilesView';
 import { resetFilesPrefs } from './prefs';
@@ -315,21 +316,35 @@ describe('the Crossing chip', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  /** The demo session open, a session of `other` listed (glassbox's other worktree), the week served. */
-  function renderCrossing(locale: 'en' | 'zh' = 'en', other = TREE) {
+  /**
+   * The demo session open, a session of `other` listed (glassbox's other worktree), the weeks
+   * served one a read (the last again once they run out).
+   */
+  function renderCrossing(
+    locale: 'en' | 'zh' = 'en',
+    other = TREE,
+    weeks: WeekResult[] = [demoWeek('7d')],
+  ) {
     const open = demoOpen();
     const store = createStore();
+    const sibling = {
+      ...open.session,
+      id: 'claude-code:sidebar',
+      cwd: other,
+      repo: demoRepo(other),
+    };
     store.applyEvent({
       type: 'sessions',
-      sessions: [
-        { ...open.session, repo: demoRepo(open.session.cwd as string) },
-        { ...open.session, id: 'claude-code:sidebar', cwd: other, repo: demoRepo(other) },
-      ],
+      sessions: [{ ...open.session, repo: demoRepo(open.session.cwd as string) }, sibling],
     });
-    const lines: WeekLine[] = [{ type: 'result', result: demoWeek('7d') }];
-    const fetched = vi.fn(
-      async (_url: string) => new Response(lines.map((l) => `${JSON.stringify(l)}\n`).join('')),
-    );
+    let read = 0;
+    const fetched = vi.fn(async (_url: string) => {
+      const line: WeekLine = {
+        type: 'result',
+        result: weeks[Math.min(read++, weeks.length - 1)] as WeekResult,
+      };
+      return new Response(`${JSON.stringify(line)}\n`);
+    });
     vi.stubGlobal('fetch', fetched);
     render(
       <StoreContext.Provider value={store}>
@@ -340,7 +355,31 @@ describe('the Crossing chip', () => {
         </I18nContext.Provider>
       </StoreContext.Provider>,
     );
-    return { fetched };
+    return { fetched, store, open, sibling };
+  }
+
+  /** The demo's 7 days with the worktree's latest session also changing `file` of the tree. */
+  function withWorktreeChange(file: string): WeekResult {
+    const week = demoWeek('7d');
+    const latest = week.sessions
+      .filter((s) => s.repo?.dir === TREE)
+      .sort((a, b) => b.id.localeCompare(a.id))[0] as WeekSession;
+    const at = WEEK_NOW - 60_000;
+    const path = {
+      path: `${TREE}/${file}`,
+      edited: 1,
+      created: 0,
+      deleted: 0,
+      first: at,
+      last: at,
+      marks: [[at, null]] as EditMark[],
+    };
+    const files = latest.inWindow.files ?? { paths: [], more: 0 };
+    const changed = {
+      ...latest,
+      inWindow: { ...latest.inWindow, files: { ...files, paths: [...files.paths, path] } },
+    };
+    return { ...week, sessions: week.sessions.map((s) => (s === latest ? changed : s)) };
   }
 
   it('is not there outside a repository with another worktree at work, and reads no week', () => {
@@ -408,6 +447,54 @@ describe('the Crossing chip', () => {
     const chip = await screen.findByRole('button', { name: /^Crossing/ });
     expect(chip).toHaveTextContent('Crossing2');
     expect(asked).toEqual(['/api/week?window=week', '/api/week?window=7d']);
+  });
+
+  it('reads the week again when another worktree’s session changes, at most twice a minute', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: WEEK_NOW });
+    try {
+      const { fetched, store, open, sibling } = renderCrossing('en', TREE, [
+        demoWeek('7d'),
+        withWorktreeChange('src/server/store.test.ts'),
+      ]);
+      const chip = await screen.findByRole('button', { name: /^Crossing/ });
+      expect(chip).toHaveTextContent('Crossing2');
+      const update = (sec: number) =>
+        act(() =>
+          store.applyEvent({
+            type: 'sessions',
+            sessions: [
+              { ...open.session, repo: demoRepo(open.session.cwd as string) },
+              { ...sibling, updatedAt: new Date(WEEK_NOW + sec * 1000).toISOString() },
+            ],
+          }),
+        );
+      // A moment later: not yet, the last read is too fresh.
+      vi.setSystemTime(WEEK_NOW + 10_000);
+      update(10);
+      expect(fetched).toHaveBeenCalledTimes(1);
+      // Half a minute on, the change is read: the worktree now changed a third file of the session.
+      vi.setSystemTime(WEEK_NOW + 31_000);
+      update(31);
+      await waitFor(() => expect(chip).toHaveTextContent('Crossing3'));
+      expect(fetched).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('says so in a sentence when the other worktree changed none of the session’s files', async () => {
+    const week = demoWeek('7d');
+    renderCrossing('en', TREE, [
+      {
+        ...week,
+        sessions: week.sessions.map((s) =>
+          s.repo?.dir === TREE ? { ...s, inWindow: { ...s.inWindow, files: undefined } } : s,
+        ),
+      },
+    ]);
+    const chip = await screen.findByRole('button', { name: /^Crossing/ });
+    expect(chip).toHaveTextContent('Crossing0');
+    expect(chip).toHaveAttribute('title', 'No file also changed in another worktree');
   });
 
   it('speaks Chinese', async () => {

@@ -16,6 +16,7 @@ import { FigureText } from '../../components/FigureText';
 import { StatusMark } from '../../components/Status';
 import { type OpenSession, StoreContext, useWeekCache } from '../../data/store';
 import { type RovingItemProps, useRovingFocus } from '../../data/useRovingFocus';
+import { useThrottled } from '../../data/useThrottled';
 import { type MessageKey, useI18n } from '../../i18n';
 import { subtreeIds } from '../../lib/agents';
 import { formatClock } from '../../lib/format';
@@ -60,6 +61,11 @@ const HEAD: { key: MessageKey; count: keyof FilesSummary; always: boolean }[] = 
 ];
 
 const NO_SESSIONS: SessionSummary[] = [];
+/**
+ * How often, at most, the chip reads the week again while another tree's sessions change: the
+ * server parses a running session again no sooner either.
+ */
+export const CROSSING_REREAD_MS = 30_000;
 const noSubscription = () => () => {};
 /** A directory as its segments, whichever separator: "/w/x" and "/w/x/" alike. */
 const dirKey = (dir: string) =>
@@ -72,7 +78,8 @@ const dirKey = (dir: string) =>
  * The session's files another worktree of its repository changed too in the last 7 days, by row
  * key, each with those trees' names. The week is read for it only once another tree of the
  * repository is known to have sessions: in the session list, or in a week read before (the
- * demo's week holds sessions its list does not). Null otherwise, and before the week is read.
+ * demo's week holds sessions its list does not); read again when one of the list's changes, at
+ * most every `CROSSING_REREAD_MS`. Null otherwise, and before the week is read.
  */
 function useCrossing(open: OpenSession): Map<string, string[]> | null {
   const store = useContext(StoreContext);
@@ -91,12 +98,20 @@ function useCrossing(open: OpenSession): Map<string, string[]> | null {
   const elsewhere =
     sessions.some(otherTree) ||
     (week ?? weeks.week?.result ?? null)?.sessions.some(otherTree) === true;
+  // When another tree's sessions last changed: the week is read again as that moves.
+  const changed = useThrottled(
+    sessions.reduce((t, s) => (otherTree(s) && s.updatedAt > t ? s.updatedAt : t), ''),
+    CROSSING_REREAD_MS,
+  );
   useEffect(() => {
     if (!elsewhere) return;
-    const release = cache.retain('7d');
-    cache.request('7d');
-    return release;
+    return cache.retain('7d');
   }, [cache, elsewhere]);
+  useEffect(() => {
+    // `changed` is the reason to read again, not an input of the read.
+    void changed;
+    if (elsewhere) cache.request('7d');
+  }, [cache, elsewhere, changed]);
   // By the repository's place, not its object: the session list arrives anew every few seconds.
   const root = repo?.root ?? null;
   const dir = repo?.dir ?? null;
@@ -212,10 +227,14 @@ export function FilesView({ open, agentId, navigate }: Props) {
                 type="button"
                 className={css.chip}
                 aria-pressed={crossingOnly}
-                title={t('files.crossingTitle', {
-                  n: crossed.length,
-                  trees: crossedTrees.join(', '),
-                })}
+                title={
+                  crossed.length > 0
+                    ? t('files.crossingTitle', {
+                        n: crossed.length,
+                        trees: crossedTrees.join(', '),
+                      })
+                    : t('files.crossingNone')
+                }
                 onClick={() => setCrossingOnly((on) => !on)}
               >
                 {t('files.chip.crossing')}
