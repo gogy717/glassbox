@@ -96,14 +96,29 @@ describe('ActivityLine', () => {
     expect(el).toHaveTextContent('Thinking · 1:15');
   });
 
-  it('says waiting for you, with how long on a card', () => {
+  it('says what a waiting session waits for on a card, with how long; waiting for you in a row', () => {
     const s = session('waiting', { kind: 'waiting', tool: 'Bash', since: ago(20) });
     const card = line(s);
-    expect(card).toHaveTextContent('Waiting for you · 0:20');
+    expect(card).toHaveTextContent('Permission · Bash · 0:20');
     expect(card).toHaveAttribute('data-state', 'waiting');
+    // The tool is a name: the mono face, as a target.
+    expect(card.querySelector('[class*="target"]')).toHaveTextContent('Bash');
     expect(line(s, { density: 'compact' })).toHaveTextContent(/^Waiting for you$/);
-    // A prompt the server does not know of yet (a glassbox run's): no clock to give.
-    expect(line(session('waiting'))).toHaveTextContent(/^Waiting for you$/);
+    // A question, and the turn finished (no tool is blocked): your turn.
+    expect(
+      line(session('waiting', { kind: 'waiting', tool: 'AskUserQuestion', since: ago(62) })),
+    ).toHaveTextContent(/^Question · 1:02$/);
+    expect(
+      line({ ...session('waiting', { kind: 'waiting' }), updatedAt: ago(220) }),
+    ).toHaveTextContent(/^Your turn · 3:40$/);
+    // Nothing says since when: no clock to give.
+    expect(line(session('waiting'))).toHaveTextContent(/^Your turn$/);
+  });
+
+  it('words a wait in Chinese', () => {
+    const s = session('waiting', { kind: 'waiting', tool: 'Bash', since: ago(20) });
+    expect(line(s, { locale: 'zh' })).toHaveTextContent('权限 · Bash · 已 0:20');
+    expect(line(session('waiting'), { locale: 'zh' })).toHaveTextContent(/^轮到你了$/);
   });
 
   it('falls back to the live word when nothing more is known', () => {

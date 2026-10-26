@@ -103,7 +103,7 @@ describe('Home', () => {
     expect(titles(running)).toEqual(['Session 2', 'Session 3']);
     expect(rows(running).map((r) => r.textContent)).toEqual([
       expect.stringContaining('glassbox /Session 2Thinking · 1:12'),
-      expect.stringContaining('shopfront /Session 3Waiting for you'),
+      expect.stringContaining('shopfront /Session 3Your turn'),
     ]);
     const recent = screen.getByRole('region', { name: 'Recent' });
     expect(titles(recent)).toEqual(['Session 5', 'Session 4', 'Session 1']);

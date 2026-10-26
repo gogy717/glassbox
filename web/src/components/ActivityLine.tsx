@@ -3,6 +3,7 @@ import type { SessionActivity, SessionSummary } from '../../../src/core/model.js
 import { type MessageKey, translateParts, useI18n } from '../i18n';
 import { isRunning } from '../lib/sessions';
 import { toolCategory } from '../lib/tool-category';
+import { WAIT_KEY, waitingSince, waitKind } from '../lib/waiting';
 import css from './ActivityLine.module.css';
 import { UiCjk } from './CompactFigure';
 import { LiveDot, Ticking } from './Status';
@@ -89,6 +90,31 @@ function Doing({ a, clock }: { a: SessionActivity; clock: boolean }) {
   );
 }
 
+/**
+ * What a waiting session waits for, and for how long: "Permission · Bash · 0:20", "Question ·
+ * 1:02", "Your turn · 3:40". On a card, under a heading that already says it waits for you.
+ */
+function Waiting({ session: s }: { session: SessionSummary }) {
+  const { t } = useI18n();
+  const kind = waitKind(s.activity);
+  const since = waitingSince(s);
+  return (
+    <>
+      {kind === 'permission' ? (
+        <Phrase k={WAIT_KEY.permission} x={s.activity?.tool ?? ''} />
+      ) : (
+        <span>{t(WAIT_KEY[kind])}</span>
+      )}
+      {since && (
+        <>
+          <span className={css.sep}> · </span>
+          <Ticking since={since} labelKey="activity.elapsed" />
+        </>
+      )}
+    </>
+  );
+}
+
 interface Props {
   session: SessionSummary;
   /** Set when the session's glassbox run failed: its error, or null when it gave none. */
@@ -99,9 +125,10 @@ interface Props {
 
 /**
  * A session's state as its row says it: what it is doing right now when the server knows
- * ("Reading tokens.css · 0:04", "Thinking · 1:12"), else its live word; Failed, with the reason,
- * when its glassbox run failed. Targets and clocks are in the mono face; each clock re-renders
- * on its own, every second, and nothing else does.
+ * ("Reading tokens.css · 0:04", "Thinking · 1:12"), else its live word; on a card, what a
+ * waiting session waits for ("Permission · Bash · 0:20"); Failed, with the reason, when its
+ * glassbox run failed. Targets and clocks are in the mono face; each clock re-renders on its
+ * own, every second, and nothing else does.
  */
 export function ActivityLine({ session: s, failure, density }: Props) {
   const { t } = useI18n();
@@ -120,13 +147,12 @@ export function ActivityLine({ session: s, failure, density }: Props) {
         )}
       </span>
     );
-  const since = s.activity?.since ?? null;
   return (
     <span className={css.activity} data-state={s.live}>
       <LiveDot state={s.live} />
       {s.live === 'waiting' ? (
-        card && since ? (
-          <Ticking since={since} labelKey="activity.waiting" />
+        card ? (
+          <Waiting session={s} />
         ) : (
           <span>{t('live.waiting')}</span>
         )
