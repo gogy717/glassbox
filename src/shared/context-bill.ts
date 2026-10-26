@@ -16,7 +16,7 @@
  * message once however many requests carry it.
  */
 import { activityTarget } from '../core/activity.js';
-import type { ModelRequest, RequestDetail } from '../core/model.js';
+import type { ModelRequest, RequestDetail, ToolCall } from '../core/model.js';
 import { resolvePath, touchesOf } from './files.js';
 import { type Block, isGap, readMessage, readSystem, readTools } from './request-read.js';
 import { pathField } from './tool-category.js';
@@ -402,6 +402,22 @@ export function requestBill(
 
 // ── The bill of an agent's requests ───────────────────────────────────────────────────────
 
+/** A call as the files model reads one, from what a request sent: its tool and input. */
+const AS_CALL: ToolCall = {
+  id: '',
+  agentId: '',
+  requestId: '',
+  name: '',
+  input: null,
+  status: 'complete',
+  startedAt: null,
+  endedAt: null,
+  durationMs: null,
+  resultPreview: null,
+  hasFullResult: false,
+  spawned: null,
+};
+
 /** Items a session's bill keeps: its costliest. */
 export const TOP_ITEMS = 12;
 /** Reads of one file worth saying so: "3 files were read 5+ times". */
@@ -668,7 +684,7 @@ export class ContextLedger {
     if (known !== undefined) return known;
     const call = w.kind === 'call' ? w : this.calls.get(id);
     if (!call?.tool) return null;
-    const read = touchesOf({ name: call.tool, input: call.input, resultPreview: null }).find(
+    const read = touchesOf({ ...AS_CALL, name: call.tool, input: call.input }).find(
       (t) => t.verb === 'read',
     );
     const path = read ? resolvePath(read.path, this.cwd) : null;
