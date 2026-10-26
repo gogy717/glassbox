@@ -92,10 +92,11 @@ function Doing({ a, clock }: { a: SessionActivity; clock: boolean }) {
 }
 
 /**
- * What a waiting session waits for, and for how long: "Permission · Bash · 0:20", "Question ·
- * 1:02", "Your turn · 3:40". On a card, under a heading that already says it waits for you.
+ * What a waiting session waits for: "Permission · Bash", "Question", "Your turn", in a row as on
+ * Home's board, which adds how long ("Permission · Bash · 0:20") under a heading that already
+ * says it waits for you.
  */
-function Waiting({ session: s }: { session: SessionSummary }) {
+function Waiting({ session: s, clock }: { session: SessionSummary; clock: boolean }) {
   const { t } = useI18n();
   const kind = waitKind(s.activity);
   const since = waitingSince(s);
@@ -106,7 +107,7 @@ function Waiting({ session: s }: { session: SessionSummary }) {
       ) : (
         <span>{t(WAIT_KEY[kind])}</span>
       )}
-      {since && (
+      {clock && since && (
         <>
           <span className={css.sep}> · </span>
           <Ticking since={since} labelKey="activity.elapsed" />
@@ -126,10 +127,10 @@ interface Props {
 
 /**
  * A session's state as its row says it: what it is doing right now when the server knows
- * ("Reading tokens.css · 0:04", "Thinking · 1:12"), else its live word; on a card, what a
- * waiting session waits for ("Permission · Bash · 0:20"); Failed, with the reason, when its
- * glassbox run failed. Targets and clocks are in the mono face; each clock re-renders on its
- * own, every second, and nothing else does.
+ * ("Reading tokens.css · 0:04", "Thinking · 1:12"), else its live word; what a waiting session
+ * waits for ("Permission · Bash", with its clock on a card); Idle for one open in a terminal with
+ * nothing pending; Failed, with the reason, when its glassbox run failed. Targets and clocks are
+ * in the mono face; each clock re-renders on its own, every second, and nothing else does.
  */
 export function ActivityLine({ session: s, failure, density }: Props) {
   const { t } = useI18n();
@@ -154,13 +155,11 @@ export function ActivityLine({ session: s, failure, density }: Props) {
     <span className={css.activity} data-state={s.live}>
       <LiveDot state={s.live} />
       {s.live === 'waiting' ? (
-        card ? (
-          <Waiting session={s} />
-        ) : (
-          <span>{t('live.waiting')}</span>
-        )
+        <Waiting session={s} clock={card} />
       ) : s.live === 'busy' && s.activity ? (
         <Doing a={s.activity} clock={card} />
+      ) : s.live === 'idle' ? (
+        <span title={t('live.idleHint')}>{t('live.idle')}</span>
       ) : (
         <span>{t(`live.${s.live}`)}</span>
       )}

@@ -505,14 +505,15 @@ describe('App', () => {
         }),
       }),
     );
-    for (const where of [top, row()]) {
-      expect(where).toHaveTextContent('Waiting for you');
+    for (const where of [top, row()])
       expect(where.querySelector('[data-kind="live"][data-state="waiting"]')).not.toBeNull();
-    }
+    // The top bar says it waits for you; the row says for what, in the words of Home's board.
+    expect(top).toHaveTextContent('Waiting for you');
+    expect(row()).toHaveTextContent('Permission · Bash');
     // Answered: back to what the process says.
     act(() => store.applyEvent({ type: 'run', run: runState({ status: 'running' }) }));
     expect(top).toHaveTextContent('Running');
-    expect(row()).not.toHaveTextContent('Waiting for you');
+    expect(row()).not.toHaveTextContent('Permission');
   });
 
   // I3b F2: one derivation (waitingSessionIds) for the top bar and the list, so they agree even
@@ -541,7 +542,7 @@ describe('App', () => {
     store.applyEvent({ type: 'run', run: runState({ id: 'run_new', status: 'running' }) });
     render(<App store={store} connect={noConnect} runs={fakeRuns()} />);
     const row = within(sidebar()).getByRole('button', { name: /Live viewer research/ });
-    expect(row).toHaveTextContent('Waiting for you');
+    expect(row).toHaveTextContent('Permission · Bash');
     expect(screen.getByRole('banner')).toHaveTextContent('Waiting for you');
   });
 

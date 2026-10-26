@@ -321,7 +321,9 @@ describe('SessionSidebar', () => {
         />
       </I18nContext.Provider>,
     );
-    expect(screen.getByText('等你确认')).toBeInTheDocument();
+    // In the words of Home's board: no tool is blocked, so it is the person's turn.
+    expect(screen.getByText('轮到你了')).toBeInTheDocument();
+    expect(screen.queryByText('等你确认')).toBeNull();
   });
 
   it('marks the selected session', () => {

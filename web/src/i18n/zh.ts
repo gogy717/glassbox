@@ -7,6 +7,7 @@ export const zh = {
   'live.busy': '运行中',
   'live.waiting': '等你确认',
   'live.idle': '空闲',
+  'live.idleHint': '在终端里打开着，没有待处理的事',
   'live.closed': '已关闭',
   'live.unknown': '状态未知',
   'follow.label': '跟随最新',

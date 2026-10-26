@@ -8,6 +8,7 @@ export const en: Record<MessageKey, string> = {
   'live.busy': 'Running',
   'live.waiting': 'Waiting for you',
   'live.idle': 'Idle',
+  'live.idleHint': 'Open in a terminal, nothing pending',
   'live.closed': 'Closed',
   'live.unknown': 'Unknown state',
   'follow.label': 'Follow latest',

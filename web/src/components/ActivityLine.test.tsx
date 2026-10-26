@@ -96,14 +96,22 @@ describe('ActivityLine', () => {
     expect(el).toHaveTextContent('Thinking · 1:15');
   });
 
-  it('says what a waiting session waits for on a card, with how long; waiting for you in a row', () => {
+  it('says what a waiting session waits for, the same words in a row as on a card, which clocks it', () => {
     const s = session('waiting', { kind: 'waiting', tool: 'Bash', since: ago(20) });
     const card = line(s);
     expect(card).toHaveTextContent('Permission · Bash · 0:20');
     expect(card).toHaveAttribute('data-state', 'waiting');
     // The tool is a name: the mono face, as a target.
     expect(card.querySelector('[class*="target"]')).toHaveTextContent('Bash');
-    expect(line(s, { density: 'compact' })).toHaveTextContent(/^Waiting for you$/);
+    const row = line(s, { density: 'compact' });
+    expect(row).toHaveTextContent(/^Permission · Bash$/);
+    expect(row).toHaveAttribute('data-state', 'waiting');
+    expect(
+      line(session('waiting', { kind: 'waiting', tool: 'AskUserQuestion', since: ago(62) }), {
+        density: 'compact',
+      }),
+    ).toHaveTextContent(/^Question$/);
+    expect(line(session('waiting'), { density: 'compact' })).toHaveTextContent(/^Your turn$/);
     // A question, and the turn finished (no tool is blocked): your turn.
     expect(
       line(session('waiting', { kind: 'waiting', tool: 'AskUserQuestion', since: ago(62) })),
@@ -118,7 +126,25 @@ describe('ActivityLine', () => {
   it('words a wait in Chinese', () => {
     const s = session('waiting', { kind: 'waiting', tool: 'Bash', since: ago(20) });
     expect(line(s, { locale: 'zh' })).toHaveTextContent('权限 · Bash · 已 0:20');
+    expect(line(s, { locale: 'zh', density: 'compact' })).toHaveTextContent(/^权限 · Bash$/);
     expect(line(session('waiting'), { locale: 'zh' })).toHaveTextContent(/^轮到你了$/);
+  });
+
+  it('says Idle of a session open in a terminal with nothing pending, and says so on hover', () => {
+    for (const density of ['compact', 'card'] as const) {
+      const idle = line(session('idle', { kind: 'idle', since: ago(600) }), { density });
+      expect(idle).toHaveTextContent(/^Idle$/);
+      expect(idle.querySelector('[title]')).toHaveAttribute(
+        'title',
+        'Open in a terminal, nothing pending',
+      );
+    }
+    expect(line(session('idle'), { locale: 'zh' }).querySelector('[title]')).toHaveAttribute(
+      'title',
+      '在终端里打开着，没有待处理的事',
+    );
+    // The other states need no gloss.
+    expect(line(session('closed')).querySelector('[title]')).toBeNull();
   });
 
   it('falls back to the live word when nothing more is known', () => {

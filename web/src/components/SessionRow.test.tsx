@@ -94,6 +94,25 @@ describe('SessionRow', () => {
     expect(meta.querySelector('.visually-hidden')).toHaveTextContent('42K output tokens');
   });
 
+  it('says what a waiting session waits for, in the words of Home’s board, its tooltip too', () => {
+    const waiting: SessionSummary = {
+      ...running,
+      live: 'waiting',
+      activity: { kind: 'waiting', tool: 'Bash', target: null, agentId: 'main', since: since(20) },
+    };
+    const row = renderRow(waiting);
+    const meta = row.lastElementChild as HTMLElement;
+    expect(meta.firstElementChild).toHaveTextContent(/^Permission · Bash$/);
+    // Cut short, the tooltip repeats the row: in its words, not "Waiting for you".
+    const title = row.querySelector<HTMLElement>(`.${css.title}`) as HTMLElement;
+    Object.defineProperty(title, 'scrollWidth', { configurable: true, value: 400 });
+    Object.defineProperty(title, 'clientWidth', { configurable: true, value: 200 });
+    fireEvent.pointerEnter(row);
+    expect((row.getAttribute('title') ?? '').split('\n')[1]).toMatch(
+      /^Claude Code · Permission · Bash · /,
+    );
+  });
+
   it('says a failed run failed, then its age', () => {
     const meta = renderRow(idle, false, vi.fn(), 'en', { failure: 'missing file' })
       .lastElementChild as HTMLElement;

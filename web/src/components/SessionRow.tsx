@@ -5,6 +5,7 @@ import { translateParts, useI18n } from '../i18n';
 import { agentName } from '../lib/agent-names';
 import { formatCompact, formatRelative } from '../lib/format';
 import { isRunning } from '../lib/sessions';
+import { waitLabel } from '../lib/waiting';
 import { ActivityLine } from './ActivityLine';
 import { AgentTag } from './AgentTag';
 import { CompactFigure } from './CompactFigure';
@@ -48,9 +49,12 @@ export function SessionRow({
   const title = s.title ?? t('sidebar.untitled');
   const running = isRunning(s);
   const failed = failure !== undefined && !running;
+  // A wait in the words the row says: "Permission · Bash", "Question", "Your turn".
   const state = failed
     ? [t('status.error'), failure].filter(Boolean).join(': ')
-    : t(`live.${s.live}`);
+    : s.live === 'waiting'
+      ? waitLabel(t, s.activity)
+      : t(`live.${s.live}`);
   const when = formatRelative(s.updatedAt, now, intl);
   const figure = s.usage && s.usage.output > 0 ? formatCompact(s.usage.output, intl) : null;
   // Said in full ("42K output tokens"): the tooltip, and what a screen reader hears.
