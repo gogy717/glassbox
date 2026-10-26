@@ -12,7 +12,6 @@ import type {
   IsoTime,
   ModelRequest,
   QuotaSnapshot,
-  RepoIdentity,
   RequestDetail,
   SessionPatch,
   SessionSnapshot,
@@ -36,14 +35,7 @@ import { troubleLabel } from './open-session.js';
 import { RateTracker } from './rate.js';
 import { compareSessions, isActive, listedSummary, withRepo } from './store.js';
 import { type WeekRead, WeekService, type WeekStore } from './week.js';
-import { createDemoWeek } from './week-demo.js';
-
-/** The demo's directories are each the main working tree of a repository of their own name. */
-const demoRepo = (cwd: string): RepoIdentity => ({
-  root: cwd,
-  dir: cwd,
-  name: cwd.split('/').filter(Boolean).at(-1) ?? cwd,
-});
+import { createDemoWeek, demoRepo } from './week-demo.js';
 
 const TICK_MS = 2000;
 
@@ -257,7 +249,9 @@ export class DemoStore implements AppStore, WeekStore {
   }
 
   async getSnapshot(sessionId: string): Promise<SessionSnapshot | null> {
-    const snap = this.snapshotOf(sessionId);
+    // The week's sessions open too, though never listed: the Crossing panel shows their edits.
+    const snap =
+      this.snapshotOf(sessionId) ?? this.weekBehind.find((s) => s.session.id === sessionId);
     return snap ? structuredClone(snap) : null;
   }
 

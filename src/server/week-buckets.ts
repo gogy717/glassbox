@@ -9,6 +9,7 @@
 import type { SessionSnapshot, TokenUsage } from '../core/model.js';
 import { MAIN_AGENT_ID } from '../core/model.js';
 import { addUsage, emptyUsage } from '../core/usage.js';
+import { addChange, changesOf, fileOps, mergePathOps, type PathOps } from '../shared/crossing.js';
 import { ms, toolSpan } from '../shared/segments.js';
 import { type ToolCategory, toolCategory } from '../shared/tool-category.js';
 import {
@@ -32,6 +33,8 @@ export interface HourBucket {
   usage: TokenUsage;
   /** `usage` by model, as `WeekFigures.usageByModel`. */
   usageByModel: Record<string, TokenUsage>;
+  /** The files its calls changed, by path, as `WeekFigures.files`. */
+  files: Map<string, PathOps>;
 }
 
 /** Adds `u` to what `byModel` holds for `model`. */
@@ -67,6 +70,7 @@ const emptyBucket = (): HourBucket => ({
   failures: 0,
   usage: emptyUsage(),
   usageByModel: {},
+  files: new Map(),
 });
 
 /** Entities handled between two pauses when a session is bucketed with pauses. */
@@ -155,13 +159,16 @@ function* bucketing(snap: SessionSnapshot, now: number): Generator<void, Session
   }
   for (const t of snap.toolCalls) {
     if (++n % STEP === 0) yield;
-    const b = at(ms(t.startedAt) ?? requestStart.get(t.requestId) ?? fallback);
+    const start = ms(t.startedAt) ?? requestStart.get(t.requestId) ?? fallback;
+    const b = at(start);
     const span = toolSpan(t, now);
     if (span) saw(t.agentId, span[0], span[1]);
     if (t.status === 'error') b.failures++;
     const cat = toolCategory(t.name, t.input);
     b.toolCats[cat] = (b.toolCats[cat] ?? 0) + 1;
-    if (ids.has(t.agentId)) b.toolCalls++;
+    if (!ids.has(t.agentId)) continue;
+    b.toolCalls++;
+    for (const c of changesOf(t, snap.session.cwd, start)) addChange(b.files, c);
   }
 
   // Sub-agents' lives: from their start to their end, else to their first and last activity.
@@ -261,6 +268,7 @@ export function sliceSession(
     usage: emptyUsage(),
     usageByModel: {},
   };
+  const files = new Map<string, PathOps>();
   for (const [h, bucket] of b.hours) {
     const i = slotOf(window.hourStarts, h);
     if (i < 0) continue;
@@ -276,7 +284,10 @@ export function sliceSession(
     addUsage(f.usage, bucket.usage);
     for (const [model, u] of Object.entries(bucket.usageByModel))
       addByModel(f.usageByModel, model, u);
+    mergePathOps(files, bucket.files.values());
   }
+  const changed = fileOps(files);
+  if (changed) f.files = changed;
   const first = window.hourStarts[0];
   const last = window.hourStarts.at(-1);
   if (first !== undefined && last !== undefined) {

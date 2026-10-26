@@ -109,8 +109,9 @@ describe('FilesView', () => {
       expect.stringMatching(/^Read·read·\d\d:\d\d:\d\d$/),
       expect.stringMatching(/^Edit·Failed·/),
       expect.stringMatching(/^Read:36-65·read·/),
-      expect.stringMatching(/^Edit·edited·/),
-      expect.stringMatching(/^Edit·edited·/),
+      // The two edits that landed, each with the lines Claude Code recorded.
+      expect.stringMatching(/^Edit:41-43·edited·/),
+      expect.stringMatching(/^Edit:36-38·edited·/),
     ]);
     fireEvent.click(calls[3] as HTMLElement);
     expect(setFollow).toHaveBeenCalledWith(false);
