@@ -382,6 +382,29 @@ describe('Inbox', () => {
     outside.remove();
   });
 
+  it('keeps focus on an item whose session asks again while one of its buttons had focus', () => {
+    const a = held(ask('tu_1', 'Bash', 90, { command: 'npm test' }));
+    const b = held(ask('tu_5', 'Bash', 60, { command: 'npm run lint' }));
+    const board = (...hs: (typeof a)[]) => ({
+      sessions: hs.map((h) => h.session),
+      prompts: new Map(hs.map((h) => [h.session.id, h.prompt])),
+    });
+    const { update } = renderInbox(board(a, b));
+    act(() =>
+      within(items()[0] as HTMLElement)
+        .getByRole('button', { name: 'Deny' })
+        .focus(),
+    );
+    // The same run asks again at once: the same item, another prompt, fresh buttons.
+    const again = {
+      ...a,
+      prompt: { ...a.prompt, request: ask('tu_2', 'Bash', 1, { command: 'git push' }) },
+    };
+    update(board(again, b));
+    expect(items()[0]).toHaveTextContent('git push');
+    expect(document.activeElement).toBe(items()[0]);
+  });
+
   it('arms its answers only once the items have stood still', () => {
     const a = held(ask('tu_1', 'Bash', 90, { command: 'npm test' }));
     renderInbox(

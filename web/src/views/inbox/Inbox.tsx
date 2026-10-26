@@ -115,12 +115,13 @@ export function Inbox({
   const waits = shown.filter((i) => i.kind !== 'stuck');
   const stuck = shown.filter((i) => i.kind === 'stuck');
   const ids = [...waits, ...stuck].map((i) => i.id);
-  const key = ids.join('\n');
-  // The prompts in their places: an item that leaves moves the ones under it up.
+  // The items in their places, each with the prompt it holds: an item that leaves moves the ones
+  // under it up, and a run that asks again gives its item new buttons.
+  const key = [...waits, ...stuck]
+    .map((i) => `${i.id} ${'prompt' in i ? i.prompt.request.id : ''}`)
+    .join('\n');
   const armed = useArmed(
-    [...waits, ...stuck]
-      .map((i) => `${i.id} ${'prompt' in i ? i.prompt.request.id : ''}`)
-      .join('\n'),
+    key,
     armMs,
     waits.some((i) => 'prompt' in i),
   );
@@ -152,10 +153,11 @@ export function Inbox({
 
   // The item focus was in has left (answered, or no longer waiting): focus goes to the item now
   // in its place, else the last one, else the page's heading, until something waits again (a run
-  // that asks once more); not if focus is elsewhere by now.
+  // that asks once more); not if focus is elsewhere by now. An item that stays, its buttons made
+  // anew for its next prompt, gets back the focus they had.
   const before = useRef(ids);
   const parked = useRef(false);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `key` names the items in their order
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `key` names the items, in their order, and their prompts
   useLayoutEffect(() => {
     const was = before.current;
     before.current = ids;
@@ -165,7 +167,14 @@ export function Inbox({
       itemEl(ref.current, first)?.focus();
       return;
     }
-    if (current === null || ids.includes(current)) return;
+    if (current === null) return;
+    if (ids.includes(current)) {
+      // Still listed, with new buttons for its next prompt: the focus its old ones had, lost to
+      // the page, goes back to the item.
+      const active = document.activeElement;
+      if (!active || active === document.body) itemEl(ref.current, current)?.focus();
+      return;
+    }
     const active = document.activeElement;
     if (active && active !== document.body && !ref.current?.contains(active)) {
       setCurrent(null);
