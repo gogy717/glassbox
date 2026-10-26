@@ -70,8 +70,9 @@ const dirKey = (dir: string) =>
 
 /**
  * The session's files another worktree of its repository changed too in the last 7 days, by row
- * key, each with those trees' names. Read from the week only while the session list holds a
- * session in another tree of the repository; null otherwise, and before the week is read.
+ * key, each with those trees' names. The week is read for it only once another tree of the
+ * repository is known to have sessions: in the session list, or in a week read before (the
+ * demo's week holds sessions its list does not). Null otherwise, and before the week is read.
  */
 function useCrossing(open: OpenSession): Map<string, string[]> | null {
   const store = useContext(StoreContext);
@@ -79,16 +80,17 @@ function useCrossing(open: OpenSession): Map<string, string[]> | null {
     store ? store.getState().sessions : NO_SESSIONS,
   );
   const repo = (sessions.find((s) => s.id === open.id) ?? open.session).repo ?? null;
-  const elsewhere =
-    !!repo &&
-    sessions.some(
-      (s) =>
-        !!s.repo &&
-        dirKey(s.repo.root) === dirKey(repo.root) &&
-        dirKey(s.repo.dir) !== dirKey(repo.dir),
-    );
   const cache = useWeekCache();
-  const week = useSyncExternalStore(cache.subscribe, () => cache.get()['7d']?.result ?? null);
+  const weeks = useSyncExternalStore(cache.subscribe, cache.get);
+  const week = weeks['7d']?.result ?? null;
+  const otherTree = (s: { repo?: SessionSummary['repo'] }) =>
+    !!s.repo &&
+    !!repo &&
+    dirKey(s.repo.root) === dirKey(repo.root) &&
+    dirKey(s.repo.dir) !== dirKey(repo.dir);
+  const elsewhere =
+    sessions.some(otherTree) ||
+    (week ?? weeks.week?.result ?? null)?.sessions.some(otherTree) === true;
   useEffect(() => {
     if (!elsewhere) return;
     const release = cache.retain('7d');

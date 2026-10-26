@@ -376,6 +376,40 @@ describe('the Crossing chip', () => {
     expect(rows()).toHaveLength(6);
   });
 
+  it('shows too when a week read before has another worktree’s sessions the list does not (the demo’s)', async () => {
+    const open = demoOpen();
+    const store = createStore();
+    store.applyEvent({
+      type: 'sessions',
+      sessions: [{ ...open.session, repo: demoRepo(open.session.cwd as string) }],
+    });
+    const asked: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        asked.push(url);
+        const line: WeekLine = {
+          type: 'result',
+          result: demoWeek(url.includes('7d') ? '7d' : 'week'),
+        };
+        return new Response(`${JSON.stringify(line)}\n`);
+      }),
+    );
+    // The Stats page read this week before the session was opened.
+    store.weeks.request('week');
+    await vi.waitFor(() => expect(store.weeks.get().week?.result).not.toBeNull());
+    render(
+      <StoreContext.Provider value={store}>
+        <I18nContext.Provider value={makeI18n('en')}>
+          <FilesView open={open} agentId="main" navigate={vi.fn()} />
+        </I18nContext.Provider>
+      </StoreContext.Provider>,
+    );
+    const chip = await screen.findByRole('button', { name: /^Crossing/ });
+    expect(chip).toHaveTextContent('Crossing2');
+    expect(asked).toEqual(['/api/week?window=week', '/api/week?window=7d']);
+  });
+
   it('speaks Chinese', async () => {
     renderCrossing('zh');
     const chip = await screen.findByRole('button', { name: /^交叉/ });
