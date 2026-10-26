@@ -1205,6 +1205,45 @@ describe('App keyboard shortcuts', () => {
     await waitFor(() => expect(window.location.hash).toBe(demoLink));
   });
 
+  it('goes to the Inbox with g i, and works its items with j, k, y, n and o', async () => {
+    const store = createStore();
+    const [demo, other] = createDemoSessions(DEMO_NOW);
+    if (!demo || !other) throw new Error('fixture');
+    store.applyEvent({ type: 'sessions', sessions: [demo, { ...other, live: 'busy' }] });
+    const prompt = {
+      id: 'tu_1',
+      toolName: 'Bash',
+      input: { command: 'npm test' },
+      questions: null,
+      requestedAt: new Date(DEMO_NOW.getTime() - 20_000).toISOString(),
+    };
+    store.applyEvent({
+      type: 'run',
+      run: runState({
+        id: 'run_2',
+        sessionId: other.id,
+        status: 'waiting-permission',
+        pendingPermissions: [prompt],
+      }),
+    });
+    const runs = fakeRuns();
+    render(<App store={store} connect={noConnect} runs={runs} />);
+    key('g');
+    key('i');
+    await waitFor(() => expect(window.location.hash).toBe('#/inbox'));
+    const item = await screen.findByRole('article', {
+      name: 'Permission for Bash · Fix flaky login test',
+    });
+    await waitFor(() => expect(item).toHaveFocus());
+    await waitFor(() => expect(within(item).getByRole('button', { name: 'Allow' })).toBeEnabled());
+    key('n');
+    await waitFor(() =>
+      expect(runs.decide).toHaveBeenCalledWith('run_2', 'tu_1', { decision: 'deny' }),
+    );
+    key('o');
+    await waitFor(() => expect(window.location.hash).toBe(`#/s/${encodeURIComponent(other.id)}`));
+  });
+
   it('switches the session page’s tab with 1 to 5', async () => {
     window.location.hash = demoLink;
     render(<App store={demoStore()} connect={noConnect} runs={fakeRuns()} />);
@@ -1264,17 +1303,33 @@ describe('App keyboard shortcuts', () => {
       'Jump to a session, prompt, page or action',
       'Search the session list',
       'Switch the session page’s tab',
-      'Down / up the prompt list',
+      'Down / up the prompt list or the Inbox',
+      'Allow / deny the Inbox item you are on',
+      'Open the session of the Inbox item you are on',
       'Go Home',
       'Go to the session page',
       'Go to Stats',
+      'Go to the Inbox',
       'Show these shortcuts',
       'Close a dialog, the palette or this list',
     ])
       expect(dialog).toHaveTextContent(words);
     expect(
       [...dialog.querySelectorAll('dt')].map((dt) => dt.textContent?.replace(/\s+/g, ' ')),
-    ).toEqual(['Ctrl K', '/', '1–5', 'j / k', 'g h', 'g s', 'g t', '?', 'Esc']);
+    ).toEqual([
+      'Ctrl K',
+      '/',
+      '1–5',
+      'j / k',
+      'y / n',
+      'o',
+      'g h',
+      'g s',
+      'g t',
+      'g i',
+      '?',
+      'Esc',
+    ]);
     fireEvent.keyDown(dialog, { key: 'Escape' });
     expect(screen.queryByRole('dialog')).toBeNull();
   });

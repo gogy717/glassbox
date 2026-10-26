@@ -17,6 +17,7 @@ import { Answer, useArmed } from '../../components/Answer';
 import { Delayed } from '../../components/Delayed';
 import { LiveDot, Ticking } from '../../components/Status';
 import type { OpenPrompt } from '../../data/runs';
+import { useCommand } from '../../data/shortcuts';
 import { type T, useI18n } from '../../i18n';
 import { resumeCommand } from '../../lib/resume';
 import { waitingSince, waitKind, waitLabel } from '../../lib/waiting';
@@ -149,6 +150,29 @@ export function Inbox({
       heading.current?.focus();
     }
   }, [key]);
+
+  // The keys (`KEYMAP`): j and k from wherever focus is, onto the list from outside it; y, n and
+  // o for the item focus is in, pressing the button that says the key, so an answer not armed
+  // yet, or already sent, is not sent by a key either.
+  const focusedItem = () =>
+    (document.activeElement as HTMLElement | null)?.closest<HTMLElement>('[data-item]') ?? null;
+  const move = (by: 1 | -1) => {
+    const items = itemsIn(ref.current);
+    const item = focusedItem();
+    const i = item ? items.indexOf(item) : -1;
+    const next = i < 0 ? (stop ? itemEl(ref.current, stop) : null) : items[i + by];
+    next?.focus();
+  };
+  const press = (key: 'y' | 'n') =>
+    focusedItem()?.querySelector<HTMLButtonElement>(`button[aria-keyshortcuts="${key}"]`)?.click();
+  useCommand('nextPrompt', () => move(1));
+  useCommand('previousPrompt', () => move(-1));
+  useCommand('allowItem', () => press('y'));
+  useCommand('denyItem', () => press('n'));
+  useCommand('openItem', () => {
+    const id = focusedItem()?.dataset.session;
+    if (id) onOpen(id);
+  });
 
   const onFocus = (e: FocusEvent<HTMLDivElement>) =>
     setCurrent((e.target as HTMLElement).closest<HTMLElement>('[data-item]')?.dataset.item ?? null);
@@ -302,6 +326,7 @@ function Item({ item, armed, now, tabIndex, onOpen, onDecide }: ItemProps) {
     <article
       className={css.item}
       data-item={item.id}
+      data-session={s.id}
       data-kind={item.kind}
       tabIndex={tabIndex}
       aria-label={itemName(t, item)}

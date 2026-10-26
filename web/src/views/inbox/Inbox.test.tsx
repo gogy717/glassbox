@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionActivity, SessionSummary, TroubleSignal } from '../../../../src/core/model.js';
 import type { PermissionRequest } from '../../../../src/shared/runs.js';
 import type { OpenPrompt } from '../../data/runs';
+import { useShortcuts } from '../../data/shortcuts';
 import { I18nContext, makeI18n } from '../../i18n';
 import { PROMPT_ARM_MS } from '../composer/PermissionDialog';
 import { Inbox } from './Inbox';
@@ -84,11 +85,18 @@ interface Board {
   at?: string | null;
 }
 
+/** The page's key map, as App listens for it. */
+function Keys() {
+  useShortcuts();
+  return null;
+}
+
 function renderInbox(board: Board, more: { armMs?: number; locale?: 'en' | 'zh' } = {}) {
   const onOpen = vi.fn();
   const onDecide = vi.fn(async () => {});
   const ui = (b: Board) => (
     <I18nContext.Provider value={makeI18n(more.locale ?? 'en')}>
+      <Keys />
       <Inbox
         sessions={b.sessions}
         prompts={b.prompts ?? new Map()}
@@ -330,5 +338,117 @@ describe('Inbox', () => {
     expect(region('等你处理')).toHaveTextContent('去终端里回答');
     expect(screen.getByRole('button', { name: '复制恢复命令' })).toBeInTheDocument();
     expect(region('看起来卡住了')).toHaveTextContent('重复执行 npm test 4 次');
+  });
+
+  describe('keys', () => {
+    /** A key pressed where focus is, as the page's listener hears it. */
+    const press = (key: string) =>
+      fireEvent.keyDown(document.activeElement ?? document.body, { key });
+
+    function three() {
+      const a = held(ask('tu_1', 'Bash', 90, { command: 'npm test' }));
+      const b = held(ask('tu_2', 'ExitPlanMode', 60, { plan: '1. Split the parser' }));
+      const c = session('busy', { trouble: sign('repeat', 30) });
+      const r = renderInbox({
+        sessions: [a.session, b.session, c],
+        prompts: new Map([a, b].map((h) => [h.session.id, h.prompt])),
+      });
+      return { ...r, a, b, c };
+    }
+
+    it('moves down and up the items with j and k, from wherever focus is', () => {
+      three();
+      const all = items();
+      expect(document.activeElement).toBe(all[0]);
+      press('j');
+      expect(document.activeElement).toBe(all[1]);
+      press('j');
+      press('j');
+      expect(document.activeElement).toBe(all[2]);
+      press('k');
+      expect(document.activeElement).toBe(all[1]);
+      // From one of an item's buttons, the next item.
+      act(() =>
+        within(all[1] as HTMLElement)
+          .getByRole('button', { name: 'Reject' })
+          .focus(),
+      );
+      press('j');
+      expect(document.activeElement).toBe(all[2]);
+      // From outside the list, back onto it.
+      act(() => (document.activeElement as HTMLElement).blur());
+      press('j');
+      expect(document.activeElement).toBe(all[2]);
+    });
+
+    it('allows with y and denies with n, the item focus is on', async () => {
+      const { onDecide } = three();
+      press('y');
+      await act(async () => {});
+      expect(onDecide).toHaveBeenLastCalledWith('run_tu_1', 'tu_1', { decision: 'allow' });
+      press('j');
+      press('n');
+      await act(async () => {});
+      expect(onDecide).toHaveBeenLastCalledWith('run_tu_2', 'tu_2', { decision: 'deny' });
+      // A stuck session has nothing to allow.
+      press('j');
+      press('y');
+      await act(async () => {});
+      expect(onDecide).toHaveBeenCalledTimes(2);
+    });
+
+    it('opens the session of the item focus is on with o', () => {
+      const { onOpen, c } = three();
+      press('j');
+      press('j');
+      press('o');
+      expect(onOpen).toHaveBeenCalledWith(c.id);
+    });
+
+    it('answers nothing while focus is off the items, or before the answers are armed', async () => {
+      const a = held(ask('tu_1', 'Bash', 90, { command: 'npm test' }));
+      const { onDecide, onOpen } = renderInbox(
+        { sessions: [a.session], prompts: new Map([[a.session.id, a.prompt]]) },
+        { armMs: PROMPT_ARM_MS },
+      );
+      press('y');
+      await act(async () => {});
+      expect(onDecide).not.toHaveBeenCalled();
+      act(() => vi.advanceTimersByTime(PROMPT_ARM_MS));
+      act(() => (document.activeElement as HTMLElement).blur());
+      press('y');
+      press('n');
+      press('o');
+      await act(async () => {});
+      expect(onDecide).not.toHaveBeenCalled();
+      expect(onOpen).not.toHaveBeenCalled();
+    });
+
+    it('takes no keys while an option of a question has focus, and Esc comes back to the item', async () => {
+      const q = held(ask('tu_5', 'AskUserQuestion', 30));
+      const { onDecide, onOpen } = renderInbox({
+        sessions: [q.session],
+        prompts: new Map([[q.session.id, q.prompt]]),
+      });
+      const [item] = items() as HTMLElement[];
+      const north = within(item as HTMLElement).getByRole('radio', { name: /North/ });
+      act(() => north.focus());
+      for (const key of ['y', 'n', 'o', 'j', 'k']) press(key);
+      await act(async () => {});
+      expect(document.activeElement).toBe(north);
+      expect(onDecide).not.toHaveBeenCalled();
+      expect(onOpen).not.toHaveBeenCalled();
+      press('Escape');
+      expect(document.activeElement).toBe(item);
+      // Picked, the answer goes with y from the item.
+      fireEvent.click(north);
+      act(() => (item as HTMLElement).focus());
+      press('y');
+      await act(async () => {});
+      expect(onDecide).toHaveBeenCalledWith('run_tu_5', 'tu_5', {
+        decision: 'allow',
+        answers: { 'Which beds first?': 'North' },
+      });
+    });
   });
 });

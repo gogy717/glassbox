@@ -2,7 +2,8 @@
  * Keyboard shortcuts: the key map in one place (`KEYMAP`, which the ? overlay lists), the hook
  * that listens for it (`useShortcuts`), and the commands a key or the palette sends to whichever
  * part of the page carries them out (`useCommand`, `runCommand`): the tabs switch themselves, the
- * prompt list moves its own selection, a receipt button opens its own dialog.
+ * prompt list moves its own selection, a receipt button opens its own dialog, the Inbox answers
+ * its own items. A key whose command nothing carries out stays the browser's.
  */
 import { useEffect, useRef } from 'react';
 import type { MessageKey } from '../i18n';
@@ -15,9 +16,13 @@ export type Command =
   | 'goHome'
   | 'goSession'
   | 'goStats'
+  | 'goInbox'
   | `tab:${Tab}`
   | 'nextPrompt'
   | 'previousPrompt'
+  | 'allowItem'
+  | 'denyItem'
+  | 'openItem'
   | 'receipt';
 
 /** One key, or two in a row ("g h"). `Mod+k` is ⌘K on a Mac and Ctrl+K elsewhere. */
@@ -40,6 +45,7 @@ export const KEYMAP: readonly KeyRow[] = [
     label: 'keys.tabs',
     bindings: TABS.map((tab, i) => ({ keys: [String(i + 1)], command: `tab:${tab}` as const })),
   },
+  // Down and up the list the page has: a session's prompt list, or the Inbox.
   {
     label: 'keys.prompts',
     bindings: [
@@ -47,9 +53,19 @@ export const KEYMAP: readonly KeyRow[] = [
       { keys: ['k'], command: 'previousPrompt' },
     ],
   },
+  // The Inbox's item focus is on: its own buttons say which key presses them.
+  {
+    label: 'keys.answer',
+    bindings: [
+      { keys: ['y'], command: 'allowItem' },
+      { keys: ['n'], command: 'denyItem' },
+    ],
+  },
+  { label: 'keys.openItem', bindings: [{ keys: ['o'], command: 'openItem' }] },
   { label: 'keys.home', bindings: [{ keys: ['g', 'h'], command: 'goHome' }] },
   { label: 'keys.session', bindings: [{ keys: ['g', 's'], command: 'goSession' }] },
   { label: 'keys.stats', bindings: [{ keys: ['g', 't'], command: 'goStats' }] },
+  { label: 'keys.inbox', bindings: [{ keys: ['g', 'i'], command: 'goInbox' }] },
   { label: 'keys.help', bindings: [{ keys: ['?'], command: 'help' }] },
   { label: 'keys.close', bindings: [{ keys: ['Escape'], command: null }] },
 ];

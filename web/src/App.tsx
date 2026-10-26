@@ -43,6 +43,7 @@ import { isListed, isRunning } from './lib/sessions';
 import { applyTheme, loadPrefs, type Prefs, savePrefs, type ThemePref } from './prefs';
 import {
   formatRoute,
+  inboxLink,
   pageOf,
   parseRoute,
   sessionLink,
@@ -344,7 +345,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
   useShortcuts();
   const [help, setHelp] = useState(false);
   useCommand('help', () => setHelp(true));
-  // As the nav's links go: Home, the session page as it was left, Stats.
+  // As the nav's links go: Home, the session page as it was left, Stats, the Inbox.
   const goHome = () => {
     window.location.hash = '#/';
   };
@@ -356,6 +357,9 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
     if (target) window.location.hash = target;
   });
   useCommand('goStats', goStats);
+  useCommand('goInbox', () => {
+    window.location.hash = inboxLink();
+  });
   // / searches the list, showing it first when it is hidden. Opened as an overlay, the list
   // starts in its search field anyway; shown as a column, focus goes there once it is.
   const searchOnShow = useRef(false);
