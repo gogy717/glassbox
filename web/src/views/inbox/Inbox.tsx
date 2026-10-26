@@ -121,13 +121,22 @@ export function Inbox({
   const stop = current !== null && ids.includes(current) ? current : (ids[0] ?? null);
 
   // On arrival, and when a notification names another item, focus starts on its item, else the
-  // first: the keys work at once.
-  const placed = useRef<{ at: string | null } | null>(null);
+  // first, so the keys work at once. With none yet (the runs' prompts come after the list), on the
+  // first to arrive, unless focus has gone somewhere else on the page meanwhile.
+  const placed = useRef<{ at: string | null; from: Element | null; done: boolean } | null>(null);
   useLayoutEffect(() => {
-    if (!loaded || placed.current?.at === at) return;
-    placed.current = { at };
+    if (!loaded) return;
+    if (!placed.current || placed.current.at !== at)
+      placed.current = { at, from: document.activeElement, done: false };
+    const p = placed.current;
+    if (p.done) return;
     const target = [...waits, ...stuck].find((i) => i.session.id === at) ?? waits[0] ?? stuck[0];
-    if (target) itemEl(ref.current, target.id)?.focus();
+    if (!target) return;
+    p.done = true;
+    const active = document.activeElement;
+    const moved = active && active !== p.from && active !== document.body;
+    if (moved && !ref.current?.contains(active)) return;
+    itemEl(ref.current, target.id)?.focus();
   });
 
   // The item focus was in has left (answered, or no longer waiting): focus goes to the item now

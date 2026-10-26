@@ -231,6 +231,38 @@ describe('Inbox', () => {
     expect(document.activeElement).toBe(items()[1]);
   });
 
+  it('starts on the first item to arrive when the page opened on none, unless focus is elsewhere', () => {
+    // The list arrives before the runs' prompts: at first, nothing waits.
+    const a = held(ask('tu_1', 'Bash', 30, { command: 'npm test' }));
+    const { update } = renderInbox({
+      sessions: [{ ...a.session, live: 'busy', activity: undefined }],
+    });
+    expect(items()).toEqual([]);
+    update({ sessions: [a.session], prompts: new Map([[a.session.id, a.prompt]]) });
+    expect(document.activeElement).toBe(items()[0]);
+  });
+
+  it('starts on the first item even from the link that opened it, outside the page', () => {
+    const link = document.createElement('a');
+    link.href = '#/inbox';
+    document.body.append(link);
+    act(() => link.focus());
+    renderInbox({ sessions: [session('waiting', { activity: waitingOn('Bash', 30) })] });
+    expect(document.activeElement).toBe(items()[0]);
+    link.remove();
+  });
+
+  it('leaves focus where it is when the first item arrives while it is elsewhere', () => {
+    const a = session('waiting', { activity: waitingOn('Bash', 30) });
+    const { update } = renderInbox({ sessions: [] });
+    const outside = document.createElement('button');
+    document.body.append(outside);
+    act(() => outside.focus());
+    update({ sessions: [a] });
+    expect(document.activeElement).toBe(outside);
+    outside.remove();
+  });
+
   it('acts on the item’s main button with Enter, and comes back to the item with Esc', async () => {
     const permission = held(ask('tu_1', 'Bash', 90, { command: 'npm test' }));
     const { onDecide } = renderInbox({
