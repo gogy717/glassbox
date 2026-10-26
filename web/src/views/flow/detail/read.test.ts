@@ -104,7 +104,15 @@ describe('readMessages', () => {
         },
       ]) ?? [];
     expect(sys?.role).toBe('system');
-    expect(added?.blocks).toEqual([{ kind: 'tool-ref', name: 'mcp__docs__batch', added: true }]);
+    // The definition rides along: the context bill weighs a tool added by what it adds.
+    expect(added?.blocks).toEqual([
+      {
+        kind: 'tool-ref',
+        name: 'mcp__docs__batch',
+        added: true,
+        definition: { name: 'mcp__docs__batch' },
+      },
+    ]);
   });
 
   it('reads Grok’s messages: calls by name only, tool results by id only', () => {

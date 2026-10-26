@@ -4,7 +4,6 @@ import {
   lazy,
   type ReactNode,
   Suspense,
-  useCallback,
   useId,
   useMemo,
   useRef,
@@ -115,11 +114,8 @@ export function DetailPanel({ sessionId, req, tools, card, onClose, calls, onOpe
   const { t } = useI18n();
   const [prefs] = useDetailPrefs();
   const context = card === 'request' && prefs.request === 'context';
-  // The bill the Context tab shows, for Copy: made in the tab's own chunk.
-  const bill = useRef<RequestBill | null>(null);
-  const onBill = useCallback((b: RequestBill) => {
-    bill.current = b;
-  }, []);
+  // The bill the Context tab shows, for Copy: made in the tab's own chunk, none until it has.
+  const [bill, onBill] = useState<RequestBill | null>(null);
   const titleId = useId();
   const maxRef = useRef<HTMLButtonElement>(null);
   const [maximized, setMaximized] = useState(false);
@@ -147,7 +143,7 @@ export function DetailPanel({ sessionId, req, tools, card, onClose, calls, onOpe
   const copyText = () =>
     JSON.stringify(
       context
-        ? bill.current
+        ? bill
         : card === 'request'
           ? detail
           : tool
@@ -185,7 +181,7 @@ export function DetailPanel({ sessionId, req, tools, card, onClose, calls, onOpe
         loadFull={() => setFullFor(tool.id)}
       />
     ) : null;
-  const canCopy = card !== 'request' || detail !== null;
+  const canCopy = context ? bill !== null : card !== 'request' || detail !== null;
   return (
     <section className={css.panel} aria-labelledby={titleId}>
       <div className={css.head}>

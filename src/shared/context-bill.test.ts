@@ -5,6 +5,7 @@ import {
   ContextLedger,
   type ContextPart,
   MEDIA_TOKENS,
+  partTexts,
   requestBill,
   textTokens,
 } from './context-bill.js';
@@ -68,6 +69,29 @@ function ok(bill: ReturnType<typeof requestBill>) {
 
 const byKind = (parts: ContextPart[], kind: ContextPart['kind']) =>
   parts.filter((p) => p.kind === kind);
+
+describe('partTexts', () => {
+  it('gives each part’s text by its key, for a filter: results, calls, prompts, tools, system', () => {
+    const texts = partTexts(
+      detail({
+        system: 'You are a coding agent.',
+        tools: [{ name: 'Bash', description: 'Runs a command' }],
+        messages: [
+          user('Fix the sort'),
+          assistant([
+            { type: 'tool_use', id: 'tu1', name: 'Bash', input: { command: 'npm test' } },
+          ]),
+          user([result('tu1', 'FAIL src/a.test.ts')]),
+        ],
+      }),
+    );
+    expect(texts.get('result:tu1')).toBe('FAIL src/a.test.ts');
+    expect(texts.get('call:tu1')).toContain('npm test');
+    expect(texts.get('system')).toBe('You are a coding agent.');
+    expect(texts.get('tool:Bash')).toContain('Runs a command');
+    expect([...texts.values()]).toContain('Fix the sort');
+  });
+});
 
 describe('textTokens', () => {
   it('counts four characters of text or code to a token, a CJK character as one', () => {
@@ -251,7 +275,7 @@ describe('requestBill', () => {
     expect(first?.key).not.toBe(second?.key);
   });
 
-  it('gives what was not reconstructed the rest of the total, the known parts their own weight', () => {
+  it('weighs messages not reconstructed as the median message, and spreads the total over all', () => {
     const bill = ok(
       requestBill(
         request({ cacheRead: 2_000 }),
@@ -266,29 +290,61 @@ describe('requestBill', () => {
         }),
       ),
     );
+    // Five messages like the one known (400): 2,000 of 2,500 weight, so 1,600 of the 2,000.
     expect(bill.parts.map((p) => [p.kind, p.tokens])).toEqual([
-      ['system', 100],
-      ['gap', 1_500],
-      ['user', 400],
+      ['system', 80],
+      ['gap', 1_600],
+      ['user', 320],
     ]);
     expect(byKind(bill.parts, 'gap')[0]?.missing).toEqual({
       messages: 5,
       system: false,
       tools: false,
+      results: 0,
     });
   });
 
-  it('scales the known parts down when they outweigh the total, leaving the gap none', () => {
+  it('keeps a small gap small: the characters’ error is shared by every part', () => {
+    const messages = Array.from({ length: 30 }, (_, i) =>
+      i % 2 ? assistant(text(800)) : user(text(800)),
+    );
+    const bill = ok(
+      requestBill(
+        request({ cacheRead: 9_300 }),
+        detail({ system: text(4_000), messages: [...messages, { unresolved: 'abc' }] }),
+      ),
+    );
+    // 31 messages of 200 and a prompt of 1,000: 7,200 of weight for 9,300 tokens.
+    const gap = byKind(bill.parts, 'gap')[0] as ContextPart;
+    expect(gap.tokens).toBeCloseTo((200 / 7_200) * 9_300, 6);
+    expect(gap.tokens).toBeLessThan(byKind(bill.parts, 'system')[0]?.tokens ?? 0);
+  });
+
+  it('gives the rest of the total to the gap when no message of the request is known', () => {
+    const bill = ok(
+      requestBill(
+        request({ cacheRead: 1_000 }),
+        detail({ system: text(400), messages: [{ unresolved: 'base:r0', messages: 4 }] }),
+      ),
+    );
+    expect(bill.parts.map((p) => [p.kind, p.tokens])).toEqual([
+      ['system', 100],
+      ['gap', 900],
+    ]);
+  });
+
+  it('keeps the gap in proportion when the parts outweigh the total', () => {
     const bill = ok(
       requestBill(
         request({ input: 250 }),
         detail({ system: text(400), messages: [{ unresolved: 'abc' }, user(text(1_600))] }),
       ),
     );
-    expect(bill.parts.map((p) => [p.kind, p.tokens])).toEqual([
-      ['system', 50],
-      ['gap', 0],
-      ['user', 200],
+    // A message like the one known: 400, so 900 of weight for 250 tokens.
+    expect(bill.parts.map((p) => [p.kind, Math.round(p.tokens * 10) / 10])).toEqual([
+      ['system', 27.8],
+      ['gap', 111.1],
+      ['user', 111.1],
     ]);
   });
 
@@ -303,7 +359,12 @@ describe('requestBill', () => {
       ['gap', 900],
       ['user', 100],
     ]);
-    expect(bill.parts[0]?.missing).toEqual({ messages: 0, system: true, tools: true });
+    expect(bill.parts[0]?.missing).toEqual({
+      messages: 0,
+      system: true,
+      tools: true,
+      results: 0,
+    });
   });
 
   it('weighs a request still in flight by its characters alone', () => {
@@ -326,6 +387,62 @@ describe('requestBill', () => {
       ),
     );
     expect(byKind(bill.parts, 'result')[0]).toMatchObject({ callId: 'c1', tool: 'shell' });
+  });
+
+  it('is not available when the tool results it sent were not recorded, as Grok keeps them', () => {
+    // Grok records a tool message by its call's id alone, and its tokens per prompt.
+    const grok = detail({
+      completeness: 'partial',
+      messages: [
+        { role: 'user', content: 'list files' },
+        { role: 'assistant', content: '', toolCalls: [{ id: 'c1', name: 'shell' }] },
+        { role: 'tool', toolCallId: 'c1' },
+        { role: 'assistant', content: 'Two files.' },
+      ],
+    });
+    expect(requestBill(request({ input: 400_000 }), grok)).toEqual({
+      status: 'unavailable',
+      reason: 'no-results',
+    });
+  });
+
+  it('is not available when nothing it sent could be reconstructed', () => {
+    expect(
+      requestBill(
+        request({ cacheRead: 120_000 }),
+        detail({
+          completeness: 'partial',
+          system: null,
+          tools: null,
+          messages: [{ unresolved: 'a' }],
+        }),
+      ),
+    ).toEqual({ status: 'unavailable', reason: 'not-reconstructed' });
+  });
+
+  it('weighs a tool added mid-conversation by its definition', () => {
+    const definition = { name: 'mcp__docs__batch', description: text(4_000) };
+    const bill = ok(
+      requestBill(
+        request({ input: 1_000 }),
+        detail({
+          messages: [user([{ type: 'tool_addition', tool: { definition } }])],
+        }),
+      ),
+    );
+    expect(bill.parts[0]?.weight).toBeCloseTo(textTokens(JSON.stringify(definition)), 6);
+  });
+
+  it('opens a message past a lone tag line, as Claude Code’s reminders begin', () => {
+    const bill = ok(
+      requestBill(
+        request({ input: 100 }),
+        detail({
+          messages: [user('<system-reminder>\nThe date is Monday.\n</system-reminder>\nFix it')],
+        }),
+      ),
+    );
+    expect(bill.parts[0]?.text).toBe('The date is Monday.');
   });
 
   it('is not available, with the reason, when the request body was not recorded', () => {
@@ -501,6 +618,7 @@ describe('ContextLedger', () => {
       read: 0,
       items: [],
       fixed: null,
+      unavailable: 'no-usage',
     });
     expect(
       ledger([{ request: { ...live.request, hasDetail: false }, detail: null }]),
@@ -513,6 +631,52 @@ describe('ContextLedger', () => {
         },
       ]),
     ).toMatchObject({ read: 0, unavailable: 'no-messages', advice: null });
+  });
+
+  it('takes a file paged through once for one read, not for reading it again', () => {
+    const c = conversation();
+    c.say(user('Read the log'));
+    const sent = [];
+    for (let i = 0; i < 5; i++) {
+      c.messages.push(
+        assistant([
+          {
+            type: 'tool_use',
+            id: `tu${i}`,
+            name: 'Read',
+            input: { file_path: '/w/big.log', offset: 1 + i * 100, limit: 100 },
+          },
+        ]),
+        user([result(`tu${i}`, text(2_000))]),
+      );
+      sent.push(c.send(3_000 + i * 600));
+    }
+    const bill = ledger(sent);
+    expect(bill.items.find((i) => i.kind === 'file')).toMatchObject({ reads: 5 });
+    expect(bill.advice?.kind).not.toBe('rereads');
+  });
+
+  it('says what the prompt and tools cost in the requests that sent them', () => {
+    const c = conversation();
+    c.say(user('hi'));
+    const whole = c.send(2_000);
+    const bare = {
+      request: request({ cacheRead: 2_000 }, { id: 'r9' }),
+      detail: detail({
+        completeness: 'partial',
+        system: null,
+        tools: null,
+        messages: [user('hi')],
+      }),
+    };
+    const bill = ledger([whole, bare]);
+    const one = requestBill(whole.request, whole.detail);
+    if (one.status !== 'ok') throw new Error('no bill');
+    const fixed = one.parts
+      .filter((p) => p.kind === 'system' || p.kind === 'tool')
+      .reduce((s, p) => s + p.tokens, 0);
+    expect(bill.fixed).toMatchObject({ requests: 1, toolCount: 1 });
+    expect(bill.fixed?.perRequest).toBeCloseTo(fixed, 6);
   });
 
   it('keeps the costliest items, largest first', () => {

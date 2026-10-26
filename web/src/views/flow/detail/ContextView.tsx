@@ -2,8 +2,10 @@ import { Search } from 'lucide-react';
 import { memo, useEffect, useMemo, useState } from 'react';
 import type { ModelRequest, RequestDetail, ToolCall } from '../../../../../src/core/model.js';
 import {
+  type BillUnavailable,
   type ContextPart,
   type PartKind,
+  partTexts,
   type RequestBill,
   requestBill,
 } from '../../../../../src/shared/context-bill.js';
@@ -54,17 +56,21 @@ const KIND_KEYS: Record<PartKind, MessageKey> = {
   other: 'context.kind.other',
   gap: 'context.kind.gap',
 };
-const ROLE_KEYS: Record<string, MessageKey> = {
+/** The roles a message of another kind is named by. */
+export const ROLE_KEYS: Record<string, MessageKey> = {
   system: 'detail.roleSystem',
   developer: 'detail.roleDeveloper',
   tool: 'detail.roleTool',
 };
 
-const UNAVAILABLE = {
+const UNAVAILABLE: Record<BillUnavailable, MessageKey> = {
   'not-recorded': 'context.unavailable.notRecorded',
   'no-messages': 'context.unavailable.noMessages',
+  'no-results': 'context.unavailable.noResults',
+  'not-reconstructed': 'context.unavailable.notReconstructed',
   empty: 'context.unavailable.empty',
-} as const;
+  'no-usage': 'context.unavailable.noUsage',
+};
 
 interface Row {
   part: ContextPart;
@@ -115,6 +121,15 @@ export const ContextView = memo(function ContextView({
     [req.hasDetail, req.usage, detail],
   );
   useEffect(() => onBill?.(bill), [bill, onBill]);
+  const q = query.trim().toLowerCase();
+  // What each part holds, lower-cased once a filter is typed: it matches text as well as names.
+  const searching = q !== '';
+  const texts = useMemo(() => {
+    if (!searching || !detail) return null;
+    const out = new Map<string, string>();
+    for (const [key, text] of partTexts(detail)) out.set(key, text.toLowerCase());
+    return out;
+  }, [searching, detail]);
 
   const rows = useMemo((): Row[] => {
     if (bill.status !== 'ok') return [];
@@ -158,8 +173,9 @@ export const ContextView = memo(function ContextView({
   if (bill.status !== 'ok')
     return <p className={css.message}>{t(UNAVAILABLE[bill.reason], { agent })}</p>;
 
-  const q = query.trim().toLowerCase();
-  const matching = q ? rows.filter((r) => r.find.includes(q)) : rows;
+  const matching = q
+    ? rows.filter((r) => r.find.includes(q) || texts?.get(r.part.key)?.includes(q))
+    : rows;
   const listed = matching.slice(0, shown);
   const approx = (n: number) => `≈${formatCompact(n, intl)}`;
   const gap = rows.some((r) => r.part.kind === 'gap' && r.part.tokens > 0);

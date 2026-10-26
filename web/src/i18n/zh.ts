@@ -501,7 +501,10 @@ export const zh = {
   'context.listSep': '、',
   'context.note':
     '按 {total} 次已完成请求中的 {n} 次估算：把每次报告的输入、缓存读取和缓存写入，按各部分的字符数分摊。',
-  'context.none.notRecorded': '没有上下文明细：此版本 {agent} 未记录请求发送的内容。',
+  'context.none.notRecorded': '没有上下文明细：{agent} 没有记录请求发送的内容。',
+  'context.none.noResults': '没有上下文明细：{agent} 没有记录请求发送的工具结果。',
+  'context.none.notReconstructed': '没有上下文明细：无法从记录里还原请求发送的内容。',
+  'context.none.noUsage': '没有上下文明细：这些请求没有报告 token 数。',
   'context.none.noMessages': '没有上下文明细：{agent} 只记录系统提示和工具，不记录每次请求的消息。',
   'context.none.empty': '没有上下文明细：请求发送的内容里没有文字。',
   'context.none.noRequests': '还没有完成的请求',
@@ -542,7 +545,10 @@ export const zh = {
   'context.colPart': '部分',
   'context.colTokens': 'Token（估算）',
   'context.colShare': '占比',
-  'context.unavailable.notRecorded': '这次请求没有上下文明细：此版本 {agent} 未记录请求内容。',
+  'context.unavailable.notRecorded': '这次请求没有上下文明细：{agent} 没有记录发送的内容。',
+  'context.unavailable.noResults': '这次请求没有上下文明细：{agent} 没有记录发送的工具结果。',
+  'context.unavailable.notReconstructed': '这次请求没有上下文明细：无法从记录里还原发送的内容。',
+  'context.unavailable.noUsage': '这次请求没有上下文明细：它没有报告 token 数。',
   'context.unavailable.noMessages':
     '这次请求没有上下文明细：{agent} 只记录系统提示和工具，不记录每次请求的消息。',
   'context.unavailable.empty': '这次请求没有上下文明细：发送的内容里没有文字。',

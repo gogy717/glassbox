@@ -508,8 +508,12 @@ export const en: Record<MessageKey, string> = {
   'context.listSep': ', ',
   'context.note':
     'Estimated from {n} of {total} finished requests: each one’s reported input, cache reads and cache writes, spread over its parts by their characters.',
-  'context.none.notRecorded':
-    'Not available: this {agent} version did not record what its requests sent.',
+  'context.none.notRecorded': 'Not available: {agent} did not record what its requests sent.',
+  'context.none.noResults':
+    'Not available: {agent} did not record the tool results its requests sent.',
+  'context.none.notReconstructed':
+    'Not available: what the requests sent could not be reconstructed from the transcript.',
+  'context.none.noUsage': 'Not available: the requests reported no tokens.',
   'context.none.noMessages':
     'Not available: {agent} records the system prompt and tools, not the messages of each request.',
   'context.none.empty': 'Not available: what the requests sent holds no text.',
@@ -556,7 +560,12 @@ export const en: Record<MessageKey, string> = {
   'context.colTokens': 'Tokens (est.)',
   'context.colShare': 'Share',
   'context.unavailable.notRecorded':
-    'Not available for this request: this {agent} version did not record what it sent.',
+    'Not available for this request: {agent} did not record what it sent.',
+  'context.unavailable.noResults':
+    'Not available for this request: {agent} did not record the tool results it sent.',
+  'context.unavailable.notReconstructed':
+    'Not available for this request: what it sent could not be reconstructed from the transcript.',
+  'context.unavailable.noUsage': 'Not available for this request: it reported no tokens.',
   'context.unavailable.noMessages':
     'Not available for this request: {agent} records the system prompt and tools, not the messages of each request.',
   'context.unavailable.empty': 'Not available for this request: what it sent holds no text.',

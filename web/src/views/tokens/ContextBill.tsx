@@ -1,6 +1,7 @@
 import { Fragment, type ReactNode, useMemo, useRef } from 'react';
 import { MAIN_AGENT_ID } from '../../../../src/core/model.js';
 import type {
+  BillUnavailable,
   CarriedItem,
   ContextAdvice,
   DroppedPart,
@@ -20,7 +21,7 @@ import { formatCompact, formatPercent } from '../../lib/format';
 import { summarizeInput } from '../../lib/tool-category';
 import type { Navigate, Route } from '../../router';
 import { useUi } from '../../ui';
-import { GROUP } from '../flow/detail/ContextView';
+import { GROUP, ROLE_KEYS } from '../flow/detail/ContextView';
 import parts from '../flow/detail/context.module.css';
 import css from './ContextBill.module.css';
 
@@ -30,11 +31,14 @@ interface Props {
   navigate: Navigate;
 }
 
-const NONE = {
+const NONE: Record<BillUnavailable, MessageKey> = {
   'not-recorded': 'context.none.notRecorded',
   'no-messages': 'context.none.noMessages',
+  'no-results': 'context.none.noResults',
+  'not-reconstructed': 'context.none.notReconstructed',
   empty: 'context.none.empty',
-} as const;
+  'no-usage': 'context.none.noUsage',
+};
 
 const MOSTLY: Record<keyof TokenSplit, MessageKey> = {
   cacheRead: 'context.mostly.cacheRead',
@@ -116,13 +120,16 @@ export function ContextBill({ open, agentId, navigate }: Props) {
       const gist = call ? summarizeInput(call) : (item.target ?? '');
       return { text: [item.tool, gist].filter(Boolean).join(' '), mono: true };
     }
+    const role = item.role ?? '';
     const word =
       item.kind === 'reply'
         ? t('context.kind.reply')
         : item.kind === 'user'
           ? t('context.kind.user')
-          : t('context.kind.other', { role: item.role ?? '' });
-    return { text: `${word} · ${item.text ?? t('context.thinking')}`, mono: false };
+          : t('context.kind.other', { role: ROLE_KEYS[role] ? t(ROLE_KEYS[role]) : role });
+    // A reply of thinking alone says so; any other message without text is its kind.
+    const text = item.text ?? (item.kind === 'reply' ? t('context.thinking') : null);
+    return { text: text ? `${word} · ${text}` : word, mono: false };
   };
   const approx = (n: number) => `≈${formatCompact(n, intl)}`;
 

@@ -18,7 +18,14 @@
 import { activityTarget } from '../core/activity.js';
 import type { ModelRequest, RequestDetail, ToolCall } from '../core/model.js';
 import { resolvePath, touchesOf } from './files.js';
-import { type Block, isGap, readMessage, readSystem, readTools } from './request-read.js';
+import {
+  type Block,
+  blockText,
+  isGap,
+  readMessage,
+  readSystem,
+  readTools,
+} from './request-read.js';
 import { pathField } from './tool-category.js';
 
 /** Characters of English text or code to a token. A CJK character is about a token of its own. */
@@ -75,7 +82,7 @@ export interface ContextPart {
   /** True for the parts of the request's last message: what this request added. */
   last: boolean;
   /** A gap's: what is missing. */
-  missing?: { messages: number; system: boolean; tools: boolean };
+  missing?: Missing;
   /** Tokens as its characters suggest. */
   weight: number;
   /** Estimated tokens: the request's total spread by weight. */
@@ -84,11 +91,28 @@ export interface ContextPart {
   split: TokenSplit | null;
 }
 
+/** A gap's: what could not be reconstructed. */
+export interface Missing {
+  messages: number;
+  system: boolean;
+  tools: boolean;
+  /** Tool results recorded by their call alone, without what they returned. */
+  results: number;
+}
+
 /**
- * Why there is no bill: the request body was not recorded (an older Claude Code, an agent that
- * keeps none), only its system prompt and tools were (Codex, oh-my-pi), or it holds nothing.
+ * Why there is no bill: the request body was not recorded (an agent that keeps none, an older
+ * Claude Code); only its system prompt and tools were (Codex, oh-my-pi); its tool results were
+ * not (Grok, which counts tokens per prompt besides); nothing of it could be reconstructed; it
+ * holds nothing; or, for an agent's requests together, none of them reported its tokens.
  */
-export type BillUnavailable = 'not-recorded' | 'no-messages' | 'empty';
+export type BillUnavailable =
+  | 'not-recorded'
+  | 'no-messages'
+  | 'no-results'
+  | 'not-reconstructed'
+  | 'empty'
+  | 'no-usage';
 
 export type RequestBill =
   | {
@@ -164,7 +188,7 @@ function blockTokens(b: Block): number {
     case 'media':
       return MEDIA_TOKENS;
     case 'tool-ref':
-      return textTokens(b.name);
+      return b.definition !== undefined ? jsonTokens(b.definition) : textTokens(b.name);
     case 'raw':
       return jsonTokens(b.value);
   }
@@ -172,12 +196,14 @@ function blockTokens(b: Block): number {
 
 /** Opening words: the first line with text, clipped. */
 const OPENING_MAX = 80;
+/** A line that is a tag alone ("<system-reminder>"): no words to open with. */
+const LONE_TAG = /^<\/?[\w:-]+(\s[^<>]*)?>$/;
 function opening(text: string): string | null {
   const line = text
     .slice(0, 2_000)
     .split('\n')
     .map((l) => l.trim())
-    .find(Boolean);
+    .find((l) => l !== '' && !LONE_TAG.test(l));
   if (!line) return null;
   return line.length > OPENING_MAX ? `${line.slice(0, OPENING_MAX - 1)}…` : line;
 }
@@ -188,12 +214,16 @@ export interface Weighed {
   role: string | null;
   tool: string | null;
   callId: string | null;
-  /** A call's input, for naming what it works on. */
+  /** A call's input, for naming what it works on; a tool definition, the system prompt. */
   input: unknown;
   text: string | null;
   weight: number;
   /** A gap's: messages not reconstructed. */
   gap: number;
+  /** The blocks of a message's own text or of a result, for its text (`partTexts`). */
+  blocks?: Block[];
+  /** A result recorded by its call alone, without what it returned. */
+  unrecorded?: true;
 }
 
 const weighed = new WeakMap<object, Weighed[]>();
@@ -241,17 +271,27 @@ function weighMessage(raw: unknown): Weighed[] {
         }),
       );
     } else if (b.kind === 'tool-result') {
-      out.push(part({ kind: 'result', role, callId: b.toolUseId, weight: blockTokens(b) }));
+      out.push(
+        part({
+          kind: 'result',
+          role,
+          callId: b.toolUseId,
+          weight: blockTokens(b),
+          blocks: b.content ?? [],
+          ...(b.content === null ? { unrecorded: true as const } : {}),
+        }),
+      );
     } else {
       if (!own) {
-        own = part({ kind, role });
+        own = part({ kind, role, blocks: [] });
         out.push(own);
       }
       own.weight += blockTokens(b);
+      own.blocks?.push(b);
       if (own.text === null && b.kind === 'text') own.text = opening(b.text);
     }
   }
-  return out.filter((p) => p.weight > 0);
+  return out.filter((p) => p.weight > 0 || p.unrecorded);
 }
 
 /** A part placed in one request: its key there, and whether its message is the last. */
@@ -260,7 +300,12 @@ export interface Placed {
   key: string;
   last: boolean;
   /** The gap's: what is missing. */
-  missing?: { messages: number; system: boolean; tools: boolean };
+  missing?: Missing;
+  /**
+   * The gap's: it takes what the known parts leave of the total, for there is nothing to weigh
+   * it by (the system prompt or tools are missing, or every message is).
+   */
+  remainder?: boolean;
 }
 
 /** What one request's details hold, weighed, in the order sent; null when there are no messages. */
@@ -275,7 +320,7 @@ export function placeParts(detail: RequestDetail): Placed[] | null {
   };
   // What could not be reconstructed is one part, where the first of it was. Made per request,
   // so it can be filled in as more is found missing.
-  const missing = { messages: 0, system: false, tools: false };
+  const missing: Missing = { messages: 0, system: false, tools: false, results: 0 };
   const gap: Placed = { w: part({ kind: 'gap' }), key: 'gap', last: false, missing };
   const addGap = () => {
     if (!out.includes(gap)) out.push(gap);
@@ -289,11 +334,11 @@ export function placeParts(detail: RequestDetail): Placed[] | null {
     detail.tools.forEach((raw, i) => {
       const name = tools[i]?.name ?? '?';
       const weight = shapeTokens(raw, jsonTokens);
-      if (weight > 0) place(part({ kind: 'tool', tool: name, weight }), `tool:${name}`);
+      if (weight > 0) place(part({ kind: 'tool', tool: name, weight, input: raw }), `tool:${name}`);
     });
   } else {
     const weight = shapeTokens(detail.tools, jsonTokens);
-    if (weight > 0) place(part({ kind: 'tool', weight }), 'tool:?');
+    if (weight > 0) place(part({ kind: 'tool', weight, input: detail.tools }), 'tool:?');
   }
 
   if (detail.system === null) {
@@ -301,13 +346,18 @@ export function placeParts(detail: RequestDetail): Placed[] | null {
     addGap();
   } else {
     const weight = shapeTokens(detail.system, systemTokens);
-    if (weight > 0) place(part({ kind: 'system', weight }), 'system');
+    if (weight > 0) place(part({ kind: 'system', weight, input: detail.system }), 'system');
   }
 
   const messages = detail.messages;
+  // The known messages' weights: a missing one is weighed as their median.
+  const sizes: number[] = [];
   messages.forEach((raw, i) => {
     const last = i === messages.length - 1;
+    let size = 0;
     for (const w of messageParts(raw)) {
+      size += w.weight;
+      if (w.unrecorded) missing.results += 1;
       if (w.kind === 'gap') {
         missing.messages += w.gap;
         addGap();
@@ -318,8 +368,45 @@ export function placeParts(detail: RequestDetail): Placed[] | null {
         place(w, `${w.kind}:${w.role}:${Math.round(w.weight * 4)}:${w.text ?? ''}`, last);
       }
     }
+    if (size > 0) sizes.push(size);
   });
+  sizes.sort((a, b) => a - b);
+  const median = sizes.length > 0 ? (sizes[Math.floor(sizes.length / 2)] as number) : 0;
   gap.w.gap = missing.messages;
+  gap.w.weight = missing.messages * median;
+  gap.remainder = missing.system || missing.tools || sizes.length === 0;
+  return out;
+}
+
+/** A value's JSON, or nothing for one that cannot be written. */
+function json(v: unknown): string {
+  try {
+    return JSON.stringify(v) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+/** A part's text, as a filter reads it. */
+function textOf(w: Weighed): string {
+  switch (w.kind) {
+    case 'system':
+      return (readSystem(w.input) ?? [json(w.input)]).join('\n');
+    case 'tool':
+      return json(w.input);
+    case 'call':
+      return `${w.tool ?? ''} ${json(w.input)}`;
+    case 'gap':
+      return '';
+    default:
+      return (w.blocks ?? []).map(blockText).join('\n');
+  }
+}
+
+/** The text of each part of a request, by its key: what a filter over the parts reads. */
+export function partTexts(detail: RequestDetail): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const p of placeParts(detail) ?? []) out.set(p.key, textOf(p.w));
   return out;
 }
 
@@ -337,16 +424,41 @@ function splitAt(start: number, size: number, usage: TokenSplit): TokenSplit {
 }
 
 /**
- * The parts' estimated tokens: the total spread by weight. With a gap, the known parts keep their
- * own weight (scaled down only if they outweigh the total) and the gap takes the rest.
+ * The parts' estimated tokens: the total spread by weight, a gap weighed with the rest. A gap
+ * that takes the remainder keeps its own weight's share (scaled down only if the parts outweigh
+ * the total) and takes what the parts leave besides.
  */
-export function spread(weights: number[], gapAt: number, total: number): number[] {
-  const known = weights.reduce((s, w, i) => (i === gapAt ? s : s + w), 0);
-  if (known === 0) return weights.map(() => 0);
-  const scale = gapAt >= 0 ? Math.min(1, total / known) : total / known;
-  const tokens = weights.map((w, i) => (i === gapAt ? 0 : w * scale));
-  if (gapAt >= 0) tokens[gapAt] = Math.max(0, total - known * scale);
+export function spread(
+  weights: number[],
+  gapAt: number,
+  total: number,
+  remainder = false,
+): number[] {
+  const sum = weights.reduce((s, w) => s + w, 0);
+  if (sum === 0) return weights.map(() => 0);
+  if (gapAt < 0 || !remainder) return weights.map((w) => (w * total) / sum);
+  const scale = Math.min(1, total / sum);
+  const tokens = weights.map((w) => w * scale);
+  tokens[gapAt] = (tokens[gapAt] as number) + Math.max(0, total - sum * scale);
   return tokens;
+}
+
+/** A request weighed, or why it cannot be. */
+type Assessed =
+  | { reason: BillUnavailable }
+  | { reason: null; placed: Placed[]; weights: number[]; gapAt: number; remainder: boolean };
+
+function assess(request: Pick<ModelRequest, 'hasDetail'>, detail: RequestDetail | null): Assessed {
+  if (!request.hasDetail || !detail || detail.completeness === 'unavailable')
+    return { reason: 'not-recorded' };
+  const placed = placeParts(detail);
+  if (!placed) return { reason: 'no-messages' };
+  if (placed.some((p) => p.w.unrecorded)) return { reason: 'no-results' };
+  const gapAt = placed.findIndex((p) => p.w.kind === 'gap');
+  const weights = placed.map((p) => p.w.weight);
+  const known = placed.reduce((s, p) => (p.w.kind === 'gap' ? s : s + p.w.weight), 0);
+  if (known === 0) return { reason: gapAt >= 0 ? 'not-reconstructed' : 'empty' };
+  return { reason: null, placed, weights, gapAt, remainder: placed[gapAt]?.remainder ?? false };
 }
 
 /** The context bill of one request, from its details. */
@@ -354,21 +466,16 @@ export function requestBill(
   request: Pick<ModelRequest, 'hasDetail' | 'usage'>,
   detail: RequestDetail | null,
 ): RequestBill {
-  if (!request.hasDetail || !detail || detail.completeness === 'unavailable')
-    return { status: 'unavailable', reason: 'not-recorded' };
-  const placed = placeParts(detail);
-  if (!placed) return { status: 'unavailable', reason: 'no-messages' };
-  const gapAt = placed.findIndex((p) => p.w.kind === 'gap');
-  const weights = placed.map((p) => p.w.weight);
-  const known = weights.reduce((s, w) => s + w, 0);
-  if (known === 0) return { status: 'unavailable', reason: 'empty' };
+  const a = assess(request, detail);
+  if (a.reason !== null) return { status: 'unavailable', reason: a.reason };
+  const { placed, weights, gapAt, remainder } = a;
 
   const u = request.usage;
   const reported = u ? u.input + u.cacheRead + u.cacheWrite : 0;
   const usage =
     reported > 0 && u ? { cacheRead: u.cacheRead, cacheWrite: u.cacheWrite, input: u.input } : null;
-  const total = usage ? reported : known;
-  const tokens = spread(weights, gapAt, total);
+  const total = usage ? reported : weights.reduce((s, w) => s + w, 0);
+  const tokens = spread(weights, gapAt, total, remainder);
 
   // The calls of this request, for naming the results that answer them.
   const calls = new Map<string, Weighed>();
@@ -540,14 +647,30 @@ interface Carried {
   last: string;
   first: string;
   path: string | null;
-  /** A file's reads: their call ids, the latest last. */
+  /** A file's reads: their call ids, the latest last; the lines of each; how many read again. */
   reads: string[];
+  ranges: [number, number][];
+  rereads: number;
 }
 
 interface Held {
   key: string;
   w: Weighed;
   tokens: number;
+}
+
+/** A read's file, and its lines: [first, last], the last Infinity when it read to the end. */
+interface FileRead {
+  path: string;
+  lines: [number, number];
+}
+
+/** The lines a read names as the files model writes them: "36-65", "36" (to the end), or all. */
+function lineRange(lines: string | null): [number, number] {
+  const m = lines ? /^(\d+)(?:-(\d+))?$/.exec(lines) : null;
+  if (!m) return [1, Number.POSITIVE_INFINITY];
+  const from = Number(m[1]);
+  return [from, m[2] ? Number(m[2]) : Number.POSITIVE_INFINITY];
 }
 
 /**
@@ -567,8 +690,16 @@ export class ContextLedger {
   private readonly items = new Map<string, Carried>();
   /** Every call seen, by id: a result is named by its call, a read by its file. */
   private readonly calls = new Map<string, Weighed>();
-  private readonly files = new Map<string, string | null>();
-  private readonly fixed = { tokens: 0, split: zero(), system: 0, tools: 0, toolCount: 0 };
+  private readonly files = new Map<string, FileRead | null>();
+  /** The system prompt and tools, and the requests that sent them. */
+  private readonly fixed = {
+    tokens: 0,
+    split: zero(),
+    system: 0,
+    tools: 0,
+    toolCount: 0,
+    requests: 0,
+  };
   private before: { id: string; held: Held[] } | null = null;
   private readonly drops: (Omit<CompactionDrop, 'largest'> & { largest: Held[] })[] = [];
 
@@ -580,33 +711,18 @@ export class ContextLedger {
 
   add(request: ModelRequest, detail: RequestDetail | null): void {
     this.fed.push(request.id);
-    const placed =
-      request.hasDetail && detail && detail.completeness !== 'unavailable'
-        ? placeParts(detail)
-        : undefined;
-    const reason: BillUnavailable | null =
-      placed === undefined
-        ? 'not-recorded'
-        : placed === null
-          ? 'no-messages'
-          : placed.every((p) => p.w.weight === 0)
-            ? 'empty'
-            : null;
-    if (reason || !placed) {
-      if (reason) this.reasons.set(reason, (this.reasons.get(reason) ?? 0) + 1);
-      return;
-    }
-    const weights = placed.map((p) => p.w.weight);
+    const a = assess(request, detail);
     const u = request.usage;
     const total = u ? u.input + u.cacheRead + u.cacheWrite : 0;
     // Not finished, or it reported nothing: there is no total to spread.
-    if (!u || total === 0) return;
+    const reason = a.reason ?? (!u || total === 0 ? 'no-usage' : null);
+    if (reason !== null || a.reason !== null || !u) {
+      if (reason) this.reasons.set(reason, (this.reasons.get(reason) ?? 0) + 1);
+      return;
+    }
+    const { placed, weights, gapAt, remainder } = a;
     const usage = { cacheRead: u.cacheRead, cacheWrite: u.cacheWrite, input: u.input };
-    const tokens = spread(
-      weights,
-      placed.findIndex((p) => p.w.kind === 'gap'),
-      total,
-    );
+    const tokens = spread(weights, gapAt, total, remainder);
     this.read += 1;
     this.tokens += total;
     addSplit(this.split, usage);
@@ -614,12 +730,14 @@ export class ContextLedger {
     const held: Held[] = [];
     let at = 0;
     let toolCount = 0;
+    let fixed = false;
     placed.forEach((p, i) => {
       const w = p.w;
       const n = tokens[i] as number;
       const split = splitAt(at, n, usage);
       at += n;
       if (w.kind === 'system' || w.kind === 'tool') {
+        fixed = true;
         this.fixed.tokens += n;
         addSplit(this.fixed.split, split);
         if (w.kind === 'system') this.fixed.system += n;
@@ -632,7 +750,8 @@ export class ContextLedger {
       if (w.kind === 'gap') return;
       if (w.kind === 'call' && w.callId && !this.calls.has(w.callId)) this.calls.set(w.callId, w);
       held.push({ key: p.key, w, tokens: n });
-      const path = this.fileOf(w);
+      const read = this.readOf(w);
+      const path = read?.path ?? null;
       const key = path ? `file:${path}` : p.key;
       let item = this.items.get(key);
       if (!item) {
@@ -647,6 +766,8 @@ export class ContextLedger {
           first: request.id,
           path,
           reads: [],
+          ranges: [],
+          rereads: 0,
         };
         this.items.set(key, item);
       }
@@ -656,9 +777,16 @@ export class ContextLedger {
         item.requests += 1;
         item.last = request.id;
       }
-      if (path && w.callId && !item.reads.includes(w.callId)) item.reads.push(w.callId);
+      // A read again of lines already read: paging through a file in parts is one read of it.
+      if (read && w.callId && !item.reads.includes(w.callId)) {
+        const [from, to] = read.lines;
+        if (item.ranges.some(([a, b]) => from <= b && a <= to)) item.rereads += 1;
+        item.ranges.push(read.lines);
+        item.reads.push(w.callId);
+      }
     });
-    this.fixed.toolCount = toolCount;
+    if (fixed) this.fixed.requests += 1;
+    if (toolCount > 0) this.fixed.toolCount = toolCount;
 
     if (request.compactedBefore && this.before) {
       const now = new Set(placed.map((p) => p.key));
@@ -675,8 +803,8 @@ export class ContextLedger {
     this.before = { id: request.id, held };
   }
 
-  /** The file a call or result reads, resolved; null when it is not a read. */
-  private fileOf(w: Weighed): string | null {
+  /** The file a call or result reads, resolved, and its lines; null when it is not a read. */
+  private readOf(w: Weighed): FileRead | null {
     if (w.kind !== 'call' && w.kind !== 'result') return null;
     const id = w.callId;
     if (!id) return null;
@@ -684,12 +812,14 @@ export class ContextLedger {
     if (known !== undefined) return known;
     const call = w.kind === 'call' ? w : this.calls.get(id);
     if (!call?.tool) return null;
-    const read = touchesOf({ ...AS_CALL, name: call.tool, input: call.input }).find(
+    const touch = touchesOf({ ...AS_CALL, name: call.tool, input: call.input }).find(
       (t) => t.verb === 'read',
     );
-    const path = read ? resolvePath(read.path, this.cwd) : null;
-    this.files.set(id, path);
-    return path;
+    const read = touch
+      ? { path: resolvePath(touch.path, this.cwd), lines: lineRange(touch.lines) }
+      : null;
+    this.files.set(id, read);
+    return read;
   }
 
   /** A call's tool and what it worked on. */
@@ -707,7 +837,7 @@ export class ContextLedger {
       key: h.key,
       kind: w.kind,
       ...this.callName(call),
-      path: this.fileOf(w),
+      path: this.readOf(w)?.path ?? null,
       text: w.text,
       role: w.role,
       callId: call,
@@ -735,19 +865,21 @@ export class ContextLedger {
       };
     });
     const read = this.read;
+    const sent = this.fixed.requests;
     const fixed: FixedCost | null =
-      read > 0 && this.fixed.tokens > 0
+      sent > 0 && this.fixed.tokens > 0
         ? {
             tokens: this.fixed.tokens,
             split: { ...this.fixed.split },
-            requests: read,
-            perRequest: this.fixed.tokens / read,
-            system: this.fixed.system / read,
-            tools: this.fixed.tools / read,
+            requests: sent,
+            perRequest: this.fixed.tokens / sent,
+            system: this.fixed.system / sent,
+            tools: this.fixed.tools / sent,
             toolCount: this.fixed.toolCount,
           }
         : null;
-    const rereads = all.filter((c) => c.kind === 'file' && c.reads.length >= REREAD).length;
+    // Files whose same lines were read REREAD times or more.
+    const rereads = all.filter((c) => c.kind === 'file' && c.rereads + 1 >= REREAD).length;
     const first = items[0];
     const advice: ContextAdvice | null =
       read === 0

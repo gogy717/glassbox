@@ -10,6 +10,7 @@ import { cjkInMono } from '../../test/cjk';
 import { DEMO_NOW, demoOpen } from '../../test/demo';
 import { UiContext } from '../../ui';
 import { ContextBill } from './ContextBill';
+import css from './ContextBill.module.css';
 
 const snapshot = createDemoSnapshot(DEMO_NOW);
 
@@ -78,6 +79,23 @@ describe('ContextBill', () => {
     await screen.findByText(/One item held/);
     const thinking = items().find((li) => li.textContent?.startsWith('Reply · Thinking'));
     expect(thinking).toHaveTextContent('since Prompt 1 · call #3 · carried in 3 requests');
+  });
+
+  it('names a message without text by its kind, and a role by its word', async () => {
+    const bill = demoBill();
+    const item = bill.items.find((i) => i.kind === 'user') as SessionContextBill['items'][number];
+    answer({
+      ...bill,
+      items: [
+        { ...item, key: 'user:a', text: null },
+        { ...item, key: 'other:a', kind: 'other', role: 'system', text: 'hook context' },
+      ],
+    });
+    renderBill(demoOpen(), 'main', 'zh');
+    await screen.findByText(/^系统提示和/);
+    const held = within(screen.getByRole('region', { name: /上下文里有什么/ }));
+    const names = held.getAllByRole('listitem').map((li) => li.querySelector(`.${css.name}`));
+    expect(names.map((n) => n?.textContent)).toEqual(['用户消息', '系统消息 · hook context']);
   });
 
   it('says what the system prompt and tools cost every request', async () => {

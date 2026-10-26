@@ -108,10 +108,35 @@ describe('ContextView', () => {
   it('says why there is no bill when the request body was not recorded', () => {
     renderView({ ...req('req_m1'), hasDetail: false }, null);
     expect(
+      screen.getByText('Not available for this request: Claude Code did not record what it sent.'),
+    ).toBeInTheDocument();
+  });
+
+  it('says so for an agent that keeps a tool result by its call alone, as Grok does', () => {
+    renderView(req('req_m1'), {
+      ...sent('req_m1'),
+      completeness: 'partial',
+      messages: [
+        { role: 'user', content: 'list files' },
+        { role: 'assistant', content: '', toolCalls: [{ id: 'c1', name: 'shell' }] },
+        { role: 'tool', toolCallId: 'c1' },
+      ],
+    });
+    expect(
       screen.getByText(
-        'Not available for this request: this Claude Code version did not record what it sent.',
+        'Not available for this request: Claude Code did not record the tool results it sent.',
       ),
     ).toBeInTheDocument();
+  });
+
+  it('filters by what a part holds, not only its name', () => {
+    renderView(req('req_m3'), sent('req_m3'));
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Filter parts' }), {
+      target: { value: 'cell-3 replaced' },
+    });
+    expect(rows().map((r) => r.textContent)).toEqual([
+      expect.stringMatching(/^Tool resultNotebookEdit sorting\.ipynb/),
+    ]);
   });
 
   it('says so for an agent that keeps the system prompt and tools only', () => {

@@ -54,6 +54,8 @@ describe('DetailPanel when the Context tab cannot load', () => {
     fireEvent.click(within(panel).getByRole('radio', { name: 'Context' }));
     expect(await within(panel).findByText(/code could not load/)).toBeInTheDocument();
     expect(within(panel).getByRole('button', { name: 'Reload' })).toBeInTheDocument();
+    // No bill, nothing to copy.
+    expect(within(panel).queryByRole('button', { name: 'Copy' })).toBeNull();
     fireEvent.click(within(panel).getByRole('radio', { name: 'Details' }));
     expect(within(panel).getByRole('heading', { name: 'Messages' })).toBeInTheDocument();
   });

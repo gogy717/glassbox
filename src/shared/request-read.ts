@@ -25,8 +25,11 @@ export type Block =
   /** `content` null: the result is not part of the record (only its id is). */
   | { kind: 'tool-result'; toolUseId: string | null; content: Block[] | null; isError: boolean }
   | { kind: 'media'; what: 'image' | 'document'; mediaType: string | null; bytes: number | null }
-  /** A tool made available mid-conversation, or a reference to one. */
-  | { kind: 'tool-ref'; name: string; added: boolean }
+  /**
+   * A tool made available mid-conversation, or a reference to one. `definition`: what an
+   * addition added, which the context bill weighs.
+   */
+  | { kind: 'tool-ref'; name: string; added: boolean; definition?: unknown }
   /** Anything else, shown as JSON. */
   | { kind: 'raw'; type: string; value: unknown };
 
@@ -122,7 +125,7 @@ export function readBlock(b: unknown): Block {
     case 'tool_addition': {
       const tool = isObj(b.tool) ? b.tool : {};
       const def = isObj(tool.definition) ? tool.definition : tool;
-      return { kind: 'tool-ref', name: str(def.name) ?? '?', added: true };
+      return { kind: 'tool-ref', name: str(def.name) ?? '?', added: true, definition: def };
     }
     case 'tool_reference':
       return { kind: 'tool-ref', name: str(b.tool_name) ?? str(b.name) ?? '?', added: false };
@@ -306,7 +309,8 @@ export function messageText(m: Message): string {
   return m.blocks.map(blockText).join('\n\n');
 }
 
-function blockText(b: Block): string {
+/** A block as plain text: a message's copy, the text a filter over the context bill reads. */
+export function blockText(b: Block): string {
   switch (b.kind) {
     case 'text':
       return b.text;
