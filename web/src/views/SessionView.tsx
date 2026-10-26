@@ -60,7 +60,7 @@ export function SessionView({ open, route, navigate, live = null, rateAgent = nu
 
   return (
     <div className={css.view}>
-      <SummaryBar open={open} agentId={agentId} rateAgent={rateAgent} />
+      <SummaryBar open={open} agentId={agentId} rateAgent={rateAgent} navigate={navigate} />
       <Suspense fallback={null}>
         <OutcomeStrip open={open} agentId={agentId} navigate={navigate} />
       </Suspense>

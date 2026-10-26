@@ -1,0 +1,95 @@
+/* Beside the diagnostics, in their manner: words, one dot of colour, a panel under them. */
+.wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 0 4px 0 0;
+}
+
+.button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-l);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    background var(--motion),
+    color var(--motion);
+}
+
+.button:hover {
+  background: var(--layer-3);
+  color: var(--text);
+}
+
+/* A sign of trouble is the error's red, as a failed run's row says it. */
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--error);
+}
+
+.count {
+  font-size: var(--fs-small);
+  white-space: nowrap;
+}
+
+.panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 40;
+  display: grid;
+  gap: 8px;
+  width: min(380px, calc(100vw - 24px));
+  padding: 12px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xl);
+  background: var(--layer-1);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+}
+
+.ok {
+  margin: 0;
+  color: var(--muted);
+}
+
+.list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 16px;
+}
+
+.item {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--error);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.item:hover {
+  text-decoration: underline;
+}
+
+/* The call a sign names: the mono face, as the execution chain sets commands. */
+.target {
+  font-family: var(--font-mono);
+}
+
+.agent {
+  color: var(--muted);
+}

@@ -15,12 +15,14 @@ import {
   formatPercent,
 } from '../lib/format';
 import { lazyView } from '../lib/lazy-view';
+import type { Navigate } from '../router';
 import { CompactFigure, UiCjk } from './CompactFigure';
 import { Diagnostics } from './Diagnostics';
 import { FigureText } from './FigureText';
 import { ReceiptBoundary, ReceiptLoading } from './ReceiptEntry';
 import css from './SummaryBar.module.css';
 import { rateText } from './TokenRate';
+import { Trouble } from './Trouble';
 
 interface Figure {
   label: string;
@@ -79,12 +81,15 @@ export function SummaryBar({
   agentId,
   rate: given,
   rateAgent = null,
+  navigate,
 }: {
   open: OpenSession;
   agentId: string;
   /** The machine's token rate, for its figure on narrow screens; the store's when not given. */
   rate?: TokenRate | null;
   rateAgent?: string | null;
+  /** Where a sign of trouble's link goes; without it, the signs are words only. */
+  navigate?: Navigate;
 }) {
   const { t, intl } = useI18n();
   const stored = useRate();
@@ -168,6 +173,7 @@ export function SummaryBar({
         </button>
       </div>
       <Diagnostics diagnostics={open.diagnostics} />
+      <Trouble open={open} agentId={agentId} now={now} navigate={navigate} />
       <ReceiptButton open={open} />
     </section>
   );

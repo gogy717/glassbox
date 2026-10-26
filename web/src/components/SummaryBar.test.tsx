@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { Turn } from '../../../src/core/model.js';
 import { I18nContext, makeI18n } from '../i18n';
 import { cjkInMono } from '../test/cjk';
@@ -89,6 +89,24 @@ describe('SummaryBar figures', () => {
 });
 
 describe('SummaryBar', () => {
+  it('says whether anything looks stuck right after Data complete, for the agent it shows', () => {
+    // At the demo's own clock: three days on, its running prompt would be a sign.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(DEMO_NOW);
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const navigate = vi.fn();
+    render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <SummaryBar open={demoOpen()} agentId="main" navigate={navigate} />
+      </I18nContext.Provider>,
+    );
+    const diagnostics = screen.getByRole('button', { name: /Data diagnostics/ });
+    const trouble = screen.getByRole('button', { name: 'Signs of trouble · No trouble' });
+    expect(diagnostics.parentElement?.nextElementSibling).toBe(trouble.parentElement);
+  });
+
   it('shows a dash, not 0ms, for an agent that has made no model call', () => {
     render(
       <I18nContext.Provider value={makeI18n('en')}>
