@@ -112,6 +112,7 @@ export const en: Record<MessageKey, string> = {
   'flow.hitReply': 'Reply',
   'flow.hitResult': 'Result',
   'flow.hitResultOf': '{tool} result',
+  'flow.hitsCapped': 'Showing the newest {shown} of {total} hits: type more to narrow the search',
   'flow.localCommand': 'local command',
   'flow.localCommandHint': 'Run by Claude Code itself; the model was not called',
   'flow.commands': '{n} {n|command|commands}',

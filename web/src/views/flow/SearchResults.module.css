@@ -20,7 +20,7 @@
   /* Holds its visually hidden text, as the list's rows do. */
   position: relative;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
   align-items: baseline;
   column-gap: 8px;
   width: 100%;
@@ -38,7 +38,12 @@
   border-left-color: var(--ink);
 }
 
+/* Whole while it fits; a long one ("Calls outside prompts · 12 hits") is cut, not let widen
+   the column. */
 .label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -145,6 +150,16 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Past the hits drawn: how many there are, and how to see fewer. */
+.capped {
+  flex: none;
+  margin: 0;
+  padding: 8px 16px 10px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: var(--fs-meta);
 }
 
 /* Narrow, the list sits in a row of its own above the calls: hits keep to part of the page,

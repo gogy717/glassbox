@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Turn } from '../../../../src/core/model.js';
 import { I18nContext, makeI18n } from '../../i18n';
 import { moduleCssValue } from '../../test/module-css';
+import resultsCss from './SearchResults.module.css';
 import type { SearchGroup, SearchHit } from './search';
 import type { SearchScope } from './search-prefs';
 import { newestMatch, type TurnItem, TurnList } from './TurnList';
@@ -489,10 +490,17 @@ describe('TurnList search', () => {
     const lines = within(groups[1] as HTMLElement)
       .getAllByRole('button')
       .slice(1);
+    // What each line is in, as seen…
     expect(lines.map((b) => b.querySelector('[data-kind]')?.textContent)).toEqual([
       'Prompt',
       'Bash',
       'Result',
+    ]);
+    // …and as heard, a result saying whose it is, each word with its space.
+    expect(lines.map((b) => b.getAttribute('aria-label'))).toEqual([
+      'Prompt: Fix the flaky login test',
+      'Bash: login.spec.ts',
+      'Bash result: FAIL login',
     ]);
     expect(lines[0]).toHaveTextContent('Fix the flaky login test');
     expect(lines.map((b) => b.querySelector('mark')?.textContent)).toEqual([
@@ -500,7 +508,8 @@ describe('TurnList search', () => {
       'login',
       'login',
     ]);
-    // A result says whose it is, where the line has no room for it.
+    // The column cuts long names: the whole name, and a result's tool, on hover.
+    expect(lines[1]?.querySelector('[data-kind]')).toHaveAttribute('title', 'Bash');
     expect(lines[2]?.querySelector('[data-kind]')).toHaveAttribute('title', 'Bash result');
     // Where the search cut the words before the match, its "…" stands apart from them, ahead of
     // the box that cuts them further when the line is short of room.
@@ -514,7 +523,7 @@ describe('TurnList search', () => {
 
   it('opens a hit where it is, and a group’s prompt from its head', () => {
     const on = renderSearch();
-    fireEvent.click(screen.getByRole('button', { name: /^Bash/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Bash: / }));
     expect(on.hit).toHaveBeenCalledWith(results[0]?.hits[1], 'turn_2');
     fireEvent.click(screen.getByRole('button', { name: /^Prompt 4 · 1 hit/ }));
     expect(on.select).toHaveBeenCalledWith('turn_4');
@@ -608,6 +617,45 @@ describe('TurnList search', () => {
     expect(screen.getByRole('button', { name: /^Prompt 2 · 3 处匹配/ })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: '用户轮次' })).toHaveTextContent('4 处匹配');
     expect(screen.getByRole('searchbox', { name: '搜索全部内容' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^提示词: Fix the flaky/ })).toBeInTheDocument();
+  });
+
+  it('draws the newest 200 hits, and says how to narrow the rest', () => {
+    const many = (turn: number, n: number): SearchGroup => ({
+      turn: item(turn).turn,
+      hits: Array.from({ length: n }, (_, i) =>
+        hit({ kind: 'reply', requestId: `r${turn}-${i}`, card: 'response' }),
+      ),
+    });
+    renderSearch({ results: [many(1, 120), many(2, 60), many(3, 70)] });
+    const heads = [...resultList().querySelectorAll('[data-group]')];
+    // Prompt 3's 70, Prompt 2's 60, then 70 of Prompt 1's 120; each head keeps its whole count.
+    expect(heads.map((h) => h.textContent?.split(' · ')[1]?.match(/^\d+ hits/)?.[0])).toEqual([
+      '70 hits',
+      '60 hits',
+      '120 hits',
+    ]);
+    expect(within(resultList()).getAllByRole('button')).toHaveLength(3 + 200);
+    expect(screen.getByRole('navigation', { name: 'Prompts' })).toHaveTextContent('250 hits');
+    // Its figures are set apart (mono), so the line is read whole.
+    expect(document.querySelector(`.${resultsCss.capped}`)).toHaveTextContent(
+      'Showing the newest 200 of 250 hits: type more to narrow the search',
+    );
+    cleanup();
+    renderSearch();
+    expect(document.querySelector(`.${resultsCss.capped}`)).toBeNull();
+  });
+
+  it('cuts a long group label rather than let it widen the column', () => {
+    renderSearch();
+    const head = resultList().querySelector('[data-group]') as HTMLElement;
+    const label = head.firstElementChild as HTMLElement;
+    const sheet = join(import.meta.dirname, 'SearchResults.module.css');
+    expect(moduleCssValue(sheet, resultsCss, head, 'grid-template-columns')).toBe(
+      'minmax(0, auto) minmax(0, 1fr)',
+    );
+    expect(moduleCssValue(sheet, resultsCss, label, 'min-width')).toBe('0');
+    expect(moduleCssValue(sheet, resultsCss, label, 'text-overflow')).toBe('ellipsis');
   });
 });
 
