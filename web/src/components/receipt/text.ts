@@ -1,6 +1,7 @@
 /**
  * The receipt as text, for a PR, a stand-up or a chat: a fenced block of at most 40 lines and 44
- * columns, one line per line of the image (the barcode aside). Its figures are always ASCII
+ * columns, one line per line of the image (the barcode aside, and the details that give way when
+ * a session fills every line: `DETAILS`). Its figures are always ASCII
  * ("1h 02m", "18.2M"); in Chinese they come first on a line and the words after them, because a
  * CJK character's width in a code font varies (about 1.7 columns on GitHub) and nothing after
  * one can be aligned.
@@ -11,7 +12,7 @@ import { formatCompact, formatPercent } from '../../lib/format';
 import type { ReceiptData } from './data';
 import { clock, day, durationParts, modelName, partsText } from './format';
 import { clean } from './printed';
-import { categoryLine, clip, timed, timeRows } from './rows';
+import { categoryLine, clip, testRunWords, timed, timeRows } from './rows';
 import type { ReceiptOptions, TokenFigures } from './slip';
 import { type ReceiptKey, rt } from './strings';
 
@@ -96,7 +97,25 @@ export const footLines = (L: Locale, measured: boolean) =>
     centred,
   );
 
+/** The block's most lines, its fences counted. */
+export const MAX_LINES = 40;
+
+/**
+ * Details that give way, in this order, when a session fills more lines than the block has:
+ * the longest think, the thinking share of output, the tool categories. Never a count.
+ */
+const DETAILS = ['longestThink', 'ofThinking', 'categories'] as const;
+type Detail = (typeof DETAILS)[number];
+
 export function receiptText(d: ReceiptData, o: ReceiptOptions): string {
+  let lines = textLines(d, o, new Set());
+  for (let i = 1; lines.length > MAX_LINES && i <= DETAILS.length; i++)
+    lines = textLines(d, o, new Set(DETAILS.slice(0, i)));
+  // Well formed whatever the session holds: a lone surrogate would not survive the clipboard.
+  return clean(lines.join('\n'));
+}
+
+function textLines(d: ReceiptData, o: ReceiptOptions, omit: ReadonlySet<Detail>): string[] {
   const L = o.locale;
   const zh = L === 'zh';
   const w = (key: ReceiptKey, params?: Record<string, string | number>) => rt(L, key, params);
@@ -137,8 +156,11 @@ export function receiptText(d: ReceiptData, o: ReceiptOptions): string {
   };
   work(d.work.requests, 'modelCalls');
   work(d.work.toolCalls, 'toolCalls');
-  if (d.work.toolCalls > 0 && d.work.categories.length > 0)
+  if (d.work.toolCalls > 0 && d.work.categories.length > 0 && !omit.has('categories'))
     out.push(`       ${categoryLine(d.work.categories, L, (line) => cols(line) <= COLUMNS - 7)}`);
+  const { tests, commits } = d.work;
+  if (tests) out.push(`${String(tests.runs).padStart(5)}  ${testRunWords(tests, L)}`);
+  work(commits, 'commits');
   work(d.work.subAgents, 'subAgents');
   work(d.work.turns, 'prompts');
   work(d.work.failures, 'failures');
@@ -153,7 +175,7 @@ export function receiptText(d: ReceiptData, o: ReceiptOptions): string {
           ? lead(dur(r.ms), `${`${r.share}%`.padStart(4)}  ${w(r.key)}`)
           : `${dots(`${w(r.key)} `, ` ${dur(r.ms)}`, COLUMNS - 5)}${`${r.share}%`.padStart(5)}`,
       );
-    if (d.time.longestThink >= 1000) {
+    if (d.time.longestThink >= 1000 && !omit.has('longestThink')) {
       const v = dur(d.time.longestThink);
       out.push(
         zh
@@ -164,9 +186,9 @@ export function receiptText(d: ReceiptData, o: ReceiptOptions): string {
     out.push(rule);
   }
 
-  out.push(...tokenLines(d.tokens, L));
+  // Without its thinking share, the token block leaves that line out.
+  out.push(...tokenLines(omit.has('ofThinking') ? { ...d.tokens, thinking: 0 } : d.tokens, L));
   out.push(...footLines(L, d.tokens.measured));
   out.push('```');
-  // Well formed whatever the session holds: a lone surrogate would not survive the clipboard.
-  return clean(out.join('\n'));
+  return out;
 }

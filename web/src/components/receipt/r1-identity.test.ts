@@ -5,7 +5,9 @@
  * turns line saying "Prompts", not "Conversations" (the UX pass's words). Changing how the
  * session receipt looks changes it on purpose: then the hash changes in the same commit, which
  * says why. So does changing what the demo sessions did: the receipt prints their tool calls and
- * the mix of their kinds (the demo's fix grew file work; the pen did not change).
+ * the mix of their kinds (the demo's fix grew file work; the pen did not change). WORK then
+ * gained the outcome's test runs and commits: the flaky-login session's `npm test` prints
+ * "1  Test run · last ✓"; with those two lines left out, the hash is the one before.
  */
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, expect, it } from 'vitest';
@@ -46,6 +48,6 @@ function receipts(): string {
 
 it('draws the session receipt exactly as it did before the weekly receipt shared its pen', () => {
   expect(createHash('sha256').update(receipts()).digest('hex')).toBe(
-    '3fb162e6b8f315cce07c81bc3b2d466b4db6b9d2ecbb4797f9d5e2e3130fe013',
+    '0b18280509eedcf568d85753df8c24fcfcc545d95b40fed7b21e8b1788e39f79',
   );
 });

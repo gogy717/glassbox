@@ -10,8 +10,23 @@
   white-space: nowrap;
 }
 
-.activity > * {
+.activity > *,
+.trouble > * {
   flex: none;
+}
+
+/* A running session's sign of trouble, after what it does: the error's red, its call giving
+   way when the row is narrow, as an activity's target does. */
+.trouble {
+  display: inline-flex;
+  align-items: center;
+  column-gap: 0.3em;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--error);
+  font-weight: 600;
 }
 
 /* The dot sits a little apart from the word, as StatusMark's does. */

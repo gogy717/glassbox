@@ -1,8 +1,9 @@
-import { X } from 'lucide-react';
-import type { SessionActivity, SessionSummary } from '../../../src/core/model.js';
-import { type MessageKey, translateParts, useI18n } from '../i18n';
+import { TriangleAlert, X } from 'lucide-react';
+import type { SessionActivity, SessionSummary, TroubleSignal } from '../../../src/core/model.js';
+import { type MessageKey, type Params, translateParts, useI18n } from '../i18n';
 import { isRunning } from '../lib/sessions';
 import { toolCategory } from '../lib/tool-category';
+import { troublePhrase } from '../lib/trouble';
 import { WAIT_KEY, waitingSince, waitKind } from '../lib/waiting';
 import css from './ActivityLine.module.css';
 import { UiCjk } from './CompactFigure';
@@ -35,14 +36,16 @@ export function toolPhrase(tool: string): MessageKey {
 }
 
 /**
- * A phrase with its target (a file, a pattern, a host, a command's summary) in the mono face.
- * Its words keep their spaces, for the row's name; on screen the line's gap spaces them.
+ * A phrase with its target (a file, a pattern, a host, a command's summary) in the mono face,
+ * its other params in its words. Its words keep their spaces, for the row's name; on screen the
+ * line's gap spaces them.
  */
-function Phrase({ k, x }: { k: MessageKey; x: string }) {
+function Phrase({ k, x, params }: { k: MessageKey; x?: string; params?: Params }) {
   const { locale } = useI18n();
+  const all = x === undefined ? { ...params } : { ...params, x };
   return (
     <>
-      {translateParts(locale, k, { x }).map((p, i) =>
+      {translateParts(locale, k, all, ['x']).map((p, i) =>
         typeof p === 'string' ? (
           // biome-ignore lint/suspicious/noArrayIndexKey: the parts of one fixed text
           <span key={i}>{p}</span>
@@ -112,6 +115,22 @@ function Waiting({ session: s }: { session: SessionSummary }) {
         </>
       )}
     </>
+  );
+}
+
+/**
+ * A running session's strongest sign of trouble, short, in the error tone: "Retrying npm test ·
+ * 4×", "Waiting 14 min". The call it names in the mono face, as an activity's target.
+ */
+export function TroubleLine({ signal, now }: { signal: TroubleSignal; now: number }) {
+  const { t } = useI18n();
+  const { k, params } = troublePhrase(t, signal, now, 'short');
+  const { x, ...rest } = params;
+  return (
+    <span className={css.trouble} data-trouble={signal.kind}>
+      <TriangleAlert size={12} strokeWidth={2.5} className={css.glyph} aria-hidden="true" />
+      <Phrase k={k} x={x === undefined ? undefined : String(x)} params={rest} />
+    </span>
   );
 }
 

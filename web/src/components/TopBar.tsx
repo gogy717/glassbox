@@ -276,9 +276,10 @@ function SettingsMenu({ prefs, onPrefs }: { prefs: Prefs; onPrefs(p: Prefs): voi
 }
 
 /**
- * "Notify me when a session needs me" (F1), off by default. Turning it on asks the browser's
- * permission once; refused, the box stays off and says so, as it does when the browser offers no
- * notifications. On only while the browser allows it: a permission withdrawn since turns it off.
+ * "Notify me when a session needs me or looks stuck" (F1), off by default. Turning it on asks
+ * the browser's permission once; refused, the box stays off and says so, as it does when the
+ * browser offers no notifications. On only while the browser allows it: a permission withdrawn
+ * since turns it off.
  */
 function NotifySetting({ prefs, onPrefs }: { prefs: Prefs; onPrefs(p: Prefs): void }) {
   const { t } = useI18n();

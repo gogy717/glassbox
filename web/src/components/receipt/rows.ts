@@ -2,9 +2,10 @@
  * Lines the image and the text both print, built once so that the two always say the same: TIME's
  * rows with their shares, and the tool categories folded to fit.
  */
+import type { TestVerdict } from '../../../../src/shared/outcome.js';
 import { type Locale, type MessageKey, translate } from '../../i18n';
 import type { ReceiptData } from './data';
-import type { ReceiptKey } from './strings';
+import { type ReceiptKey, rt } from './strings';
 
 /**
  * `units` whole units shared out in proportion to `values`, adding up to exactly `units`: each
@@ -79,6 +80,20 @@ export function categoryLine(
     list = [...named.slice(0, -1), { category: 'other', count: other }];
   }
   return render(list);
+}
+
+/** The last run's verdict on WORK's test line, when it is known. */
+const LAST: Partial<Record<TestVerdict, ReceiptKey>> = {
+  passed: 'lastPassed',
+  failed: 'lastFailed',
+  running: 'lastRunning',
+};
+
+/** WORK's test line after its count: "Test runs · last ✓". */
+export function testRunWords(tests: { runs: number; verdict: TestVerdict }, locale: Locale) {
+  const words = rt(locale, 'testRuns', { n: tests.runs });
+  const last = LAST[tests.verdict];
+  return last ? `${words} · ${rt(locale, last)}` : words;
 }
 
 /** `s` cut to `width` by `measure`, ending in "…" when it was longer. */

@@ -45,6 +45,19 @@ export function summarizeCommand(
 }
 
 /**
+ * Each simple command of a line, in order, as its words (quotes removed) and its own summary:
+ * `cd web && npm test | tail -5` is three, summed up as `cd`, `npm test` and `tail`. For telling
+ * what a line runs (a test runner, a commit) wherever in it, which its one summary does not say.
+ */
+export function simpleCommands(
+  line: string,
+  options: SummaryOptions = {},
+): { words: string[]; summary: string | null }[] {
+  const ps = options.powershell ?? false;
+  return segments(line, ps).map((words) => ({ words, summary: render(describe(words, 0)) }));
+}
+
+/**
  * An argv's leading words, whole, up to SCAN_MAX characters in all: the rest is never looked
  * at, however long the array. Null when a word read is not a string.
  */

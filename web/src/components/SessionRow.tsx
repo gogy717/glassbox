@@ -5,7 +5,8 @@ import { translateParts, useI18n } from '../i18n';
 import { agentName } from '../lib/agent-names';
 import { formatCompact, formatRelative } from '../lib/format';
 import { isRunning } from '../lib/sessions';
-import { ActivityLine } from './ActivityLine';
+import { troubleText } from '../lib/trouble';
+import { ActivityLine, TroubleLine } from './ActivityLine';
 import { AgentTag } from './AgentTag';
 import { CompactFigure } from './CompactFigure';
 import css from './SessionRow.module.css';
@@ -52,11 +53,19 @@ export function SessionRow({
     ? [t('status.error'), failure].filter(Boolean).join(': ')
     : t(`live.${s.live}`);
   const when = formatRelative(s.updatedAt, now, intl);
+  // A running session's strongest sign of being stuck, from the server: after what it does.
+  const sign = running ? (s.trouble ?? null) : null;
   const figure = s.usage && s.usage.output > 0 ? formatCompact(s.usage.output, intl) : null;
   // Said in full ("42K output tokens"): the tooltip, and what a screen reader hears.
   const tokens = figure ? t('session.outputTokens', { n: figure }) : null;
   const tip = clipped
-    ? [title, [agentName(s.agent), state, when, tokens].filter(Boolean).join(' · '), s.cwd]
+    ? [
+        title,
+        [agentName(s.agent), state, sign && troubleText(t, sign, now, 'short'), when, tokens]
+          .filter(Boolean)
+          .join(' · '),
+        s.cwd,
+      ]
         .filter(Boolean)
         .join('\n')
     : (s.cwd ?? undefined);
@@ -96,6 +105,12 @@ export function SessionRow({
         </span>
         <span className={css.meta}>
           <ActivityLine session={s} failure={failure} density="card" />
+          {sign && (
+            <>
+              <span className={css.sep}> · </span>
+              <TroubleLine signal={sign} now={now} />
+            </>
+          )}
           {showAge && (
             <>
               <span className={css.sep}> · </span>
@@ -124,6 +139,11 @@ export function SessionRow({
       </span>
       <span className={css.meta}>
         <ActivityLine session={s} failure={failure} density="compact" />
+        {sign && (
+          <span className={css.sign}>
+            <span className={css.sep}>·</span> <TroubleLine signal={sign} now={now} />
+          </span>
+        )}
         <span className={css.when} data-clip data-age={showAge || undefined}>
           {showAge && (
             <>

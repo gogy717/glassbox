@@ -161,6 +161,12 @@ export const SHELLS = new Set([
   'bash',
 ]);
 
+/**
+ * Shell tools whose calls are read for what they run (a test runner, a commit, a loop): `SHELLS`,
+ * and `execute_command`, as agents glassbox may read next name theirs.
+ */
+export const SHELL_TOOLS: ReadonlySet<string> = new Set([...SHELLS, 'execute_command']);
+
 const READ_ONLY = new Set([
   'rg',
   'grep',
@@ -315,6 +321,27 @@ export function shellCommand(input: unknown): string | null {
 }
 
 export const isUrl = (s: string) => /^https?:\/\//i.test(s);
+
+/** Where a file lives, whatever the agent calls the key. */
+export const PATH_KEYS = [
+  'file_path',
+  'filePath',
+  'path',
+  'target_file',
+  'notebook_path',
+  'target_notebook',
+  'dir_path',
+  'target_directory',
+];
+
+/**
+ * The path a call's input names, whatever the agent calls the key (`file_path`, `filePath`,
+ * `path`, `target_file`…), as written: a search's directory as much as a read's file, a URL as
+ * much as a path. Null when the input names none.
+ */
+export function pathField(input: unknown): string | null {
+  return PATH_KEYS.map((k) => field(input, k)).find(Boolean) ?? null;
+}
 
 /**
  * An MCP tool's server and name: `mcp__server__tool`, or `server__tool` as Grok (and older

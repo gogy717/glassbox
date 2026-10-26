@@ -347,9 +347,12 @@ describe('App', () => {
     expect(screen.getByRole('tabpanel')).toContainElement(
       await screen.findByRole('heading', { level: 3, name: 'src/server' }),
     );
-    expect(screen.getByText(/files edited/).closest('p')).toHaveTextContent(
-      '3 files edited · 1 created · 3 read · Main',
-    );
+    // The tab's own head; the outcome strip above the tabs counts the same files.
+    expect(
+      within(screen.getByRole('tabpanel'))
+        .getByText(/files edited/)
+        .closest('p'),
+    ).toHaveTextContent('3 files edited · 1 created · 3 read · Main');
   });
 
   it('hides probe sessions until the settings toggle shows them', () => {
@@ -712,7 +715,9 @@ describe('App notifications', () => {
   }
   const notifyBox = () => {
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
-    return screen.getByRole('checkbox', { name: 'Notify me when a session needs me' });
+    return screen.getByRole('checkbox', {
+      name: 'Notify me when a session needs me or looks stuck',
+    });
   };
   const saved = () => JSON.parse(localStorage.getItem('glassbox.prefs') ?? '{}');
 
@@ -780,6 +785,48 @@ describe('App notifications', () => {
     const box = notifyBox();
     expect(box).toBeDisabled();
     expect(box).toHaveAccessibleDescription('Not offered by this browser');
+  });
+
+  it('notifies once as a running session begins to look stuck, its sign the body', () => {
+    localStorage.setItem('glassbox.prefs', JSON.stringify({ notify: true }));
+    const store = createStore();
+    const [busy, ...rest] = createDemoSessions(DEMO_NOW);
+    if (!busy) throw new Error('fixture');
+    store.applyEvent({ type: 'sessions', sessions: [{ ...busy, trouble: null }, ...rest] });
+    render(<App store={store} connect={noConnect} runs={fakeRuns()} />);
+    const sign = {
+      kind: 'repeat' as const,
+      params: { x: 'npm test', n: 4 },
+      at: null,
+      since: DEMO_NOW.toISOString(),
+    };
+    act(() =>
+      store.applyEvent({ type: 'sessions', sessions: [{ ...busy, trouble: sign }, ...rest] }),
+    );
+    act(() =>
+      store.applyEvent({
+        type: 'sessions',
+        sessions: [{ ...busy, trouble: { ...sign, params: { x: 'npm test', n: 5 } } }, ...rest],
+      }),
+    );
+    expect(FakeNotification.shown.map((x) => [x.title, x.options?.body])).toEqual([
+      ['glassbox / Live viewer research (demo)', 'Repeated npm test 4×'],
+    ]);
+  });
+
+  it('tells nothing of a sign the server says first, when it opens a running session', () => {
+    localStorage.setItem('glassbox.prefs', JSON.stringify({ notify: true }));
+    const store = createStore();
+    const [busy, ...rest] = createDemoSessions(DEMO_NOW);
+    if (!busy) throw new Error('fixture');
+    // Listed before the server has read it: its signs are not known yet.
+    store.applyEvent({ type: 'sessions', sessions: [busy, ...rest] });
+    render(<App store={store} connect={noConnect} runs={fakeRuns()} />);
+    const old = { kind: 'compaction' as const, params: { n: 4 }, at: null, since: null };
+    act(() =>
+      store.applyEvent({ type: 'sessions', sessions: [{ ...busy, trouble: old }, ...rest] }),
+    );
+    expect(FakeNotification.shown).toEqual([]);
   });
 
   it('notifies once as a session begins to wait, not on page load, and opens it from the notification', async () => {

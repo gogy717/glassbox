@@ -27,6 +27,12 @@ describe('DemoStore', () => {
     expect(list).toHaveLength(3);
   });
 
+  it('reads the running demo session’s signs of trouble as the server does; the rest carry none', () => {
+    const [demo, ...rest] = store.listSessions();
+    expect(demo).toHaveProperty('trouble', null);
+    for (const s of rest) expect(s).not.toHaveProperty('trouble');
+  });
+
   // The sidebar offers every listed session; each must open (audit #25).
   it('opens every session it lists, with its details and results', async () => {
     for (const { id } of store.listSessions()) {
@@ -132,6 +138,30 @@ describe('DemoStore', () => {
         expect(other.activity).toMatchObject({ kind: 'idle', since: other.updatedAt });
       else expect(other).not.toHaveProperty('activity');
     }
+  });
+
+  it('gets stuck now and then on a flaky test, says so meanwhile, then moves on', async () => {
+    const signs: string[] = [];
+    store.onSessions((l) => {
+      const t = l.find((x) => x.id === DEMO_SESSION_ID)?.trouble;
+      const said = t ? `${t.kind} ${t.params.x} ${t.params.n}` : 'none';
+      if (signs.at(-1) !== said) signs.push(said);
+    });
+    await vi.advanceTimersByTimeAsync(80_000);
+    // Retried until it passed, the same call each time, in one prompt; the sign goes with it.
+    expect(signs).toEqual([
+      'none',
+      'repeat npm test 3',
+      'repeat npm test 4',
+      'repeat npm test 5',
+      'none',
+    ]);
+    const snap = (await store.getSnapshot(DEMO_SESSION_ID)) as SessionSnapshot;
+    const runs = snap.toolCalls.filter(
+      (t) => (t.input as { command?: string }).command === 'npm test -- login',
+    );
+    expect(runs.map((t) => t.status)).toEqual(['error', 'error', 'error', 'error', 'complete']);
+    expect(checkSnapshot(snap)).toEqual([]);
   });
 
   it('stops notifying after unsubscribe and after stop', async () => {

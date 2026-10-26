@@ -1,3 +1,4 @@
+import { activityTarget } from '../core/activity.js';
 import type {
   AgentAdapter,
   ChangeSet,
@@ -6,8 +7,19 @@ import type {
   SourceFile,
 } from '../core/adapter.js';
 import { isEmptyChanges, mergeChanges } from '../core/changes.js';
-import type { LiveState, SessionPatch, SessionSnapshot, SessionSummary } from '../core/model.js';
+import {
+  type EntityKind,
+  type LiveState,
+  MAIN_AGENT_ID,
+  type SessionPatch,
+  type SessionSnapshot,
+  type SessionSummary,
+  type TroubleSignal,
+} from '../core/model.js';
+import { SHELL_TOOLS } from '../shared/tool-category.js';
+import { detectTrouble, type TroubleInput } from '../shared/trouble.js';
 import { Coalescer } from './coalescer.js';
+import { isActive } from './live.js';
 import { JsonlTailer, readJsonFile } from './tail/tailer.js';
 import { type DirWatcher, watchDirs } from './tail/watch.js';
 
@@ -54,6 +66,89 @@ export interface OpenSessionOptions {
   onPatch: (patch: SessionPatch) => void;
   onReset: (snapshot: SessionSnapshot) => void;
   log: (msg: string) => void;
+  /** The clock the signs of trouble are read by: a wait or a prompt runs on without a write. */
+  now?: () => number;
+}
+
+/**
+ * A repeated call as a row may name it, for every client to show: a command's summary, or the
+ * tool and what it works on (`activityTarget`), never a command line.
+ */
+export function troubleLabel(tool: { name: string; input: unknown }): string {
+  const target = activityTarget(tool.name, tool.input);
+  if (target === null) return tool.name;
+  return SHELL_TOOLS.has(tool.name) ? target : `${tool.name} ${target}`;
+}
+
+type Slim<K extends 'agents' | 'turns' | 'requests' | 'toolCalls'> =
+  TroubleInput[K] extends ReadonlyMap<string, infer X> ? X : never;
+
+/**
+ * What the signs of trouble are read from, kept by id from the parser's snapshots and patches:
+ * the few fields they need of each entity, so a long session is not held twice.
+ */
+class TroubleWatch {
+  session: SessionSummary | null = null;
+  readonly agents = new Map<string, Slim<'agents'>>();
+  readonly turns = new Map<string, Slim<'turns'>>();
+  readonly requests = new Map<string, Slim<'requests'>>();
+  readonly toolCalls = new Map<string, Slim<'toolCalls'>>();
+
+  reset(snapshot: SessionSnapshot): void {
+    for (const map of [this.agents, this.turns, this.requests, this.toolCalls]) map.clear();
+    this.apply(snapshot);
+  }
+
+  apply(p: SessionPatch | SessionSnapshot): void {
+    this.session = p.session;
+    for (const a of p.agents)
+      this.agents.set(a.id, { id: a.id, parentId: a.parentId, status: a.status });
+    for (const t of p.turns)
+      this.turns.set(t.id, {
+        id: t.id,
+        agentId: t.agentId,
+        startedAt: t.startedAt,
+        endedAt: t.endedAt,
+        status: t.status,
+      });
+    for (const r of p.requests)
+      this.requests.set(r.id, {
+        id: r.id,
+        agentId: r.agentId,
+        turnId: r.turnId,
+        status: r.status,
+        startedAt: r.startedAt,
+        ...(r.compactedBefore ? { compactedBefore: true } : {}),
+      });
+    for (const t of p.toolCalls)
+      this.toolCalls.set(t.id, {
+        id: t.id,
+        agentId: t.agentId,
+        requestId: t.requestId,
+        name: t.name,
+        input: t.input,
+        status: t.status,
+        startedAt: t.startedAt,
+      });
+    const removed = 'removed' in p ? p.removed : undefined;
+    const maps: Partial<Record<EntityKind, Map<string, unknown>>> = {
+      agents: this.agents,
+      turns: this.turns,
+      requests: this.requests,
+      toolCalls: this.toolCalls,
+    };
+    for (const [kind, ids] of Object.entries(removed ?? {}) as [EntityKind, string[]][])
+      for (const id of ids) maps[kind]?.delete(id);
+  }
+
+  /** The strongest sign of a running session now; none of one that is not running. */
+  strongest(now: number): TroubleSignal | null {
+    const session = this.session;
+    if (!session || !isActive(session.live)) return null;
+    const { agents, turns, requests, toolCalls } = this;
+    const input = { session, agents, turns, requests, toolCalls };
+    return detectTrouble(input, MAIN_AGENT_ID, now, troubleLabel)[0] ?? null;
+  }
 }
 
 interface Tracked {
@@ -102,6 +197,11 @@ export class OpenSession {
   private readonly flusher: Coalescer;
   private closed = false;
   private live: LiveState;
+  private readonly watch = new TroubleWatch();
+  /** The strongest sign of trouble as last read, sent with every summary while it runs. */
+  private trouble: TroubleSignal | null = null;
+  /** The parser's latest summary, so a sign read again can be sent with it. */
+  private latest: SessionSummary | null = null;
 
   constructor(
     private readonly adapter: AgentAdapter,
@@ -128,7 +228,10 @@ export class OpenSession {
       const { parser, files, stats } = await this.parseFromScratch();
       this.parser = parser;
       this.files = files;
-      this.opts.onSummary(parser.snapshot().session);
+      const snapshot = parser.snapshot();
+      this.watch.reset(snapshot);
+      this.trouble = this.readTrouble();
+      this.opts.onSummary(this.withTrouble(snapshot.session));
       const ms = Math.round(performance.now() - started);
       this.opts.log(`opened ${this.id}: ${stats.files} files, ${stats.lines} lines in ${ms} ms`);
     });
@@ -146,6 +249,41 @@ export class OpenSession {
       files: [...files.values()].map((t) => t.file),
       lines: stats.lines,
     };
+  }
+
+  /** The parser's snapshot, its summary as the session list has it. */
+  snapshot(): SessionSnapshot {
+    const snapshot = this.parser.snapshot();
+    return { ...snapshot, session: this.withTrouble(snapshot.session) };
+  }
+
+  /**
+   * Reads the signs of trouble again, as time alone moves some (a wait, a prompt running on),
+   * and sends the summary when its sign changed. Called on every live poll; patches between
+   * two polls carry the sign last read.
+   */
+  refreshTrouble(): void {
+    if (this.closed || !this.latest) return;
+    const next = this.readTrouble();
+    if (JSON.stringify(next) === JSON.stringify(this.trouble)) return;
+    this.trouble = next;
+    this.opts.onSummary(this.withTrouble(this.latest));
+  }
+
+  private readTrouble(): TroubleSignal | null {
+    try {
+      return this.watch.strongest((this.opts.now ?? Date.now)());
+    } catch (err) {
+      // A detector bug must cost this session's sign, not its updates.
+      this.opts.log(`session ${this.id}: signs of trouble failed: ${errorText(err)}`);
+      return null;
+    }
+  }
+
+  /** `summary` with its strongest sign while the session runs; none while it does not. */
+  private withTrouble(summary: SessionSummary): SessionSummary {
+    this.latest = summary;
+    return isActive(summary.live) ? { ...summary, trouble: this.trouble } : summary;
   }
 
   setLive(live: LiveState): void {
@@ -243,9 +381,12 @@ export class OpenSession {
     this.pending = null;
     this.flusher.cancel();
     const snapshot = parser.snapshot();
+    this.watch.reset(snapshot);
+    this.trouble = this.readTrouble();
+    const session = this.withTrouble(snapshot.session);
     this.opts.onBackfill?.();
-    this.opts.onSummary(snapshot.session);
-    this.opts.onReset(snapshot);
+    this.opts.onSummary(session);
+    this.opts.onReset({ ...snapshot, session });
     const ms = Math.round(performance.now() - started);
     this.opts.log(`rebuilt ${this.id} after a file was truncated or replaced (${ms} ms)`);
   }
@@ -392,8 +533,10 @@ export class OpenSession {
     if (this.closed || !changes) return;
     try {
       const patch = this.parser.patch(changes);
-      this.opts.onSummary(patch.session);
-      this.opts.onPatch(patch);
+      this.watch.apply(patch);
+      const session = this.withTrouble(patch.session);
+      this.opts.onSummary(session);
+      this.opts.onPatch({ ...patch, session });
     } catch (err) {
       this.opts.log(`session ${this.id}: patch failed: ${errorText(err)}`);
     }

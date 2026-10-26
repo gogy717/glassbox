@@ -28,7 +28,9 @@ import {
   type RateKind,
   type TokenRate,
 } from '../shared/rate.js';
+import { detectTrouble } from '../shared/trouble.js';
 import type { AppStore } from './app.js';
+import { troubleLabel } from './open-session.js';
 import { RateTracker } from './rate.js';
 import { compareSessions, isActive, listedSummary } from './store.js';
 import { type WeekRead, WeekService, type WeekStore } from './week.js';
@@ -75,15 +77,37 @@ const IDLE_TICKS = 2;
 /** Requests per demo turn; all but the last call a tool. */
 const REQUESTS_PER_TURN = 3;
 
-const DEMO_TOOLS: { name: string; input: unknown; result: string }[] = [
+interface DemoTool {
+  name: string;
+  input: unknown;
+  result: string;
+  failed?: boolean;
+}
+
+const DEMO_TOOLS: DemoTool[] = [
   { name: 'Read', input: { file_path: '/repo/src/server/app.ts' }, result: '1\timport { Hono }…' },
   { name: 'Grep', input: { pattern: 'onPatch', path: 'src' }, result: 'src/server/store.ts:142' },
   { name: 'Bash', input: { command: 'npm test', description: 'Run tests' }, result: '89 passed' },
 ];
 
+/**
+ * Now and then the demo agent is stuck: in one prompt of every `STUCK_EVERY`, the first of them
+ * among the demo's own, it runs a flaky test again and again, each time a model call of its own,
+ * failing `STUCK_FAILS` times until a run passes, then answers; so the signs of trouble have
+ * something to show.
+ */
+const FLAKY = {
+  name: 'Bash',
+  input: { command: 'npm test -- login', description: 'Run the login test' },
+};
+const FLAKY_FAIL = 'FAIL tests/login.spec.ts > signs in\n  TimeoutError: waiting for #submit';
+const FLAKY_PASS = '1 passed (3.2s)';
+const STUCK_EVERY = 4;
+const STUCK_FAILS = 4;
+
 type Lane =
   | { phase: 'thinking'; ticksLeft: number; requestId: string }
-  | { phase: 'tool'; ticksLeft: number; requestId: string; toolId: string }
+  | { phase: 'tool'; ticksLeft: number; requestId: string; toolId: string; tool: DemoTool }
   | { phase: 'idle'; ticksLeft: number };
 
 interface Changed {
@@ -98,7 +122,8 @@ interface Changed {
  * Serves the demo fixture for `--demo`, and keeps it moving so the UI's live paths can be
  * built without a running Claude Code: every 2 s the main agent's in-flight request ages,
  * completes, calls a tool, starts the next request or turn; early ticks also finish the
- * fixture's running workflow.
+ * fixture's running workflow. Every couple of minutes the agent is stuck for a while on a flaky
+ * test (`nextTool`), so the signs of trouble show.
  */
 export class DemoStore implements AppStore, WeekStore {
   private readonly snap: SessionSnapshot;
@@ -115,6 +140,9 @@ export class DemoStore implements AppStore, WeekStore {
   private timer: NodeJS.Timeout | null = null;
   private tickNo = 0;
   private serial = 0;
+  /** Prompts the demo has started, and the flaky test's runs in this one while it is stuck. */
+  private prompts = 0;
+  private flakyRuns: number | null = null;
   private lane: Lane;
   /** The token rate, counted from simulated sessions as the real store counts real ones. */
   private readonly rate: RateTracker;
@@ -344,8 +372,7 @@ export class DemoStore implements AppStore, WeekStore {
     if (lane.phase === 'thinking') {
       const request = this.request(lane.requestId);
       const turn = this.turn(request.turnId as string);
-      const toolSpec =
-        request.index < REQUESTS_PER_TURN ? DEMO_TOOLS[this.serial % DEMO_TOOLS.length] : null;
+      const toolSpec = this.nextTool(request);
       this.completeRequest(request, now, toolSpec !== null);
       changed.turns.add(turn.id);
       if (toolSpec) {
@@ -356,6 +383,7 @@ export class DemoStore implements AppStore, WeekStore {
           ticksLeft: TOOL_TICKS,
           requestId: request.id,
           toolId: tool.id,
+          tool: toolSpec,
         };
       } else {
         this.snap.session.live = 'idle';
@@ -363,8 +391,7 @@ export class DemoStore implements AppStore, WeekStore {
       }
     } else if (lane.phase === 'tool') {
       const tool = this.toolCall(lane.toolId);
-      const spec = DEMO_TOOLS.find((t) => t.name === tool.name);
-      this.completeTool(tool, now, spec?.result ?? 'ok');
+      this.completeTool(tool, now, lane.tool.result, lane.tool.failed);
       changed.toolCalls.add(tool.id);
       const turnId = this.request(lane.requestId).turnId as string;
       const next = this.startRequest(turnId, now);
@@ -408,7 +435,23 @@ export class DemoStore implements AppStore, WeekStore {
     }
   }
 
+  /**
+   * The tool the request that just finished calls, or null when it answers: the usual round, two
+   * calls a prompt; while the agent is stuck, the flaky test until a run passes.
+   */
+  private nextTool(request: ModelRequest): DemoTool | null {
+    if (this.flakyRuns !== null) {
+      const run = this.flakyRuns++;
+      if (run < STUCK_FAILS) return { ...FLAKY, result: FLAKY_FAIL, failed: true };
+      if (run === STUCK_FAILS) return { ...FLAKY, result: FLAKY_PASS };
+      return null;
+    }
+    if (request.index >= REQUESTS_PER_TURN) return null;
+    return DEMO_TOOLS[this.serial % DEMO_TOOLS.length] as DemoTool;
+  }
+
   private startTurn(now: IsoTime): Turn {
+    this.flakyRuns = this.prompts++ % STUCK_EVERY === 0 ? 0 : null;
     const index = this.snap.turns.filter((t) => t.agentId === MAIN_AGENT_ID).length + 1;
     const turn: Turn = {
       id: `turn_live_${++this.serial}`,
@@ -503,8 +546,8 @@ export class DemoStore implements AppStore, WeekStore {
     return tool;
   }
 
-  private completeTool(tool: ToolCall, now: IsoTime, result: string): void {
-    tool.status = 'complete';
+  private completeTool(tool: ToolCall, now: IsoTime, result: string, failed = false): void {
+    tool.status = failed ? 'error' : 'complete';
     tool.endedAt = now;
     tool.durationMs = Date.parse(now) - Date.parse(tool.startedAt ?? now);
     tool.resultPreview = result;
@@ -552,11 +595,14 @@ export class DemoStore implements AppStore, WeekStore {
     this.refreshActivity();
   }
 
-  /** What the demo session is doing, worked out as a parser would. */
+  /**
+   * What the demo session is doing, worked out as a parser would, and its strongest sign of
+   * trouble as the server reads one of a session it has open.
+   */
   private refreshActivity(): void {
     const s = this.snap;
-    const { activity: _old, ...session } = s.session;
-    s.session = {
+    const { activity: _old, trouble: _sign, ...session } = s.session;
+    const next: SessionSummary = {
       ...session,
       ...activityField({
         live: s.session.live,
@@ -566,6 +612,18 @@ export class DemoStore implements AppStore, WeekStore {
         updatedAt: s.session.updatedAt,
       }),
     };
+    if (isActive(next.live)) {
+      const byId = <T extends { id: string }>(items: T[]) => new Map(items.map((x) => [x.id, x]));
+      const input = {
+        session: next,
+        agents: byId(s.agents),
+        turns: byId(s.turns),
+        requests: byId(s.requests),
+        toolCalls: byId(s.toolCalls),
+      };
+      next.trouble = detectTrouble(input, MAIN_AGENT_ID, Date.now(), troubleLabel)[0] ?? null;
+    }
+    s.session = next;
   }
 
   private snapshotOf(sessionId: string): SessionSnapshot | undefined {

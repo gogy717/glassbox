@@ -1,4 +1,4 @@
-import { type KeyboardEvent, Suspense } from 'react';
+import { type KeyboardEvent, lazy, Suspense } from 'react';
 import { MAIN_AGENT_ID } from '../../../src/core/model.js';
 import type { LivePartial } from '../../../src/shared/runs.js';
 import { AgentBreadcrumb } from '../components/AgentBreadcrumb';
@@ -17,6 +17,18 @@ import { StepsView } from './steps/StepsView';
 const TimeView = lazyView(() => import('./time/TimeView').then((m) => m.TimeView));
 const TokensView = lazyView(() => import('./tokens/TokensView').then((m) => m.TokensView));
 const FilesView = lazyView(() => import('./files/FilesView').then((m) => m.FilesView));
+// The outcome strip reads command lines with the command summary, which the first chunk does
+// without: its chunk is asked for as the app loads, so the strip is there when a session opens.
+const outcomeStrip = import('../components/OutcomeStrip');
+outcomeStrip.catch(() => {});
+// It only adds to the page: a strip whose chunk did not load (an upgrade since the tab opened)
+// leaves the session as it was, without it, where a view would ask for a reload.
+const OutcomeStrip = lazy(() =>
+  outcomeStrip.then(
+    (m) => ({ default: m.OutcomeStrip }),
+    () => ({ default: () => null }),
+  ),
+);
 
 interface Props {
   open: OpenSession;
@@ -55,7 +67,10 @@ export function SessionView({ open, route, navigate, live = null, rateAgent = nu
 
   return (
     <div className={css.view}>
-      <SummaryBar open={open} agentId={agentId} rateAgent={rateAgent} />
+      <SummaryBar open={open} agentId={agentId} rateAgent={rateAgent} navigate={navigate} />
+      <Suspense fallback={null}>
+        <OutcomeStrip open={open} agentId={agentId} navigate={navigate} />
+      </Suspense>
       <div className={css.toolbar}>
         <AgentBreadcrumb
           open={open}

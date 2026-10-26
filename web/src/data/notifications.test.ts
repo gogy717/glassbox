@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SessionSummary } from '../../../src/core/model.js';
+import type { SessionSummary, TroubleSignal } from '../../../src/core/model.js';
 import { makeI18n } from '../i18n';
 import { askToNotify, notifyState, useNeedsYouNotifications } from './notifications';
 
@@ -46,16 +46,31 @@ function waiting(since: string | null, tool: string | null = 'Bash'): SessionSum
   };
 }
 
-type Props = { waiting: SessionSummary[]; enabled?: boolean; loaded?: boolean };
+type Props = {
+  waiting: SessionSummary[];
+  running?: SessionSummary[];
+  enabled?: boolean;
+  loaded?: boolean;
+};
 
 function hook(initial: Props) {
   const onOpen = vi.fn();
   const t = makeI18n('en').t;
   const r = renderHook(
-    (p: Props) => useNeedsYouNotifications({ enabled: true, loaded: true, t, onOpen, ...p }),
+    (p: Props) =>
+      useNeedsYouNotifications({ enabled: true, loaded: true, t, onOpen, running: [], ...p }),
     { initialProps: initial },
   );
   return { ...r, onOpen };
+}
+
+/** A running session whose strongest sign of trouble is `sign`. */
+function stuck(sign: Partial<TroubleSignal> & Pick<TroubleSignal, 'kind'>): SessionSummary {
+  return {
+    ...waiting(null),
+    live: 'busy',
+    trouble: { params: { x: 'npm test', n: 4 }, at: null, since: at(-60), ...sign },
+  };
 }
 
 describe('useNeedsYouNotifications', () => {
@@ -161,6 +176,102 @@ describe('useNeedsYouNotifications', () => {
     const { rerender } = hook({ waiting: [] });
     act(() => vi.setSystemTime(NOW + 5000));
     expect(() => rerender({ waiting: [waiting(at(1))] })).not.toThrow();
+  });
+});
+
+describe('useNeedsYouNotifications for sessions that look stuck', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    vi.stubGlobal('Notification', FakeNotification);
+    FakeNotification.permission = 'granted';
+    FakeNotification.shown = [];
+    n = 0;
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  /** `s` with another sign, or with none: `null`. */
+  const now = (s: SessionSummary, sign: Partial<TroubleSignal> | null) => ({
+    ...s,
+    trouble: sign && { ...(s.trouble as TroubleSignal), ...sign },
+  });
+
+  it('tells each new kind of sign once a session, its words the body, and opens it on click', () => {
+    const s = stuck({ kind: 'repeat' });
+    // Known to look fine first: its sign is news.
+    const { rerender, onOpen } = hook({ waiting: [], running: [now(s, null)] });
+    rerender({ waiting: [], running: [s] });
+    expect(FakeNotification.shown.map((x) => [x.title, x.options])).toEqual([
+      [
+        'shopfront / Session 1',
+        { body: 'Repeated npm test 4×', tag: 'claude-code:s1:repeat', silent: true },
+      ],
+    ]);
+    // The same sign on (its count grows): nothing more.
+    rerender({ waiting: [], running: [now(s, { params: { x: 'npm test', n: 5 } })] });
+    expect(FakeNotification.shown).toHaveLength(1);
+    // Another kind: its own, the first one gone with its sign.
+    rerender({ waiting: [], running: [now(s, { kind: 'failing', params: { n: 3 } })] });
+    expect(FakeNotification.shown.map((x) => x.options?.body)).toEqual([
+      'Repeated npm test 4×',
+      '3 tool calls failed in a row',
+    ]);
+    expect(FakeNotification.shown[0]?.closed).toBe(true);
+    // Back to the first kind: told already.
+    rerender({ waiting: [], running: [s] });
+    expect(FakeNotification.shown).toHaveLength(2);
+
+    const focus = vi.spyOn(window, 'focus').mockImplementation(() => {});
+    act(() => FakeNotification.shown[1]?.onclick?.());
+    expect(onOpen).toHaveBeenCalledWith('claude-code:s1');
+    focus.mockRestore();
+  });
+
+  it('tells nothing of a sign the server says first: on page load, or once it opens a session', () => {
+    const already = stuck({ kind: 'repeat' });
+    const { rerender } = hook({ waiting: [], running: [already], loaded: false });
+    rerender({ waiting: [], running: [already], loaded: true });
+    // Opened in the background seconds later, an hour into its compactions; one not yet read.
+    const opened = stuck({ kind: 'compaction', params: { n: 4 } });
+    const unread = { ...stuck({ kind: 'errors' }), trouble: undefined };
+    rerender({ waiting: [], running: [already, opened, unread] });
+    rerender({ waiting: [], running: [already, opened, { ...unread, trouble: null }] });
+    expect(FakeNotification.shown).toEqual([]);
+    // Since then: news.
+    rerender({
+      waiting: [],
+      running: [already, now(opened, { kind: 'errors', params: { n: 2, of: 10 } })],
+    });
+    expect(FakeNotification.shown.map((x) => x.options?.body)).toEqual([
+      '2 API errors in the last 10 model calls',
+    ]);
+  });
+
+  it('starts again from what it says first when a session runs again', () => {
+    const s = stuck({ kind: 'repeat' });
+    const { rerender } = hook({ waiting: [], running: [now(s, null)] });
+    rerender({ waiting: [], running: [] });
+    rerender({ waiting: [], running: [s] });
+    expect(FakeNotification.shown).toEqual([]);
+  });
+
+  it('stays quiet while the setting is off, and does not catch up once it is on', () => {
+    const s = stuck({ kind: 'repeat' });
+    const { rerender } = hook({ waiting: [], running: [now(s, null)], enabled: false });
+    rerender({ waiting: [], running: [s], enabled: false });
+    rerender({ waiting: [], running: [s], enabled: true });
+    expect(FakeNotification.shown).toEqual([]);
+  });
+
+  it('closes the notification when the sign goes', () => {
+    const s = stuck({ kind: 'repeat' });
+    const { rerender } = hook({ waiting: [], running: [now(s, null)] });
+    rerender({ waiting: [], running: [s] });
+    rerender({ waiting: [], running: [now(s, null)] });
+    expect(FakeNotification.shown[0]?.closed).toBe(true);
   });
 });
 

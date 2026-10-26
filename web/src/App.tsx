@@ -33,7 +33,7 @@ import { createStore, type Store, StoreContext } from './data/store';
 import { useNow } from './data/useNow';
 import { I18nContext, makeI18n, useI18n } from './i18n';
 import { lazyView } from './lib/lazy-view';
-import { isListed } from './lib/sessions';
+import { isListed, isRunning } from './lib/sessions';
 import { applyTheme, loadPrefs, type Prefs, savePrefs } from './prefs';
 import { formatRoute, pageOf, parseRoute, sessionLink, useRoute, youngWeek } from './router';
 import { UiContext } from './ui';
@@ -281,10 +281,16 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
   useEffect(() => {
     document.title = documentTitle(needsYou.length, sessionTitle);
   }, [needsYou.length, sessionTitle]);
-  // And, when asked for, a desktop notification as each one begins to wait.
+  // The running sessions, watched for a sign of trouble from the server.
+  const running = useMemo(
+    () => sessions.filter((s) => isListed(s, prefs.showProbes) && isRunning(s)),
+    [sessions, prefs.showProbes],
+  );
+  // And, when asked for, a desktop notification as each one begins to wait or to look stuck.
   useNeedsYouNotifications({
     enabled: prefs.notify && notifyState() === 'granted',
     waiting: needsYou,
+    running,
     loaded: state.sessionsLoaded,
     t,
     onOpen: (id) => {
