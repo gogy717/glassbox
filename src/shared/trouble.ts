@@ -122,16 +122,20 @@ export function agentSubtree(
   return ids;
 }
 
+/** A call that is a look while waiting, not an attempt: streaks look past it. */
+const POLL = Symbol('poll');
+
 /**
  * What makes two calls the same call: a shell command by its line, whitespace aside (the line
- * the call's summary shows, whole); any other tool by its name and its input. Null for a call
- * that repeats by nature, a poll, a wait, a `sleep` before a look.
+ * the call's summary shows, whole); any other tool by its name and its input. `POLL` for a call
+ * that repeats by nature, a poll, a wait, a `sleep` before a look; null for one that is never
+ * the same as another.
  */
-function sameKey(tool: Tool): string | null {
-  if (POLLING.has(tool.name)) return null;
+function sameKey(tool: Tool): string | null | typeof POLL {
+  if (POLLING.has(tool.name)) return POLL;
   const line = SHELL_TOOLS.has(tool.name) ? shellCommand(tool.input) : null;
   if (line !== null)
-    return /^\s*sleep\s/.test(line) ? null : `$ ${line.replace(/\s+/g, ' ').trim()}`;
+    return /^\s*sleep\s/.test(line) ? POLL : `$ ${line.replace(/\s+/g, ' ').trim()}`;
   try {
     return `${tool.name} ${JSON.stringify(tool.input) ?? ''}`;
   } catch {
@@ -147,34 +151,68 @@ const toolRef = (t: Tool): TroubleRef => ({
   toolCallId: t.id,
 });
 
-/** The same call `STREAK` or more times in a row at the end of an agent's calls. */
-function repeat<T extends Tool>(calls: T[], label: (tool: T) => string): TroubleSignal | null {
-  const last = calls.at(-1);
-  const key = last && sameKey(last);
-  if (!last || !key) return null;
-  let first = last;
-  let n = 0;
-  for (let i = calls.length - 1; i >= 0 && sameKey(calls[i] as T) === key; i--) {
-    first = calls[i] as T;
-    n++;
+/**
+ * An agent's model steps in the prompt it runs, oldest first, each the calls one request asked
+ * for: calls asked for together are one attempt, not a streak. A call of a request an earlier
+ * prompt made is left out (you asking for the tests again is not the agent stuck); one whose
+ * request names no prompt is kept, so an agent whose calls know no prompt is read across them.
+ */
+function stepsOf<T extends Tool>(calls: T[], s: TroubleInput<T>, prompt: string | null): T[][] {
+  const steps = new Map<string, T[]>();
+  for (const t of byStart(calls)) {
+    const turnId = s.requests.get(t.requestId)?.turnId ?? null;
+    if (turnId === null || turnId === prompt) push(steps, t.requestId, t);
   }
+  return [...steps.values()];
+}
+
+/** What makes a step the same as another: its attempts' keys; `POLL` when it only looked. */
+function stepKey(step: Tool[]): string | null | typeof POLL {
+  const keys = step.map(sameKey).filter((k) => k !== POLL);
+  if (keys.length === 0) return POLL;
+  return keys.includes(null) ? null : (keys as string[]).sort().join('\n');
+}
+
+/** The same step `STREAK` or more times in a row at the end of an agent's, polls looked past. */
+function repeat<T extends Tool>(steps: T[][], label: (tool: T) => string): TroubleSignal | null {
+  const keyed = steps.map((step) => ({ step, key: stepKey(step) })).filter((x) => x.key !== POLL);
+  const last = keyed.at(-1);
+  if (!last || last.key === null) return null;
+  let n = 0;
+  while (n < keyed.length && keyed[keyed.length - 1 - n]?.key === last.key) n++;
   if (n < STREAK) return null;
+  const call = last.step.filter((t) => sameKey(t) !== POLL).at(-1) as T;
+  const first = keyed[keyed.length - n]?.step[0] as T;
   return {
     kind: 'repeat',
-    params: { x: label(last), n },
-    at: toolRef(last),
+    params: { x: label(call), n },
+    at: toolRef(call),
     since: first.startedAt,
   };
 }
 
-/** `STREAK` or more failed calls in a row at the end of an agent's finished calls. */
-function failing(calls: Tool[]): TroubleSignal | null {
-  const done = calls.filter((t) => t.status === 'complete' || t.status === 'error');
+/**
+ * `STREAK` or more failed steps in a row at the end of an agent's finished ones: a step failed
+ * when every call of it that finished failed; one still running is not over yet. `n` counts the
+ * calls that failed.
+ */
+function failing(steps: Tool[][]): TroubleSignal | null {
+  let failed = 0;
   let n = 0;
-  while (n < done.length && done[done.length - 1 - n]?.status === 'error') n++;
-  if (n < STREAK) return null;
-  const last = done.at(-1) as Tool;
-  const first = done[done.length - n] as Tool;
+  let first: Tool | undefined;
+  let last: Tool | undefined;
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const done = (steps[i] as Tool[]).filter(
+      (t) => t.status === 'complete' || t.status === 'error',
+    );
+    if (done.length === 0) continue;
+    if (!done.every((t) => t.status === 'error')) break;
+    failed++;
+    n += done.length;
+    last ??= done.at(-1);
+    first = done[0];
+  }
+  if (failed < STREAK || !first || !last) return null;
   return { kind: 'failing', params: { n }, at: toolRef(last), since: first.startedAt };
 }
 
@@ -232,8 +270,10 @@ function longTurn(turns: Prompt[], now: number): TroubleSignal | null {
 
 /**
  * The signs of trouble of `agentId` and its sub-agents, strongest first; none: empty. A
- * sub-agent counts while it runs (one that finished is not stuck, however it ended); the agent
- * asked about counts always. `label` names a repeated call: what a row may show of it.
+ * sub-agent counts while it runs (one that finished is not stuck, however it ended, its calls
+ * and its model calls alike); the agent asked about counts always. Streaks count model steps
+ * within the prompt each agent runs (`stepsOf`). `label` names a repeated call: what a row may
+ * show of it.
  */
 export function detectTrouble<T extends Tool>(
   s: TroubleInput<T>,
@@ -242,20 +282,24 @@ export function detectTrouble<T extends Tool>(
   label: (tool: T) => string,
 ): TroubleSignal[] {
   const ids = agentSubtree(s.agents, agentId);
-  const live = (id: string) => id === agentId || s.agents.get(id)?.status === 'running';
+  const live = (id: string) =>
+    ids.has(id) && (id === agentId || s.agents.get(id)?.status === 'running');
   const calls = new Map<string, T[]>();
-  for (const t of s.toolCalls.values())
-    if (ids.has(t.agentId) && live(t.agentId)) push(calls, t.agentId, t);
+  for (const t of s.toolCalls.values()) if (live(t.agentId)) push(calls, t.agentId, t);
+  // The prompt each agent runs, its latest: streaks are within it.
+  const prompts = new Map<string, string>();
+  for (const t of byStart([...s.turns.values()]))
+    if (t.status === 'running' && t.endedAt === null) prompts.set(t.agentId, t.id);
   const signals: TroubleSignal[] = [];
   const add = (signal: TroubleSignal | null) => {
     if (signal) signals.push(signal);
   };
-  for (const list of calls.values()) {
-    const ordered = byStart(list);
-    add(repeat(ordered, label));
-    add(failing(ordered));
+  for (const [id, list] of calls) {
+    const steps = stepsOf(list, s, prompts.get(id) ?? null);
+    add(repeat(steps, label));
+    add(failing(steps));
   }
-  const requests = byStart([...s.requests.values()].filter((r) => ids.has(r.agentId)));
+  const requests = byStart([...s.requests.values()].filter((r) => live(r.agentId)));
   add(errors(requests));
   add(compaction(requests));
 

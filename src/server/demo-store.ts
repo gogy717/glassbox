@@ -91,9 +91,10 @@ const DEMO_TOOLS: DemoTool[] = [
 ];
 
 /**
- * Now and then the demo agent is stuck: it runs a flaky test again and again, failing, until a
- * run passes, so the signs of trouble have something to show. Counted in the lane's tool calls:
- * of every `STUCK_EVERY`, those from `STUCK_FROM` fail `STUCK_FAILS` times, then one passes.
+ * Now and then the demo agent is stuck: in one prompt of every `STUCK_EVERY`, the first of them
+ * among the demo's own, it runs a flaky test again and again, each time a model call of its own,
+ * failing `STUCK_FAILS` times until a run passes, then answers; so the signs of trouble have
+ * something to show.
  */
 const FLAKY = {
   name: 'Bash',
@@ -101,8 +102,7 @@ const FLAKY = {
 };
 const FLAKY_FAIL = 'FAIL tests/login.spec.ts > signs in\n  TimeoutError: waiting for #submit';
 const FLAKY_PASS = '1 passed (3.2s)';
-const STUCK_EVERY = 12;
-const STUCK_FROM = 2;
+const STUCK_EVERY = 4;
 const STUCK_FAILS = 4;
 
 type Lane =
@@ -140,8 +140,9 @@ export class DemoStore implements AppStore, WeekStore {
   private timer: NodeJS.Timeout | null = null;
   private tickNo = 0;
   private serial = 0;
-  /** Tool calls the lane has started: when the agent is stuck. */
-  private toolCalls = 0;
+  /** Prompts the demo has started, and the flaky test's runs in this one while it is stuck. */
+  private prompts = 0;
+  private flakyRuns: number | null = null;
   private lane: Lane;
   /** The token rate, counted from simulated sessions as the real store counts real ones. */
   private readonly rate: RateTracker;
@@ -371,7 +372,7 @@ export class DemoStore implements AppStore, WeekStore {
     if (lane.phase === 'thinking') {
       const request = this.request(lane.requestId);
       const turn = this.turn(request.turnId as string);
-      const toolSpec = request.index < REQUESTS_PER_TURN ? this.nextTool() : null;
+      const toolSpec = this.nextTool(request);
       this.completeRequest(request, now, toolSpec !== null);
       changed.turns.add(turn.id);
       if (toolSpec) {
@@ -434,15 +435,23 @@ export class DemoStore implements AppStore, WeekStore {
     }
   }
 
-  /** The lane's next tool call: the usual round, or the flaky test while the agent is stuck. */
-  private nextTool(): DemoTool {
-    const at = (this.toolCalls++ % STUCK_EVERY) - STUCK_FROM;
-    if (at >= 0 && at < STUCK_FAILS) return { ...FLAKY, result: FLAKY_FAIL, failed: true };
-    if (at === STUCK_FAILS) return { ...FLAKY, result: FLAKY_PASS };
+  /**
+   * The tool the request that just finished calls, or null when it answers: the usual round, two
+   * calls a prompt; while the agent is stuck, the flaky test until a run passes.
+   */
+  private nextTool(request: ModelRequest): DemoTool | null {
+    if (this.flakyRuns !== null) {
+      const run = this.flakyRuns++;
+      if (run < STUCK_FAILS) return { ...FLAKY, result: FLAKY_FAIL, failed: true };
+      if (run === STUCK_FAILS) return { ...FLAKY, result: FLAKY_PASS };
+      return null;
+    }
+    if (request.index >= REQUESTS_PER_TURN) return null;
     return DEMO_TOOLS[this.serial % DEMO_TOOLS.length] as DemoTool;
   }
 
   private startTurn(now: IsoTime): Turn {
+    this.flakyRuns = this.prompts++ % STUCK_EVERY === 0 ? 0 : null;
     const index = this.snap.turns.filter((t) => t.agentId === MAIN_AGENT_ID).length + 1;
     const turn: Turn = {
       id: `turn_live_${++this.serial}`,

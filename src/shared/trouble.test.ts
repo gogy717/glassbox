@@ -335,14 +335,79 @@ describe('detectTrouble', () => {
     });
   });
 
+  describe('steps', () => {
+    it('counts a model step once: calls asked for together that fail together are one failure', () => {
+      const together = { requestId: 'r-batch' };
+      expect(
+        detect({
+          calls: [
+            bash('npm test', { ...together, status: 'error' }),
+            bash('npm run lint', { ...together, status: 'error' }),
+            bash('npx tsc', { ...together, status: 'error' }),
+          ],
+        }),
+      ).toEqual([]);
+      const read = () => call('Read', { file_path: 'a.ts' }, together);
+      expect(detect({ calls: [read(), read(), read()] })).toEqual([]);
+    });
+
+    it('fails a step only when all it did failed, and counts the calls that failed', () => {
+      const step = (id: string, ...statuses: ToolCall['status'][]) =>
+        statuses.map((status, i) => bash(`c${id}${i}`, { requestId: id, status }));
+      const calls = [
+        ...step('a', 'error', 'complete'),
+        ...step('b', 'error', 'error'),
+        ...step('c', 'error'),
+        ...step('d', 'error', 'error'),
+      ];
+      expect(detect({ calls })).toMatchObject([{ kind: 'failing', params: { n: 5 } }]);
+    });
+
+    it('keeps a streak within the prompt that runs: the calls of an earlier one are not it', () => {
+      const [first, second, third] = [request(), request(), request()] as [
+        ModelRequest,
+        ModelRequest,
+        ModelRequest,
+      ];
+      const run = (q: ModelRequest) => bash('npm test', { requestId: q.id });
+      const calls = [run(first), run(second), run(third)];
+      // You asked for the tests again: two runs in the prompt before, one in this.
+      const earlier = [first, second].map((q) => ({ ...q, turnId: 'turn1' }));
+      expect(
+        detect({
+          turns: [turn(1, 0, 4), turn(2, 118, null)],
+          requests: [...earlier, { ...third, turnId: 'turn2' }],
+          calls,
+        }),
+      ).toEqual([]);
+      // The three in the prompt that runs.
+      expect(
+        kinds(
+          detect({
+            turns: [turn(1, 118, null)],
+            requests: [first, second, third].map((q) => ({ ...q, turnId: 'turn1' })),
+            calls,
+          }),
+        ),
+      ).toEqual(['repeat']);
+    });
+
+    it('looks past the polls between the calls it compares', () => {
+      const exec = () => call('exec_command', { cmd: 'npm test' });
+      const poll = () => call('write_stdin', { session_id: 1, chars: '' });
+      expect(detect({ calls: [exec(), poll(), exec(), poll(), poll(), exec()] })).toMatchObject([
+        { kind: 'repeat', params: { n: 3 } },
+      ]);
+    });
+  });
+
   describe('scope', () => {
-    const loop = (agentId: string) =>
-      [1, 2, 3].map(() => bash('npm test', { agentId, requestId: `${agentId}-r` }));
+    const loop = (agentId: string) => [1, 2, 3].map(() => bash('npm test', { agentId }));
 
     it('reads the agent and its running sub-agents', () => {
       const agents = [agent('main'), agent('sub'), agent('done', { status: 'complete' })];
       expect(detect({ agents, calls: loop('sub') }).map((s) => s.at)).toEqual([
-        { kind: 'tool', agentId: 'sub', requestId: 'sub-r', toolCallId: 't3' },
+        { kind: 'tool', agentId: 'sub', requestId: 'r3', toolCallId: 't3' },
       ]);
       // A sub-agent that finished is not stuck, however it ended.
       expect(detect({ agents, calls: loop('done') })).toEqual([]);
@@ -350,6 +415,11 @@ describe('detectTrouble', () => {
       expect(kinds(detect({ agents, calls: loop('done') }, 'done'))).toEqual(['repeat']);
       // The main agent's sub-agents are not a sibling's.
       expect(detect({ agents, calls: loop('main') }, 'sub')).toEqual([]);
+      // Nor are the model calls of one that finished: its errors and compactions are done with.
+      const done = { agentId: 'done', status: 'error' as const, compactedBefore: true };
+      expect(detect({ agents, requests: [request(done), request(done), request(done)] })).toEqual(
+        [],
+      );
     });
 
     it('lists the strongest sign first', () => {

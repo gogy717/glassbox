@@ -148,13 +148,10 @@ describe('DemoStore', () => {
       if (signs.at(-1) !== said) signs.push(said);
     });
     await vi.advanceTimersByTimeAsync(80_000);
-    // Retried until it passed, the same call each time; then other work. Idle between two
-    // prompts, the session is not running, and a session not running carries no sign.
+    // Retried until it passed, the same call each time, in one prompt; the sign goes with it.
     expect(signs).toEqual([
       'none',
       'repeat npm test 3',
-      'repeat npm test 4',
-      'none',
       'repeat npm test 4',
       'repeat npm test 5',
       'none',

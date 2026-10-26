@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { ToolCall } from '../../../src/core/model.js';
+import type { ModelRequest, ToolCall } from '../../../src/core/model.js';
 import type { OpenSession } from '../data/store';
 import { I18nContext, makeI18n } from '../i18n';
 import { cjkInMono } from '../test/cjk';
@@ -28,12 +28,27 @@ function renderTrouble(
   return { navigate, setFollow };
 }
 
-/** The demo with `n` more failing `npm test` calls of `agentId`, a minute apart, to the clock. */
-function looping(open: OpenSession, n: number, agentId = 'main', requestId = 'req_m3') {
+/**
+ * The demo with `n` more failing `npm test` calls of `agentId`, a minute apart, to the clock:
+ * one a model call, in the prompt it runs.
+ */
+function looping(open: OpenSession, n: number, agentId = 'main', turnId = 'turn_m3') {
   const toolCalls = new Map(open.toolCalls);
+  const requests = new Map(open.requests);
+  const base = open.requests.get('req_m1') as ModelRequest;
   for (let i = 0; i < n; i++) {
     const at = new Date(NOW - (n - i) * 60_000).toISOString();
     const id = `t_loop${i}`;
+    const requestId = `req_loop${i}`;
+    requests.set(requestId, {
+      ...base,
+      id: requestId,
+      agentId,
+      turnId,
+      startedAt: at,
+      endedAt: at,
+      toolCallIds: [id],
+    });
     toolCalls.set(id, {
       id,
       agentId,
@@ -49,7 +64,7 @@ function looping(open: OpenSession, n: number, agentId = 'main', requestId = 're
       spawned: null,
     } satisfies ToolCall);
   }
-  return { ...open, toolCalls };
+  return { ...open, toolCalls, requests };
 }
 
 describe('Trouble', () => {
@@ -83,8 +98,8 @@ describe('Trouble', () => {
     expect(navigate).toHaveBeenLastCalledWith({
       tab: 'flow',
       agentId: 'main',
-      turnId: 'turn_m1',
-      requestId: 'req_m3',
+      turnId: 'turn_m3',
+      requestId: 'req_loop3',
       card: 'tool:t_loop3',
     });
     // Gone once followed.
@@ -92,7 +107,7 @@ describe('Trouble', () => {
   });
 
   it('names the sub-agent a sign belongs to', () => {
-    const open = looping(demoOpen(), 3, 'af00000000000002', 'req_w2_9');
+    const open = looping(demoOpen(), 3, 'af00000000000002', 'turn_w2');
     renderTrouble(open);
     fireEvent.click(screen.getByRole('button', { name: /Signs of trouble/ }));
     const panel = screen.getByRole('dialog');

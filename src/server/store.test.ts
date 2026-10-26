@@ -484,23 +484,27 @@ describe('SessionStore', () => {
 });
 
 describe('SessionStore signs of trouble', () => {
-  const npmTest = (id: string) => rec.tool(id, 'ra', 'Bash', { command: 'npm test -- --run' });
+  /** A model call at `min` running `npm test`: one step of the agent each. */
+  const npmTest = (id: string, min: number) => [
+    rec.req(`r${id}`, T(min)),
+    rec.tool(id, `r${id}`, 'Bash', { command: 'npm test -- --run' }),
+  ];
 
   it('sends a running session’s strongest sign in its listed and patched summary', async () => {
-    const p = await session('a', rec.req('ra', T(1)), npmTest('t1'), npmTest('t2'));
+    const p = await session('a', ...npmTest('t1', 1), ...npmTest('t2', 2));
     await setLive({ a: 'busy' });
     const s = await startStore();
     await vi.waitFor(() => expect(s.listSessions()[0]?.trouble).toBeNull(), { timeout: 5000 });
     const patches: SessionPatch[] = [];
     s.onPatch(p.id, (x) => patches.push(x));
 
-    await appendFile(p.main, lines(npmTest('t3')));
+    await appendFile(p.main, lines(...npmTest('t3', 3)));
 
     const sign = {
       kind: 'repeat',
       // What a row may show of it: the command's summary, never its line.
       params: { x: 'npm test', n: 3 },
-      at: { kind: 'tool', agentId: 'main', requestId: 'ra', toolCallId: 't3' },
+      at: { kind: 'tool', agentId: 'main', requestId: 'rt3', toolCallId: 't3' },
       since: T(1),
     };
     await vi.waitFor(() => expect(s.listSessions()[0]?.trouble).toEqual(sign), { timeout: 5000 });
@@ -514,7 +518,7 @@ describe('SessionStore signs of trouble', () => {
   });
 
   it('carries none for a session that is not running, open or not', async () => {
-    const p = await session('a', rec.req('ra', T(1)), npmTest('t1'), npmTest('t2'), npmTest('t3'));
+    const p = await session('a', ...npmTest('t1', 1), ...npmTest('t2', 2), ...npmTest('t3', 3));
     const s = await startStore();
     await s.getSnapshot(p.id);
     expect(s.listSessions()[0]).not.toHaveProperty('trouble');
