@@ -233,6 +233,16 @@ describe('Inbox', () => {
     expect(document.activeElement).toBe(items()[1]);
   });
 
+  it('waits for the item asked for when it comes after the others, and takes no other meanwhile', () => {
+    const a = session('waiting', { activity: waitingOn('Bash', 90) });
+    const b = session('waiting', { activity: waitingOn('Edit', 30) });
+    const { update } = renderInbox({ sessions: [a], at: b.id });
+    // Not there yet: no item has focus, so no key answers another session's.
+    expect(document.activeElement).toBe(document.body);
+    update({ sessions: [a, b], at: b.id });
+    expect(document.activeElement).toBe(items()[1]);
+  });
+
   it('goes back to the item asked for each time it is asked, the one named already included', () => {
     const a = session('waiting', { activity: waitingOn('Bash', 90) });
     const b = session('waiting', { activity: waitingOn('Edit', 30) });

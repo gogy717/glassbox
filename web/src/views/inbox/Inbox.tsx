@@ -129,7 +129,8 @@ export function Inbox({
 
   // On arrival, and at each notification's click, focus starts on its item, else the first, so
   // the keys work at once. With none yet (the runs' prompts come after the list), on the first to
-  // arrive, unless focus has gone somewhere else on the page meanwhile.
+  // arrive, unless focus has gone somewhere else on the page meanwhile. An item asked for by name
+  // is waited for, never stood in for by another: a key must not answer another session's.
   const placed = useRef<{
     at: string | null;
     call: number;
@@ -142,7 +143,9 @@ export function Inbox({
       placed.current = { at, call, from: document.activeElement, done: false };
     const p = placed.current;
     if (p.done) return;
-    const target = [...waits, ...stuck].find((i) => i.session.id === at) ?? waits[0] ?? stuck[0];
+    const target = at
+      ? [...waits, ...stuck].find((i) => i.session.id === at)
+      : (waits[0] ?? stuck[0]);
     if (!target) return;
     p.done = true;
     const active = document.activeElement;
