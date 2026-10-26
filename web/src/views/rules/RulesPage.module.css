@@ -126,21 +126,22 @@
   border-bottom: 0;
 }
 
-.pickHead,
-.pick {
+/* Past `.table td`'s right alignment, as the price table's model column. */
+.table .pickHead,
+.table .pick {
   width: 1px;
   text-align: center;
 }
 
-.ruleHead,
-.textHead,
-.rule,
-.text {
+.table .ruleHead,
+.table .textHead,
+.table .rule,
+.table .text {
   text-align: left;
 }
 
 /* A rule keeps its whole key: the tags after it wrap under it if they must. */
-.rule {
+.table .rule {
   white-space: normal;
 }
 

@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type {
@@ -7,7 +8,9 @@ import type {
   SettingsHit,
 } from '../../../../src/shared/permissions.js';
 import { I18nContext, makeI18n } from '../../i18n';
+import { moduleCssValue } from '../../test/module-css';
 import { RulesPage } from './RulesPage';
+import classes from './RulesPage.module.css';
 import type { ReadRules } from './readRules';
 
 const NOW = Date.parse('2026-10-26T12:00:00.000Z');
@@ -100,7 +103,22 @@ function result(rows: RuleRow[] = ROWS, kind: RulesWindowKind = '30d'): RulesRes
   return {
     window: { kind, from: NOW - 30 * 24 * HOUR, now: NOW },
     rows,
-    settings: [],
+    settings: [
+      {
+        path: '/Users/demo/.claude/settings.json',
+        scope: 'global',
+        root: null,
+        allow: ['Bash(npm test:*)'],
+        deny: [],
+      },
+      {
+        path: `${SHOP}/.claude/settings.local.json`,
+        scope: 'project',
+        root: SHOP,
+        allow: [],
+        deny: ['Bash(rm:*)'],
+      },
+    ],
     yourSettings: '/Users/demo/.claude/settings.json',
     asOf: NOW,
     stats: { considered: 5, read: 5, cached: 0, failed: 0, ms: 12 },
@@ -193,12 +211,24 @@ describe('the Rules page', () => {
     ]);
     expect(region).toHaveTextContent('/Users/demo/.claude/settings.json');
     expect(region).toHaveTextContent(`${SHOP}/.claude/settings.local.json`);
+    expect(region).toHaveTextContent('Checked against the permission lists of 2 settings files');
 
     fireEvent.click(box('Bash(git push:*)') as HTMLElement);
     fireEvent.click(box('mcp__tracker__create_issue') as HTMLElement);
     expect(codes()).toEqual([
       '{\n  "permissions": {\n    "allow": [\n      "Bash(npm run e2e:*)",\n      "Bash(git push:*)"\n    ]\n  }\n}',
     ]);
+  });
+
+  it('sets the rule, its repositories and its settings at the left, the counts at the right', async () => {
+    renderPage(answered());
+    await screen.findByRole('table');
+    const align = (el: Element | undefined) =>
+      el && moduleCssValue(join(import.meta.dirname, 'RulesPage.module.css'), classes, el, 'text-align');
+    const [, rule, asked, , , repos, , held] = within(rowOf('Bash(npm test:*)')).getAllByRole('cell');
+    expect([rule, repos, held].map(align)).toEqual(['left', 'left', 'left']);
+    expect(align(asked)).toBe('right');
+    expect(align(within(table()).getByRole('columnheader', { name: 'Rule' }))).toBe('left');
   });
 
   it('says to tick a rule when nothing is ticked', async () => {

@@ -102,7 +102,7 @@ export const en: Record<MessageKey, string> = {
   'rules.blockProjectWhere':
     'Merge into {local} for yourself, or into {shared} to share it through git, worktrees included.',
   'rules.settingsRead':
-    'Checked against the permission lists of {n|settings file|settings files}; nothing else in them is read, and glassbox writes none.',
+    'Checked against the permission lists of {n} {n|settings file|settings files}; nothing else in them is read, and glassbox writes none.',
   'settings.title': 'Settings',
   'settings.language': 'Language',
   'settings.theme': 'Theme',

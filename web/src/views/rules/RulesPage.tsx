@@ -289,7 +289,12 @@ export function RulesPage({ window: kind, onWindow, now, read = readRules }: Rul
                       <td className={css.num} data-denied={counts.denied > 0 ? '' : undefined}>
                         {formatNumber(counts.denied, intl)}
                       </td>
-                      <td className={css.text}>{row.projects.map((p) => p.name).join(', ')}</td>
+                      <td
+                        className={css.text}
+                        title={row.projects.map((p) => p.root ?? p.name).join('\n')}
+                      >
+                        {row.projects.map((p) => p.name).join(', ')}
+                      </td>
                       <td
                         className={css.text}
                         title={new Date(counts.lastAsked).toLocaleString(intl)}
