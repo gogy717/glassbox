@@ -52,6 +52,7 @@ export const en: Record<MessageKey, string> = {
   'sidebar.foldedCount': '{n} {n|session|sessions}',
   'sidebar.foldedRunning': '{n} running',
   'sidebar.foldedWaiting': '{n} waiting for you',
+  'sidebar.more': '{n} more',
   'sidebar.today': 'Today',
   'sidebar.yesterday': 'Yesterday',
   'sidebar.thisWeek': 'This week',

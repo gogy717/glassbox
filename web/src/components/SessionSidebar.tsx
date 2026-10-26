@@ -5,6 +5,7 @@ import { type RovingItemProps, useRovingFocus } from '../data/useRovingFocus';
 import { type MessageKey, useI18n } from '../i18n';
 import { AGENT_TONES, agentName } from '../lib/agent-names';
 import {
+  foldClosed,
   groupSessions,
   isListed,
   isRunning,
@@ -16,12 +17,14 @@ import {
 } from '../lib/sessions';
 import { DEFAULT_PREFS, type Prefs } from '../prefs';
 import { Delayed } from './Delayed';
+import { FigureText } from './FigureText';
 import { SessionRow } from './SessionRow';
 import css from './SessionSidebar.module.css';
 import { LiveDot } from './Status';
 
-/** A group title's roving id: no session id starts with a slash. */
+/** A group title's and its "N more" row's roving ids: no session id starts with a slash. */
 const headId = (key: string) => `/h/${key}`;
+const moreId = (key: string) => `/m/${key}`;
 
 interface Props {
   sessions: SessionSummary[];
@@ -145,21 +148,32 @@ export function SessionSidebar({
       ...prefs,
       folded: foldedSet.has(key) ? prefs.folded.filter((k) => k !== key) : [...prefs.folded, key],
     });
+  // The rest of a group's closed sessions wait behind "N more", unfolded per group for this page
+  // only. Not under a search or the Closed filter, which ask for them, and never the pins.
+  const [unfolded, setUnfolded] = useState<ReadonlySet<string>>(() => new Set());
+  const capped = !query.trim() && live !== 'closed';
   const visible = useMemo(
     () =>
-      groups.map((g) => ({
-        g,
-        rows: foldedSet.has(g.key) ? g.sessions.filter((s) => s.id === selectedId) : g.sessions,
-      })),
-    [groups, foldedSet, selectedId],
+      groups.map((g) => {
+        const none: SessionSummary[] = [];
+        if (foldedSet.has(g.key))
+          return { g, rows: g.sessions.filter((s) => s.id === selectedId), more: none };
+        if (!capped || g.kind === 'pinned' || unfolded.has(g.key))
+          return { g, rows: g.sessions, more: none };
+        const { shown, more } = foldClosed(g.sessions, selectedId);
+        return { g, rows: shown, more };
+      }),
+    [groups, foldedSet, selectedId, capped, unfolded],
   );
-  // One tab stop for the whole list; the arrow keys move between the rows and the group titles
-  // in their order, across projects. The rows come first here, so Tab enters at a row.
+  // One tab stop for the whole list; the arrow keys move between the rows, the group titles and
+  // the "N more" rows in their order, across projects. The rows come first here, so Tab enters
+  // at a row.
   const listRef = useRef<HTMLDivElement>(null);
   const ids = useMemo(
     () => [
       ...visible.flatMap(({ rows }) => rows.map((s) => s.id)),
       ...visible.map(({ g }) => headId(g.key)),
+      ...visible.filter(({ more }) => more.length > 0).map(({ g }) => moreId(g.key)),
     ],
     [visible],
   );
@@ -181,6 +195,11 @@ export function SessionSidebar({
       pinned: pinnedSet.has(id) ? pinned.filter((p) => p !== id) : [...pinned, id],
     });
     setRefocusRow(id);
+  };
+  // "N more" pressed: the rest of the group shows, and focus moves on to the first row of it.
+  const unfold = (key: string, first: SessionSummary) => {
+    setUnfolded((u) => new Set(u).add(key));
+    setRefocusRow(first.id);
   };
   // A row's keys: P alone pins or unpins it; the rest move between the rows.
   const rowProps = (id: string): RovingItemProps => {
@@ -278,7 +297,7 @@ export function SessionSidebar({
               <p className={css.empty}>{t('sidebar.connecting')}</p>
             </Delayed>
           ))}
-        {visible.map(({ g, rows }, i) => {
+        {visible.map(({ g, rows, more }, i) => {
           const name = label(g);
           const folded = foldedSet.has(g.key);
           const listId = `${uid}-${i}`;
@@ -361,6 +380,16 @@ export function SessionSidebar({
                     </li>
                   ))}
                 </ul>
+              )}
+              {more[0] && (
+                <button
+                  type="button"
+                  className={css.more}
+                  {...roving(moreId(g.key))}
+                  onClick={() => unfold(g.key, more[0] as SessionSummary)}
+                >
+                  <FigureText k="sidebar.more" params={{ n: more.length }} figures={['n']} />
+                </button>
               )}
             </div>
           );

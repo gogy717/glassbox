@@ -762,3 +762,74 @@ describe('SessionSidebar folding', () => {
     );
   });
 });
+
+// Branch D (F7) item 4: a group lists its running and idle sessions and the 5 most recently
+// closed; "N more" unfolds the rest, for this page only.
+describe('SessionSidebar "N more"', () => {
+  const idle = sessions[1] as SessionSummary;
+  const minutesAgo = (n: number) => new Date(DEMO_NOW.getTime() - n * 60_000).toISOString();
+  // shopfront: the idle session, then eight closed ones, newest first.
+  const many = [
+    sessions[0] as SessionSummary,
+    idle,
+    ...Array.from({ length: 8 }, (_, i) => ({
+      ...idle,
+      id: `claude-code:closed-${i}`,
+      title: `Closed ${i}`,
+      live: 'closed' as const,
+      updatedAt: minutesAgo(100 + i),
+    })),
+  ];
+  const shopfront = () => titles(screen.getByRole('list', { name: 'shopfront' }));
+
+  it('lists the 5 most recent closed sessions, then "N more", which unfolds the rest', () => {
+    render(<Harness sessions={many} />);
+    expect(shopfront()).toEqual([
+      'Fix flaky login test',
+      'Closed 0',
+      'Closed 1',
+      'Closed 2',
+      'Closed 3',
+      'Closed 4',
+    ]);
+    const more = screen.getByRole('button', { name: '3 more' });
+    // Under the list's one tab stop, after the group's rows.
+    expect(more).toHaveAttribute('data-roving');
+    const last = screen.getByRole('button', { name: /Closed 4/ });
+    last.focus();
+    fireEvent.keyDown(last, { key: 'ArrowDown' });
+    expect(more).toHaveFocus();
+    fireEvent.click(more);
+    expect(shopfront()).toHaveLength(9);
+    expect(screen.queryByRole('button', { name: /more$/ })).toBeNull();
+    // Focus moves on to the first row revealed.
+    expect(screen.getByRole('button', { name: /Closed 5/ })).toHaveFocus();
+  });
+
+  it('shows every closed session under a search or the Closed filter', () => {
+    render(<Harness sessions={many} />);
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'closed' } });
+    expect(screen.queryByRole('button', { name: /more$/ })).toBeNull();
+    expect(shopfront()).toHaveLength(8);
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: '' } });
+    expect(screen.getByRole('button', { name: '3 more' })).toBeInTheDocument();
+    const states = screen.getByRole('group', { name: 'Filter by state' });
+    fireEvent.click(within(states).getByRole('button', { name: /^Closed/ }));
+    expect(screen.queryByRole('button', { name: /more$/ })).toBeNull();
+    expect(shopfront()).toHaveLength(8);
+  });
+
+  it('keeps the open session on show past the 5, and says N more in Chinese', () => {
+    render(<Harness sessions={many} locale="zh" selectedId="claude-code:closed-7" />);
+    expect(shopfront()).toEqual([
+      'Fix flaky login test',
+      'Closed 0',
+      'Closed 1',
+      'Closed 2',
+      'Closed 3',
+      'Closed 4',
+      'Closed 7',
+    ]);
+    expect(screen.getByRole('button', { name: '还有 2 个' })).toBeInTheDocument();
+  });
+});

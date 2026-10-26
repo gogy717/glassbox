@@ -51,6 +51,7 @@ export const zh = {
   'sidebar.foldedCount': '{n} 个会话',
   'sidebar.foldedRunning': '{n} 个运行中',
   'sidebar.foldedWaiting': '{n} 个等你确认',
+  'sidebar.more': '还有 {n} 个',
   'sidebar.today': '今天',
   'sidebar.yesterday': '昨天',
   'sidebar.thisWeek': '本周',

@@ -154,6 +154,29 @@
   list-style: none;
 }
 
+/* "12 more": the rest of a group's closed sessions, as a quiet row at its foot. */
+.more {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--accent);
+  font-size: var(--fs-small);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--motion);
+}
+
+.more:hover {
+  background: var(--layer-3);
+}
+
+.more:focus-visible {
+  outline-offset: -2px;
+}
+
 /* A row and its pin, in the row's top right corner (the title leaves it room): shown on hover or
    focus, and always once pinned. Beside the row, not in it: a button holds no button. */
 .item {
