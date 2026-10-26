@@ -833,3 +833,40 @@ describe('SessionSidebar "N more"', () => {
     expect(screen.getByRole('button', { name: '还有 2 个' })).toBeInTheDocument();
   });
 });
+
+// Branch D (F7) item 3: Group by Project · Time, in the head; the choice is kept in the prefs.
+describe('SessionSidebar grouping', () => {
+  it('groups by time from the switch, today to earlier, and remembers the choice', () => {
+    const onPrefs = vi.fn();
+    render(<Harness sessions={sessions} onPrefs={onPrefs} />);
+    const by = screen.getByRole('radiogroup', { name: 'Group by' });
+    expect(within(by).getByRole('radio', { name: 'Project' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    fireEvent.click(within(by).getByRole('radio', { name: 'Time' }));
+    expect(onPrefs).toHaveBeenLastCalledWith(expect.objectContaining({ groupBy: 'time' }));
+    // The demo: two sessions today, one earlier this week; nothing yesterday or earlier.
+    expect(lists()).toEqual(['Today', 'This week']);
+    expect(titles(screen.getByRole('list', { name: 'Today' }))).toEqual([
+      'Live viewer research (demo)',
+      'Fix flaky login test',
+    ]);
+    // A time group folds like a project, by its own key.
+    fireEvent.click(screen.getByRole('button', { name: 'This week' }));
+    expect(onPrefs).toHaveBeenLastCalledWith(
+      expect.objectContaining({ folded: ['/week'], groupBy: 'time' }),
+    );
+    expect(lists()).toEqual(['Today']);
+    fireEvent.click(within(by).getByRole('radio', { name: 'Project' }));
+    expect(lists()).toEqual(['glassbox', 'shopfront', 'blog']);
+  });
+
+  it('names the time groups in Chinese', () => {
+    render(
+      <Harness sessions={sessions} locale="zh" prefs={{ ...DEFAULT_PREFS, groupBy: 'time' }} />,
+    );
+    expect(screen.getByRole('radiogroup', { name: '分组' })).toBeInTheDocument();
+    expect(lists()).toEqual(['今天', '本周']);
+  });
+});

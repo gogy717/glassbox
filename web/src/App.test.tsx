@@ -1166,3 +1166,41 @@ describe('App pages: Home · Session · Stats', () => {
     ).toEqual(['本周', '最近 7 天']);
   });
 });
+
+// Branch D (F7): the list's grouping, folds and pins live in the prefs, so they survive a reload.
+describe('App session list prefs', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(DEMO_NOW);
+    window.location.hash = '';
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    localStorage.clear();
+    window.location.hash = '';
+  });
+
+  it('lists as the saved prefs say, and saves a change to them', () => {
+    const [, idle] = createDemoSessions(DEMO_NOW);
+    localStorage.setItem(
+      'glassbox.prefs',
+      JSON.stringify({ groupBy: 'time', pinned: [idle?.id], folded: ['/today'] }),
+    );
+    const store = createStore();
+    store.applyEvent({ type: 'sessions', sessions: createDemoSessions(DEMO_NOW) });
+    render(<App store={store} connect={noConnect} runs={fakeRuns()} />);
+    const list = sidebar();
+    expect(
+      within(list)
+        .getAllByRole('list')
+        .map((l) => l.getAttribute('aria-label')),
+    ).toEqual(['Pinned', 'This week']);
+    expect(within(list).getByRole('button', { name: /^Today/ })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    fireEvent.click(within(list).getByRole('radio', { name: 'Project' }));
+    const saved = JSON.parse(localStorage.getItem('glassbox.prefs') ?? '{}');
+    expect(saved).toMatchObject({ groupBy: 'project', pinned: [idle?.id], folded: ['/today'] });
+  });
+});

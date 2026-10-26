@@ -77,6 +77,16 @@
   color: var(--muted);
 }
 
+/* Group by Project · Time: the two-word switch after the chips, its label in the chips' face. */
+.groupBy {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 0 6px;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+
 .list {
   flex: 1;
   min-height: 0;

@@ -21,6 +21,7 @@ import { FigureText } from './FigureText';
 import { SessionRow } from './SessionRow';
 import css from './SessionSidebar.module.css';
 import { LiveDot } from './Status';
+import { Switch } from './Switch';
 
 /** A group title's and its "N more" row's roving ids: no session id starts with a slash. */
 const headId = (key: string) => `/h/${key}`;
@@ -126,10 +127,20 @@ export function SessionSidebar({
   const agent = onlyAgent;
   const live = onlyLive;
   const pinned = prefs.pinned;
+  const groupBy = prefs.groupBy;
   const groups = useMemo(
     // The open session keeps its row, so the list never loses what the page shows.
-    () => groupSessions(sessions, query, { showProbes, agent, live, keep: selectedId, pinned }),
-    [sessions, query, showProbes, agent, live, selectedId, pinned],
+    () =>
+      groupSessions(sessions, query, {
+        showProbes,
+        agent,
+        live,
+        keep: selectedId,
+        pinned,
+        groupBy,
+        now,
+      }),
+    [sessions, query, showProbes, agent, live, selectedId, pinned, groupBy, now],
   );
   // Sessions the live filter alone hides, for "5 more are idle or closed".
   const hidden = useMemo(() => {
@@ -287,6 +298,20 @@ export function SessionSidebar({
             ))}
           </div>
         )}
+        {/* The switch carries the name; the word beside it is for the eye. */}
+        <div className={css.groupBy}>
+          <span aria-hidden="true">{t('sidebar.groupBy')}</span>
+          <Switch
+            size="small"
+            label={t('sidebar.groupBy')}
+            value={groupBy}
+            onChange={(by) => onPrefs({ ...prefs, groupBy: by })}
+            options={[
+              { value: 'project', label: t('sidebar.byProject') },
+              { value: 'time', label: t('sidebar.byTime') },
+            ]}
+          />
+        </div>
       </div>
       <div ref={listRef} className={css.list}>
         {groups.length === 0 &&
