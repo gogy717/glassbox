@@ -496,6 +496,7 @@ export const en: Record<MessageKey, string> = {
   'context.fixedLabel': 'System prompt and {n} {n|tool|tools}',
   'context.fixedValue': '≈{k} every request · {r} {r|request|requests}',
   'context.carried': 'carried in {n} {n|request|requests}',
+  'context.since': 'since {ref}',
   'context.reads': 'read {n} {n|time|times}',
   'context.mostly.cacheRead': 'mostly cache reads',
   'context.mostly.cacheWrite': 'mostly cache writes',

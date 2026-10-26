@@ -489,6 +489,7 @@ export const zh = {
   'context.fixedLabel': '系统提示和 {n} 个工具',
   'context.fixedValue': '每次请求约 {k} · {r} 次请求',
   'context.carried': '带入 {n} 次请求',
+  'context.since': '自{ref}起',
   'context.reads': '读了 {n} 次',
   'context.mostly.cacheRead': '大多是缓存读取',
   'context.mostly.cacheWrite': '大多是缓存写入',

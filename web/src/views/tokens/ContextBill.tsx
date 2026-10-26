@@ -88,6 +88,12 @@ export function ContextBill({ open, agentId, navigate }: Props) {
       ? { agentId: req.agentId, turnId: req.turnId, requestId: req.id, card: 'request' }
       : null;
   };
+  /** A request as the execution chain numbers it: "Prompt 2 · call #1". */
+  const refOf = (id: string) => {
+    const req = open.requests.get(id);
+    const turn = req?.turnId ? open.turns.get(req.turnId) : undefined;
+    return t('tokens.requestRef', { turn: turn?.index ?? '—', n: req?.index ?? '—' });
+  };
   const toCall = (id: string): Partial<Route> | null => {
     const call = open.toolCalls.get(id);
     const req = call && open.requests.get(call.requestId);
@@ -194,6 +200,9 @@ export function ContextBill({ open, agentId, navigate }: Props) {
                     </span>
                   )}
                   <span className={css.meta}>
+                    {/* A message by when it joined: replies of thinking alone read alike. */}
+                    {(item.kind === 'user' || item.kind === 'reply' || item.kind === 'other') &&
+                      `${t('context.since', { ref: refOf(item.firstRequestId) })} · `}
                     <FigureText k="context.carried" params={{ n: item.requests }} />
                     {item.kind === 'file' && (
                       <>
@@ -223,12 +232,7 @@ export function ContextBill({ open, agentId, navigate }: Props) {
             <h4>{t('context.compactions')}</h4>
             <ul className={css.drops}>
               {bill.compactions.map((drop) => {
-                const req = open.requests.get(drop.requestId);
-                const turn = req?.turnId ? open.turns.get(req.turnId) : undefined;
-                const ref = t('tokens.requestRef', {
-                  turn: turn?.index ?? '—',
-                  n: req?.index ?? '—',
-                });
+                const ref = refOf(drop.requestId);
                 return (
                   <li key={drop.requestId} className={css.drop}>
                     <button

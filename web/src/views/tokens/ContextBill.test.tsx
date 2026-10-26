@@ -72,6 +72,14 @@ describe('ContextBill', () => {
     expect(items()).toHaveLength(12);
   });
 
+  it('says since when a message rode along, so a reply of thinking alone is told apart', async () => {
+    answer(demoBill());
+    renderBill();
+    await screen.findByText(/One item held/);
+    const thinking = items().find((li) => li.textContent?.startsWith('Reply · Thinking'));
+    expect(thinking).toHaveTextContent('since Prompt 1 · call #3 · carried in 3 requests');
+  });
+
   it('says what the system prompt and tools cost every request', async () => {
     answer(demoBill());
     renderBill();
