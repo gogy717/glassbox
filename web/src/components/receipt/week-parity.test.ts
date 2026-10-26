@@ -104,8 +104,7 @@ describe('a session alone in its week prints its own receipt’s figures (W3)', 
       expect(f.usage.thinking).toBe(r1.tokens.thinking);
       // Priced from usage summed by model, as from each call: the same API equivalent.
       const cost = costByModel(f.usageByModel, DEFAULT_PRICES);
-      expect(cost.priced).toBe(r1.tokens.cost !== null);
-      expect(cost.usd).toBeCloseTo(r1.tokens.cost?.usd ?? 0, 9);
+      expect(cost).toEqual(r1.tokens.cost);
       // Categories before the receipt folds them into its top three and "other".
       const cats: Record<string, number> = {};
       for (const t of open.toolCalls.values()) {

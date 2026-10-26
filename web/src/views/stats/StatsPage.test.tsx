@@ -3,8 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionSummary } from '../../../../src/core/model.js';
 import type { WeekLine, WeekResult, WeekWindowKind } from '../../../../src/shared/week.js';
 import { durationParts, hourOf, partsText } from '../../components/receipt/format';
+import { PriceTableContext } from '../../data/price-table';
 import { createStore, type Store, StoreContext } from '../../data/store';
 import { I18nContext, makeI18n } from '../../i18n';
+import { priceTable } from '../../lib/prices';
 import { sessionLink } from '../../router';
 import { demoWeek, WEEK_NOW } from '../../test/week';
 import { StatsPage } from './StatsPage';
@@ -564,6 +566,37 @@ const agentNameOf = (kind: string) =>
   })[kind] ?? kind;
 
 // Branch D (F7) item 6: the note under the switch, for the visit that opened on the last 7 days.
+// Proposal 6: the Tokens card prices the window with the table set in Settings.
+describe('the Stats page’s API cost', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('prices the window’s tokens with the table in force', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(WEEK_NOW);
+    serve({ week });
+    const twice = (input: number, read: number) => ({
+      input: input * 2,
+      cacheWrite: input * 2.5,
+      cacheWrite1h: input * 4,
+      cacheRead: read * 2,
+      output: input * 10,
+    });
+    const prices = priceTable({
+      'claude-opus-5-5': twice(4, 0.2),
+      'claude-sonnet-5-5': twice(2, 0.1),
+    });
+    render(
+      <PriceTableContext.Provider value={prices}>{page(createStore())}</PriceTableContext.Provider>,
+    );
+    const card = await screen.findByRole('region', { name: /^TOKENS/ });
+    await waitFor(() =>
+      expect(within(card).getByText('API cost (est.)').parentElement).toHaveTextContent('≈ $282'),
+    );
+  });
+});
+
 describe('the Stats page’s note on its default window', () => {
   const noted = (store: Store, kind: WeekWindowKind, note: boolean, onNoteSeen = vi.fn()) => (
     <StoreContext.Provider value={store}>

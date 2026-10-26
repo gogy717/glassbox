@@ -401,7 +401,7 @@ describe('the API equivalent', () => {
 
   it('prints no API line when no model it used has a price, or no call reported tokens', () => {
     const { data } = madeBy('gpt-5.5-codex', true);
-    expect(data.tokens.cost).toBeNull();
+    expect(data.tokens.cost).toMatchObject({ priced: false, partial: true });
     const unmeasured: ReceiptData = {
       ...demo().data,
       tokens: { ...demo().data.tokens, measured: false },

@@ -19,6 +19,7 @@ import { useRate } from '../../data/store';
 import { type Locale, useI18n } from '../../i18n';
 import { agentName } from '../../lib/agent-names';
 import { formatCompact, formatPercent, formatResetTime } from '../../lib/format';
+import { formatUsdShort } from '../../lib/prices';
 import { providerShortName } from '../../lib/provider-names';
 import { quotaWindowName } from '../../lib/quota';
 import { paceOf, quotaLevel } from '../../lib/quota-pace';
@@ -316,6 +317,12 @@ export const TokensCard = memo(function TokensCard({
   const fmt = (n: number) => formatCompact(n, intl);
   const sum = tk.cacheRead + tk.cacheWrite + tk.uncached + tk.output;
   const note = unreportedLine(w.receipt, locale, () => true);
+  // What the same tokens would cost on the API: an estimate from the price table in Settings.
+  const leftOut =
+    tk.cost.unpriced.length > 0 ? tk.cost.unpriced.join(', ') : st(locale, 'costNoModel');
+  const costTitle = tk.cost.partial
+    ? `${st(locale, 'costTitle')} · ${st(locale, 'costLeftOut', { models: leftOut })}`
+    : st(locale, 'costTitle');
   return (
     <section className={css.card} data-area="tokens" aria-labelledby="stats-tokens">
       <Head id="stats-tokens" name={rt(locale, 'tokens')} note={st(locale, 'tokensNote')} />
@@ -356,6 +363,12 @@ export const TokensCard = memo(function TokensCard({
                 <UiCjk text={fmt(tk.total)} />
               </span>
               <span className="section-label">{rt(locale, 'total')}</span>
+            </div>
+            <div className={css.figure} data-cost title={costTitle}>
+              <span className={`${css.value} figure`}>
+                {tk.cost.priced ? `≈ ${formatUsdShort(tk.cost.usd, intl)}` : '—'}
+              </span>
+              <span className="section-label">{st(locale, 'apiCost')}</span>
             </div>
           </div>
           {note && <p className={css.hint}>{note}</p>}

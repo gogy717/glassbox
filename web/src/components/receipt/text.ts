@@ -92,7 +92,7 @@ export function tokenLines(t: TokenFigures, L: Locale, note?: string): string[] 
   if (note) out.push(note);
   out.push(zh ? lead(count(t.total), w('total')) : spread(head('total'), count(t.total)));
   // API EQUIV.: the same tokens at API prices, an estimate; the models it could not price.
-  if (t.cost) {
+  if (t.cost.priced) {
     const usd = `≈ ${formatUsd(t.cost.usd, 'en')}`;
     out.push(
       zh ? lead(usd, `${w('apiEquiv')}${w('est')}`) : spread(head('apiEquiv'), `${usd}${w('est')}`),

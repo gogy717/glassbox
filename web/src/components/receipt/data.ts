@@ -65,8 +65,8 @@ export interface ReceiptData {
     thinking: number;
     cacheHit: number | null;
     total: number;
-    /** What the same tokens would cost on the API, an estimate; null when no call was priced. */
-    cost: Cost | null;
+    /** What the same tokens would cost on the API, an estimate: printed once any call was priced. */
+    cost: Cost;
   };
   /** The main agent's timeline, each sub-agent's span and each one's timeline: the barcode. */
   segments: Segment[];
@@ -169,7 +169,7 @@ export function receiptData(
       thinking: usage?.thinking ?? 0,
       cacheHit: s.cacheHitRate,
       total: usage ? totalTokens(usage) : 0,
-      cost: cost.priced ? cost : null,
+      cost,
     },
     segments,
     subAgents,

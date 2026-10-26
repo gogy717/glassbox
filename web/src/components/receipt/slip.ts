@@ -187,8 +187,8 @@ export interface TokenFigures {
   thinking: number;
   cacheHit: number | null;
   total: number;
-  /** What the same tokens would cost on the API, an estimate; null when no call was priced. */
-  cost: Cost | null;
+  /** What the same tokens would cost on the API, an estimate: printed once any call was priced. */
+  cost: Cost;
 }
 
 /** Draws a slip top to bottom: `y` is the baseline of the line being drawn. */
@@ -341,7 +341,7 @@ export class Pen {
       }),
     );
     // API EQUIV.: the same tokens at API prices, an estimate; the models it could not price.
-    if (t.cost) {
+    if (t.cost.priced) {
       this.y += 24;
       this.label('apiEquiv');
       this.push(

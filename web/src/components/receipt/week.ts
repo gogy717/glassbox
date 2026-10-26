@@ -249,7 +249,7 @@ export function weekReceipt(r: WeekResult, prices: PriceTable = DEFAULT_PRICES):
       thinking: usage.thinking,
       cacheHit: ctx > 0 ? usage.cacheRead / ctx : null,
       total: totalTokens(usage),
-      cost: cost.priced ? cost : null,
+      cost,
     },
     unreported: [...unreported].sort((a, b) => b[1] - a[1]).map(([agent, n]) => ({ agent, n })),
   };

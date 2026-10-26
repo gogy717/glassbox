@@ -17,6 +17,7 @@ import {
 } from '../../components/receipt/week';
 import type { Locale } from '../../i18n';
 import { agentName } from '../../lib/agent-names';
+import { DEFAULT_PRICES, type PriceTable } from '../../lib/prices';
 import { st } from './strings';
 
 /** A window's result as the page counts it, and the receipt drawn from it. */
@@ -24,11 +25,18 @@ export interface StatsWeek {
   /** Without the sessions the sidebar hides. */
   result: WeekResult;
   receipt: WeekReceipt;
+  /** The price table its receipt's API equivalent was worked out with; an isolate keeps it. */
+  prices: PriceTable;
 }
 
-export function statsWeek(result: WeekResult, showProbes: boolean): StatsWeek {
+/** `prices`: the API price table for the tokens' API equivalent (the person's, from Settings). */
+export function statsWeek(
+  result: WeekResult,
+  showProbes: boolean,
+  prices: PriceTable = DEFAULT_PRICES,
+): StatsWeek {
   const listed = listedOnly(result, showProbes);
-  return { result: listed, receipt: weekReceipt(listed) };
+  return { result: listed, receipt: weekReceipt(listed, prices), prices };
 }
 
 /** A session as a row of a card: what it is, and the time that ranks it there. */
@@ -127,7 +135,7 @@ export function isolated(w: StatsWeek, by: Isolate): StatsWeek {
   const keep = (s: WeekSession) =>
     'cli' in by ? s.agent === by.cli : printedProject(s.cwd, s.project) === by.project;
   const result = { ...w.result, sessions: w.result.sessions.filter(keep) };
-  return { result, receipt: weekReceipt(result) };
+  return { result, receipt: weekReceipt(result, w.prices), prices: w.prices };
 }
 
 /** A time as the receipt prints it ("23h 41m", "38m", "4m 12s"); "—" for none at all. */
