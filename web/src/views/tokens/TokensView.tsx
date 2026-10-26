@@ -23,6 +23,7 @@ import {
 import type { Navigate } from '../../router';
 import { useUi } from '../../ui';
 import { AgentBreakdown } from './AgentBreakdown';
+import { ContextBill } from './ContextBill';
 import { ContextChart } from './ContextChart';
 import css from './TokensView.module.css';
 import { TopRequests } from './TopRequests';
@@ -132,6 +133,8 @@ export function TokensView({ open, agentId, navigate }: Props) {
           <TopRequests open={open} requests={top} onPick={openInFlow} />
         </div>
       </div>
+
+      <ContextBill open={open} agentId={agentId} navigate={navigate} />
     </div>
   );
 }

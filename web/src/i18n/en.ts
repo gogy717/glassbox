@@ -492,6 +492,32 @@ export const en: Record<MessageKey, string> = {
   'detail.show': 'Show',
   'detail.tabDetails': 'Details',
   'detail.tabContext': 'Context',
+  'context.title': 'What the context held',
+  'context.fixedLabel': 'System prompt and {n} {n|tool|tools}',
+  'context.fixedValue': '≈{k} every request · {r} {r|request|requests}',
+  'context.carried': 'carried in {n} {n|request|requests}',
+  'context.reads': 'read {n} {n|time|times}',
+  'context.mostly.cacheRead': 'mostly cache reads',
+  'context.mostly.cacheWrite': 'mostly cache writes',
+  'context.mostly.input': 'mostly uncached input',
+  'context.compactions': 'Compactions',
+  'context.compactionBefore': 'Compaction before {ref}',
+  'context.compactionDropped': 'dropped {n} {n|part|parts}, ≈{k}',
+  'context.largestSep': ': ',
+  'context.listSep': ', ',
+  'context.note':
+    'Estimated from {n} of {total} finished requests: each one’s reported input, cache reads and cache writes, spread over its parts by their characters.',
+  'context.none.notRecorded':
+    'Not available: this {agent} version did not record what its requests sent.',
+  'context.none.noMessages':
+    'Not available: {agent} records the system prompt and tools, not the messages of each request.',
+  'context.none.empty': 'Not available: what the requests sent holds no text.',
+  'context.none.noRequests': 'No finished requests yet',
+  'context.advice.rereads':
+    'Reads of the same file cost more than the file: {n} {n|file was|files were} read {k}+ times.',
+  'context.advice.carried': 'One item held {pct} of all the context: {label}.',
+  'context.advice.fixed':
+    'The system prompt and tools were {pct} of all the context: ≈{k} sent with every request.',
   'context.total': 'About {n} tokens in context',
   'context.measured':
     'Estimated: the request’s reported input, cache reads and cache writes, spread over its parts by their characters.',
