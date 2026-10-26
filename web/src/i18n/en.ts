@@ -92,6 +92,7 @@ export const en: Record<MessageKey, string> = {
   'common.tokens': '{n} {n|token|tokens}',
   'session.out': '{n} out',
   'session.outputTokens': '{n} output {n|token|tokens}',
+  'session.lastSaid': '“{text}”',
   'status.unknownEnd': 'Ended (unknown)',
   'flow.turns': 'Prompts',
   'flow.turnsShown': '{n} of {total}',

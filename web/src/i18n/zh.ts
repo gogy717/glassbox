@@ -91,6 +91,7 @@ export const zh = {
   'common.tokens': '{n} token',
   'session.out': '输出 {n}',
   'session.outputTokens': '输出 {n} token',
+  'session.lastSaid': '“{text}”',
   'status.unknownEnd': '未知结束',
   'flow.turns': '用户轮次',
   'flow.turnsShown': '{n} / {total}',

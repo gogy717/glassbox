@@ -134,6 +134,20 @@ describe('DemoStore', () => {
     }
   });
 
+  it('lists what the demo session last said as it moves on, as a parser would', async () => {
+    const said = new Set<string | null>();
+    store.onSessions((l) => {
+      const demo = l.find((x) => x.id === DEMO_SESSION_ID);
+      if (demo && 'lastReply' in demo) said.add(demo.lastReply ?? null);
+    });
+    await vi.advanceTimersByTimeAsync(80_000);
+    // Its words, then a new prompt that has said nothing yet, then words again.
+    expect(
+      [...said].filter((x) => typeof x === 'string' && x.trim() !== '').length,
+    ).toBeGreaterThan(0);
+    expect(said.has(null)).toBe(true);
+  });
+
   it('stops notifying after unsubscribe and after stop', async () => {
     const patches: SessionPatch[] = [];
     const lists: SessionSummary[][] = [];

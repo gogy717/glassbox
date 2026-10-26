@@ -23,6 +23,7 @@ import { basename } from 'node:path';
 import { activityField, latestTurn } from '../../core/activity.js';
 import type { ChangeSet, SessionParser, SessionSource, SourceFile } from '../../core/adapter.js';
 import { emptyChanges } from '../../core/changes.js';
+import { lastReplyField, requestsById } from '../../core/last-reply.js';
 import type {
   AgentNode,
   Diagnostics,
@@ -560,6 +561,11 @@ export class OmpSessionParser implements SessionParser {
         requests,
         lastTurn: latestTurn(turns),
         updatedAt: this.updatedAt,
+      }),
+      ...lastReplyField({
+        live: this.live,
+        lastTurn: latestTurn(turns),
+        request: requestsById(requests),
       }),
       usage: sumUsage(requests.map((r) => r.usage)),
       counts: {

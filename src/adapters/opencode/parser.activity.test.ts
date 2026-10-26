@@ -81,3 +81,15 @@ describe('activity of a live OpenCode session', () => {
     expect('activity' in feed(b.doc(), 'closed').snapshot().session).toBe(false);
   });
 });
+
+describe('what a live OpenCode session last said', () => {
+  it('is the reply’s latest text, as far as it has been written, and absent once closed', () => {
+    const { b, a } = open();
+    expect(feed(b.doc(), 'busy').snapshot().session.lastReply).toBeNull();
+    b.part(a, 5, text('Building now', 5));
+    const parser = feed(b.doc(), 'busy');
+    expect(parser.snapshot().session.lastReply).toBe('Building now');
+    parser.setLive('closed');
+    expect('lastReply' in parser.snapshot().session).toBe(false);
+  });
+});

@@ -6,6 +6,7 @@ import {
   createDemoSnapshot,
   DEMO_SESSION_ID,
 } from '../core/fixtures/demo.js';
+import { lastReplyField, requestsById } from '../core/last-reply.js';
 import type {
   AgentNode,
   IsoTime,
@@ -552,10 +553,10 @@ export class DemoStore implements AppStore, WeekStore {
     this.refreshActivity();
   }
 
-  /** What the demo session is doing, worked out as a parser would. */
+  /** What the demo session is doing, and what it last said, worked out as a parser would. */
   private refreshActivity(): void {
     const s = this.snap;
-    const { activity: _old, ...session } = s.session;
+    const { activity: _old, lastReply: _said, ...session } = s.session;
     s.session = {
       ...session,
       ...activityField({
@@ -564,6 +565,11 @@ export class DemoStore implements AppStore, WeekStore {
         requests: s.requests,
         lastTurn: latestTurn(s.turns),
         updatedAt: s.session.updatedAt,
+      }),
+      ...lastReplyField({
+        live: s.session.live,
+        lastTurn: latestTurn(s.turns),
+        request: requestsById(s.requests),
       }),
     };
   }

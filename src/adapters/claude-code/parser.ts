@@ -6,6 +6,7 @@
 import { activityField } from '../../core/activity.js';
 import type { ChangeSet, SessionParser, SessionSource, SourceFile } from '../../core/adapter.js';
 import { emptyChanges } from '../../core/changes.js';
+import { lastReplyField } from '../../core/last-reply.js';
 import type {
   AgentNode,
   Diagnostics,
@@ -900,6 +901,7 @@ export class ClaudeSessionParser implements SessionParser {
       model: main.model ?? base.model,
       ...(this.isProbe() ? { tags: [...new Set([...(base.tags ?? []), 'probe'])] } : {}),
       ...this.activityView(),
+      ...this.lastReplyView(),
       usage: sumUsage(requests.map((r) => this.exposedUsage(r))),
       counts: {
         turns: this.turns.size,
@@ -935,6 +937,19 @@ export class ClaudeSessionParser implements SessionParser {
       requests,
       lastTurn: lastTurn ? this.turnView(lastTurn) : null,
       updatedAt: this.updatedAt,
+    });
+  }
+
+  /** The main agent's latest words: its latest turn's requests are viewed, newest first, as needed. */
+  private lastReplyView(): { lastReply?: string | null } {
+    const lastTurn = this.turns.get(this.agents.get(MAIN_AGENT_ID)?.turnIds.at(-1) ?? '');
+    return lastReplyField({
+      live: this.live,
+      lastTurn: lastTurn ? this.turnView(lastTurn) : null,
+      request: (id) => {
+        const r = this.requests.get(id);
+        return r ? this.requestView(r) : undefined;
+      },
     });
   }
 

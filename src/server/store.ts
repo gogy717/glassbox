@@ -93,14 +93,19 @@ export { isActive } from './live.js';
 /**
  * The summary under the latest polled live state. An open session's parser hears of a change
  * at once but may send its next summary up to a patch gap later: its activity was worked out
- * for the old state, so it goes until then. Idle sessions are not opened in the background;
- * their activity needs nothing a parser knows: idle since the last write.
+ * for the old state, so it goes until then, and what it last said goes with a process that is
+ * no longer up. Idle sessions are not opened in the background; their activity needs nothing a
+ * parser knows: idle since the last write.
  */
 export function listedSummary(summary: SessionSummary, live = summary.live): SessionSummary {
   let next = summary;
   if (summary.live !== live) {
     const { activity: _stale, ...rest } = summary;
     next = { ...rest, live };
+  }
+  if (live !== 'busy' && live !== 'waiting' && live !== 'idle' && 'lastReply' in next) {
+    const { lastReply: _gone, ...rest } = next;
+    next = rest;
   }
   if (live !== 'idle' || next.activity) return next;
   return { ...next, activity: idleActivity(next.updatedAt) };

@@ -74,6 +74,13 @@ export interface SessionSummary {
    * known: a closed session, one not opened, or an older server. The UI then shows `live`.
    */
   activity?: SessionActivity;
+  /**
+   * What the main agent last said: the first 140 characters of its latest reply text in its
+   * latest turn, credentials masked and the home directory as "~"; null while that turn has said
+   * nothing yet. Only a session whose process is up carries it, from the parser of an open
+   * session, as `activity`; absent otherwise.
+   */
+  lastReply?: string | null;
 }
 
 /**

@@ -66,3 +66,22 @@ describe('activity of a live Grok session', () => {
     expect('activity' in parser.snapshot().session).toBe(false);
   });
 });
+
+describe('what a live Grok session last said', () => {
+  it('is the reply to the latest prompt, and absent once closed', () => {
+    expect(
+      feed({ events, updates: [prompt, thought, readNotes] }).snapshot().session.lastReply,
+    ).toBeNull();
+    const reply = modelChunk({
+      kind: 'message',
+      text: 'The notes list three beds.',
+      promptId: PROMPT_1,
+      streamAtSec: 5,
+    });
+    const done = toolUpdate({ id: 'call-1', status: 'completed', output: 'beds', atSec: 4 });
+    const parser = feed({ events, updates: [prompt, thought, readNotes, done, reply] }, 'idle');
+    expect(parser.snapshot().session.lastReply).toBe('The notes list three beds.');
+    parser.setLive('closed');
+    expect('lastReply' in parser.snapshot().session).toBe(false);
+  });
+});

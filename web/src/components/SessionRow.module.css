@@ -145,3 +145,15 @@
 .tokens {
   flex: none;
 }
+
+/* On a card, what a running session's agent last said: one muted line under its activity, cut
+   by the row, whole in the tooltip. */
+.said {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}

@@ -4,6 +4,7 @@ import type { RovingItemProps } from '../data/useRovingFocus';
 import { translateParts, useI18n } from '../i18n';
 import { agentName } from '../lib/agent-names';
 import { formatCompact, formatRelative } from '../lib/format';
+import { plainText } from '../lib/preview';
 import { isRunning } from '../lib/sessions';
 import { ActivityLine } from './ActivityLine';
 import { AgentTag } from './AgentTag';
@@ -55,8 +56,11 @@ export function SessionRow({
   const figure = s.usage && s.usage.output > 0 ? formatCompact(s.usage.output, intl) : null;
   // Said in full ("42K output tokens"): the tooltip, and what a screen reader hears.
   const tokens = figure ? t('session.outputTokens', { n: figure }) : null;
+  // On a card, what a running session last said, as the plain words its markdown reads as.
+  const lastWords = density === 'card' && running && s.lastReply ? plainText(s.lastReply) : '';
+  const said = lastWords ? t('session.lastSaid', { text: lastWords }) : null;
   const tip = clipped
-    ? [title, [agentName(s.agent), state, when, tokens].filter(Boolean).join(' · '), s.cwd]
+    ? [title, [agentName(s.agent), state, when, tokens].filter(Boolean).join(' · '), said, s.cwd]
         .filter(Boolean)
         .join('\n')
     : (s.cwd ?? undefined);
@@ -114,6 +118,11 @@ export function SessionRow({
             </>
           )}
         </span>
+        {said && (
+          <span className={css.said} data-clip>
+            {said}
+          </span>
+        )}
       </button>
     );
 
