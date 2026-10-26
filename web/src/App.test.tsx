@@ -7,7 +7,7 @@ import {
   DEMO_SESSION_ID,
 } from '../../src/core/fixtures/demo.js';
 import type { RunState } from '../../src/shared/runs.js';
-import { App, sidebarMode } from './App';
+import { App, documentTitle, sidebarMode } from './App';
 import type { RunsClient } from './data/runs';
 import { createStore } from './data/store';
 import { DEMO_NOW, demoStore } from './test/demo';
@@ -859,6 +859,88 @@ describe('App top-bar popovers', () => {
     fireEvent.click(within(banner).getByRole('button', { name: /^Token rate/ }));
     expect(screen.getByRole('dialog', { name: 'Token rate' })).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: 'Plan quota' })).toBeNull();
+  });
+});
+
+// F1: a background tab says how many sessions need you.
+describe('documentTitle', () => {
+  it('counts the sessions that need you, before the open session’s title', () => {
+    expect(documentTitle(0, null)).toBe('glassbox');
+    expect(documentTitle(2, null)).toBe('(2) glassbox');
+    expect(documentTitle(0, 'Fix flaky login test')).toBe('Fix flaky login test · glassbox');
+    expect(documentTitle(1, 'Fix flaky login test')).toBe('(1) Fix flaky login test · glassbox');
+  });
+});
+
+describe('App document title', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(DEMO_NOW);
+    window.location.hash = '';
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    window.location.hash = '';
+    document.title = '';
+  });
+
+  const prompt = {
+    id: 'tu_1',
+    toolName: 'Bash',
+    input: { command: 'ls' },
+    questions: null,
+    requestedAt: DEMO_NOW.toISOString(),
+  };
+
+  it('counts the sessions waiting for you, from prompts and from their own state, hidden probes aside', async () => {
+    const store = createStore();
+    const all = createDemoSessions(DEMO_NOW);
+    const [demo, idle, closed] = all;
+    if (!demo || !idle || !closed) throw new Error('fixture');
+    store.applyEvent({ type: 'sessions', sessions: all });
+    render(<App store={store} connect={noConnect} runs={fakeRuns()} />);
+    expect(document.title).toBe('glassbox');
+    // A glassbox run's prompt.
+    act(() =>
+      store.applyEvent({
+        type: 'run',
+        run: runState({
+          id: 'run_2',
+          sessionId: idle.id,
+          status: 'waiting-permission',
+          pendingPermissions: [prompt],
+        }),
+      }),
+    );
+    expect(document.title).toBe('(1) glassbox');
+    // A session a terminal holds, blocked on its own prompt; a probe waiting counts for nothing.
+    act(() =>
+      store.applyEvent({
+        type: 'sessions',
+        sessions: [
+          demo,
+          idle,
+          { ...closed, live: 'waiting' },
+          { ...closed, id: 'claude-code:probe', title: 'Probe', tags: ['probe'], live: 'waiting' },
+        ],
+      }),
+    );
+    expect(document.title).toBe('(2) glassbox');
+    // On the session page, the session's title comes first.
+    act(() => {
+      window.location.hash = `#/s/${encodeURIComponent(idle.id)}`;
+    });
+    await waitFor(() => expect(document.title).toBe('(2) Fix flaky login test · glassbox'));
+    // Answered, and the other one back to idle.
+    act(() => {
+      store.applyEvent({ type: 'run', run: runState({ id: 'run_2', sessionId: idle.id }) });
+      store.applyEvent({ type: 'sessions', sessions: all });
+    });
+    expect(document.title).toBe('Fix flaky login test · glassbox');
+    act(() => {
+      window.location.hash = `#/s/${encodeURIComponent(closed.id)}`;
+    });
+    await waitFor(() => expect(document.title).toBe('Untitled session · glassbox'));
   });
 });
 

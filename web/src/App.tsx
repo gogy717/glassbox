@@ -109,6 +109,16 @@ export function sessionTarget(
   return latest ? sessionLink(latest.id) : null;
 }
 
+/**
+ * The tab's title: how many sessions need you, in parentheses, so a background tab says so
+ * ("(2) glassbox"); on the session page the session's title first ("(2) Fix the login test ·
+ * glassbox"); plain "glassbox" otherwise.
+ */
+export function documentTitle(waiting: number, sessionTitle: string | null): string {
+  const name = sessionTitle ? `${sessionTitle} · glassbox` : 'glassbox';
+  return waiting > 0 ? `(${waiting}) ${name}` : name;
+}
+
 function useMediaQuery(query: string): boolean {
   const subscribe = useCallback(
     (fn: () => void) => {
@@ -260,6 +270,16 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
 
   const open = state.open;
   const summary = open?.session ?? state.sessions.find((s) => s.id === route.sessionId) ?? null;
+  // The sessions that need you, as the board lists them: the tab's title counts them.
+  const needsYou = useMemo(
+    () => sessions.filter((s) => isListed(s, prefs.showProbes) && s.live === 'waiting'),
+    [sessions, prefs.showProbes],
+  );
+  const sessionTitle =
+    page === 'session' && summary ? (summary.title ?? t('sidebar.untitled')) : null;
+  useEffect(() => {
+    document.title = documentTitle(needsYou.length, sessionTitle);
+  }, [needsYou.length, sessionTitle]);
   const sidebarShown = floating ? floatOpen : !sidebarCollapsed;
   // A session picked from the overlay: carry on in it once <main> is no longer inert (a browser
   // refuses focus inside an inert subtree, so not in the click handler).
