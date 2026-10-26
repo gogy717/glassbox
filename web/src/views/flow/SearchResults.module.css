@@ -146,3 +146,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Narrow, the list sits in a row of its own above the calls: hits keep to part of the page,
+   scrolling within it, so the call a hit opens stays in view. */
+@media (max-width: 900px) {
+  .results {
+    max-height: min(45vh, 360px);
+  }
+}

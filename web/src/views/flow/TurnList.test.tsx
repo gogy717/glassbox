@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import postcss from 'postcss';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Turn } from '../../../../src/core/model.js';
 import { I18nContext, makeI18n } from '../../i18n';
@@ -625,6 +626,19 @@ describe('newestMatch', () => {
 });
 
 describe('TurnList styles', () => {
+  it('keeps search results to part of a narrow page, so the calls under them stay in view', () => {
+    // At 900 px and under the list sits in an auto row above the calls: uncapped, a long list
+    // of hits would grow that row and leave the calls no height.
+    const sheet = readFileSync(join(import.meta.dirname, 'SearchResults.module.css'), 'utf8');
+    const caps: string[] = [];
+    postcss.parse(sheet).walkAtRules('media', (media) => {
+      if (/max-width:\s*900px/.test(media.params))
+        media.walkRules('.results', (r) => r.walkDecls('max-height', (d) => caps.push(d.value)));
+    });
+    expect(caps).toHaveLength(1);
+    expect(caps[0]).not.toBe('none');
+  });
+
   // jsdom has no layout. The utility is safe on its own (global.test.ts); the row also holds its
   // hidden words, so a screen reader's cursor lands on the row it reads.
   it('contains each row’s visually hidden text, so the scrolling list cannot widen the page', () => {
