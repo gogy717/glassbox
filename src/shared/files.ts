@@ -1,7 +1,7 @@
 /**
  * What a session did to files, read from its tool calls' inputs alone (`ToolCall.input`): the
  * files read, searched, edited, created and deleted, by which calls, with the edits themselves.
- * The Files tab's model, here so that whatever else counts a session's files counts them alike.
+ * The Files tab's model, and the outcome strip's count of files (`outcome.ts`), so the two agree.
  * It never looks at the file system, so a file is whatever a call named.
  */
 import type { IsoTime, ToolCall } from '../core/model.js';

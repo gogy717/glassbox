@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { activityTarget } from './activity.js';
-import { summarizeCode, summarizeCommand } from './command-summary.js';
+import { simpleCommands, summarizeCode, summarizeCommand } from './command-summary.js';
 
 describe('summarizeCommand', () => {
   it.each([
@@ -262,6 +262,21 @@ describe('summarizeCommand', () => {
     expect(summarizeCommand(['curl', ...Array(100_000).fill('a://b:c')])).toBe('curl');
     // The script crosses the limit, so it is not read: the shell and its flag only.
     expect(summarizeCommand(['bash', '-lc', `npm test; ${'x'.repeat(9000)}`])).toBe('bash -lc');
+  });
+});
+
+describe('simpleCommands', () => {
+  it('reads each simple command of a line, its words unquoted, with its own summary', () => {
+    expect(simpleCommands('cd web && CI=1 npm test -- --run 2>&1 | tail -5')).toEqual([
+      { words: ['cd', 'web'], summary: 'cd' },
+      { words: ['CI=1', 'npm', 'test', '--', '--run', '2>&1'], summary: 'npm test' },
+      { words: ['tail', '-5'], summary: 'tail' },
+    ]);
+    // A message is one word; what is inside its quotes is not a command.
+    expect(simpleCommands('git commit -m "fix; npm test passes" && git push')).toEqual([
+      { words: ['git', 'commit', '-m', 'fix; npm test passes'], summary: 'git commit' },
+      { words: ['git', 'push'], summary: 'git push' },
+    ]);
   });
 });
 
