@@ -410,8 +410,10 @@ const fontStyle = () =>
   `<style>@font-face{font-family:"Receipt Mono";font-weight:400;src:url(${FONTS.regular}) format("woff2")}@font-face{font-family:"Receipt Mono";font-weight:500;src:url(${FONTS.medium}) format("woff2")}</style>`;
 
 /**
- * A drawn slip as an image at `size`, in slip units: the slip alone (tall), or scaled to fit a
- * 4:5 post or a 9:16 story, centred on the theme's page colour with one soft shadow under it.
+ * A drawn slip as an image at `size`, in slip units: the slip alone (tall); a short slip drawn
+ * to the frame's own height (post, story: `short.ts`) as it is; anything else scaled to fit the
+ * frame, centred on the theme's page colour with one soft shadow under it (the stub while a
+ * week is read).
  */
 export function frame(
   drawn: { body: string; height: number },
@@ -424,14 +426,14 @@ export function frame(
   // Exact glyph advances at any scale (no rounding to whole pixels), so lines measured at 0.6 em
   // a character meet their leaders and right edges as laid out.
   const head = `<svg xmlns="http://www.w3.org/2000/svg" font-family='${MONO}' text-rendering="geometricPrecision"`;
-  if (size === 'tall') {
+  const box = SIZES[size];
+  if (size === 'tall' || height === box.h) {
     return {
       svg: `${head} width="${WIDTH}" height="${height}" viewBox="0 0 ${WIDTH} ${height}">${fontStyle()}${slip}</svg>`,
       width: WIDTH,
       height,
     };
   }
-  const box = SIZES[size];
   const fh = box.h as number;
   const margin = fh * 0.06;
   const scale = Math.min((WIDTH - margin * 2) / WIDTH, (fh - margin * 2) / height);

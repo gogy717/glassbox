@@ -19,6 +19,15 @@ import {
 } from './format';
 import { categoryLine, clip } from './rows';
 import {
+  costFigure,
+  type Figure,
+  figures,
+  finish,
+  shortHeight,
+  tokensBrief,
+  totalFigure,
+} from './short';
+import {
   frame,
   INNER,
   LEFT,
@@ -88,6 +97,49 @@ export const wayOutLine = (e: WeekElsewhere, w: Words, time: (ms: number) => str
     ? w('wayOut', { n: e.sessions, time: time(e.agentMs) })
     : w('wayOutUntimed', { n: e.sessions });
 
+/**
+ * The week's grid: 7 rows of 24 cells under the label, the end's hairline, the hour axis.
+ * Starts 10 units under `p.y` and leaves `p.y` on the axis line.
+ */
+export function drawGrid(p: Pen, d: WeekReceipt, empty: boolean): void {
+  const { c, L } = p;
+  const top = p.y + 10;
+  d.grid.forEach((cells, row) => {
+    const y = top + row * PITCH;
+    const mark = weekdayMark(d.rows[row] ?? d.start, L);
+    p.push(text(LEFT, y + 8.5, runs(mark), { size: 9, fill: c.soft }));
+    cells.forEach((cell, col) => {
+      const x = GRID_X + col * PITCH;
+      const ink = empty && cell.state !== 'out' ? 'future' : inkOf(cell);
+      if (ink === 'out') return;
+      if (ink === 'future')
+        p.push(
+          `<rect x="${num(x + 0.5)}" y="${num(y + 0.5)}" width="${CELL - 1}" height="${CELL - 1}" fill="none" stroke="${c.ink}" stroke-opacity="0.18" stroke-width="1"/>`,
+        );
+      else if (ink === 'none')
+        p.push(
+          `<rect x="${num(x + 4.5)}" y="${num(y + 4.5)}" width="2" height="2" fill="${c.ink}" fill-opacity="0.28"/>`,
+        );
+      else
+        p.push(
+          `<rect x="${x}" y="${num(y)}" width="${CELL}" height="${CELL}" fill="${c.ink}"${ink === 'high' ? '' : ` fill-opacity="${ink === 'low' ? 0.25 : 0.6}"`}/>`,
+        );
+    });
+  });
+  // The end: a hairline in the gap after the hour the receipt ends in, on its row (R20).
+  const cx = GRID_X + (d.cursor.col + 1) * PITCH - 0.5;
+  const cy = top + d.cursor.row * PITCH;
+  p.push(
+    `<line x1="${num(cx)}" y1="${num(cy - 2)}" x2="${num(cx)}" y2="${num(cy + CELL + 2)}" stroke="${c.ink}" stroke-width="1"/>`,
+  );
+  p.y = top + 7 * PITCH + 9;
+  for (const h of [0, 6, 12, 18, 24]) {
+    const anchor = h === 0 ? 'start' : h === 24 ? 'end' : 'middle';
+    const x = GRID_X + h * PITCH - (h === 24 ? 1 : h === 0 ? 0 : 0.5);
+    p.push(text(x, p.y, runs(String(h)), { size: 9, fill: c.soft, anchor }));
+  }
+}
+
 /** The weekly receipt's drawing and its height, in slip units. */
 export function drawWeek(
   d: WeekReceipt,
@@ -127,41 +179,7 @@ export function drawWeek(
   // WEEK (or LAST 7 DAYS): the grid, its hour axis, the busiest hour and the share after hours.
   p.y += 18;
   p.label(d.kind === 'week' ? 'week' : 'last7');
-  const top = p.y + 10;
-  d.grid.forEach((cells, row) => {
-    const y = top + row * PITCH;
-    const mark = weekdayMark(d.rows[row] ?? d.start, L);
-    p.push(text(LEFT, y + 8.5, runs(mark), { size: 9, fill: c.soft }));
-    cells.forEach((cell, col) => {
-      const x = GRID_X + col * PITCH;
-      const ink = empty && cell.state !== 'out' ? 'future' : inkOf(cell);
-      if (ink === 'out') return;
-      if (ink === 'future')
-        p.push(
-          `<rect x="${num(x + 0.5)}" y="${num(y + 0.5)}" width="${CELL - 1}" height="${CELL - 1}" fill="none" stroke="${c.ink}" stroke-opacity="0.18" stroke-width="1"/>`,
-        );
-      else if (ink === 'none')
-        p.push(
-          `<rect x="${num(x + 4.5)}" y="${num(y + 4.5)}" width="2" height="2" fill="${c.ink}" fill-opacity="0.28"/>`,
-        );
-      else
-        p.push(
-          `<rect x="${x}" y="${num(y)}" width="${CELL}" height="${CELL}" fill="${c.ink}"${ink === 'high' ? '' : ` fill-opacity="${ink === 'low' ? 0.25 : 0.6}"`}/>`,
-        );
-    });
-  });
-  // The end: a hairline in the gap after the hour the receipt ends in, on its row (R20).
-  const cx = GRID_X + (d.cursor.col + 1) * PITCH - 0.5;
-  const cy = top + d.cursor.row * PITCH;
-  p.push(
-    `<line x1="${num(cx)}" y1="${num(cy - 2)}" x2="${num(cx)}" y2="${num(cy + CELL + 2)}" stroke="${c.ink}" stroke-width="1"/>`,
-  );
-  p.y = top + 7 * PITCH + 9;
-  for (const h of [0, 6, 12, 18, 24]) {
-    const anchor = h === 0 ? 'start' : h === 24 ? 'end' : 'middle';
-    const x = GRID_X + h * PITCH - (h === 24 ? 1 : h === 0 ? 0 : 0.5);
-    p.push(text(x, p.y, runs(String(h)), { size: 9, fill: c.soft, anchor }));
-  }
+  drawGrid(p, d, empty);
 
   const elsewhereLine = () => {
     if (!elsewhere || elsewhere.sessions === 0 || d.kind !== 'week') return;
@@ -296,7 +314,189 @@ export function weekSvg(
   size: ReceiptSize,
   elsewhere: WeekElsewhere | null = null,
 ): { svg: string; width: number; height: number } {
-  return frame(drawWeek(d, o, elsewhere), o, size);
+  return frame(
+    size === 'tall' ? drawWeek(d, o, elsewhere) : drawWeekShort(d, o, size, elsewhere),
+    o,
+    size,
+  );
+}
+
+interface ShortPlan {
+  work: number;
+  cli: boolean;
+  longest: boolean;
+  tokens: boolean;
+}
+const POST: ShortPlan[] = [
+  { work: 2, cli: false, longest: false, tokens: false },
+  { work: 1, cli: false, longest: false, tokens: false },
+];
+// A story gives way in this order: the work line to one, the longest session, the tokens, the
+// split by CLI.
+const STORY: ShortPlan[] = [
+  { work: 2, cli: true, longest: true, tokens: true },
+  { work: 1, cli: true, longest: true, tokens: true },
+  { work: 2, cli: true, longest: false, tokens: true },
+  { work: 1, cli: true, longest: false, tokens: true },
+  { work: 2, cli: true, longest: true, tokens: false },
+  { work: 1, cli: true, longest: true, tokens: false },
+  { work: 1, cli: true, longest: false, tokens: false },
+  { work: 1, cli: false, longest: false, tokens: false },
+];
+
+/** The week's work in one line: sessions, projects, calls, tools, failures; zeros left out. */
+export function weekWorkLine(d: WeekReceipt, w: Words, L: ReceiptOptions['locale']): string {
+  const parts: string[] = [`${count(d.sessions, L)} ${w('sessions', { n: d.sessions })}`];
+  if (d.projects > 0) parts.push(w('projectsN', { n: d.projects }));
+  const say = (n: number, key: ReceiptKey) => {
+    if (n > 0) parts.push(`${count(n, L)} ${w(key, { n })}`);
+  };
+  say(d.work.requests, 'modelCalls');
+  say(d.work.toolCalls, 'toolCalls');
+  say(d.work.subAgents, 'subAgents');
+  say(d.work.failures, 'failures');
+  return parts.join(' · ');
+}
+
+function drawWeekShortPlan(
+  d: WeekReceipt,
+  o: ReceiptOptions,
+  plan: ShortPlan,
+  height: number,
+  elsewhere: WeekElsewhere | null,
+): { body: string; fits: boolean } {
+  const p = new Pen(o);
+  const { c, L } = p;
+  const w = (key: ReceiptKey, params?: Record<string, string | number>) => p.w(key, params);
+  const fits11 = (s: string) => textWidth(s, 11);
+  const empty = d.sessions === 0;
+  const quiet = isQuiet(d);
+
+  p.head('weeklyHeading');
+  p.y = 78;
+  p.push(
+    text(LEFT, p.y, runs(clip(windowLine(d.kind, d.start, d.now, L, w), INNER, fits11)), {
+      size: 11,
+      fill: c.soft,
+    }),
+  );
+  if (empty || quiet) {
+    // The quiet slips: what there is to say, and the way out, then the foot.
+    p.y += 14;
+    const said = empty
+      ? w(d.kind === 'week' ? 'noSessions' : 'noSessions7')
+      : quietLine(d, w, (ms) => partsText(durationParts(ms, L)));
+    for (const line of wrap(said, 12.5, INNER, 4)) {
+      p.y += 20;
+      p.push(text(LEFT, p.y, runs(line), { size: 12.5, fill: c.ink }));
+    }
+    if (elsewhere && elsewhere.sessions > 0 && d.kind === 'week') {
+      p.y += 10;
+      const out = wayOutLine(elsewhere, w, (ms) => partsText(durationParts(ms, L)));
+      for (const line of wrap(out, 11.5, INNER, 3)) {
+        p.y += 17;
+        p.push(text(LEFT, p.y, runs(line), { size: 11.5, fill: c.soft }));
+      }
+    }
+    p.y += 22;
+    p.rule();
+    p.y += 22;
+    p.serial(weekSerial(d.kind, d.start, d.now));
+    const fits = finish(p, height, !empty && d.tokens.measured);
+    return { body: p.out.join(''), fits };
+  }
+  p.y += 17;
+  const who =
+    d.clis.length > 3
+      ? `${w('clisN', { n: d.clis.length })} · ${w('projectsN', { n: d.projects })}`
+      : d.clis.map(agentName).join(' · ');
+  p.push(text(LEFT, p.y, runs(clip(who, INNER, fits11)), { size: 11, fill: c.soft }));
+  p.y += 6;
+  p.rule();
+
+  // The headline figures: the agent time, the sessions, the API equivalent (or the tokens).
+  const items: Figure[] = [
+    { key: 'agentTime', value: timeParts(d.agentMs, L) },
+    { key: 'sessionsHead', value: count(d.sessions, L) },
+    costFigure(d.tokens) ?? totalFigure(p, d.tokens),
+  ];
+  figures(p, items);
+  p.y += 14;
+  p.rule();
+
+  // The grid, then the busiest hour and the share after hours in one soft line.
+  p.y += 16;
+  p.label(d.kind === 'week' ? 'week' : 'last7');
+  drawGrid(p, d, false);
+  p.y += 18;
+  // The busiest hour, and the share after hours when the line has room for it.
+  const busiest = d.busiest
+    ? `${w('busiestHour')} ${hourOf(d.busiest.at, L)} · ${partsText(durationParts(d.busiest.ms, L))}`
+    : null;
+  const after =
+    d.afterHours !== null ? `${w('afterHours')} ${Math.round(d.afterHours * 100)}%` : null;
+  const both = [busiest, after].filter(Boolean).join(' · ');
+  const hours = fits11(both) <= INNER ? both : (busiest ?? after ?? '');
+  if (hours) p.push(text(LEFT, p.y, runs(clip(hours, INNER, fits11)), { size: 11, fill: c.soft }));
+  else p.y -= 18;
+
+  // WORK in a line or two.
+  p.y += 18;
+  for (const l of wrap(weekWorkLine(d, w, L), 11.5, INNER, plan.work)) {
+    p.push(text(LEFT, p.y, runs(l), { size: 11.5, fill: c.ink }));
+    p.y += 16;
+  }
+  p.y -= 16;
+
+  // A story's room: BY CLI, the longest session, TOKENS.
+  if (plan.cli && d.byCli.length > 1) {
+    p.y += 16;
+    p.rule();
+    p.y += 16;
+    p.label('byCli');
+    for (const r of d.byCli) {
+      p.y += 18;
+      p.row(agentName(r.agent), cliParts(r, d.cliUnit, L), {
+        valueRight: RIGHT - 42,
+        share: r.share === null ? undefined : shareText(r.share),
+      });
+    }
+  }
+  if (plan.longest && d.longest) {
+    p.y += 16;
+    p.rule();
+    p.y += 20;
+    p.row(w('longestSession'), timeParts(d.longest.ms, L));
+    p.y += 17;
+    const line = longestLine(d.longest, o.hideNames, w);
+    p.push(text(LEFT, p.y, runs(clip(line, INNER, fits11)), { size: 11, fill: c.soft }));
+  }
+  if (plan.tokens) {
+    p.y += 16;
+    p.rule();
+    tokensBrief(p, d.tokens);
+  }
+  p.y += 22;
+  p.serial(weekSerial(d.kind, d.start, d.now));
+  const fits = finish(p, height, d.tokens.measured);
+  return { body: p.out.join(''), fits };
+}
+
+/** The weekly receipt drawn short for `size`, in slip units; the first plan that fits. */
+export function drawWeekShort(
+  d: WeekReceipt,
+  o: ReceiptOptions,
+  size: Exclude<ReceiptSize, 'tall'>,
+  elsewhere: WeekElsewhere | null = null,
+): { body: string; height: number } {
+  const height = shortHeight(size);
+  let body = '';
+  for (const plan of size === 'post' ? POST : STORY) {
+    const r = drawWeekShortPlan(d, o, plan, height, elsewhere);
+    body = r.body;
+    if (r.fits) break;
+  }
+  return { body, height };
 }
 
 /**

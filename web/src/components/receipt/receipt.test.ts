@@ -80,6 +80,61 @@ describe('receipt data: the app’s own figures (R3)', () => {
   });
 });
 
+describe('the short receipts: Post and Story for a phone', () => {
+  const ZH = { ...EN, locale: 'zh' as const };
+  const baselines = (svg: string) =>
+    [...svg.matchAll(/<text [^>]*\by="([\d.]+)"/g)].map((m) => Number(m[1]));
+
+  it('draws a slip the size of the frame, as it is, every line inside it, the foot at its end', () => {
+    const { data } = demo();
+    for (const size of ['post', 'story'] as const)
+      for (const o of [EN, ZH]) {
+        const r = receiptSvg(data, o, size);
+        expect(r.height).toBe(SIZES[size].h);
+        // Not the tall slip scaled down: nothing is scaled, the outline is the frame's.
+        expect(r.svg).not.toContain('scale(');
+        const ys = baselines(r.svg);
+        expect(Math.max(...ys)).toBeLessThanOrEqual(r.height - 14);
+        expect(Math.max(...ys)).toBeGreaterThan(r.height - 40);
+        const shown = svgText(r.svg);
+        expect(shown).toContain(o.locale === 'zh' ? '活跃时长' : 'ACTIVE TIME');
+        expect(shown).toContain(o.locale === 'zh' ? 'API 折算' : 'API EQUIV.');
+        expect(shown).toContain('npx github:gogy717/glassbox');
+      }
+  });
+
+  it('keeps a post to the headline, and gives a story the time and the tokens as well', () => {
+    const { data } = demo();
+    const post = svgText(receiptSvg(data, EN, 'post').svg);
+    const story = svgText(receiptSvg(data, EN, 'story').svg);
+    expect(post).toContain('Model calls');
+    expect(post).not.toMatch(/Cache read|Thinking/);
+    expect(story).toMatch(/TIME.*Thinking/);
+    expect(story).toMatch(/TOKENS.*Cache read/);
+    // The figures are set large: the hero size, three of them.
+    expect(receiptSvg(data, EN, 'post').svg.match(/font-size="22"/g)?.length).toBe(3);
+  });
+
+  it('gives way in order: a long title to one line, the work line to one, a story’s tokens', () => {
+    const { data } = demo();
+    const long: ReceiptData = {
+      ...data,
+      title: 'A very long title that needs every one of its lines to fit, and then some more words',
+    };
+    const post = receiptSvg(long, EN, 'post');
+    expect(post.height).toBe(450);
+    expect(Math.max(...baselines(post.svg))).toBeLessThanOrEqual(436);
+    expect(svgText(post.svg)).toContain('…');
+    expect(svgText(post.svg)).toContain('ACTIVE TIME');
+    // Names hidden: the title is the untitled word, the project gone, in both sizes.
+    for (const size of ['post', 'story'] as const) {
+      const hidden = svgText(receiptSvg(data, { ...EN, hideNames: true }, size).svg);
+      expect(hidden).toContain('Untitled session');
+      expect(hidden).not.toContain(`${data.project} /`);
+    }
+  });
+});
+
 describe('the receipt', () => {
   it('prints the README’s command at its foot, never npm’s other glassbox (R2)', () => {
     const { data } = demo();

@@ -4,16 +4,16 @@
  * the pen and frame every receipt shares (`slip.ts`).
  */
 import { agentName } from '../../lib/agent-names';
-import { BAR_HEIGHT, type BarKind, barcode } from './barcode';
+import { barcode } from './barcode';
 import type { ReceiptData } from './data';
-import { clock, day, durationParts, modelName, serial } from './format';
+import { clock, day, durationParts, modelName } from './format';
 import { categoryLine, clip, testRunWords, timed, timeRows } from './rows';
+import { drawBarcode } from './short';
+import { drawShortSession } from './shortSession';
 import {
-  EDGE,
   frame,
   INNER,
   LEFT,
-  num,
   Pen,
   partsBody,
   type ReceiptOptions,
@@ -22,7 +22,6 @@ import {
   runs,
   text,
   textWidth,
-  WIDTH,
   wrap,
 } from './slip';
 import type { ReceiptKey } from './strings';
@@ -149,8 +148,7 @@ export function drawReceipt(d: ReceiptData, o: ReceiptOptions): { body: string; 
   // TIME: where it went, each line's share of what is printed, then the barcode; left out when
   // nothing was timed (a session read without its timings).
   const code = barcode(d.segments, d.subAgents, d.failedTools, INNER, d.subSegments);
-  const drawn = code.bars.length > 0 || code.tracks.length > 0;
-  const hasTime = timed(d) || drawn;
+  const hasTime = timed(d) || code.bars.length > 0 || code.tracks.length > 0;
   if (hasTime) {
     p.y += 18;
     p.label('time');
@@ -169,63 +167,7 @@ export function drawReceipt(d: ReceiptData, o: ReceiptOptions): { body: string; 
   }
 
   // The barcode: the session's own timeline.
-  if (drawn) {
-    const bottom = p.y + 12 + 42;
-    const ink = (k: BarKind) => (k === 'fail' ? c.fail : k === 'approval' ? c.soft : c.ink);
-    for (const b of code.bars) {
-      const h = BAR_HEIGHT[b.kind];
-      p.push(
-        `<rect x="${num(LEFT + b.x)}" y="${num(bottom - h)}" width="${num(b.w)}" height="${h}" fill="${ink(b.kind)}"/>`,
-      );
-    }
-    for (const x of code.breaks)
-      p.push(
-        `<path d="M${num(LEFT + x - 3)} ${num(bottom + 3)} l2 -6 M${num(LEFT + x + 1)} ${num(bottom + 3)} l2 -6" stroke="${c.soft}" stroke-width="1"/>`,
-      );
-    let ty = bottom + 6;
-    code.tracks.forEach((t, i) => {
-      p.push(
-        `<rect x="${num(LEFT + t.x)}" y="${num(ty)}" width="${num(t.w)}" height="2" fill="${c.soft}"/>`,
-      );
-      // "+N" just before the merged track's start (in the margin if need be), else after its
-      // end, else under its start: never past the paper's edge.
-      if (i === code.tracks.length - 1 && code.more > 0) {
-        const label = `+${code.more}`;
-        const lw = textWidth(label, 9);
-        const before = LEFT + t.x - 4;
-        const after = LEFT + t.x + t.w + 4;
-        const style = { size: 9, fill: c.soft };
-        if (before - lw >= EDGE)
-          p.push(text(before, ty + 3, runs(label), { ...style, anchor: 'end' }));
-        else if (after + lw <= WIDTH - EDGE) p.push(text(after, ty + 3, runs(label), style));
-        else {
-          ty += 10;
-          p.push(text(Math.min(LEFT + t.x, WIDTH - EDGE - lw), ty + 3, runs(label), style));
-        }
-      }
-      ty += 4;
-    });
-    p.y = ty + 14;
-    p.push(
-      text(LEFT, p.y, runs(d.start !== null ? clock(d.start) : ''), { size: 10.5, fill: c.soft }),
-    );
-    p.push(
-      text(RIGHT, p.y, runs(d.running ? w('now') : clock(d.end)), {
-        size: 10.5,
-        fill: c.soft,
-        anchor: 'end',
-      }),
-    );
-    p.y += 17;
-    p.push(
-      text(WIDTH / 2, p.y, runs(serial(d.nativeId, d.start, d.end)), {
-        size: 10.5,
-        fill: c.soft,
-        anchor: 'middle',
-        spacing: 1,
-      }),
-    );
-  }
+  drawBarcode(p, d);
   if (hasTime) {
     p.y += 18;
     p.rule();
@@ -243,5 +185,5 @@ export function receiptSvg(
   o: ReceiptOptions,
   size: ReceiptSize,
 ): { svg: string; width: number; height: number } {
-  return frame(drawReceipt(d, o), o, size);
+  return frame(size === 'tall' ? drawReceipt(d, o) : drawShortSession(d, o, size), o, size);
 }

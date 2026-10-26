@@ -12,7 +12,9 @@
  * Then TOKENS ended with API EQUIV., what the same tokens would cost at API list prices
  * (proposal 6): the demo's Claude calls are priced, so every one of its receipts prints that
  * line. Then the headline's word became ACTIVE TIME (活跃时长), as the summary bar says it, not
- * DURATION; the hash below is of the receipt with all three.
+ * DURATION. Then Post and Story stopped being the tall slip scaled down and became short slips
+ * laid out for a phone (`short.ts`, `shortSession.ts`); the hash below is of all three sizes
+ * as they are now.
  */
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, expect, it } from 'vitest';
@@ -53,6 +55,6 @@ function receipts(): string {
 
 it('draws the session receipt exactly as it did, with TOKENS ending in its API equivalent', () => {
   expect(createHash('sha256').update(receipts()).digest('hex')).toBe(
-    'c50c7d63be109eaf5fbfed44f91030d280135dfb429bcae5f97f2452a9c8d767',
+    'cfac2937ab2d5810141ad71c58f73fb719a72fb45a591ac4a93dfdbc0e62b4d5',
   );
 });

@@ -130,6 +130,45 @@ const busiest = (n: number, now = WEEK_NOW) =>
     .slice(0, n)
     .map((x) => x.s);
 
+describe('the short weekly receipts', () => {
+  const baselines = (svg: string) =>
+    [...svg.matchAll(/<text [^>]*\by="([\d.]+)"/g)].map((m) => Number(m[1]));
+
+  it('fills the frame with the headline figures, the grid and the work, the foot at its end', () => {
+    const w = weekReceipt(demoWeek());
+    for (const size of ['post', 'story'] as const)
+      for (const o of [EN, { ...EN, locale: 'zh' as const }]) {
+        const r = weekSvg(w, o, size);
+        expect(r.height).toBe(size === 'post' ? 450 : 640);
+        expect(r.svg).not.toContain('scale(');
+        const ys = baselines(r.svg);
+        expect(Math.max(...ys)).toBeLessThanOrEqual(r.height - 14);
+        expect(Math.max(...ys)).toBeGreaterThan(r.height - 40);
+        const shown = svgText(r.svg);
+        expect(shown).toContain(o.locale === 'zh' ? '代理时长' : 'AGENT TIME');
+        expect(shown).toContain(o.locale === 'zh' ? '会话数' : 'SESSIONS');
+        expect(shown).toContain('npx github:gogy717/glassbox');
+      }
+    const post = svgText(weekSvg(w, EN, 'post').svg);
+    const story = svgText(weekSvg(w, EN, 'story').svg);
+    expect(post).toContain('Busiest hour');
+    expect(post).not.toContain('BY CLI');
+    expect(story).toContain('BY CLI');
+  });
+
+  it('says what a quiet or empty week has to say, with the way out, and nothing more', () => {
+    const w = weekReceipt(demoWeek());
+    const empty = { ...w, sessions: 0, agentMs: 0 } as typeof w;
+    const r = weekSvg(empty, EN, 'post', { sessions: 37, agentMs: 23 * HOUR });
+    expect(r.height).toBe(450);
+    const shown = svgText(r.svg);
+    expect(shown).toMatch(/No sessions/);
+    expect(shown).toContain('37');
+    expect(shown).not.toContain('AGENT TIME');
+    expect(Math.max(...baselines(r.svg))).toBeLessThanOrEqual(436);
+  });
+});
+
 describe('the weekly receipt’s figures', () => {
   it('prints a week of one session as its receipt: WORK, TOKENS, session time (W3, DR1)', () => {
     const now = WEEK_NOW;
