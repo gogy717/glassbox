@@ -6,9 +6,10 @@ import { StatusMark, type UiStatus } from '../../components/Status';
 import { useApprovalsContext } from '../../data/approvals';
 import { useSessionAgentKind } from '../../data/session-agent';
 import type { OpenSession } from '../../data/store';
+import { useNow } from '../../data/useNow';
 import { useRovingFocus } from '../../data/useRovingFocus';
 import { useI18n } from '../../i18n';
-import { formatClock } from '../../lib/format';
+import { formatClock, formatDay, localDayIndex } from '../../lib/format';
 import type { Route } from '../../router';
 import {
   callStatus,
@@ -183,6 +184,59 @@ interface Props {
   onQuery?(query: string): void;
 }
 
+/** A line of the list: a day's heading, a turn (`folded` under a run of commands), or that run. */
+type Row =
+  | { kind: 'day'; key: string; label: string }
+  | { kind: 'turn'; item: TurnItem; folded: boolean }
+  | { kind: 'fold'; key: string; items: TurnItem[]; expanded: boolean };
+
+/**
+ * The rows of `newestFirst`: a heading where the day changes, once the list spans more than one
+ * day; and two or more local commands in a row folded under one line ("3 commands") until it is
+ * opened. A fold holding the selected turn is open. A turn whose start is unknown heads no day.
+ */
+function listRows(
+  newestFirst: TurnItem[],
+  selectedId: string | null,
+  opened: ReadonlyMap<string, boolean>,
+  dayOf: (it: TurnItem) => number,
+  labelOf: (it: TurnItem) => string,
+): Row[] {
+  const days = new Set(newestFirst.map(dayOf).filter((d) => Number.isFinite(d)));
+  const rows: Row[] = [];
+  let day = Number.NaN;
+  for (let i = 0; i < newestFirst.length; ) {
+    const it = newestFirst[i] as TurnItem;
+    const d = dayOf(it);
+    if (days.size > 1 && Number.isFinite(d) && d !== day) {
+      day = d;
+      rows.push({ kind: 'day', key: `day:${d}`, label: labelOf(it) });
+    }
+    if (!it.command) {
+      rows.push({ kind: 'turn', item: it, folded: false });
+      i++;
+      continue;
+    }
+    // The run of commands on this day, newest first.
+    const run = [it];
+    for (let j = i + 1; j < newestFirst.length; j++) {
+      const next = newestFirst[j] as TurnItem;
+      if (!next.command || dayOf(next) !== d) break;
+      run.push(next);
+    }
+    if (run.length === 1) rows.push({ kind: 'turn', item: it, folded: false });
+    else {
+      // Keyed by its oldest command, so the fold keeps its state as newer ones join it.
+      const key = `fold:${(run.at(-1) as TurnItem).turn.id}`;
+      const expanded = opened.get(key) ?? run.some((r) => r.turn.id === selectedId);
+      rows.push({ kind: 'fold', key, items: run, expanded });
+      if (expanded) for (const r of run) rows.push({ kind: 'turn', item: r, folded: true });
+    }
+    i += run.length;
+  }
+  return rows;
+}
+
 /**
  * The agent's turns, newest first: the turn being followed, or the one that just arrived, is on
  * top (on the left in the narrow, horizontal layout). Numbers stay chronological, and the DOM is
@@ -195,12 +249,32 @@ export const TurnList = memo(function TurnList({
   query = '',
   onQuery,
 }: Props) {
-  const { t } = useI18n();
+  const { t, intl } = useI18n();
   const listRef = useRef<HTMLUListElement>(null);
   const shown = useMemo(() => filterTurns(items, query), [items, query]);
   const newestFirst = useMemo(() => [...shown].reverse(), [shown]);
-  const ids = useMemo(() => newestFirst.map((it) => it.turn.id), [newestFirst]);
-  // One tab stop for the whole list; the arrow keys move between turns.
+  // The day headings ("Today", "Yesterday") move at midnight: the clock is read each minute.
+  const now = useNow(60_000);
+  const [opened, setOpened] = useState<ReadonlyMap<string, boolean>>(() => new Map());
+  const rows = useMemo(() => {
+    const today = localDayIndex(now);
+    const dayOf = (it: TurnItem) => localDayIndex(Date.parse(it.turn.startedAt));
+    const labelOf = (it: TurnItem) => {
+      const day = dayOf(it);
+      if (day === today) return t('day.today');
+      if (day === today - 1) return t('day.yesterday');
+      return formatDay(Date.parse(it.turn.startedAt), now, intl);
+    };
+    return listRows(newestFirst, selectedId, opened, dayOf, labelOf);
+  }, [newestFirst, selectedId, opened, now, t, intl]);
+  // One tab stop for the whole list; the arrow keys move between turns (and folds), not headings.
+  const ids = useMemo(
+    () =>
+      rows.flatMap((r) =>
+        r.kind === 'turn' ? [r.item.turn.id] : r.kind === 'fold' ? [r.key] : [],
+      ),
+    [rows],
+  );
   const roving = useRovingFocus(listRef, ids, selectedId);
 
   // Follow moves the selection to each new turn and a link may select an old one: keep it in view.
@@ -250,7 +324,43 @@ export const TurnList = memo(function TurnList({
         aria-label={t('flow.turns')}
         hidden={newestFirst.length === 0 && items.length > 0}
       >
-        {newestFirst.map((it) => {
+        {rows.map((row) => {
+          if (row.kind === 'day')
+            return (
+              <li key={row.key} className={css.day}>
+                <span className="section-label">{row.label}</span>
+              </li>
+            );
+          if (row.kind === 'fold') {
+            const commands = row.items.map((it) => it.turn.prompt.trim());
+            return (
+              <li key={row.key} data-fold={row.key}>
+                {/* One line for the run: the commands, their count, the newest one's clock. Open,
+                    the line keeps its count and the commands follow it, each a row of its own. */}
+                <button
+                  type="button"
+                  className={css.row}
+                  {...roving(row.key)}
+                  data-command
+                  aria-expanded={row.expanded}
+                  title={commands.join('\n')}
+                  onClick={() => setOpened((m) => new Map(m).set(row.key, !row.expanded))}
+                >
+                  <span className={`${css.num} figure`} aria-hidden="true" />
+                  <span className={css.title} data-title>
+                    {row.expanded ? '' : commands.join(' · ')}
+                  </span>
+                  <span className={css.command}>
+                    <FigureText k="flow.commands" params={{ n: row.items.length }} />
+                  </span>
+                  <span className={`${css.clock} figure`}>
+                    {formatClock((row.items[0] as TurnItem).turn.startedAt)}
+                  </span>
+                </button>
+              </li>
+            );
+          }
+          const it = row.item;
           const clock = formatClock(it.turn.startedAt);
           // Dense list: complete and failed are their glyph alone; the dot states keep their
           // word, as a dot would differ by colour only.
@@ -263,6 +373,7 @@ export const TurnList = memo(function TurnList({
                 {...roving(it.turn.id)}
                 aria-current={it.turn.id === selectedId ? 'true' : undefined}
                 data-command={it.command || undefined}
+                data-folded={row.folded || undefined}
                 title={it.turn.prompt}
                 onClick={() => onSelect(it.turn.id)}
               >

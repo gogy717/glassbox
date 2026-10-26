@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Turn } from '../../../../src/core/model.js';
 import { I18nContext, makeI18n } from '../../i18n';
 import { newestMatch, type TurnItem, TurnList } from './TurnList';
@@ -182,6 +182,149 @@ describe('TurnList', () => {
   });
 });
 
+describe('TurnList days', () => {
+  // Every instant is noon UTC: one calendar day in any zone short of the far Pacific, so the
+  // headings do not depend on where the tests run.
+  const on = (n: number, iso: string): TurnItem => ({
+    ...item(n),
+    turn: { ...item(n).turn, startedAt: new Date(Date.parse(iso)).toISOString() },
+  });
+  const rowsOf = () =>
+    [...screen.getByRole('list', { name: /Prompts|用户轮次/ }).children].map(
+      (li) => li.querySelector('[data-title]')?.textContent ?? li.textContent,
+    );
+  const renderDays = (items: TurnItem[], locale: 'en' | 'zh' = 'en') =>
+    render(
+      <I18nContext.Provider value={makeI18n(locale)}>
+        <TurnList items={items} selectedId="turn_5" onSelect={vi.fn()} />
+      </I18nContext.Provider>,
+    );
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-26T12:00:00Z'));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    cleanup();
+  });
+
+  it('heads each day where the day changes: today, yesterday, then the date', () => {
+    renderDays([
+      on(1, '2026-10-23T12:01:00Z'),
+      on(2, '2026-10-23T12:02:00Z'),
+      on(3, '2026-10-25T12:00:00Z'),
+      on(4, '2026-10-26T12:04:00Z'),
+      on(5, '2026-10-26T12:05:00Z'),
+    ]);
+    expect(rowsOf()).toEqual([
+      'Today',
+      'prompt 5',
+      'prompt 4',
+      'Yesterday',
+      'prompt 3',
+      'Oct 23',
+      'prompt 2',
+      'prompt 1',
+    ]);
+    // A heading is not a stop: the arrow keys move from prompt to prompt.
+    const list = screen.getByRole('list', { name: 'Prompts' });
+    expect(within(list).getAllByRole('button')).toHaveLength(5);
+    expect(list.querySelectorAll('[data-roving]')).toHaveLength(5);
+  });
+
+  it('writes the year for a day of another year, in Chinese too', () => {
+    const items = [on(1, '2025-12-31T12:00:00Z'), on(5, '2026-10-26T12:00:00Z')];
+    renderDays(items);
+    expect(rowsOf()).toEqual(['Today', 'prompt 5', 'Dec 31, 2025', 'prompt 1']);
+    cleanup();
+    renderDays(items, 'zh');
+    expect(rowsOf()).toEqual(['今天', 'prompt 5', '2025年12月31日', 'prompt 1']);
+  });
+
+  it('heads nothing while every prompt is from one day', () => {
+    renderDays([1, 2, 3, 4, 5].map((n) => on(n, `2026-10-26T12:0${n}:00Z`)));
+    expect(rowsOf()).toEqual(['prompt 5', 'prompt 4', 'prompt 3', 'prompt 2', 'prompt 1']);
+  });
+});
+
+describe('TurnList commands', () => {
+  afterEach(cleanup);
+
+  const command = (n: number, prompt: string): TurnItem => ({
+    ...item(n),
+    turn: { ...item(n).turn, prompt },
+    title: prompt,
+    prompt,
+    calls: 0,
+    command: true,
+  });
+  const run = [
+    item(1),
+    command(2, '/model opus'),
+    command(3, '/effort high'),
+    command(4, '/clear'),
+    item(5),
+  ];
+  const renderRun = (selectedId: string, items = run, onSelect = vi.fn()) => {
+    render(
+      <I18nContext.Provider value={makeI18n('en')}>
+        <TurnList items={items} selectedId={selectedId} onSelect={onSelect} />
+      </I18nContext.Provider>,
+    );
+    return onSelect;
+  };
+  const buttons = () =>
+    within(screen.getByRole('list', { name: 'Prompts' })).getAllByRole('button');
+
+  it('folds two or more local commands in a row into one line, which opens on a click', () => {
+    const onSelect = renderRun('turn_5');
+    const fold = screen.getByRole('button', { name: /3 commands/ });
+    expect(fold).toHaveAttribute('aria-expanded', 'false');
+    expect(fold).toHaveAttribute('data-command');
+    expect(fold.querySelector('[data-title]')).toHaveTextContent(
+      '/clear · /effort high · /model opus',
+    );
+    expect(fold).toHaveAttribute('title', '/clear\n/effort high\n/model opus');
+    // Five prompts, three of them folded: three lines.
+    expect(screen.queryByRole('button', { name: /^\/effort/ })).toBeNull();
+    expect(buttons()).toHaveLength(3);
+    fireEvent.click(fold);
+    expect(fold).toHaveAttribute('aria-expanded', 'true');
+    expect(buttons()).toHaveLength(6);
+    const effort = screen.getByRole('button', { name: /^\/effort high/ });
+    expect(effort).toHaveAttribute('data-folded');
+    expect(effort).toHaveAttribute('data-command');
+    fireEvent.click(effort);
+    expect(onSelect).toHaveBeenCalledWith('turn_3');
+    // Opened, the line names the run alone: its commands are the rows under it.
+    expect(fold.querySelector('[data-title]')).toHaveTextContent('');
+    fireEvent.click(fold);
+    expect(buttons()).toHaveLength(3);
+  });
+
+  it('opens the fold that holds the selected prompt', () => {
+    renderRun('turn_3');
+    expect(screen.getByRole('button', { name: /3 commands/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: /^\/effort high/ })).toHaveAttribute(
+      'aria-current',
+      'true',
+    );
+  });
+
+  it('leaves a lone command as its own line', () => {
+    renderRun('turn_5', [item(1), command(2, '/model opus'), item(5)]);
+    expect(screen.queryByRole('button', { name: /commands/ })).toBeNull();
+    expect(screen.getByRole('button', { name: /^\/model opus/ })).not.toHaveAttribute(
+      'data-folded',
+    );
+    expect(buttons()).toHaveLength(3);
+  });
+});
+
 describe('TurnList filter', () => {
   afterEach(cleanup);
 
@@ -279,5 +422,15 @@ describe('TurnList styles', () => {
     const note = /\n\.command \{([^}]*)\}/.exec(sheet)?.[1];
     expect(note).toBeDefined();
     expect(note).not.toMatch(/font-family/);
+  });
+
+  it('keeps a local command to one line: its note and clock share the row with the command', () => {
+    const sheet = readFileSync(join(import.meta.dirname, 'TurnList.module.css'), 'utf8');
+    const row = /\n\.row\[data-command\] \{([^}]*)\}/.exec(sheet)?.[1];
+    expect(row).toMatch(/grid-template-columns: 14px minmax\(0, 1fr\) auto auto;/);
+    expect(/\n\.command \{([^}]*)\}/.exec(sheet)?.[1]).toMatch(/grid-row: 1;/);
+    expect(/\n\.row\[data-command\] \.clock \{([^}]*)\}/.exec(sheet)?.[1]).toMatch(
+      /grid-column: 4;/,
+    );
   });
 });

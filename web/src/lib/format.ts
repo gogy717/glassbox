@@ -90,6 +90,7 @@ const dayFormats = new Map<string, Intl.DateTimeFormat>();
  * for tests.
  */
 export function localDayIndex(ms: number, timeZone?: string): number {
+  if (!Number.isFinite(ms)) return Number.NaN;
   const key = timeZone ?? '';
   let fmt = dayFormats.get(key);
   if (!fmt) {
@@ -115,6 +116,22 @@ export function calendarDays(startMs: number, endMs: number, timeZone?: string):
       localDayIndex(Math.min(startMs, endMs), timeZone) +
       1,
   );
+}
+
+/**
+ * A day as a list heading, in the UI language: "Oct 23" / "10月23日" in this year, with the year
+ * in any other ("Dec 31, 2025" / "2025年12月31日"). `timeZone` is for tests.
+ */
+export function formatDay(ms: number, now: number, locale: string, timeZone?: string): string {
+  if (!Number.isFinite(ms)) return DASH;
+  const year = (t: number) =>
+    new Intl.DateTimeFormat('en-CA', { year: 'numeric', timeZone }).format(t);
+  return new Intl.DateTimeFormat(locale, {
+    month: 'short',
+    day: 'numeric',
+    ...(year(ms) === year(now) ? {} : { year: 'numeric' }),
+    timeZone,
+  }).format(ms);
 }
 
 const clockFormats = new Map<string, Intl.DateTimeFormat>();

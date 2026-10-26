@@ -6,6 +6,7 @@ import {
   formatClock,
   formatCompact,
   formatCountdown,
+  formatDay,
   formatDuration,
   formatElapsed,
   formatNumber,
@@ -126,6 +127,27 @@ describe('calendarDays', () => {
       calendarDays(t('2026-11-01T04:30:00Z'), t('2026-11-02T04:30:00Z'), 'America/New_York'),
     ).toBe(1);
     expect(calendarDays(Number.NaN, t('2026-01-01T01:00:00Z'), 'UTC')).toBe(1);
+  });
+});
+
+describe('formatDay', () => {
+  const now = Date.parse('2026-10-26T12:00:00Z');
+
+  it('names a day of this year by month and day, in the UI language', () => {
+    expect(formatDay(Date.parse('2026-10-23T12:00:00Z'), now, 'en', 'UTC')).toBe('Oct 23');
+    expect(formatDay(Date.parse('2026-10-23T12:00:00Z'), now, 'zh-CN', 'UTC')).toBe('10月23日');
+  });
+
+  it('adds the year for a day of another year, and gives a dash for no day', () => {
+    expect(formatDay(Date.parse('2025-12-31T12:00:00Z'), now, 'en', 'UTC')).toBe('Dec 31, 2025');
+    expect(formatDay(Date.parse('2025-12-31T12:00:00Z'), now, 'zh-CN', 'UTC')).toBe(
+      '2025年12月31日',
+    );
+    // The zone decides the day, and so the year: 23:30 UTC on New Year's Eve is 2026 in Sydney.
+    expect(formatDay(Date.parse('2025-12-31T23:30:00Z'), now, 'en', 'Australia/Sydney')).toBe(
+      'Jan 1',
+    );
+    expect(formatDay(Number.NaN, now, 'en')).toBe('—');
   });
 });
 
