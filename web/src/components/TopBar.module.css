@@ -305,27 +305,30 @@
   }
 }
 
-/* In a session the title keeps at least 240px (D4 DR1), paid for by the others, sooner: Follow
-   latest's and Jump to…'s words below 1400, the rate's line below 1300, the wordmark's word below 1200, the
-   quota's full form below 1600. The page nav's words go at 1200 on every page alike: the nav is
-   what all three pages share, and it must not change as you move between them. */
-@media (max-width: 1399px) {
-  .bar[data-session] .toggleLabel {
-    display: none;
-  }
-
-  .bar[data-session] .toggle {
-    width: 34px;
-    padding: 0;
-    justify-content: center;
-  }
-
+/* In a session the title keeps at least 240px (D4 DR1), paid for by the others, sooner: Jump
+   to…'s word and keys below 1500, Follow latest's word below 1400, the rate's line below 1300,
+   the wordmark's word below 1200, the quota's full form below 1600. The page nav's words go at
+   1200 on every page alike: the nav is what all three pages share, and it must not change as you
+   move between them. */
+@media (max-width: 1499px) {
   .bar[data-session] .jumpLabel,
   .bar[data-session] .jumpKeys {
     display: none;
   }
 
   .bar[data-session] .jump {
+    width: 34px;
+    padding: 0;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 1399px) {
+  .bar[data-session] .toggleLabel {
+    display: none;
+  }
+
+  .bar[data-session] .toggle {
     width: 34px;
     padding: 0;
     justify-content: center;

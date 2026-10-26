@@ -111,9 +111,13 @@ describe('Jump to…', () => {
     },
   );
 
-  it('gives up its word and keys before a session’s title does, as Follow latest does', () => {
-    const session = mediaBlocks(sheet).find((b) => b.max === 1399);
-    expect(session?.body).toMatch(/\.bar\[data-session\] \.jumpLabel/);
+  it('gives up its word and keys below 1500 in a session, so the title keeps its 240px', () => {
+    // Measured in English: with them, a session's title had 202px at 1400 and 252px at 1450.
+    const hiding = mediaBlocks(sheet).filter((b) =>
+      /\.bar\[data-session\] \.jumpLabel/.test(b.body),
+    );
+    expect(hiding.map((b) => b.max)).toEqual([1499]);
+    // Off a session, at the width the page nav's words go.
     expect(mediaBlocks(sheet).some((b) => b.max === 1199 && /\.jumpLabel\b/.test(b.body))).toBe(
       true,
     );
