@@ -209,7 +209,7 @@ describe('TokensView', () => {
     const byAgent = screen.getByRole('region', { name: 'By sub-agent' });
     const labels = () =>
       within(byAgent)
-        .getAllByRole('button', { name: /tokens$/ })
+        .getAllByRole('button', { name: /tokens/ })
         .map((b) => b.querySelector('[data-label]')?.textContent);
     expect(labels()).toEqual([
       'Main',
@@ -221,7 +221,7 @@ describe('TokensView', () => {
     expect(within(byAgent).getByText('cc-recon')).toBeInTheDocument();
     // The row's name says the agent's state, which its dot only shows.
     expect(
-      within(byAgent).getByRole('button', { name: /^Main · Running · .+ tokens$/ }),
+      within(byAgent).getByRole('button', { name: /^Main · Running · .+ tokens · ≈\$0\.61$/ }),
     ).toBeInTheDocument();
     fireEvent.click(within(byAgent).getByRole('radio', { name: 'By spend' }));
     expect(labels()).toEqual([
@@ -304,6 +304,56 @@ describe('TokensView', () => {
     expect(within(totals).getByText('128,800')).toBeInTheDocument();
     const top = screen.getByRole('region', { name: 'Costliest 4 requests' });
     expect(within(top).getAllByRole('button')).toHaveLength(4);
+  });
+});
+
+// Proposal 6: the tokens as dollars, as the API would have billed them.
+describe('TokensView API cost', () => {
+  const TITLE =
+    'What these tokens would cost on the API, estimated from the price table in Settings';
+  /** The demo with the calls of `agentId` made by `model`. */
+  const madeBy = (agentId: string, model: string) => {
+    const open = demoOpen();
+    open.requests = new Map(
+      [...open.requests].map(([id, r]) => [id, r.agentId === agentId ? { ...r, model } : r]),
+    );
+    return open;
+  };
+
+  it('gives each of the costliest requests its cost', () => {
+    renderTokens();
+    const top = screen.getByRole('region', { name: 'Costliest 5 requests' });
+    const [first] = within(top).getAllByRole('button');
+    // 193,900 tokens of claude-opus-5-5, mostly cache reads: about 12 cents.
+    expect(first).toHaveTextContent('193,900');
+    expect(within(first as HTMLElement).getByText('≈$0.12')).toHaveAttribute('title', TITLE);
+  });
+
+  it('gives the sub-agent rows a cost column: an agent’s own calls, a group’s sum', () => {
+    renderTokens();
+    const byAgent = screen.getByRole('region', { name: 'By sub-agent' });
+    const costOf = (name: RegExp) =>
+      within(byAgent).getByRole('button', { name }).querySelector(`[data-cost]`)?.textContent;
+    expect(costOf(/^Main · /)).toBe('≈$0.61');
+    expect(costOf(/^recon:prior-art · /)).toBe('≈$1.10');
+    expect(costOf(/^verify:live-write · /)).toBe('≈$0.32');
+    const workflow = within(byAgent).getByText('cc-recon').closest('[data-group]');
+    expect(workflow?.querySelector('[data-cost]')).toHaveTextContent('≈$2.16');
+    expect(workflow?.querySelector('[data-cost]')).toHaveAttribute('title', TITLE);
+  });
+
+  it('says "no price" where a row’s calls have none', () => {
+    renderTokens('main', madeBy('af00000000000002', 'gpt-5.5-codex'));
+    const byAgent = screen.getByRole('region', { name: 'By sub-agent' });
+    const row = within(byAgent).getByRole('button', { name: /^recon:prior-art · / });
+    expect(row.querySelector('[data-cost]')).toHaveTextContent('no price');
+    expect(row).toHaveAccessibleName(/ · no price$/);
+    expect(row.querySelector('[data-cost]')).toHaveAttribute(
+      'title',
+      `${TITLE} · Left out, no price: gpt-5.5-codex`,
+    );
+    const top = screen.getByRole('region', { name: 'Costliest 5 requests' });
+    expect(within(top).getAllByRole('button')[0]).toHaveTextContent('no price');
   });
 });
 

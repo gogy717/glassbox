@@ -2,9 +2,11 @@ import type { ModelRequest, TokenUsage } from '../../../../src/core/model.js';
 import { MAIN_AGENT_ID } from '../../../../src/core/model.js';
 import { totalTokens } from '../../../../src/core/usage.js';
 import { FigureText } from '../../components/FigureText';
+import { usePriceTable } from '../../data/price-table';
 import type { OpenSession } from '../../data/store';
 import { useI18n } from '../../i18n';
 import { formatNumber } from '../../lib/format';
+import { costText, costTitle, sumCost } from '../../lib/prices';
 import css from './TokensView.module.css';
 
 interface Props {
@@ -13,9 +15,13 @@ interface Props {
   onPick(req: ModelRequest): void;
 }
 
-/** The costliest requests: who, where (as numbered in the execution chain), how many tokens. */
+/**
+ * The costliest requests: who, where (as numbered in the execution chain), how many tokens, and
+ * what they would cost on the API.
+ */
 export function TopRequests({ open, requests, onPick }: Props) {
   const { t, intl } = useI18n();
+  const prices = usePriceTable();
   return (
     <section className={css.section} aria-labelledby="tok-top">
       <div className={css.sectionHead}>
@@ -26,6 +32,8 @@ export function TopRequests({ open, requests, onPick }: Props) {
           const usage = r.usage as TokenUsage;
           const agent = open.agents.get(r.agentId);
           const turn = r.turnId ? open.turns.get(r.turnId) : undefined;
+          const cost = sumCost([r], prices);
+          const costShown = costText(cost, t, intl);
           return (
             <li key={r.id}>
               <button type="button" className={css.topRow} onClick={() => onPick(r)}>
@@ -42,6 +50,12 @@ export function TopRequests({ open, requests, onPick }: Props) {
                 </span>
                 <span className={`${css.topValue} figure`}>
                   {formatNumber(totalTokens(usage), intl)}
+                </span>
+                <span
+                  className={`${css.topCost} figure`}
+                  title={costShown ? costTitle(cost, t) : undefined}
+                >
+                  {costShown}
                 </span>
               </button>
             </li>

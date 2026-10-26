@@ -187,6 +187,12 @@ export function costTitle(cost: Cost, t: T): string {
   return `${t('cost.title')} · ${t('cost.leftOut', { models })}`;
 }
 
+/** A cost as a row says it: "≈$0.42"; "no price" when none of its tokens has one; null without tokens. */
+export function costText(cost: Cost, t: T, locale: string): string | null {
+  if (cost.priced) return `≈${formatUsdShort(cost.usd, locale)}`;
+  return cost.partial ? t('cost.noPrice') : null;
+}
+
 const usd = (digits: number, locale: string) =>
   new Intl.NumberFormat(locale, {
     style: 'currency',

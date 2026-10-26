@@ -4,6 +4,7 @@ import { MAIN_AGENT_ID } from '../../../../src/core/model.js';
 import { totalTokens } from '../../../../src/core/usage.js';
 import { FigureText } from '../../components/FigureText';
 import { TokenBar, TokenLegend } from '../../components/TokenBar';
+import { usePriceTable } from '../../data/price-table';
 import { useSessionAgentKind } from '../../data/session-agent';
 import { type OpenSession, useViewState } from '../../data/store';
 import { useNow } from '../../data/useNow';
@@ -12,7 +13,13 @@ import { mayStillRun, subtreeIds } from '../../lib/agents';
 import { formatNumber, formatPercent, formatRelative } from '../../lib/format';
 import { providerShortName } from '../../lib/provider-names';
 import { quotaWindowName, sessionQuota } from '../../lib/quota';
-import { contextSeries, insights, rollupByAgent, topRequests } from '../../lib/token-stats';
+import {
+  contextSeries,
+  insights,
+  rollupByAgent,
+  rollupCosts,
+  topRequests,
+} from '../../lib/token-stats';
 import type { Navigate } from '../../router';
 import { useUi } from '../../ui';
 import { AgentBreakdown } from './AgentBreakdown';
@@ -33,6 +40,8 @@ export function TokensView({ open, agentId, navigate }: Props) {
   const { setFollow } = useUi();
 
   const rows = useMemo(() => rollupByAgent(open), [open]);
+  const prices = usePriceTable();
+  const costs = useMemo(() => rollupCosts(open, prices), [open, prices]);
   const found = useMemo(() => insights(open), [open]);
   const series = useMemo(() => contextSeries(open, agentId), [open, agentId]);
   const top = useMemo(() => topRequests(open, TOP_N, subtreeIds(open, agentId)), [open, agentId]);
@@ -107,6 +116,7 @@ export function TokensView({ open, agentId, navigate }: Props) {
       <div className={css.columns}>
         <AgentBreakdown
           rows={rows}
+          costs={costs}
           selectedId={agentId}
           onSelect={(id) => navigate({ agentId: id })}
         />

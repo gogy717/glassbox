@@ -3,6 +3,7 @@ import type { AgentNode, ModelRequest, TokenUsage } from '../../../src/core/mode
 import { addUsage, contextSize, emptyUsage, totalTokens } from '../../../src/core/usage.js';
 import type { OpenSession } from '../data/store';
 import { agentTree, subtreeIds } from './agents';
+import { type Cost, type PriceTable, sumCost } from './prices';
 
 export type RollupRow =
   | {
@@ -67,6 +68,46 @@ export function rollupByAgent(open: OpenSession): RollupRow[] {
     }
   }
   return rows;
+}
+
+/**
+ * What each row of `rollupByAgent` would cost on the API, by `${kind}:${id}`: an agent its own
+ * calls, as its bar shows its own tokens; a workflow or phase its members with their sub-agents.
+ */
+export function rollupCosts(open: OpenSession, table: PriceTable): Map<string, Cost> {
+  const byAgent = new Map<string, ModelRequest[]>();
+  for (const r of open.requests.values()) {
+    const list = byAgent.get(r.agentId);
+    if (list) list.push(r);
+    else byAgent.set(r.agentId, [r]);
+  }
+  const of = (ids: Iterable<string>) =>
+    sumCost(
+      [...ids].flatMap((id) => byAgent.get(id) ?? []),
+      table,
+    );
+  const members = (pred: (a: AgentNode) => boolean) => {
+    const ids = new Set<string>();
+    for (const a of open.agents.values())
+      if (pred(a)) for (const id of subtreeIds(open, a.id)) ids.add(id);
+    return of(ids);
+  };
+  // Keys as `rollupByAgent` names its rows.
+  const costs = new Map<string, Cost>();
+  for (const r of agentTree(open)) {
+    if (r.kind === 'agent') costs.set(`agent:${r.agent.id}`, of([r.agent.id]));
+    else if (r.kind === 'workflow')
+      costs.set(
+        `workflow:${r.workflow.id}`,
+        members((a) => a.workflowRunId === r.workflow.id),
+      );
+    else
+      costs.set(
+        `phase:${r.workflowId}:${r.title}`,
+        members((a) => a.workflowRunId === r.workflowId && a.phase === r.title),
+      );
+  }
+  return costs;
 }
 
 export interface ContextPoint {
