@@ -21,6 +21,7 @@ export const en: Record<MessageKey, string> = {
   'nav.session': 'Session',
   'nav.stats': 'Stats',
   'nav.inbox': 'Inbox',
+  'nav.inboxCount': '{n} waiting for you',
   'nav.noSessions': 'No sessions yet',
   'keys.title': 'Keyboard shortcuts',
   'keys.palette': 'Jump to a session, prompt, page or action',

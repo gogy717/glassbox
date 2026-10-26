@@ -277,6 +277,9 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
   const prompts = useMemo(() => new Map([...held].map(([id, p]) => [id, p.request])), [held]);
   const sessions = useMemo(() => withWaiting(state.sessions, prompts), [state.sessions, prompts]);
   const failures = useMemo(() => failedSessions(state.runs), [state.runs]);
+  // The sessions that need you, as the board lists them: the tab's title and the Inbox's badge
+  // count them.
+  const waiting = useMemo(() => needsYou(sessions, prefs.showProbes), [sessions, prefs.showProbes]);
   // The session page as it was last left, agent, tab, turn, request and card: the nav's Session
   // goes back to it, and back on Home that session's row keeps the tab stop.
   const [lastSession, setLastSession] = useState<string | null>(null);
@@ -293,6 +296,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
       ? { href: target, waiting: sessions.some((s) => s.id === targetId && s.live === 'waiting') }
       : null,
     sessionsLoaded: state.sessionsLoaded,
+    inbox: waiting.length,
   };
   // Escape collapses a prompt without answering it; a newer prompt shows itself again.
   const [dismissed, setDismissed] = useState<string | null>(null);
@@ -301,8 +305,6 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
 
   const open = state.open;
   const summary = open?.session ?? state.sessions.find((s) => s.id === route.sessionId) ?? null;
-  // The sessions that need you, as the board lists them: the tab's title counts them.
-  const waiting = useMemo(() => needsYou(sessions, prefs.showProbes), [sessions, prefs.showProbes]);
   const sessionTitle =
     page === 'session' && summary ? (summary.title ?? t('sidebar.untitled')) : null;
   useEffect(() => {

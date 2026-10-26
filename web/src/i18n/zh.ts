@@ -20,6 +20,7 @@ export const zh = {
   'nav.session': '会话',
   'nav.stats': '统计',
   'nav.inbox': '收件箱',
+  'nav.inboxCount': '{n} 项等你处理',
   'nav.noSessions': '还没有会话',
   'keys.title': '快捷键',
   'keys.palette': '跳转到会话、轮次、页面或操作',

@@ -1844,7 +1844,8 @@ describe('App pages: Home · Session · Stats', () => {
 
   const at = (id: string) => `#/s/${encodeURIComponent(id)}`;
   const pages = () => within(screen.getByRole('banner')).getByRole('navigation', { name: 'Pages' });
-  const page = (name: 'Home' | 'Session' | 'Stats') => within(pages()).getByRole('link', { name });
+  const page = (name: 'Home' | 'Session' | 'Stats' | 'Inbox') =>
+    within(pages()).getByRole('link', { name });
   const listed = (sessions = createDemoSessions(DEMO_NOW)) => {
     const store = createStore();
     store.applyEvent({ type: 'sessions', sessions });
@@ -1860,12 +1861,53 @@ describe('App pages: Home · Session · Stats', () => {
       within(pages())
         .getAllByRole('link')
         .map((a) => a.textContent),
-    ).toEqual(['Home', 'Session', 'Stats']);
+    ).toEqual(['Home', 'Session', 'Stats', 'Inbox']);
     expect(page('Stats')).toHaveAttribute('aria-current', 'page');
     expect(page('Home')).not.toHaveAttribute('aria-current');
     expect(page('Home')).toHaveAttribute('href', '#/');
     const wordmark = within(screen.getByRole('banner')).getByRole('link', { name: 'glassbox' });
     expect(wordmark).toHaveAttribute('href', '#/');
+  });
+
+  it('counts on the Inbox what Home counts under Needs you, as the tab’s title does', async () => {
+    const [, other, closed] = createDemoSessions(DEMO_NOW);
+    if (!other || !closed) throw new Error('fixture');
+    const store = listed([
+      demo,
+      other,
+      // A terminal's wait, and a probe's, which counts for nothing.
+      { ...closed, live: 'waiting' },
+      { ...closed, id: 'claude-code:probe', title: 'Probe', tags: ['probe'], live: 'waiting' },
+    ]);
+    // A glassbox run's prompt.
+    store.applyEvent({
+      type: 'run',
+      run: runState({
+        id: 'run_2',
+        sessionId: other.id,
+        status: 'waiting-permission',
+        pendingPermissions: [
+          {
+            id: 'tu_1',
+            toolName: 'Bash',
+            input: { command: 'ls' },
+            questions: null,
+            requestedAt: DEMO_NOW.toISOString(),
+          },
+        ],
+      }),
+    });
+    render(<App store={store} connect={noConnect} runs={fakeRuns()} />);
+    const home = screen.getByRole('region', { name: 'Needs you' });
+    expect(within(home).getByText('2')).toHaveAttribute('data-attention');
+    expect(within(page('Inbox')).getByText('2')).toHaveAttribute('data-badge');
+    expect(document.title).toBe('(2) glassbox');
+    fireEvent.click(page('Inbox'));
+    await waitFor(() => expect(window.location.hash).toBe('#/inbox'));
+    const inbox = await screen.findByRole('region', { name: 'Needs you' });
+    expect(within(inbox).getAllByRole('article')).toHaveLength(2);
+    expect(within(inbox).getByText('2')).toHaveAttribute('data-attention');
+    expect(page('Inbox')).toHaveAttribute('aria-current', 'page');
   });
 
   it('goes Back and Forward across all three pages', async () => {
@@ -2020,7 +2062,7 @@ describe('App pages: Home · Session · Stats', () => {
     expect(screen.getByRole('textbox', { name: 'Message' })).toBeInTheDocument();
   });
 
-  it('speaks Chinese: 首页 · 会话 · 统计', async () => {
+  it('speaks Chinese: 首页 · 会话 · 统计 · 收件箱', async () => {
     localStorage.setItem('glassbox.prefs', JSON.stringify({ locale: 'zh' }));
     onTestFinished(() => localStorage.clear());
     window.location.hash = '#/stats';
@@ -2030,7 +2072,7 @@ describe('App pages: Home · Session · Stats', () => {
       within(nav)
         .getAllByRole('link')
         .map((a) => a.textContent),
-    ).toEqual(['首页', '会话', '统计']);
+    ).toEqual(['首页', '会话', '统计', '收件箱']);
     expect(within(nav).getByRole('link', { name: '会话' })).toHaveAttribute('title', '还没有会话');
     const windows = await screen.findByRole('radiogroup', { name: '时间范围' });
     expect(
