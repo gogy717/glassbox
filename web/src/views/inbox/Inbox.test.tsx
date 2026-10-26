@@ -312,6 +312,31 @@ describe('Inbox', () => {
     expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1 }));
   });
 
+  it('comes back to the list from the heading when something waits again, the last one gone', () => {
+    const a = held(ask('tu_1', 'Bash', 90, { command: 'npm test' }));
+    const board = (...hs: (typeof a)[]) => ({
+      sessions: hs.map((h) => h.session),
+      prompts: new Map(hs.map((h) => [h.session.id, h.prompt])),
+    });
+    const { update } = renderInbox(board(a));
+    expect(document.activeElement).toBe(items()[0]);
+    // Answered: the run asks nothing for a moment, then asks again.
+    update(board());
+    const heading = screen.getByRole('heading', { level: 1 });
+    expect(document.activeElement).toBe(heading);
+    const next = { ...a, prompt: { ...a.prompt, request: ask('tu_2', 'AskUserQuestion', 1) } };
+    update(board(next));
+    expect(document.activeElement).toBe(items()[0]);
+    // Not when focus went elsewhere meanwhile.
+    update(board());
+    const outside = document.createElement('button');
+    document.body.append(outside);
+    act(() => outside.focus());
+    update(board(a));
+    expect(document.activeElement).toBe(outside);
+    outside.remove();
+  });
+
   it('arms its answers only once the items have stood still', () => {
     const a = held(ask('tu_1', 'Bash', 90, { command: 'npm test' }));
     renderInbox(

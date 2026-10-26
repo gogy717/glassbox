@@ -131,12 +131,20 @@ export function Inbox({
   });
 
   // The item focus was in has left (answered, or no longer waiting): focus goes to the item now
-  // in its place, else the last one, else the page's heading; not if focus is elsewhere by now.
+  // in its place, else the last one, else the page's heading, until something waits again (a run
+  // that asks once more); not if focus is elsewhere by now.
   const before = useRef(ids);
+  const parked = useRef(false);
   // biome-ignore lint/correctness/useExhaustiveDependencies: `key` names the items in their order
   useLayoutEffect(() => {
     const was = before.current;
     before.current = ids;
+    const first = ids[0];
+    if (parked.current && first && document.activeElement === heading.current) {
+      parked.current = false;
+      itemEl(ref.current, first)?.focus();
+      return;
+    }
     if (current === null || ids.includes(current)) return;
     const active = document.activeElement;
     if (active && active !== document.body && !ref.current?.contains(active)) {
@@ -147,6 +155,7 @@ export function Inbox({
     if (next) itemEl(ref.current, next)?.focus();
     else {
       setCurrent(null);
+      parked.current = true;
       heading.current?.focus();
     }
   }, [key]);
