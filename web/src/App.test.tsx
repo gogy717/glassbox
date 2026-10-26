@@ -841,7 +841,7 @@ describe('App notifications', () => {
     expect(box).toHaveAccessibleDescription('Not offered by this browser');
   });
 
-  it('notifies once as a running session begins to look stuck, its sign the body', () => {
+  it('notifies once as a running session begins to look stuck, its sign the body', async () => {
     localStorage.setItem('glassbox.prefs', JSON.stringify({ notify: true }));
     const store = createStore();
     const [busy, ...rest] = createDemoSessions(DEMO_NOW);
@@ -866,6 +866,15 @@ describe('App notifications', () => {
     expect(FakeNotification.shown.map((x) => [x.title, x.options?.body])).toEqual([
       ['glassbox / Live viewer research (demo)', 'Repeated npm test 4×'],
     ]);
+    // A click opens the Inbox at the session's item.
+    const focus = vi.spyOn(window, 'focus').mockImplementation(() => {});
+    act(() => FakeNotification.shown[0]?.onclick?.());
+    expect(focus).toHaveBeenCalled();
+    expect(window.location.hash).toBe(`#/inbox?item=${encodeURIComponent(busy.id)}`);
+    expect(
+      await screen.findByRole('article', { name: 'Looks stuck · Live viewer research (demo)' }),
+    ).toHaveFocus();
+    focus.mockRestore();
   });
 
   it('tells nothing of a sign the server says first, when it opens a running session', () => {
@@ -883,7 +892,7 @@ describe('App notifications', () => {
     expect(FakeNotification.shown).toEqual([]);
   });
 
-  it('notifies once as a session begins to wait, not on page load, and opens it from the notification', async () => {
+  it('notifies once as a session begins to wait, not on page load, and opens the Inbox at it from the notification', async () => {
     localStorage.setItem('glassbox.prefs', JSON.stringify({ notify: true }));
     const store = createStore();
     const all = createDemoSessions(DEMO_NOW);
@@ -952,10 +961,15 @@ describe('App notifications', () => {
     const focus = vi.spyOn(window, 'focus').mockImplementation(() => {});
     act(() => FakeNotification.shown[0]?.onclick?.());
     expect(focus).toHaveBeenCalled();
-    await waitFor(() => expect(window.location.hash).toBe(`#/s/${encodeURIComponent(idle.id)}`));
-    expect(
-      await screen.findByRole('dialog', { name: 'Claude Code wants to use Bash' }),
-    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(window.location.hash).toBe(`#/inbox?item=${encodeURIComponent(idle.id)}`),
+    );
+    // Its item has focus: y answers it at once. The terminal's wait, older, comes first.
+    const item = await screen.findByRole('article', {
+      name: 'Permission for Bash · Fix flaky login test',
+    });
+    expect(item).toHaveFocus();
+    expect(screen.getAllByRole('article')).toHaveLength(2);
     focus.mockRestore();
   });
 

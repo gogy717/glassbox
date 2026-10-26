@@ -315,7 +315,8 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
     () => sessions.filter((s) => isListed(s, prefs.showProbes) && isRunning(s)),
     [sessions, prefs.showProbes],
   );
-  // And, when asked for, a desktop notification as each one begins to wait or to look stuck.
+  // And, when asked for, a desktop notification as each one begins to wait or to look stuck; a
+  // click opens the Inbox at its item, where y answers it.
   useNeedsYouNotifications({
     enabled: prefs.notify && notifyState() === 'granted',
     waiting,
@@ -323,8 +324,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
     loaded: state.sessionsLoaded,
     t,
     onOpen: (id) => {
-      setDismissed(null);
-      navigate({ sessionId: id, agentId: 'main', turnId: null, requestId: null });
+      window.location.hash = inboxLink(id);
     },
   });
   const sidebarShown = floating ? floatOpen : !sidebarCollapsed;
