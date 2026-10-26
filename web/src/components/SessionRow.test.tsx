@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import postcss from 'postcss';
 import { describe, expect, it, vi } from 'vitest';
 import { createDemoSessions } from '../../../src/core/fixtures/demo.js';
@@ -49,18 +49,32 @@ describe('SessionRow', () => {
     expect(row).toHaveTextContent(/[\d.]+万/);
   });
 
-  it('reads title, then state · short age · tokens, with the agent tag last', () => {
+  it('reads title, then state · short age · output tokens, with the agent tag last', () => {
     const row = renderRow(running);
     expect(row).toHaveAttribute('data-density', 'compact');
     const meta = row.lastElementChild as HTMLElement;
     const parts = [...meta.children].map((c) => c.textContent?.trim());
     expect(parts[0]).toBe('Running');
-    // The age as formatRelative words it ("now", "7 seconds ago", or "7 s ago").
-    expect(parts[1]).toMatch(/^· (now|\d+\s?s(econds?)? ago) · 1\.88M1\.88M tokens$/);
+    // The age as formatRelative words it ("now", "7 seconds ago", or "7 s ago"); then the output
+    // (42,040 of the demo's 1.88M tokens: the rest is cache reads, which say little).
+    expect(parts[1]).toMatch(/^· (now|\d+\s?s(econds?)? ago) · 42K out42K output tokens$/);
     expect(parts.at(-1)).toBe('Claude Code');
     // The figure is mono and silent; the spoken text says what it counts.
     expect(meta.querySelector('.figure')?.closest('[aria-hidden="true"]')).not.toBeNull();
-    expect(meta.querySelector('.visually-hidden')).toHaveTextContent('1.88M tokens');
+    expect(meta.querySelector('.visually-hidden')).toHaveTextContent('42K output tokens');
+  });
+
+  it('shows no figure at all while the output is zero', () => {
+    const usage = running.usage as NonNullable<SessionSummary['usage']>;
+    const meta = renderRow({ ...running, usage: { ...usage, output: 0 } })
+      .lastElementChild as HTMLElement;
+    expect(meta).not.toHaveTextContent(/out|token/);
+    expect(meta.querySelector('.figure')).toBeNull();
+    cleanup();
+    const card = renderRow({ ...idle, usage: { ...usage, output: 0 } }, false, vi.fn(), 'en', {
+      density: 'card',
+    });
+    expect(card.lastElementChild).not.toHaveTextContent(/out|token/);
   });
 
   it('marks the open session and opens the one clicked', () => {
@@ -75,7 +89,7 @@ describe('SessionRow', () => {
     const meta = renderRow(reading).lastElementChild as HTMLElement;
     expect(meta.firstElementChild).toHaveTextContent(/^Reading tokens\.css$/);
     expect(meta).not.toHaveTextContent(/ago|now/);
-    expect(meta.querySelector('.visually-hidden')).toHaveTextContent('1.88M tokens');
+    expect(meta.querySelector('.visually-hidden')).toHaveTextContent('42K output tokens');
   });
 
   it('says a failed run failed, then its age', () => {
@@ -98,12 +112,13 @@ describe('SessionRow', () => {
           'glassbox /',
           'Live viewer research (demo)',
         ]);
-        // Running with a clock: no age beside it.
-        expect(meta).toHaveTextContent(/^Reading tokens\.css · 0:04 · 1\.88M tokens$/);
+        // Running with a clock: no age beside it; then the output, said in full for the ear.
+        expect(meta).toHaveTextContent(/^Reading tokens\.css · 0:04 · 42K out42K output tokens$/);
+        expect(meta?.querySelector('.visually-hidden')).toHaveTextContent('42K output tokens');
         // The figures are mono: the clock and the count, not the words around them.
         expect([...(meta?.querySelectorAll('.figure') ?? [])].map((f) => f.textContent)).toEqual([
           '0:04',
-          '1.88M',
+          '42K',
         ]);
       } finally {
         vi.useRealTimers();
@@ -143,7 +158,7 @@ describe('SessionRow', () => {
 
     it('sets only the digits of a Chinese count in the mono face', () => {
       const row = renderRow(running, false, vi.fn(), 'zh', { density: 'card' });
-      expect(row.lastElementChild).toHaveTextContent(/[\d.]+万 token$/);
+      expect(row.lastElementChild).toHaveTextContent(/输出 4\.2万输出 4\.2万 token$/);
       for (const f of row.querySelectorAll('.figure')) expect(f.textContent).not.toMatch(/万/);
     });
   });
