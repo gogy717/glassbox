@@ -35,6 +35,7 @@ const additive = (s: WeekSession | null) => {
     toolCalls: f?.toolCalls ?? 0,
     failures: f?.failures ?? 0,
     tokens: f ? totalTokens(f.usage) : 0,
+    opusTokens: totalTokens(f?.usageByModel['claude-opus-5-5'] ?? emptyUsage()),
     thinking: f?.usage.thinking ?? 0,
     cats: Object.values(f?.toolCats ?? {}).reduce((a, b) => a + b, 0),
   };
@@ -138,6 +139,7 @@ describe('a session as hourly buckets', () => {
     expect(after).not.toBeNull();
     expect(plus(additive(before), additive(after))).toEqual(additive(all));
     expect(additive(all).requests).toBe(snap.requests.length);
+    expect(additive(all).opusTokens).toBe(additive(all).tokens);
     // The main agent's turns, cut at midnight: what falls after it is this week's.
     const cut = snap.turns
       .filter((t) => t.agentId === 'main')
@@ -297,7 +299,8 @@ describe('a session as hourly buckets', () => {
       toolCalls: 0,
       toolCats: {},
       failures: 0,
-      usage: emptyUsage(),
+      usage: { ...emptyUsage(), output: agentMs },
+      usageByModel: { m: { ...emptyUsage(), output: agentMs } },
     });
     const b: SessionBuckets = {
       id: 's',
@@ -316,5 +319,30 @@ describe('a session as hourly buckets', () => {
     const s = sliceSession(b, { kind: '7d', hourStarts: [h, h + HOUR_MS], now: h });
     expect(s?.hours).toEqual([15 * 60_000, 0]);
     expect(s?.inWindow.agentMs).toBe(15 * 60_000);
+    expect(s?.inWindow.usageByModel.m?.output).toBe(15 * 60_000);
+  });
+
+  // Proposal 6: the client prices a week by model, so usage keeps the model of each call.
+  it('keeps usage by the model of each call, adding up to the usage', () => {
+    const now = new Date(2026, 9, 22, 12, 30).getTime();
+    const snap = createDemoSnapshot(new Date(now));
+    const sub = snap.requests.filter((r) => r.agentId !== 'main' && r.usage);
+    for (const r of sub) r.model = 'claude-haiku-5-5';
+    const nameless = snap.requests.find((r) => r.agentId === 'main' && r.usage);
+    if (!nameless || sub.length === 0) throw new Error('fixture');
+    nameless.model = null;
+    const s = sliceSession(sessionBuckets(snap, now), everything(sessionBuckets(snap, now)));
+    const byModel = s?.inWindow.usageByModel ?? {};
+    expect(Object.keys(byModel).sort()).toEqual(['', 'claude-haiku-5-5', 'claude-opus-5-5']);
+    const tokensOf = (model: string | null) =>
+      snap.requests
+        .filter((r) => r.model === model && r.usage)
+        .reduce((n, r) => n + totalTokens(r.usage ?? emptyUsage()), 0);
+    expect(totalTokens(byModel['claude-haiku-5-5'] ?? emptyUsage())).toBe(
+      tokensOf('claude-haiku-5-5'),
+    );
+    expect(totalTokens(byModel[''] ?? emptyUsage())).toBe(tokensOf(null));
+    const sum = Object.values(byModel).reduce((n, u) => n + totalTokens(u), 0);
+    expect(sum).toBe(totalTokens(s?.inWindow.usage ?? emptyUsage()));
   });
 });

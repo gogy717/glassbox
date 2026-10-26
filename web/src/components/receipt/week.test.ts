@@ -87,6 +87,7 @@ function made(kind: WeekWindowKind, now: number, sessions: Made[]): WeekResult {
           subAgents: m.subAgents ?? 0,
           failures: 0,
           usage: emptyUsage(),
+          usageByModel: {},
         },
         hours: window.hourStarts.map((h) => (h === hourStart(now) ? m.ms : 0)),
       }),
@@ -440,6 +441,7 @@ describe('the last 7 days across a change of the clocks (C3)', () => {
           webSearch: 0,
           webFetch: 0,
         },
+        usageByModel: {},
       },
       hours,
     };

@@ -30,6 +30,15 @@ export interface HourBucket {
   toolCats: Partial<Record<ToolCategory, number>>;
   failures: number;
   usage: TokenUsage;
+  /** `usage` by model, as `WeekFigures.usageByModel`. */
+  usageByModel: Record<string, TokenUsage>;
+}
+
+/** Adds `u` to what `byModel` holds for `model`. */
+function addByModel(byModel: Record<string, TokenUsage>, model: string, u: TokenUsage): void {
+  const held = byModel[model];
+  if (held) addUsage(held, u);
+  else byModel[model] = addUsage(emptyUsage(), u);
 }
 
 /** A session's buckets: what its receipt says, by hour. */
@@ -57,6 +66,7 @@ const emptyBucket = (): HourBucket => ({
   toolCats: {},
   failures: 0,
   usage: emptyUsage(),
+  usageByModel: {},
 });
 
 /** Entities handled between two pauses when a session is bucketed with pauses. */
@@ -139,6 +149,7 @@ function* bucketing(snap: SessionSnapshot, now: number): Generator<void, Session
     b.requests++;
     if (r.usage) {
       addUsage(b.usage, r.usage);
+      addByModel(b.usageByModel, r.model ?? '', r.usage);
       reportsUsage = true;
     }
   }
@@ -248,6 +259,7 @@ export function sliceSession(
     subAgents: 0,
     failures: 0,
     usage: emptyUsage(),
+    usageByModel: {},
   };
   for (const [h, bucket] of b.hours) {
     const i = slotOf(window.hourStarts, h);
@@ -262,6 +274,8 @@ export function sliceSession(
       f.toolCats[cat] = (f.toolCats[cat] ?? 0) + n;
     f.failures += bucket.failures;
     addUsage(f.usage, bucket.usage);
+    for (const [model, u] of Object.entries(bucket.usageByModel))
+      addByModel(f.usageByModel, model, u);
   }
   const first = window.hourStarts[0];
   const last = window.hourStarts.at(-1);
