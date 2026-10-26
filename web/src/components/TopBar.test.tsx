@@ -175,7 +175,10 @@ describe('API prices in Settings', () => {
     expect(cell(dialog, 'claude-opus-5-5', 'Cache read').value).toBe('0.2');
     expect(cell(dialog, 'claude-opus-5-5', 'Output').value).toBe('20');
     expect(dialog).toHaveTextContent('Oct 26, 2026');
-    expect(within(dialog).getByRole('button', { name: 'Reset to defaults' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Reset to defaults' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
   });
 
   it('keeps an edited price as the model’s whole row, and a number that is not one not at all', () => {
@@ -204,6 +207,28 @@ describe('API prices in Settings', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Reset to defaults' }));
     expect(changes.at(-1)?.prices).toEqual({});
     expect(cell(dialog, 'claude-opus-5-5', 'Input').value).toBe('4');
+  });
+
+  // Final review #6: a button that disables itself drops focus out of the dialog's trap.
+  it('keeps Reset to defaults focusable once there is nothing left to reset', () => {
+    const changes = renderWithPrefs({
+      prices: {
+        'claude-opus-5-5': { input: 1, cacheWrite: 1, cacheWrite1h: 1, cacheRead: 1, output: 1 },
+      },
+    });
+    const dialog = openPrices();
+    const reset = within(dialog).getByRole('button', { name: 'Reset to defaults' });
+    reset.focus();
+    fireEvent.click(reset);
+    expect(reset).not.toBeDisabled();
+    expect(reset).toHaveAttribute('aria-disabled', 'true');
+    expect(document.activeElement).toBe(reset);
+    // Pressed again, it does nothing.
+    const made = changes.length;
+    fireEvent.click(reset);
+    expect(changes).toHaveLength(made);
+    fireEvent.keyDown(reset, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'API prices (estimate)' })).toBeNull();
   });
 
   it('adds a model the table does not price, and removes it again', () => {

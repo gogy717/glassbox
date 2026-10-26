@@ -34,6 +34,7 @@ export function PricesDialog({ prices, onPrices, onClose, returnFocusTo }: Props
   const [drawn, setDrawn] = useState(0);
   const [adding, setAdding] = useState('');
   const table = priceTable(prices);
+  const edited = Object.keys(prices).length > 0;
   const models = [
     ...Object.keys(DEFAULT_PRICES),
     ...Object.keys(prices).filter((m) => !(m in DEFAULT_PRICES)),
@@ -142,11 +143,13 @@ export function PricesDialog({ prices, onPrices, onClose, returnFocusTo }: Props
         </form>
         <p className={css.note}>{t('prices.asOf', { date: asOf })}</p>
         <div className={css.foot}>
+          {/* Unavailable, not disabled: a disabled button would drop focus out of the dialog. */}
           <button
             type="button"
             className={css.button}
-            disabled={Object.keys(prices).length === 0}
+            aria-disabled={edited ? undefined : 'true'}
             onClick={() => {
+              if (!edited) return;
               onPrices({});
               setDrawn((n) => n + 1);
             }}

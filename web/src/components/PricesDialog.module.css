@@ -144,11 +144,11 @@
   cursor: pointer;
 }
 
-.button:hover:not(:disabled) {
+.button:hover:not([aria-disabled="true"]) {
   background: var(--layer-2);
 }
 
-.button:disabled {
+.button[aria-disabled="true"] {
   opacity: 0.45;
   cursor: not-allowed;
 }
