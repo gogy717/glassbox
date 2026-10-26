@@ -15,6 +15,7 @@ import type {
   SessionSnapshot,
   SessionSummary,
 } from '../core/model.js';
+import { sessionBill } from '../shared/context-bill.js';
 import { api } from '../shared/protocol.js';
 import type { TokenRate } from '../shared/rate.js';
 import { createFakeAdapter, fakePaths, lines, rec } from './__tests__/fake-adapter.js';
@@ -67,6 +68,8 @@ function stubStore() {
             messages: [],
           }
         : null,
+    getContextBill: async (id, agentId) =>
+      id === DEMO_SESSION_ID ? sessionBill(agentId, []) : null,
     getToolResult: async (id, toolCallId) =>
       id === DEMO_SESSION_ID && toolCallId === 'tu_m1a'
         ? { found: true, result: { stdout: 'src/server/store.ts:41' } }
@@ -140,6 +143,17 @@ describe('REST routes', () => {
     const missing = await app.request(api.requestDetail(DEMO_SESSION_ID, 'nope'));
     expect(missing.status).toBe(404);
     expect(await missing.json()).toEqual({ error: 'request not found' });
+  });
+
+  it('returns what an agent’s requests carried, 404 for an unknown session', async () => {
+    const { store } = stubStore();
+    const app = createApp({ store });
+    const ok = await app.request(api.contextBill(DEMO_SESSION_ID, 'af/1'));
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toMatchObject({ agentId: 'af/1', requests: 0, read: 0 });
+    const missing = await app.request(api.contextBill('nope', 'main'));
+    expect(missing.status).toBe(404);
+    expect(await missing.json()).toEqual({ error: 'session not found' });
   });
 
   it('returns full tool results, 404 for an unknown tool call', async () => {

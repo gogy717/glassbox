@@ -1,6 +1,7 @@
 import {
   type ApiErrorResponse,
   api,
+  type ContextBillResponse,
   type RequestDetailResponse,
   type SessionsResponse,
   type ToolResultResponse,
@@ -29,6 +30,9 @@ export const fetchSessions = (signal?: AbortSignal) =>
 
 export const fetchRequestDetail = (sessionId: string, requestId: string, signal?: AbortSignal) =>
   getJson<RequestDetailResponse>(api.requestDetail(sessionId, requestId), signal);
+
+export const fetchContextBill = (sessionId: string, agentId: string, signal?: AbortSignal) =>
+  getJson<ContextBillResponse>(api.contextBill(sessionId, agentId), signal);
 
 export const fetchToolResult = (sessionId: string, toolCallId: string, signal?: AbortSignal) =>
   getJson<ToolResultResponse>(api.toolResult(sessionId, toolCallId), signal);

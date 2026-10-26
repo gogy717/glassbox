@@ -66,6 +66,9 @@ export const rec = {
   title: (title: string) => JSON.stringify({ t: 'title', title }),
   req: (id: string, at: string, out = 10, params?: unknown) =>
     JSON.stringify({ t: 'req', id, at, out, params }),
+  /** A request whose body was recorded: it read `cacheRead` tokens and sent `messages`. */
+  sent: (id: string, at: string, cacheRead: number, messages: unknown[]) =>
+    JSON.stringify({ t: 'req', id, at, out: 10, sent: { cacheRead, messages } }),
   tool: (id: string, req: string, name = 'Bash', input?: unknown) =>
     JSON.stringify({ t: 'tool', id, req, name, input }),
   result: (tool: string, result: unknown) => JSON.stringify({ t: 'result', tool, result }),
@@ -440,6 +443,8 @@ export class FakeParser implements SessionParser {
   private readonly workflows = new Map<string, WorkflowRun>();
   private readonly results = new Map<string, unknown>();
   private readonly params = new Map<string, unknown>();
+  /** The messages of requests whose body was recorded. */
+  private readonly sent = new Map<string, unknown[]>();
 
   constructor(readonly source: SessionSource) {
     this.title = source.summary.title;
@@ -520,6 +525,17 @@ export class FakeParser implements SessionParser {
 
   requestDetail(requestId: string): RequestDetail | null {
     if (!this.requests.has(requestId)) return null;
+    const messages = this.sent.get(requestId);
+    if (messages)
+      return {
+        requestId,
+        completeness: 'full',
+        notes: [],
+        params: null,
+        system: 'You are a fake agent.',
+        tools: [],
+        messages,
+      };
     return {
       requestId,
       completeness: 'unavailable',
@@ -560,13 +576,14 @@ export class FakeParser implements SessionParser {
           endedAt: r.at,
           status: 'complete',
           stopReason: 'end_turn',
-          usage: { ...emptyUsage(), input: 1, output: r.out },
+          usage: { ...emptyUsage(), input: 1, cacheRead: r.sent?.cacheRead ?? 0, output: r.out },
           blocks: [],
           toolCallIds: [],
-          hasDetail: false,
+          hasDetail: r.sent !== undefined,
           error: null,
         });
         if (r.params !== undefined) this.params.set(r.id, r.params);
+        if (r.sent) this.sent.set(r.id, r.sent.messages);
         if (r.at > this.updatedAt) this.updatedAt = r.at;
         c.session = true;
         c.requests.push(r.id);

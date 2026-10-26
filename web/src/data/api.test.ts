@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, fetchRequestDetail, fetchToolResult } from './api';
+import { ApiError, fetchContextBill, fetchRequestDetail, fetchToolResult } from './api';
 
 describe('api client', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -10,6 +10,16 @@ describe('api client', () => {
     await expect(fetchRequestDetail('claude-code:s', 'r/1')).resolves.toEqual({ requestId: 'r/1' });
     expect(fetch).toHaveBeenCalledWith(
       '/api/sessions/claude-code%3As/requests/r%2F1/detail',
+      expect.anything(),
+    );
+  });
+
+  it('fetches what an agent’s requests carried from the protocol URL', async () => {
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ agentId: 'a/1' })));
+    vi.stubGlobal('fetch', fetch);
+    await expect(fetchContextBill('claude-code:s', 'a/1')).resolves.toEqual({ agentId: 'a/1' });
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/sessions/claude-code%3As/context?agent=a%2F1',
       expect.anything(),
     );
   });

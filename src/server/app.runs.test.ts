@@ -31,6 +31,7 @@ function storeWith(sessions: SessionSummary[] = []): AppStore {
     listSessions: () => sessions,
     getSnapshot: async () => null,
     getRequestDetail: async () => null,
+    getContextBill: async () => null,
     getToolResult: async () => ({ found: false, result: undefined }),
     onSessions: () => () => {},
     onPatch: () => () => {},

@@ -24,6 +24,7 @@ import type {
 } from '../core/model.js';
 import { MAIN_AGENT_ID } from '../core/model.js';
 import { emptyUsage, sumUsage } from '../core/usage.js';
+import { type SessionContextBill, sessionBill } from '../shared/context-bill.js';
 import {
   MINUTE_MS,
   RATE_MINUTES,
@@ -267,6 +268,23 @@ export class DemoStore implements AppStore, WeekStore {
     return snap && this.findRequest(sessionId, requestId)?.hasDetail
       ? demoRequestDetail(snap, requestId)
       : null;
+  }
+
+  /** What the agent's finished requests carried, from what the demo's requests sent. */
+  async getContextBill(sessionId: string, agentId: string): Promise<SessionContextBill | null> {
+    const snap = this.snapshotOf(sessionId);
+    if (!snap) return null;
+    const finished = snap.requests
+      .filter((r) => r.agentId === agentId && r.status !== 'in-flight')
+      .sort((a, b) => (a.startedAt ?? '').localeCompare(b.startedAt ?? ''));
+    return sessionBill(
+      agentId,
+      finished.map((request) => ({
+        request,
+        detail: request.hasDetail ? demoRequestDetail(snap, request.id) : null,
+      })),
+      snap.session.cwd,
+    );
   }
 
   async getToolResult(
