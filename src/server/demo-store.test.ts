@@ -59,6 +59,15 @@ describe('DemoStore', () => {
     expect(await store.getSnapshot('claude-code:nope')).toBeNull();
 
     expect((await store.getRequestDetail(DEMO_SESSION_ID, 'req_m1'))?.completeness).toBe('full');
+    // What each request sent: the conversation so far, made up from the demo (demo-detail.ts).
+    const sent = await store.getRequestDetail(DEMO_SESSION_ID, 'req_m3');
+    expect(sent?.messages?.map((m) => (m as { role: string }).role)).toEqual([
+      'user',
+      'assistant',
+      'user',
+      'assistant',
+      'user',
+    ]);
     expect(await store.getRequestDetail(DEMO_SESSION_ID, 'nope')).toBeNull();
     expect(await store.getRequestDetail('claude-code:nope', 'req_m1')).toBeNull();
 

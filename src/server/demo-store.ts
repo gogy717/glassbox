@@ -6,6 +6,7 @@ import {
   createDemoSnapshot,
   DEMO_SESSION_ID,
 } from '../core/fixtures/demo.js';
+import { demoRequestDetail } from '../core/fixtures/demo-detail.js';
 import { lastReplyField, requestsById } from '../core/last-reply.js';
 import type {
   AgentNode,
@@ -262,23 +263,10 @@ export class DemoStore implements AppStore, WeekStore {
   }
 
   async getRequestDetail(sessionId: string, requestId: string): Promise<RequestDetail | null> {
-    const request = this.findRequest(sessionId, requestId);
-    if (!request?.hasDetail) return null;
-    return {
-      requestId,
-      completeness: 'full',
-      notes: [],
-      params: {
-        model: request.model,
-        max_tokens: 64000,
-        output_config: { effort: request.effort },
-      },
-      system: [{ type: 'text', text: 'You are Claude Code… (demo)' }],
-      tools: [
-        { name: 'Bash', description: 'Run a shell command', input_schema: { type: 'object' } },
-      ],
-      messages: [{ role: 'user', content: [{ type: 'text', text: 'Busy sessions first (demo)' }] }],
-    };
+    const snap = this.snapshotOf(sessionId);
+    return snap && this.findRequest(sessionId, requestId)?.hasDetail
+      ? demoRequestDetail(snap, requestId)
+      : null;
   }
 
   async getToolResult(
