@@ -36,6 +36,12 @@ import { st } from './strings';
 /** The sessions the panel has read, each once, whichever files unfold. */
 type Sessions = Map<string, Promise<OpenSession | null>>;
 
+/** The window's start, and when the week was put together (`asOf`): what its counts cover. */
+interface Span {
+  from: number;
+  to: number;
+}
+
 /** The Crossing card: drawn only when a repository was worked on in two or more worktrees. */
 export const CrossingCard = memo(function CrossingCard({
   w,
@@ -75,7 +81,7 @@ export const CrossingCard = memo(function CrossingCard({
       {open && (
         <CrossingPanel
           repos={crossed}
-          from={w.result.window.hourStarts[0] ?? 0}
+          span={{ from: w.result.window.hourStarts[0] ?? 0, to: w.result.asOf }}
           locale={locale}
           onClose={() => setOpen(false)}
           returnFocusTo={showRef}
@@ -87,14 +93,13 @@ export const CrossingCard = memo(function CrossingCard({
 
 function CrossingPanel({
   repos,
-  from,
+  span,
   locale,
   onClose,
   returnFocusTo,
 }: {
   repos: RepoCrossing[];
-  /** Where the window starts: changes before it are not the window's. */
-  from: number;
+  span: Span;
   locale: Locale;
   onClose(): void;
   returnFocusTo: RefObject<HTMLElement | null>;
@@ -110,7 +115,7 @@ function CrossingPanel({
     >
       <div className={css.panel}>
         {repos.map((r) => (
-          <RepoTable key={r.root} repo={r} from={from} locale={locale} sessions={sessions} />
+          <RepoTable key={r.root} repo={r} span={span} locale={locale} sessions={sessions} />
         ))}
         <p className={css.hint}>
           {st(locale, 'crossingHint')}
@@ -124,12 +129,12 @@ function CrossingPanel({
 /** A repository's crossing files, a row each, its worktrees in columns. */
 function RepoTable({
   repo,
-  from,
+  span,
   locale,
   sessions,
 }: {
   repo: RepoCrossing;
-  from: number;
+  span: Span;
   locale: Locale;
   sessions: Sessions;
 }) {
@@ -160,7 +165,7 @@ function RepoTable({
                 key={p.path}
                 path={p}
                 trees={repo.trees}
-                from={from}
+                span={span}
                 locale={locale}
                 sessions={sessions}
               />
@@ -182,13 +187,13 @@ const VERDICT = {
 function PathRows({
   path,
   trees,
-  from,
+  span,
   locale,
   sessions,
 }: {
   path: CrossingPath;
   trees: TreeRef[];
-  from: number;
+  span: Span;
   locale: Locale;
   sessions: Sessions;
 }) {
@@ -242,7 +247,7 @@ function PathRows({
                 <SideChanges
                   key={side.tree.dir}
                   side={side}
-                  from={from}
+                  span={span}
                   locale={locale}
                   sessions={sessions}
                 />
@@ -303,12 +308,12 @@ function Lines({ side, locale }: { side: TreeSide; locale: Locale }) {
 /** One tree's changes of the file, session by session. */
 function SideChanges({
   side,
-  from,
+  span,
   locale,
   sessions,
 }: {
   side: TreeSide;
-  from: number;
+  span: Span;
   locale: Locale;
   sessions: Sessions;
 }) {
@@ -323,7 +328,7 @@ function SideChanges({
           key={s.id}
           id={s.id}
           path={s.path}
-          from={from}
+          span={span}
           locale={locale}
           sessions={sessions}
         />
@@ -357,29 +362,34 @@ function useOpened(sessions: Sessions, id: string): OpenSession | null | undefin
 
 const CHANGED = new Set<FileVerb>(['edited', 'created', 'deleted']);
 
-/** The calls of a session that changed `path` in the window, as the week counted them. */
-function changesIn(open: OpenSession, path: string, from: number): FileTouch[] {
+/**
+ * The calls of a session that changed `path` as the week counted them: each by when it started,
+ * in the window and no later than the week was put together.
+ */
+function changesIn(open: OpenSession, path: string, span: Span): FileTouch[] {
   const row = buildFiles(open, subtreeIds(open, MAIN_AGENT_ID)).rows.find((r) => r.key === path);
-  return (row?.touches ?? []).filter(
-    (x) =>
+  return (row?.touches ?? []).filter((x) => {
+    const at = Date.parse(x.tool.startedAt ?? x.tool.endedAt ?? '');
+    return (
       CHANGED.has(x.verb) &&
       x.tool.status !== 'error' &&
       x.tool.status !== 'running' &&
-      !(Date.parse(x.tool.endedAt ?? x.tool.startedAt ?? '') < from),
-  );
+      !(at < span.from || at > span.to)
+    );
+  });
 }
 
 /** A session's changes of the file: each its call (a link into the session) and its diff. */
 function SessionChanges({
   id,
   path,
-  from,
+  span,
   locale,
   sessions,
 }: {
   id: string;
   path: string;
-  from: number;
+  span: Span;
   locale: Locale;
   sessions: Sessions;
 }) {
@@ -388,7 +398,7 @@ function SessionChanges({
   const open = useOpened(sessions, id);
   if (open === undefined) return <p className={css.note}>{st(locale, 'crossingReading')}</p>;
   if (open === null) return <p className={css.note}>{st(locale, 'crossingFailed')}</p>;
-  const changes = changesIn(open, path, from);
+  const changes = changesIn(open, path, span);
   return (
     <div className={css.session}>
       <p className={css.sessionHead}>

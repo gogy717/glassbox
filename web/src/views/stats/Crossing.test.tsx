@@ -142,6 +142,22 @@ describe('the Crossing card', () => {
     );
   });
 
+  it('lists only the changes the week counted: none made after it was read', async () => {
+    const { snaps } = serveSessions();
+    // The open session's second edit of store.ts came a minute after the week was put together.
+    const demo = snaps.get(DEMO_SESSION_ID) as SessionSnapshot;
+    const late = demo.toolCalls.find((t) => t.id === 'tu_m2e');
+    if (!late) throw new Error('fixture');
+    late.startedAt = new Date(WEEK_NOW + 60_000).toISOString();
+    late.endedAt = new Date(WEEK_NOW + 61_000).toISOString();
+    renderCard();
+    fireEvent.click(screen.getByRole('button', { name: 'Show files' }));
+    fireEvent.click(screen.getByRole('button', { name: /src\/server\/store\.ts/ }));
+    const sides = await screen.findAllByRole('region', { name: /^Changes in / });
+    const links = await within(sides[0] as HTMLElement).findAllByRole('link');
+    expect(links.map((a) => a.textContent)).toEqual([expect.stringMatching(/^Edit:41-43·/)]);
+  });
+
   it('says when a session cannot be read, the other side still shown', async () => {
     const { snaps } = serveSessions();
     snaps.delete(DEMO_SESSION_ID);
