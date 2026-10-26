@@ -19,6 +19,7 @@ import { ShortcutsHelp } from './components/ShortcutsHelp';
 import { TopBar } from './components/TopBar';
 import { ApprovalsContext, useApprovals } from './data/approvals';
 import { connectEvents } from './data/events';
+import { needsYou } from './data/needs-you';
 import { notifyState, useNeedsYouNotifications } from './data/notifications';
 import { PriceTableContext } from './data/price-table';
 import {
@@ -299,15 +300,12 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
   const open = state.open;
   const summary = open?.session ?? state.sessions.find((s) => s.id === route.sessionId) ?? null;
   // The sessions that need you, as the board lists them: the tab's title counts them.
-  const needsYou = useMemo(
-    () => sessions.filter((s) => isListed(s, prefs.showProbes) && s.live === 'waiting'),
-    [sessions, prefs.showProbes],
-  );
+  const waiting = useMemo(() => needsYou(sessions, prefs.showProbes), [sessions, prefs.showProbes]);
   const sessionTitle =
     page === 'session' && summary ? (summary.title ?? t('sidebar.untitled')) : null;
   useEffect(() => {
-    document.title = documentTitle(needsYou.length, sessionTitle);
-  }, [needsYou.length, sessionTitle]);
+    document.title = documentTitle(waiting.length, sessionTitle);
+  }, [waiting.length, sessionTitle]);
   // The running sessions, watched for a sign of trouble from the server.
   const running = useMemo(
     () => sessions.filter((s) => isListed(s, prefs.showProbes) && isRunning(s)),
@@ -316,7 +314,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
   // And, when asked for, a desktop notification as each one begins to wait or to look stuck.
   useNeedsYouNotifications({
     enabled: prefs.notify && notifyState() === 'granted',
-    waiting: needsYou,
+    waiting,
     running,
     loaded: state.sessionsLoaded,
     t,

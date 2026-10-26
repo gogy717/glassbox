@@ -6,12 +6,13 @@ import { shellCommand } from '../../../src/shared/tool-category.js';
 import { AgentTag } from '../components/AgentTag';
 import { Delayed } from '../components/Delayed';
 import { SessionRow } from '../components/SessionRow';
+import { needsYou } from '../data/needs-you';
 import type { OpenPrompt } from '../data/runs';
 import { useRovingFocus } from '../data/useRovingFocus';
 import { type MessageKey, useI18n } from '../i18n';
 import { isListed } from '../lib/sessions';
 import { summarizeInput } from '../lib/tool-category';
-import { longestWaitFirst, waitKind } from '../lib/waiting';
+import { waitKind } from '../lib/waiting';
 import promptCss from './composer/Composer.module.css';
 import { PROMPT_ARM_MS } from './composer/PermissionDialog';
 import css from './Home.module.css';
@@ -84,10 +85,7 @@ export function Home({
     () => sessions.filter((s) => isListed(s, showProbes)),
     [sessions, showProbes],
   );
-  const needsYou = useMemo(
-    () => visible.filter((s) => s.live === 'waiting').sort(longestWaitFirst),
-    [visible],
-  );
+  const waiting = useMemo(() => needsYou(sessions, showProbes), [sessions, showProbes]);
   const working = useMemo(
     () => visible.filter((s) => s.live === 'busy').sort(newestFirst),
     [visible],
@@ -100,7 +98,7 @@ export function Home({
         .slice(0, RECENT),
     [visible],
   );
-  const rows = [...needsYou, ...working, ...recent];
+  const rows = [...waiting, ...working, ...recent];
   const roving = useRovingFocus(
     ref,
     rows.map((s) => s.id),
@@ -108,9 +106,9 @@ export function Home({
   );
   // The rows and the prompts on them: a run that asks again at once changes its row in place.
   const armed = useArmed(
-    needsYou.map((s) => `${s.id} ${prompts.get(s.id)?.request.id ?? ''}`).join('\n'),
+    waiting.map((s) => `${s.id} ${prompts.get(s.id)?.request.id ?? ''}`).join('\n'),
     armMs,
-    needsYou.some((s) => prompts.has(s.id)),
+    waiting.some((s) => prompts.has(s.id)),
   );
 
   if (!loaded)
@@ -208,7 +206,7 @@ export function Home({
   return (
     <div className={css.home} ref={ref}>
       <h1 className="visually-hidden">{t('nav.home')}</h1>
-      {section('needsYou', needsYou, 'home.nothingWaiting', newSession)}
+      {section('needsYou', waiting, 'home.nothingWaiting', newSession)}
       {section('working', working, 'home.nothingWorking')}
       {recent.length > 0 && section('recent', recent, null)}
     </div>
