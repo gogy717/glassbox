@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { SessionSummary } from '../../../src/core/model.js';
-import { groupSessions, isRunning, liveFilterOf } from './sessions';
+import {
+  CLOSED_SHOWN,
+  foldClosed,
+  groupNames,
+  groupSessions,
+  isRunning,
+  liveFilterOf,
+  timeBucket,
+} from './sessions';
 
 const base: SessionSummary = {
   id: 'x',
@@ -115,5 +123,124 @@ describe('groupSessions filters', () => {
     expect(listed({ live: 'running', keep: 'shut' }).sort()).toEqual(['busy', 'shut', 'wait']);
     expect(listed({ agent: 'codex', keep: 'idle' }).sort()).toEqual(['idle', 'shut', 'wait']);
     expect(listed({ live: 'running', keep: 'shut' }, 'retry')).toEqual(['wait']);
+  });
+});
+
+// Branch D (F7): the time groups' day boundaries, by the browser's calendar.
+describe('timeBucket', () => {
+  // A Wednesday at noon, local time: Monday 00:00 is this week's start.
+  const now = new Date(2026, 9, 28, 12, 0, 0).getTime();
+  const at = (y: number, mo: number, d: number, h: number, mi = 0, s = 0) =>
+    new Date(y, mo, d, h, mi, s).toISOString();
+
+  it('puts today, yesterday, the week from Monday and the rest in their groups', () => {
+    expect(timeBucket(at(2026, 9, 28, 0), now)).toBe('today');
+    expect(timeBucket(at(2026, 9, 27, 23, 59, 59), now)).toBe('yesterday');
+    expect(timeBucket(at(2026, 9, 27, 0), now)).toBe('yesterday');
+    expect(timeBucket(at(2026, 9, 26, 23, 59, 59), now)).toBe('week');
+    expect(timeBucket(at(2026, 9, 26, 0), now)).toBe('week');
+    expect(timeBucket(at(2026, 9, 25, 23, 59, 59), now)).toBe('earlier');
+    expect(timeBucket(at(2026, 9, 1, 9), now)).toBe('earlier');
+  });
+
+  it('counts a time a little ahead of the clock as today, and one it cannot read as earlier', () => {
+    expect(timeBucket(at(2026, 9, 28, 12, 0, 5), now)).toBe('today');
+    expect(timeBucket('not a time', now)).toBe('earlier');
+  });
+
+  it('leaves this week empty on a Monday or a Tuesday: those days are today and yesterday', () => {
+    const tuesday = new Date(2026, 9, 27, 9, 0, 0).getTime();
+    expect(timeBucket(at(2026, 9, 26, 10), tuesday)).toBe('yesterday');
+    expect(timeBucket(at(2026, 9, 25, 10), tuesday)).toBe('earlier');
+  });
+});
+
+// Branch D (F7) item 5: group names from paths alone, no project file read.
+describe('groupNames', () => {
+  const named = (dirs: (string | null)[], project = 'x') => {
+    const list = dirs.map((cwd, i) => ({ ...base, id: `s${i}`, cwd, project }));
+    const name = groupNames(list);
+    return list.map(name);
+  };
+
+  it('prefixes a worktree with its repository: a parent named like another session’s directory', () => {
+    expect(
+      named([
+        '/home/dev/src/glassbox',
+        '/home/dev/work/glassbox/weever',
+        '/home/dev/work/glassbox/opaleye-2',
+        '/home/dev/src/blog',
+      ]),
+    ).toEqual(['glassbox', 'glassbox/weever', 'glassbox/opaleye-2', 'blog']);
+  });
+
+  it('leaves unrelated siblings alone: a parent that is nobody’s project names nothing', () => {
+    expect(named(['/home/dev/src/blog', '/home/dev/src/shopfront'])).toEqual(['blog', 'shopfront']);
+    // Worktrees with no main clone among the sessions read as their own directory.
+    expect(named(['/w/glassbox/weever', '/w/glassbox/pm-d'])).toEqual(['weever', 'pm-d']);
+  });
+
+  it('does not take a directory inside a project the user also works in for a worktree', () => {
+    expect(named(['/home/dev/src/api', '/home/dev/src/api/web'])).toEqual(['api', 'web']);
+  });
+
+  it('tells two directories that read alike apart with as many parents as it takes', () => {
+    expect(named(['/home/dev/work/api', '/home/dev/home/api'])).toEqual(['work/api', 'home/api']);
+    expect(named(['/a/x/api', '/b/x/api', '/c/other'])).toEqual(['a/x/api', 'b/x/api', 'other']);
+  });
+
+  it('reads Windows paths and trailing separators as the same directories', () => {
+    expect(named(['C:\\w\\glassbox\\', 'D:\\clones\\glassbox\\weever', '/w/blog/'])).toEqual([
+      'glassbox',
+      'glassbox/weever',
+      'blog',
+    ]);
+    // The same directory written twice is one group.
+    expect(named(['/w/blog', '/w/blog/'])).toEqual(['blog', 'blog']);
+  });
+
+  it('keeps the server’s name for a session without a directory', () => {
+    expect(named([null, '/w/blog'], 'codex')).toEqual(['codex', 'blog']);
+    expect(named(['/'], 'root')).toEqual(['root']);
+  });
+});
+
+// Branch D (F7) item 4: a group lists its running and idle sessions and the 5 most recently
+// closed; the rest wait behind "N more".
+describe('foldClosed', () => {
+  const closed = (id: string, hhmm: string) => s(id, 'p', hhmm, { live: 'closed' });
+  const list = [
+    s('busy', 'p', '09:59', { live: 'busy' }),
+    s('idle1', 'p', '09:40'),
+    closed('c1', '09:30'),
+    closed('c2', '09:20'),
+    s('idle2', 'p', '09:15'),
+    closed('c3', '09:10'),
+    closed('c4', '09:00'),
+    closed('c5', '08:50'),
+    closed('c6', '08:40'),
+    s('lost', 'p', '08:30', { live: 'unknown' }),
+    closed('c8', '08:20'),
+  ];
+  const ids = (xs: SessionSummary[]) => xs.map((x) => x.id);
+
+  it('shows every running and idle session and the 5 most recent closed, in the group’s order', () => {
+    expect(CLOSED_SHOWN).toBe(5);
+    const { shown, more } = foldClosed(list);
+    expect(ids(shown)).toEqual(['busy', 'idle1', 'c1', 'c2', 'idle2', 'c3', 'c4', 'c5']);
+    // An unknown state counts as closed, as the state filter counts it.
+    expect(ids(more)).toEqual(['c6', 'lost', 'c8']);
+  });
+
+  it('keeps the open session on show wherever it falls, without taking a slot', () => {
+    const { shown, more } = foldClosed(list, 'c8');
+    expect(ids(shown)).toEqual(['busy', 'idle1', 'c1', 'c2', 'idle2', 'c3', 'c4', 'c5', 'c8']);
+    expect(ids(more)).toEqual(['c6', 'lost']);
+  });
+
+  it('has nothing more when the closed sessions fit', () => {
+    const { shown, more } = foldClosed(list.slice(0, 8));
+    expect(ids(shown)).toHaveLength(8);
+    expect(more).toEqual([]);
   });
 });
