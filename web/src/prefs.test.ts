@@ -1,49 +1,57 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { loadPrefs, savePrefs } from './prefs';
+import { loadPrefs, type Prefs, savePrefs } from './prefs';
+
+const defaults: Prefs = {
+  locale: 'en',
+  theme: 'system',
+  showProbes: false,
+  rateAgent: null,
+  groupBy: 'project',
+  folded: [],
+  pinned: [],
+  statsNoteSeen: false,
+};
 
 describe('prefs', () => {
   afterEach(() => localStorage.clear());
 
-  it('defaults to English, system theme, hidden probe sessions and every CLI’s rate', () => {
-    expect(loadPrefs()).toEqual({
-      locale: 'en',
-      theme: 'system',
-      showProbes: false,
-      rateAgent: null,
-    });
+  it('defaults to English, system theme, hidden probes, every CLI’s rate, and a list by project with nothing folded or pinned', () => {
+    expect(loadPrefs()).toEqual(defaults);
   });
 
   it('reads the "auto" language an older version saved as English', () => {
     localStorage.setItem('glassbox.prefs', '{"locale":"auto","theme":"dark"}');
-    expect(loadPrefs()).toEqual({
-      locale: 'en',
-      theme: 'dark',
-      showProbes: false,
-      rateAgent: null,
-    });
+    expect(loadPrefs()).toEqual({ ...defaults, theme: 'dark' });
   });
 
   it('round-trips through storage and ignores junk', () => {
-    savePrefs({ locale: 'zh', theme: 'dark', showProbes: true, rateAgent: 'codex' });
-    expect(loadPrefs()).toEqual({
+    const saved: Prefs = {
       locale: 'zh',
       theme: 'dark',
       showProbes: true,
       rateAgent: 'codex',
-    });
-    localStorage.setItem('glassbox.prefs', '{"locale":"fr","showProbes":"yes","rateAgent":"foo"}');
-    expect(loadPrefs()).toEqual({
-      locale: 'en',
-      theme: 'system',
-      showProbes: false,
-      rateAgent: null,
-    });
+      groupBy: 'time',
+      folded: ['glassbox', '/earlier'],
+      pinned: ['claude-code:a', 'codex:b'],
+      statsNoteSeen: true,
+    };
+    savePrefs(saved);
+    expect(loadPrefs()).toEqual(saved);
+    localStorage.setItem(
+      'glassbox.prefs',
+      '{"locale":"fr","showProbes":"yes","rateAgent":"foo","groupBy":"week","folded":"glassbox","pinned":{},"statsNoteSeen":"no"}',
+    );
+    expect(loadPrefs()).toEqual(defaults);
     localStorage.setItem('glassbox.prefs', 'not json');
-    expect(loadPrefs()).toEqual({
-      locale: 'en',
-      theme: 'system',
-      showProbes: false,
-      rateAgent: null,
-    });
+    expect(loadPrefs()).toEqual(defaults);
+  });
+
+  // Branch D (F7): the list's folds and pins, saved by name and by id.
+  it('keeps only the strings of the folded and pinned lists, each once', () => {
+    localStorage.setItem(
+      'glassbox.prefs',
+      '{"folded":["a",2,"a","b"],"pinned":["x:1",null,"x:1"]}',
+    );
+    expect(loadPrefs()).toEqual({ ...defaults, folded: ['a', 'b'], pinned: ['x:1'] });
   });
 });
