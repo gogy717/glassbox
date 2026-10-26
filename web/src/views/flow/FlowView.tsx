@@ -31,7 +31,7 @@ export function FlowView({ open, agentId, route, navigate, live = null }: Props)
   const { follow, setFollow } = useUi();
 
   const items = useTurnItems(open, agentId);
-  // The list's filter: follow shows the newest conversation that passes it; when none does,
+  // The list's filter: follow shows the newest prompt that passes it; when none does,
   // the one on stage stays (not the newest, which the filter has just ruled out).
   const [query, setQuery] = useState('');
   const match = useMemo(() => newestMatch(items, query), [items, query]);

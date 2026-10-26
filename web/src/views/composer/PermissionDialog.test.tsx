@@ -180,14 +180,14 @@ describe('PermissionDialog', () => {
       </StoreContext.Provider>,
     );
     const dialog = screen.getByRole('dialog', { name: 'Claude Code wants to use Bash' });
-    expect(dialog).toHaveTextContent(`Conversation ${turn?.index} · call #${request?.index}`);
+    expect(dialog).toHaveTextContent(`Prompt ${turn?.index} · call #${request?.index}`);
     expect(dialog).toHaveTextContent('Permission');
     expect(dialog).toHaveTextContent('Esc hides this prompt; it stays pending');
   });
 
   it('leaves the reference out when the call is not in the records yet', () => {
     renderDialog(bash);
-    expect(screen.getByRole('dialog')).not.toHaveTextContent(/Conversation \d/);
+    expect(screen.getByRole('dialog')).not.toHaveTextContent(/Prompt \d/);
   });
 
   it('starts with focus on the panel itself, where Enter answers nothing', () => {

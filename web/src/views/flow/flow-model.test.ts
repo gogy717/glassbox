@@ -246,7 +246,7 @@ describe('isLocalCommand', () => {
     ['/add-dir /home/user/other', 0, 'complete', true],
     ['/superpowers:brainstorm', 0, 'interrupted', true],
     ['  /clear', 0, 'complete', true],
-    // Answered by the model (a skill, a custom command): a conversation like any other.
+    // Answered by the model (a skill, a custom command): a prompt like any other.
     ['/review', 2, 'complete', false],
     // Still starting: its first call may be on the way.
     ['/review', 0, 'running', false],

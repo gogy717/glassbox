@@ -24,7 +24,7 @@ import css from './TurnList.module.css';
 
 export interface TurnItem {
   turn: Turn;
-  /** What it is called: "Conversation 2", or "Calls outside conversations". */
+  /** What it is called: "Prompt 2", or "Calls outside prompts". */
   label: string;
   /** For the turn list: one line, the prompt shortened, without the label. */
   title: string;
@@ -266,14 +266,14 @@ export const TurnList = memo(function TurnList({
                 title={it.turn.prompt}
                 onClick={() => onSelect(it.turn.id)}
               >
-                {/* The number column says "Conversation N" on screen; screen readers hear the words. */}
+                {/* The number column says "Prompt N" on screen; screen readers hear the words. */}
                 {!it.command && it.title !== it.label && (
                   <span className="visually-hidden">{`${it.label} `}</span>
                 )}
                 <span className={`${css.num} figure`} aria-hidden="true">
                   {it.command || isOutsideTurn(it.turn) ? '' : it.turn.index}
                 </span>
-                {/* Not a conversation, so not numbered like one: the command says what it was. */}
+                {/* Not a prompt to the model, so not numbered like one: the command says what it was. */}
                 <span className={css.title} data-title>
                   {it.command ? it.turn.prompt.trim() : it.title}
                 </span>

@@ -132,7 +132,7 @@ describe('FlowView', () => {
   useFakeLayout();
   afterEach(() => vi.useRealTimers());
 
-  it('says “yet” of an empty conversation or agent only while more may still arrive', () => {
+  it('says “yet” of an empty prompt or agent only while more may still arrive', () => {
     const base = demoOpen();
     const first = [...base.turns.values()][0];
     if (!first) throw new Error('fixture');
@@ -142,10 +142,10 @@ describe('FlowView', () => {
       requests: new Map([...base.requests].filter(([, r]) => r.turnId !== first.id)),
     });
     renderFlow({ open: emptyTurn('complete'), route: { turnId: first.id }, follow: false });
-    expect(screen.getByText('No model calls in this conversation')).toBeInTheDocument();
+    expect(screen.getByText('No model calls for this prompt')).toBeInTheDocument();
     cleanup();
     renderFlow({ open: emptyTurn('running'), route: { turnId: first.id }, follow: false });
-    expect(screen.getByText('No model calls in this conversation yet')).toBeInTheDocument();
+    expect(screen.getByText('No model calls for this prompt yet')).toBeInTheDocument();
     cleanup();
 
     // An agent with no turns: "yet" only while the session runs.
@@ -153,21 +153,21 @@ describe('FlowView', () => {
       open: { ...base, session: { ...base.session, live: 'closed' } },
       route: { agentId: 'nobody' },
     });
-    expect(screen.getByText('No conversations for this agent')).toBeInTheDocument();
+    expect(screen.getByText('No prompts for this agent')).toBeInTheDocument();
     cleanup();
     renderFlow({
       open: { ...base, session: { ...base.session, live: 'busy' } },
       route: { agentId: 'nobody' },
     });
-    expect(screen.getByText('No conversations for this agent yet')).toBeInTheDocument();
+    expect(screen.getByText('No prompts for this agent yet')).toBeInTheDocument();
   });
 
   it('lists the agent’s turns newest first and follows the newest, on top', () => {
     renderFlow();
-    const turns = screen.getByRole('list', { name: 'Conversations' });
+    const turns = screen.getByRole('list', { name: 'Prompts' });
     // DOM order is display order, so Tab walks the turns as they are seen.
     const items = within(turns).getAllByRole('button');
-    // The number column says which conversation; the title is the prompt alone.
+    // The number column says which prompt; the title is the prompt alone.
     expect(items.map((b) => b.querySelector('[data-title]')?.textContent)).toEqual([
       'Now write the design document from the findings',
       expect.stringMatching(
@@ -175,10 +175,10 @@ describe('FlowView', () => {
       ),
       'Busy sessions should be listed first in the sidebar',
     ]);
-    expect(items.map((b) => b.textContent?.match(/^Conversation \d/)?.[0])).toEqual([
-      'Conversation 3',
-      'Conversation 2',
-      'Conversation 1',
+    expect(items.map((b) => b.textContent?.match(/^Prompt \d/)?.[0])).toEqual([
+      'Prompt 3',
+      'Prompt 2',
+      'Prompt 1',
     ]);
     expect(items[0]).toHaveAttribute('aria-current', 'true');
     expect(within(items[0] as HTMLElement).getAllByText('Running')[0]).toBeInTheDocument();
@@ -191,12 +191,10 @@ describe('FlowView', () => {
 
   it('keeps an older turn picked from the URL selected while newer ones stay on top', () => {
     renderFlow({ route: { turnId: 'turn_m1' }, follow: false });
-    const items = within(screen.getByRole('list', { name: 'Conversations' })).getAllByRole(
-      'button',
-    );
+    const items = within(screen.getByRole('list', { name: 'Prompts' })).getAllByRole('button');
     expect(items[2]).toHaveAttribute('aria-current', 'true');
-    expect(items[2]).toHaveTextContent('Conversation 1');
-    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Conversation 1: /);
+    expect(items[2]).toHaveTextContent('Prompt 1');
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Prompt 1: /);
   });
 
   it('lists a local slash command compactly, and a prompt like it with calls in full', () => {
@@ -227,7 +225,7 @@ describe('FlowView', () => {
     renderFlow({ open });
     const card = screen.getByRole('button', {
       // W2's rows: the hidden label, then the title (no colon; jsdom drops the space between).
-      name: /^Conversation 1\s*Continued after usage limit/,
+      name: /^Prompt 1\s*Continued after usage limit/,
     });
     expect(card).not.toHaveTextContent(/usage limit has reset/);
     expect(card).not.toHaveAttribute('data-command');
@@ -263,7 +261,7 @@ describe('FlowView', () => {
   it('keeps a pasted 5 KB prompt to 120 characters in the list, all of it on hover', () => {
     const prompt = `Paste: ${'log line '.repeat(600)}`;
     renderFlow({ open: withPrompt('turn_m1', prompt) });
-    const card = screen.getByRole('button', { name: /Conversation 1/ });
+    const card = screen.getByRole('button', { name: /Prompt 1/ });
     const title = card.querySelector('[data-title]')?.textContent ?? '';
     expect([...title]).toHaveLength(120 + 1);
     expect(title.endsWith('…')).toBe(true);
@@ -273,9 +271,7 @@ describe('FlowView', () => {
   it('heads the open turn with its whole prompt, with no toggle when it fits', () => {
     const prompt = 'Now write the design document from the findings. '.repeat(8).trim();
     renderFlow({ open: withPrompt('turn_m3', prompt) });
-    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(
-      `Conversation 3: ${prompt}`,
-    );
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(`Prompt 3: ${prompt}`);
     expect(screen.queryByRole('button', { name: 'Show full prompt' })).toBeNull();
   });
 
@@ -288,7 +284,7 @@ describe('FlowView', () => {
     expect(heading).toHaveAttribute('data-expanded', 'false');
     fireEvent.click(screen.getByRole('button', { name: 'Show full prompt' }));
     expect(heading).toHaveAttribute('data-expanded', 'true');
-    expect(heading.textContent).toBe(`Conversation 3: ${prompt}`);
+    expect(heading.textContent).toBe(`Prompt 3: ${prompt}`);
     expect(screen.getByRole('button', { name: 'Show less' })).toHaveAttribute(
       'aria-expanded',
       'true',
@@ -318,12 +314,12 @@ describe('FlowView', () => {
       sender: 'glassbox-7a',
     });
     renderFlow({ open });
-    const card = screen.getByRole('button', { name: /Conversation 2/ });
+    const card = screen.getByRole('button', { name: /Prompt 2/ });
     expect(card).toHaveTextContent('from glassbox-7a');
-    expect(screen.getByRole('button', { name: /Conversation 1/ })).not.toHaveTextContent('from');
+    expect(screen.getByRole('button', { name: /Prompt 1/ })).not.toHaveTextContent('from');
   });
 
-  it('lists calls that belong to no turn under “Calls outside conversations”', () => {
+  it('lists calls that belong to no turn under “Calls outside prompts”', () => {
     const open = demoOpen();
     const m1 = open.requests.get('req_m1');
     if (!m1) throw new Error('fixture');
@@ -335,7 +331,7 @@ describe('FlowView', () => {
       toolCallIds: [],
     });
     const { navigate } = renderFlow({ open, follow: false });
-    const card = screen.getByRole('button', { name: /Calls outside conversations/ });
+    const card = screen.getByRole('button', { name: /Calls outside prompts/ });
     expect(card).toHaveTextContent('1 call · 0 tools');
     fireEvent.click(card);
     expect(navigate).toHaveBeenLastCalledWith({ turnId: 'outside:main', requestId: null });
@@ -482,9 +478,9 @@ describe('FlowView', () => {
       turns: new Map([...full.turns].filter(([id]) => id !== 'turn_m3')),
     };
     const { rerender } = render(flowTree(before, false));
-    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/Conversation 2/);
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/Prompt 2/);
     act(() => rerender(flowTree(full, false)));
-    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/Conversation 2/);
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/Prompt 2/);
   });
 
   it('pauses follow when a card is opened, so new calls do not scroll it away', () => {
@@ -519,7 +515,7 @@ describe('FlowView', () => {
   it('pauses follow when a turn is picked, and resumes from “Back to latest”', () => {
     const { navigate, setFollow } = renderFlow();
     expect(screen.queryByRole('button', { name: 'Back to latest' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /Conversation 1/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Prompt 1/ }));
     expect(setFollow).toHaveBeenLastCalledWith(false);
     expect(navigate).toHaveBeenLastCalledWith({ turnId: 'turn_m1', requestId: null });
   });
@@ -530,9 +526,9 @@ describe('FlowView', () => {
     const header = screen.getByRole('heading', { level: 2 }).closest(`.${headerCss.header}`);
     const bar = header?.nextElementSibling;
     if (!(bar instanceof HTMLElement)) throw new Error('no bar after the header');
-    // The newest conversation (3) is still running in the demo.
+    // The newest prompt (3) is still running in the demo.
     expect(within(bar).getByRole('status')).toHaveTextContent(
-      'Following paused · Conversation 3 is running',
+      'Following paused · Prompt 3 is running',
     );
     const back = within(bar).getByRole('button', { name: 'Back to latest' });
     fireEvent.click(back);
@@ -580,25 +576,25 @@ describe('FlowView', () => {
     expect(screen.queryByRole('region', { name: /details/ })).toBeNull();
   });
 
-  it('follows the newest conversation that passes the filter, and keeps the stage when none does', () => {
+  it('follows the newest prompt that passes the filter, and keeps the stage when none does', () => {
     renderFlow();
-    const field = screen.getByRole('searchbox', { name: 'Filter conversations' });
+    const field = screen.getByRole('searchbox', { name: 'Filter prompts' });
     fireEvent.change(field, { target: { value: 'busy sessions' } });
-    const list = screen.getByRole('list', { name: 'Conversations' });
+    const list = screen.getByRole('list', { name: 'Prompts' });
     expect(within(list).getAllByRole('button')).toHaveLength(1);
-    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Conversation 1: Busy/);
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Prompt 1: Busy/);
     fireEvent.change(field, { target: { value: 'busy sessionsx' } });
-    expect(screen.getByText('No conversation matches')).toBeInTheDocument();
-    // Nothing in the list to follow: the conversation on stage stays, rather than the newest
+    expect(screen.getByText('No prompt matches')).toBeInTheDocument();
+    // Nothing in the list to follow: the prompt on stage stays, rather than the newest
     // one the filter has just ruled out.
-    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Conversation 1: Busy/);
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Prompt 1: Busy/);
     fireEvent.change(field, { target: { value: '' } });
-    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Conversation 3: /);
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Prompt 3: /);
   });
 
   it('opens the turn of a linked request and highlights its row', () => {
     renderFlow({ route: { requestId: 'req_m2' }, follow: false });
-    expect(screen.getByRole('button', { name: /Conversation 1/ })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: /Prompt 1/ })).toHaveAttribute(
       'aria-current',
       'true',
     );

@@ -23,7 +23,7 @@ export function TurnHeader({ item, children }: Props) {
   const { turn } = item;
   const end = turn.endedAt ? Date.parse(turn.endedAt) : item.status === 'running' ? now : null;
   return (
-    // Not a named group: the heading names the conversation, once ("Conversation 2: …").
+    // Not a named group: the heading names the prompt, once ("Prompt 2: …").
     <div className={css.header}>
       <div className={css.top}>
         <span className="section-label" aria-hidden="true">

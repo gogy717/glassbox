@@ -17,7 +17,7 @@ import { rateText } from './TokenRate';
 interface Figure {
   label: string;
   value: ReactNode;
-  /** Below 900px, behind "More figures": the bar keeps conversations, calls, duration, output. */
+  /** Below 900px, behind "More figures": the bar keeps prompts, calls, active time, output. */
   more?: boolean;
   /** Muted after the value, e.g. the thinking share of output. */
   aside?: string;

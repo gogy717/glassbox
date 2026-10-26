@@ -39,7 +39,7 @@ export function Diagnostics({ diagnostics: d }: { diagnostics: Diag }) {
   // Each gap listed in the panel: missing data, unparsable lines, unrecognised record types.
   const gaps = d.unavailable.length + (d.parseErrors > 0 ? 1 : 0) + unknown.length;
   const alert = gaps > 0;
-  // Always in words, so the panel is found without hunting for an icon: "1 gap", or "No gaps".
+  // Always in words, so the panel is found without hunting for an icon: "1 gap", or "Data complete".
   const count = alert ? t('diag.count', { n: gaps }) : t('diag.none');
   const n = (v: number) => v.toLocaleString(intl);
 

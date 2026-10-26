@@ -61,7 +61,7 @@ describe('translate', () => {
   });
 
   it('leaves an unknown placeholder visible rather than printing undefined', () => {
-    expect(translate('en', 'flow.turnLabel', {})).toBe('Conversation {n}');
+    expect(translate('en', 'flow.turnLabel', {})).toBe('Prompt {n}');
   });
 });
 

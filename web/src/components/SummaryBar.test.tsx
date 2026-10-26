@@ -18,7 +18,7 @@ describe('SummaryBar', () => {
       </I18nContext.Provider>,
     );
     expect(value('Model calls')).toBe('0');
-    expect(value('Duration')).toBe('—');
+    expect(value('Active time')).toBe('—');
   });
 
   it('shows the time spent once there are calls', () => {
@@ -27,7 +27,7 @@ describe('SummaryBar', () => {
         <SummaryBar open={demoOpen()} agentId="main" />
       </I18nContext.Provider>,
     );
-    expect(value('Duration')).not.toBe('—');
+    expect(value('Active time')).not.toBe('—');
   });
 
   it('shows dashes, not zeros, for token figures no call has reported', () => {

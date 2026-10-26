@@ -20,7 +20,7 @@ function item(n: number): TurnItem {
   } as Turn;
   return {
     turn,
-    label: `Conversation ${n}`,
+    label: `Prompt ${n}`,
     title: `prompt ${n}`,
     prompt: `prompt ${n}`,
     calls: 1,
@@ -72,9 +72,7 @@ describe('TurnList', () => {
 
   it('shows the newest turn first and keeps chronological numbers', () => {
     renderList('turn_5');
-    const cards = within(screen.getByRole('list', { name: 'Conversations' })).getAllByRole(
-      'button',
-    );
+    const cards = within(screen.getByRole('list', { name: 'Prompts' })).getAllByRole('button');
     expect(cards.map((c) => c.querySelector('[data-title]')?.textContent)).toEqual([
       'prompt 5',
       'prompt 4',
@@ -83,7 +81,7 @@ describe('TurnList', () => {
       'prompt 1',
     ]);
     // The number column is what the eye reads; the row's name says the words.
-    expect(cards[0]).toHaveAccessibleName(/^Conversation 5\s*prompt 5/);
+    expect(cards[0]).toHaveAccessibleName(/^Prompt 5\s*prompt 5/);
     expect(cards.map((c) => c.querySelector('[aria-hidden="true"]')?.textContent)).toEqual([
       '5',
       '4',
@@ -92,18 +90,18 @@ describe('TurnList', () => {
       '1',
     ]);
     expect(cards[0]).toHaveAttribute('aria-current', 'true');
-    expect(screen.getByRole('navigation', { name: 'Conversations' })).toHaveTextContent('5');
+    expect(screen.getByRole('navigation', { name: 'Prompts' })).toHaveTextContent('5');
   });
 
   it('selects the turn that was clicked, not its position', () => {
     const { onSelect } = renderList('turn_5');
-    fireEvent.click(screen.getByRole('button', { name: /Conversation 2/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Prompt 2/ }));
     expect(onSelect).toHaveBeenCalledWith('turn_2');
   });
 
   it('scrolls the list, and only the list, to a selected turn out of view', () => {
     const { select } = renderList('turn_5');
-    const list = screen.getByRole('list', { name: 'Conversations' });
+    const list = screen.getByRole('list', { name: 'Prompts' });
     const scrolled = layOut(list);
 
     // Turn 1 is the fifth card, at 400–490 px in a 300 px list: scroll it into view.
@@ -118,16 +116,14 @@ describe('TurnList', () => {
 
   it('leaves the scroll alone when the selected turn is already in view', () => {
     const { select } = renderList('turn_5');
-    const scrolled = layOut(screen.getByRole('list', { name: 'Conversations' }));
+    const scrolled = layOut(screen.getByRole('list', { name: 'Prompts' }));
     select('turn_4');
     expect(scrolled).toEqual({ top: 0, left: 0 });
   });
 
   it('is one tab stop, at the selected turn, and the arrow keys move through the rest', () => {
     renderList('turn_3');
-    const cards = within(screen.getByRole('list', { name: 'Conversations' })).getAllByRole(
-      'button',
-    );
+    const cards = within(screen.getByRole('list', { name: 'Prompts' })).getAllByRole('button');
     expect(cards.map((c) => c.tabIndex)).toEqual([-1, -1, 0, -1, -1]);
 
     const third = cards[2] as HTMLElement;
@@ -151,9 +147,7 @@ describe('TurnList', () => {
 
   it('puts the tab stop on the newest turn when nothing is selected', () => {
     renderList(null);
-    const cards = within(screen.getByRole('list', { name: 'Conversations' })).getAllByRole(
-      'button',
-    );
+    const cards = within(screen.getByRole('list', { name: 'Prompts' })).getAllByRole('button');
     expect(cards[0]).toHaveAttribute('tabindex', '0');
     expect(cards.filter((c) => c.tabIndex === 0)).toHaveLength(1);
   });
@@ -181,7 +175,7 @@ describe('TurnList', () => {
     expect(within(card).queryByText(/model call/)).toBeNull();
     expect(within(card).queryByText('Complete')).toBeNull();
     // Ordinary turns keep their counts and status.
-    const other = screen.getByRole('button', { name: /Conversation 5/ });
+    const other = screen.getByRole('button', { name: /Prompt 5/ });
     expect(other).toHaveTextContent('1 call · 0 tools');
     fireEvent.click(card);
     expect(onSelect).toHaveBeenCalledWith('turn_6');
@@ -209,29 +203,29 @@ describe('TurnList filter', () => {
   }
 
   const titles = () =>
-    within(screen.getByRole('list', { name: 'Conversations' }))
+    within(screen.getByRole('list', { name: 'Prompts' }))
       .getAllByRole('button')
       .map((b) => b.querySelector('[data-title]')?.textContent);
 
-  it('keeps the conversations whose heading matches, newest first, and counts them', () => {
+  it('keeps the prompts whose heading matches, newest first, and counts them', () => {
     const { type, onQuery } = renderFiltered();
-    const field = screen.getByRole('searchbox', { name: 'Filter conversations' });
+    const field = screen.getByRole('searchbox', { name: 'Filter prompts' });
     fireEvent.change(field, { target: { value: 'prompt 2' } });
     expect(onQuery).toHaveBeenLastCalledWith('prompt 2');
     type('PROMPT');
     expect(titles()).toEqual(['prompt 5', 'prompt 4', 'prompt 3', 'prompt 2', 'prompt 1']);
     type('prompt 2');
     expect(titles()).toEqual(['prompt 2']);
-    expect(screen.getByRole('navigation', { name: 'Conversations' })).toHaveTextContent('1 of 5');
-    // The number the row shows matches too: "Conversation 4".
-    type('conversation 4');
+    expect(screen.getByRole('navigation', { name: 'Prompts' })).toHaveTextContent('1 of 5');
+    // The number the row shows matches too: "Prompt 4".
+    type('prompt 4');
     expect(titles()).toEqual(['prompt 4']);
   });
 
   it('says so when nothing matches, and clears with Escape', () => {
     const { type, onQuery } = renderFiltered('nothing like this');
-    expect(screen.getByText('No conversation matches')).toBeInTheDocument();
-    expect(screen.queryByRole('list', { name: 'Conversations' })).toBeNull();
+    expect(screen.getByText('No prompt matches')).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Prompts' })).toBeNull();
     fireEvent.keyDown(screen.getByRole('searchbox'), { key: 'Escape' });
     expect(onQuery).toHaveBeenLastCalledWith('');
     type('');
@@ -240,8 +234,8 @@ describe('TurnList filter', () => {
 
   it('is the tab stop before the list', () => {
     renderFiltered();
-    const field = screen.getByRole('searchbox', { name: 'Filter conversations' });
-    const list = screen.getByRole('list', { name: 'Conversations' });
+    const field = screen.getByRole('searchbox', { name: 'Filter prompts' });
+    const list = screen.getByRole('list', { name: 'Prompts' });
     expect(field.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
@@ -256,7 +250,7 @@ describe('newestMatch', () => {
 
   it('is the newest turn whose label or prompt has the words, any case', () => {
     expect(newestMatch(items, 'PROMPT 1')?.turn.index).toBe(12);
-    expect(newestMatch(items, 'conversation 2')?.turn.index).toBe(2);
+    expect(newestMatch(items, 'prompt 2')?.turn.index).toBe(2);
   });
 
   it('is the newest of all for no words, and nothing when none matches', () => {
