@@ -1,4 +1,4 @@
-import type { AgentKind, RepoIdentity, SessionSummary } from '../../../src/core/model.js';
+import type { AgentKind, SessionSummary } from '../../../src/core/model.js';
 import { weekStart } from '../../../src/shared/week.js';
 
 /** How the sidebar groups sessions: by project (the default), or by when each was last active. */

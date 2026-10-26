@@ -13,7 +13,7 @@ import type { Locale } from '../../i18n';
 import { agentName } from '../../lib/agent-names';
 import { costByModel, DEFAULT_PRICES, type PriceTable } from '../../lib/prices';
 import { isListed } from '../../lib/sessions';
-import { printedProject, printedTitle } from './printed';
+import { printedTitle, projectNames } from './printed';
 import { apportion, shares } from './rows';
 import type { TokenFigures } from './slip';
 import { type ReceiptKey, rt } from './strings';
@@ -165,6 +165,7 @@ export function weekReceipt(r: WeekResult, prices: PriceTable = DEFAULT_PRICES):
   const cats = new Map<ToolCategory, number>();
   const unreported = new Map<AgentKind, number>();
   const projects = new Set<string>();
+  const projectOf = projectNames(r.sessions);
   const work = { requests: 0, toolCalls: 0, subAgents: 0, failures: 0 };
   let longest: (typeof r.sessions)[number] | null = null;
   for (const s of r.sessions) {
@@ -186,7 +187,7 @@ export function weekReceipt(r: WeekResult, prices: PriceTable = DEFAULT_PRICES):
         else usageByModel[model] = addUsage(emptyUsage(), u);
       }
     } else unreported.set(s.agent, (unreported.get(s.agent) ?? 0) + 1);
-    const project = printedProject(s.cwd, s.project);
+    const project = projectOf(s);
     if (project) projects.add(project);
     if (f.activeMs > (longest?.inWindow.activeMs ?? 0)) longest = s;
   }
@@ -235,7 +236,7 @@ export function weekReceipt(r: WeekResult, prices: PriceTable = DEFAULT_PRICES):
     longest: top
       ? {
           agent: top.agent,
-          project: printedProject(top.cwd, top.project),
+          project: projectOf(top),
           title: top.title ? printedTitle(top.title) : null,
           ms: top.inWindow.activeMs,
         }

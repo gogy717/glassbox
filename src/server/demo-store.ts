@@ -161,7 +161,7 @@ export class DemoStore implements AppStore, WeekStore {
   /** The rest of the week behind the weekly receipt: read by the week only, never listed. */
   private readonly weekBehind: SessionSnapshot[];
   /** The weekly receipt's data, read from the demo's sessions and the week behind them. */
-  readonly week: WeekService = new WeekService(this);
+  readonly week: WeekService = new WeekService(this, { repoOf: demoRepo });
   private readonly sessionCbs = new Set<(s: SessionSummary[]) => void>();
   private readonly patchCbs = new Set<(p: SessionPatch) => void>();
   private timer: NodeJS.Timeout | null = null;

@@ -8,7 +8,7 @@
 import type { AgentKind } from '../../../../src/core/model.js';
 import type { WeekResult, WeekSession, WeekWindowKind } from '../../../../src/shared/week.js';
 import { clock, day, durationParts, partsText, shortDay } from '../../components/receipt/format';
-import { printedProject } from '../../components/receipt/printed';
+import { projectNames } from '../../components/receipt/printed';
 import {
   type GridCell,
   listedOnly,
@@ -48,11 +48,25 @@ export interface SessionLine {
   ms: number;
 }
 
-const lineOf = (s: WeekSession, ms: number): SessionLine => ({
+/**
+ * Each session's project name, as the session list groups them (`projectNames`): a
+ * repository's worktrees are one project. Worked out once per week result.
+ */
+const namers = new WeakMap<WeekResult, (s: WeekSession) => string | null>();
+export function projectOf(w: StatsWeek, s: WeekSession): string | null {
+  let name = namers.get(w.result);
+  if (!name) {
+    name = projectNames(w.result.sessions);
+    namers.set(w.result, name);
+  }
+  return name(s);
+}
+
+const lineOf = (w: StatsWeek, s: WeekSession, ms: number): SessionLine => ({
   id: s.id,
   agent: s.agent,
   title: s.title,
-  project: printedProject(s.cwd, s.project),
+  project: projectOf(w, s),
   ms,
 });
 
@@ -60,7 +74,7 @@ const lineOf = (s: WeekSession, ms: number): SessionLine => ({
 export function topProjects(w: StatsWeek, n = 5): { name: string; ms: number; sessions: number }[] {
   const by = new Map<string, { name: string; ms: number; sessions: number }>();
   for (const s of w.result.sessions) {
-    const name = printedProject(s.cwd, s.project);
+    const name = projectOf(w, s);
     if (!name) continue;
     const p = by.get(name) ?? { name, ms: 0, sessions: 0 };
     p.ms += s.inWindow.agentMs;
@@ -76,7 +90,7 @@ export function longestSessions(w: StatsWeek, n = 5): SessionLine[] {
     .filter((s) => s.inWindow.activeMs > 0)
     .sort((a, b) => b.inWindow.activeMs - a.inWindow.activeMs)
     .slice(0, n)
-    .map((s) => lineOf(s, s.inWindow.activeMs));
+    .map((s) => lineOf(w, s, s.inWindow.activeMs));
 }
 
 /** Where the busiest hour sits in the grid, selected when the page opens; null with none. */
@@ -110,7 +124,7 @@ export function hourOfCell(w: StatsWeek, cell: GridCell, index: HourIndex = inde
   const worked = new Map<WeekSession, number>();
   for (const i of cell.hours)
     for (const x of index[i] ?? []) worked.set(x.s, (worked.get(x.s) ?? 0) + x.ms);
-  const sessions = [...worked].map(([s, ms]) => lineOf(s, ms)).sort((a, b) => b.ms - a.ms);
+  const sessions = [...worked].map(([s, ms]) => lineOf(w, s, ms)).sort((a, b) => b.ms - a.ms);
   const byCli = new Map<AgentKind, number>();
   for (const s of sessions) byCli.set(s.agent, (byCli.get(s.agent) ?? 0) + s.ms);
   const top = [...byCli].sort((a, b) => b[1] - a[1])[0];
@@ -133,7 +147,7 @@ export const sameIsolate = (a: Isolate | null, b: Isolate | null): boolean =>
 
 export function isolated(w: StatsWeek, by: Isolate): StatsWeek {
   const keep = (s: WeekSession) =>
-    'cli' in by ? s.agent === by.cli : printedProject(s.cwd, s.project) === by.project;
+    'cli' in by ? s.agent === by.cli : projectOf(w, s) === by.project;
   const result = { ...w.result, sessions: w.result.sessions.filter(keep) };
   return { result, receipt: weekReceipt(result, w.prices), prices: w.prices };
 }

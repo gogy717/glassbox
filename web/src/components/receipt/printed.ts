@@ -3,7 +3,9 @@
  * lone surrogate, U+FFFE, U+FFFF or a control character breaks an SVG), a title's absolute paths
  * cut to their last segment, and the project printed only as a name, never as a home directory.
  */
+import type { SessionSummary } from '../../../../src/core/model.js';
 import { redact } from '../../../../src/core/redact.js';
+import { groupNames } from '../../lib/sessions';
 
 /** Control characters (a terminal's colour codes) and the two noncharacters XML forbids. */
 // biome-ignore lint/suspicious/noControlCharactersInRegex: these are what it removes
@@ -81,3 +83,16 @@ export function printedProject(cwd: string | null, project: string): string | nu
     return null;
   return clean(project) || null;
 }
+
+/**
+ * The name each session's project reads as on Stats and the weekly receipt, as the session
+ * list groups it: its repository's name when the server read one (a repository's worktrees are
+ * one project, two repositories of one name read with their parents, `groupNames`), else the
+ * directory as `printedProject` prints it.
+ */
+export function projectNames(sessions: readonly Named[]): (s: Named) => string | null {
+  const byRepo = groupNames(sessions.filter((s) => s.repo));
+  return (s) => (s.repo ? byRepo(s) : printedProject(s.cwd, s.project));
+}
+
+type Named = Pick<SessionSummary, 'cwd' | 'project' | 'repo'>;

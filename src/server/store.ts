@@ -197,7 +197,7 @@ export class SessionStore implements WeekStore {
       staleReason: this.opts.quotaStaleReason,
       log: this.opts.log,
     });
-    this.week = new WeekService(this, { log: this.opts.log });
+    this.week = new WeekService(this, { log: this.opts.log, repoOf: this.opts.repoOf });
   }
 
   async start(): Promise<void> {

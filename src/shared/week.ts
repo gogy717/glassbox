@@ -16,7 +16,7 @@
  * or a failure counts in the hour its start falls in, usage goes with its request, a turn's
  * active time and a segment's agent time are split at hour boundaries.
  */
-import type { AgentKind, TokenUsage } from '../core/model.js';
+import type { AgentKind, RepoIdentity, TokenUsage } from '../core/model.js';
 import type { ToolCategory } from './tool-category.js';
 
 export type WeekWindowKind = 'week' | '7d';
@@ -68,6 +68,12 @@ export interface WeekSession {
   /** Raw: the client prints them through `printedProject` / `printedTitle`. */
   project: string;
   cwd: string | null;
+  /**
+   * The git repository of `cwd`, as `SessionSummary.repo`: the client groups the week's
+   * projects by it, so a repository's worktrees count as one project. Null when `cwd` is in no
+   * repository; absent when the server did not look.
+   */
+  repo?: RepoIdentity | null;
   title: string | null;
   /** As listed: 'probe' marks a tool's background session, hidden unless asked for. */
   tags: string[];

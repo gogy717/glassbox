@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { WeekSession } from '../../../../src/shared/week.js';
 import { listedOnly, weekReceipt } from '../../components/receipt/week';
 import { demoWeek, WEEK_NOW } from '../../test/week';
 import {
@@ -18,6 +19,41 @@ import {
 const r = demoWeek('week');
 const w = statsWeek(r, false);
 const sum = (ns: number[]) => ns.reduce((a, b) => a + b, 0);
+
+describe('the Stats page projects', () => {
+  it('counts a repository’s worktrees as one project, named like the session list names it', () => {
+    const base = demoWeek();
+    const [a, b, c] = base.sessions as [WeekSession, WeekSession, WeekSession];
+    const repo = { root: '/home/dev/src/glassbox', name: 'glassbox' };
+    const sessions: WeekSession[] = [
+      {
+        ...a,
+        cwd: '/home/dev/src/glassbox',
+        project: 'glassbox',
+        repo: { ...repo, dir: '/home/dev/src/glassbox' },
+      },
+      {
+        ...b,
+        cwd: '/home/dev/work/whitefish',
+        project: 'whitefish',
+        repo: { ...repo, dir: '/home/dev/work/whitefish' },
+      },
+      { ...c, cwd: '/home/dev/notes', project: 'notes', repo: null },
+    ];
+    const w = statsWeek({ ...base, sessions }, false);
+    const top = topProjects(w);
+    expect(top.map((p) => [p.name, p.sessions])).toEqual([
+      ['glassbox', 2],
+      ['notes', 1],
+    ]);
+    expect(top[0]?.ms).toBe(a.inWindow.agentMs + b.inWindow.agentMs);
+    expect(isolated(w, { project: 'glassbox' }).result.sessions.map((s) => s.id)).toEqual([
+      a.id,
+      b.id,
+    ]);
+    expect(w.receipt.projects).toBe(2);
+  });
+});
 
 describe('the Stats page figures', () => {
   it('are the weekly receipt’s own, from the same listed sessions (N6)', () => {

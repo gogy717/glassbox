@@ -8,7 +8,7 @@
  * progress and all; any other waits its turn, hearing meanwhile how many of its sessions are
  * ready.
  */
-import type { SessionSnapshot, SessionSummary } from '../core/model.js';
+import type { RepoIdentity, SessionSnapshot, SessionSummary } from '../core/model.js';
 import {
   type WeekLine,
   type WeekResult,
@@ -39,6 +39,8 @@ export interface WeekStore {
 export interface WeekOptions {
   /** Sessions read at once. */
   concurrency?: number;
+  /** The git repository of a directory, for `WeekSession.repo`; none when absent. */
+  repoOf?: (cwd: string) => RepoIdentity | null;
   /** A session this large (bytes) is read alone: two at once would hold both in memory. */
   bigBytes?: number;
   /** A running session that has to be parsed is parsed again no sooner than this (ms). */
@@ -100,12 +102,14 @@ export class WeekService {
   private readonly reparseMs: number;
   private readonly now: () => number;
   private readonly log: (msg: string) => void;
+  private readonly repoOf: ((cwd: string) => RepoIdentity | null) | null;
 
   constructor(
     private readonly store: WeekStore,
     opts: WeekOptions = {},
   ) {
     this.concurrency = Math.max(1, opts.concurrency ?? 2);
+    this.repoOf = opts.repoOf ?? null;
     this.bigBytes = opts.bigBytes ?? 64 * 1024 * 1024;
     this.reparseMs = opts.reparseMs ?? 30_000;
     this.now = opts.now ?? Date.now;
@@ -300,7 +304,9 @@ export class WeekService {
       const c = this.cache.get(s.id);
       if (!c) continue;
       const row = sliceSession(c.buckets, window, s.tags ?? []);
-      if (row) sessions.push(row);
+      if (!row) continue;
+      if (this.repoOf && row.cwd) row.repo = this.repoOf(row.cwd);
+      sessions.push(row);
     }
     sessions.sort(
       (a, b) =>
