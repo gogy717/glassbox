@@ -357,7 +357,7 @@ describe('permissions', () => {
     expect(state()).toMatchObject({ status: 'running', pendingPermissions: [] });
   });
 
-  it('deny sends the reason, or a default one', async () => {
+  it('deny says the user declined, then their reason, so the transcript says it too', async () => {
     const { proc, manager, run } = await running();
     proc.push(canUseTool('toolu_1', 'req-1'));
     proc.push(canUseTool('toolu_2', 'req-2'));
@@ -367,7 +367,10 @@ describe('permissions', () => {
     const [a, b] = proc
       .sentOf('control_response')
       .map((m) => (m.response as { response: unknown }).response);
-    expect(a).toEqual({ behavior: 'deny', message: 'Not in this repo' });
+    expect(a).toEqual({
+      behavior: 'deny',
+      message: 'The user declined this action. The user said: Not in this repo',
+    });
     expect(b).toEqual({ behavior: 'deny', message: 'The user declined this action.' });
   });
 

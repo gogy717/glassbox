@@ -44,6 +44,7 @@ import {
   formatRoute,
   pageOf,
   parseRoute,
+  RULES_LINK,
   sessionLink,
   statsLink,
   type Tab,
@@ -56,6 +57,7 @@ import { NewSessionDialog } from './views/composer/NewSessionDialog';
 import { PermissionDialog } from './views/composer/PermissionDialog';
 import { Home } from './views/Home';
 import { pageItems, promptItems, sessionItems } from './views/palette-items';
+import type { RulesPageProps } from './views/rules/RulesPage';
 import { SessionView } from './views/SessionView';
 import type { StatsPageProps } from './views/stats/StatsPage';
 
@@ -69,6 +71,8 @@ const loadStats = () =>
     return m;
   });
 const LazyStatsPage = lazyView(() => loadStats().then((m) => m.StatsPage));
+// Rules is its own chunk too, loaded on its first visit.
+const LazyRulesPage = lazyView(() => import('./views/rules/RulesPage').then((m) => m.RulesPage));
 
 function usePrefetchStats(): void {
   useEffect(() => {
@@ -208,7 +212,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
   }
   const narrow = useMediaQuery(NARROW);
   const twoColumns = useMediaQuery(TWO_COLUMNS);
-  // Stats lays out as Home does: only a session has a third column to protect.
+  // Stats and Rules lay out as Home does: only a session has a third column to protect.
   const mode = sidebarMode(narrow ? 900 : twoColumns ? 1199 : 1200, page === 'session');
   const mainRef = useRef<HTMLElement>(null);
   const asideRef = useRef<HTMLElement>(null);
@@ -345,7 +349,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
   useShortcuts();
   const [help, setHelp] = useState(false);
   useCommand('help', () => setHelp(true));
-  // As the nav's links go: Home, the session page as it was left, Stats.
+  // As the nav's links go: Home, the session page as it was left, Stats, Rules.
   const goHome = () => {
     window.location.hash = '#/';
   };
@@ -357,6 +361,10 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
     if (target) window.location.hash = target;
   });
   useCommand('goStats', goStats);
+  const goRules = () => {
+    if (page !== 'rules') window.location.hash = RULES_LINK;
+  };
+  useCommand('goRules', goRules);
   // / searches the list, showing it first when it is hidden. Opened as an overlay, the list
   // starts in its search field anyway; shown as a column, focus goes there once it is.
   const searchOnShow = useRef(false);
@@ -408,7 +416,7 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
     return [
       ...sessionItems(sessions, prefs.showProbes, t, openSession),
       ...promptItems(open, t, selectPrompt),
-      ...pageItems(t, { home: goHome, stats: goStats, tab: goTab }),
+      ...pageItems(t, { home: goHome, stats: goStats, rules: goRules, tab: goTab }),
       action('new', t('composer.newSession'), () => setNewSession(true)),
       ...(canRun('receipt')
         ? [action('receipt', t('palette.receipt'), () => runCommand('receipt'))]
@@ -487,7 +495,22 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
               />
             </aside>
             <main ref={mainRef} tabIndex={-1} className={css.main} inert={modal}>
-              {route.stats ? (
+              {route.rules ? (
+                <ErrorBoundary key="rules">
+                  <Suspense
+                    fallback={
+                      <Delayed>
+                        <p className={css.placeholder}>{t('app.loadingView')}</p>
+                      </Delayed>
+                    }
+                  >
+                    <RulesContainer
+                      window={route.rules}
+                      onWindow={(rules) => navigate({ rules }, { replace: true })}
+                    />
+                  </Suspense>
+                </ErrorBoundary>
+              ) : route.stats ? (
                 <ErrorBoundary key="stats">
                   <Suspense
                     fallback={
@@ -604,6 +627,12 @@ function StatsContainer({
   // Early in the week the nav's Stats link opens the last 7 days (`statsLink`): say why, once.
   const note = props.window === '7d' && !noteSeen && youngWeek(now);
   return <Page {...props} now={now} note={note} />;
+}
+
+function RulesContainer(props: Omit<RulesPageProps, 'now'>) {
+  // When each rule was last asked moves by the minute at most.
+  const now = useNow(30_000);
+  return <LazyRulesPage {...props} now={now} />;
 }
 
 function SidebarContainer(props: Omit<Parameters<typeof SessionSidebar>[0], 'now'>) {

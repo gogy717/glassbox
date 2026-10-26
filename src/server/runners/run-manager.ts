@@ -18,6 +18,7 @@ import { stat } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 import type { LiveState } from '../../core/model.js';
 import { redact, tildeHome } from '../../core/redact.js';
+import { glassboxDenial } from '../../shared/permissions.js';
 import type {
   AskQuestion,
   DecidedPermission,
@@ -311,10 +312,8 @@ export class RunManager {
           request.questions && d.answers ? { ...input, answers: flattenAnswers(d.answers) } : input,
       };
     } else {
-      response = {
-        behavior: 'deny',
-        message: d.message?.trim() || 'The user declined this action.',
-      };
+      // Said in words the transcript keeps, so Rules reads it as declined after a restart.
+      response = { behavior: 'deny', message: glassboxDenial(d.message) };
     }
     run.proc.send({
       type: 'control_response',

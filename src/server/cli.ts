@@ -14,6 +14,7 @@ import { createOpenCodeAdapter } from '../adapters/opencode/index.js';
 import type { AgentAdapter } from '../core/adapter.js';
 import type { SessionSummary } from '../core/model.js';
 import type { QuotaSource } from '../core/quota-source.js';
+import { runDecisions } from '../shared/permissions.js';
 import { createApp } from './app.js';
 import {
   bindWarning,
@@ -32,10 +33,12 @@ import { DemoRuns } from './demo-runs.js';
 import { DemoStore } from './demo-store.js';
 import { createFetchQuota } from './fetch-quota.js';
 import { openBrowser } from './open-browser.js';
+import { RulesService } from './rules.js';
 import { ClientCounter, startRunReaper } from './run-reaper.js';
 import { isDirectory, linkRunSessions, type RunService, sessionResolver } from './run-service.js';
 import { spawnClaude } from './runners/claude-process.js';
 import { RunManager } from './runners/run-manager.js';
+import { readRuleSettings } from './settings-read.js';
 import { SessionStore } from './store.js';
 
 const log = (msg: string) => console.error(`[glassbox] ${msg}`);
@@ -162,7 +165,18 @@ async function main(): Promise<void> {
   const clients = new ClientCounter();
   const stopReaper = runs ? startRunReaper({ runs, clients, log }) : () => {};
   if (runs) linkRunSessions(runs, store);
-  const app = createApp({ store, staticDir, runs, clients, log });
+  // The Rules page: the sessions' permission prompts, what glassbox runs answered, and the
+  // permission lists of the settings (the demo keeps its own).
+  const rules = opts.demo
+    ? undefined
+    : new RulesService(store, {
+        readSettings: (projects) => readRuleSettings({ claudeDir: opts.claudeDir, projects }),
+        yourSettings: join(opts.claudeDir, 'settings.json'),
+        decisions: () => runDecisions(runs?.list() ?? []),
+        home: homedir(),
+        log,
+      });
+  const app = createApp({ store, staticDir, runs, clients, log, rules });
   const server = serve({ fetch: app.fetch, port: opts.port, hostname: opts.host }, (info) => {
     const url = browserUrl(opts.host, info.port);
     console.log(`glassbox ${opts.demo ? '(demo data) ' : ''}listening on ${url}`);
@@ -184,6 +198,7 @@ async function main(): Promise<void> {
     stopping = true;
     stopReaper();
     demoRuns?.stop();
+    rules?.stop();
     // Ending stdin lets each `claude` child finish its turn bookkeeping and exit.
     for (const run of runs?.list() ?? []) if (run.status !== 'closed') runs?.close(run.id);
     await store.stop();

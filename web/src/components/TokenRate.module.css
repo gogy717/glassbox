@@ -61,14 +61,14 @@
 }
 
 /* One column: the figure (and the filter's tag) stay, the line goes, with the wordmark's word, the
-   last of the top bar to give way (D4); in a session, below 1300, for the title's room (DR1). */
+   last of the top bar to give way (D4); in a session, below 1390, for the title's room (DR1). */
 @media (max-width: 900px) {
   .spark {
     display: none;
   }
 }
 
-@media (max-width: 1299px) {
+@media (max-width: 1389px) {
   .wrap[data-session] .spark {
     display: none;
   }

@@ -6,6 +6,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { stream, streamSSE } from 'hono/streaming';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { MAIN_AGENT_ID } from '../core/model.js';
+import { RULES_WINDOWS, type RulesLine, type RulesWindowKind } from '../shared/permissions.js';
 import type {
   ApiErrorResponse,
   ContextBillResponse,
@@ -18,6 +19,7 @@ import type {
 } from '../shared/protocol.js';
 import type { WeekLine } from '../shared/week.js';
 import { jsonResponse, toJson } from './json.js';
+import type { RulesService } from './rules.js';
 import type { ClientCounter } from './run-reaper.js';
 import type { RunService } from './run-service.js';
 import { registerRunRoutes, runEventPacer } from './runs-routes.js';
@@ -45,6 +47,8 @@ export type AppStore = Pick<
 > & {
   /** The weekly receipt's data, when the store keeps one. */
   week?: WeekService | null;
+  /** The Rules page's data, when the store keeps one (the demo's does). */
+  rules?: RulesService | null;
 };
 
 export interface AppDeps {
@@ -62,6 +66,8 @@ export interface AppDeps {
   sessionWaitMs?: number;
   /** The weekly receipt's data; by default the store's own. */
   week?: WeekService | null;
+  /** The Rules page's data; by default the store's own. */
+  rules?: RulesService | null;
   log?: (msg: string) => void;
 }
 
@@ -75,6 +81,7 @@ export function createApp(deps: AppDeps): Hono {
   const fail = (c: Context, status: 400 | 404 | 500, error: string) =>
     jsonResponse<ApiErrorResponse>(c, { error }, status);
   const week = deps.week !== undefined ? deps.week : (store.week ?? null);
+  const rules = deps.rules !== undefined ? deps.rules : (store.rules ?? null);
 
   // Outermost, so early answers (403s, 404s, errors) carry the headers too.
   app.use('*', securityHeaders);
@@ -141,6 +148,34 @@ export function createApp(deps: AppDeps): Hono {
         write({ type: 'result', result });
       } catch (err) {
         log(`week (${kind}) failed: ${errorText(err)}`);
+        write({ type: 'error', error: errorText(err) });
+      }
+      await queue;
+    });
+  });
+
+  // NDJSON as the week's: progress lines, then the result (see src/shared/permissions.ts).
+  app.get('/api/rules', (c) => {
+    if (!rules) return fail(c, 404, 'not found');
+    const kind = c.req.query('window') ?? '30d';
+    if (!RULES_WINDOWS.includes(kind as RulesWindowKind))
+      return fail(c, 400, 'window must be 7d, 30d or all');
+    const refresh = c.req.query('refresh') === '1';
+    c.header('Content-Type', 'application/x-ndjson; charset=utf-8');
+    c.header('Cache-Control', 'no-store');
+    return stream(c, async (out) => {
+      let queue = Promise.resolve();
+      const write = (line: RulesLine) => {
+        queue = queue
+          .then(() => (out.aborted ? undefined : out.write(`${toJson(line)}\n`)))
+          .then(() => {})
+          .catch(() => {});
+      };
+      try {
+        const result = await rules.compute(kind as RulesWindowKind, { refresh }, write);
+        write({ type: 'result', result });
+      } catch (err) {
+        log(`rules (${kind}) failed: ${errorText(err)}`);
         write({ type: 'error', error: errorText(err) });
       }
       await queue;

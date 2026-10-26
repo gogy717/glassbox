@@ -1,0 +1,240 @@
+/* The Rules page scrolls on its own, as Stats does. */
+.rules {
+  height: 100%;
+  min-width: 0;
+  padding: 20px 24px 40px;
+  overflow-y: auto;
+}
+
+/* The window, then when the data is from, at the right where it fits. */
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin-bottom: 10px;
+}
+
+.status {
+  margin-left: auto;
+  font-size: var(--fs-small);
+  color: var(--muted);
+}
+
+.failed {
+  color: var(--error);
+}
+
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+/* What Asked counts, and that nothing is written: one paragraph under the head. */
+.intro {
+  max-width: 76ch;
+  margin: 0 0 16px;
+  font-size: var(--fs-small);
+  color: var(--muted);
+}
+
+/* A first read: one line of progress under the head. */
+.progress {
+  height: 2px;
+  margin: -8px 0 14px;
+  background: var(--border);
+}
+
+.progress > span {
+  display: block;
+  height: 100%;
+  background: var(--ink);
+  transition: width var(--motion);
+}
+
+.none {
+  margin: 0 0 12px;
+  font-size: var(--fs-body);
+  color: var(--muted);
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin-bottom: 12px;
+}
+
+.filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-small);
+  color: var(--muted);
+}
+
+.select {
+  max-width: 260px;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  background: var(--layer-1);
+  color: var(--text);
+  font: inherit;
+}
+
+/* The table scrolls sideways on a narrow screen rather than squeezing a rule onto many lines. */
+.scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-meta);
+}
+
+.table th,
+.table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+
+.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--layer-2);
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+/* Past `.table td`'s right alignment, as the price table's model column. */
+.table .pickHead,
+.table .pick {
+  width: 1px;
+  text-align: center;
+}
+
+.table .ruleHead,
+.table .textHead,
+.table .rule,
+.table .text {
+  text-align: left;
+}
+
+/* A rule keeps its whole key: the tags after it wrap under it if they must. */
+.table .rule {
+  white-space: normal;
+}
+
+.key {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.table .text {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.num[data-denied] {
+  color: var(--error);
+  font-weight: 600;
+}
+
+.tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  color: var(--muted);
+  font-size: var(--fs-small);
+  white-space: nowrap;
+}
+
+.tag[data-tone="suggested"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.tag[data-tone="danger"] {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+/* A Codex row: no box to tick, its title says why. */
+.apart {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+}
+
+.more {
+  margin-top: 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--fs-small);
+  cursor: pointer;
+}
+
+.blocks {
+  max-width: 820px;
+  margin-top: 28px;
+}
+
+.blocksTitle {
+  margin: 0 0 10px;
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+
+.block {
+  margin-bottom: 18px;
+}
+
+.blockTitle {
+  margin: 0 0 2px;
+  font-size: var(--fs-meta);
+  font-weight: 600;
+}
+
+.where {
+  margin: 0 0 8px;
+  font-size: var(--fs-small);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.note {
+  margin: 8px 0 0;
+  font-size: var(--fs-small);
+  color: var(--faint);
+}
