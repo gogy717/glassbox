@@ -4,9 +4,11 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Turn } from '../../../../src/core/model.js';
 import { I18nContext, makeI18n } from '../../i18n';
+import { moduleCssValue } from '../../test/module-css';
 import type { SearchGroup, SearchHit } from './search';
 import type { SearchScope } from './search-prefs';
 import { newestMatch, type TurnItem, TurnList } from './TurnList';
+import listCss from './TurnList.module.css';
 
 function item(n: number): TurnItem {
   const turn = {
@@ -542,6 +544,40 @@ describe('TurnList search', () => {
     head.focus();
     fireEvent.keyDown(head, { key: 'ArrowDown' });
     expect(document.activeElement).toBe(stops[3]);
+  });
+
+  it('hides the prompt list under the results, whatever display its own rules give it', () => {
+    renderSearch();
+    // Hidden, it has no accessible name to be found by.
+    const list = document.querySelector(`ul.${listCss.list}`) as HTMLElement;
+    expect(list).toHaveAttribute('hidden');
+    // jsdom applies no module CSS: the module's rules, matched on the list, must say none.
+    const sheet = join(import.meta.dirname, 'TurnList.module.css');
+    expect(moduleCssValue(sheet, listCss, list, 'display')).toBe('none');
+  });
+
+  it('brings the open prompt into view once a search that hid the list is cleared', () => {
+    const tree = (shown: SearchGroup[] | null) => (
+      <I18nContext.Provider value={makeI18n('en')}>
+        <TurnList
+          items={items}
+          selectedId="turn_1"
+          onSelect={vi.fn()}
+          query="login"
+          onQuery={vi.fn()}
+          scope="everything"
+          onScope={vi.fn()}
+          results={shown}
+          onHit={vi.fn()}
+        />
+      </I18nContext.Provider>
+    );
+    // A hit opened prompt 1 while the list was hidden, and so was never laid out to show it.
+    const view = render(tree(results));
+    const scrolled = layOut(document.querySelector(`ul.${listCss.list}`) as HTMLElement);
+    view.rerender(tree(null));
+    // Prompt 1 is the fifth row, at 400–490 px in a 300 px list.
+    expect(scrolled.top).toBe(490 - 300 + 10);
   });
 
   it('says when nothing matches, and what it searched', () => {

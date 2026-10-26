@@ -96,6 +96,11 @@
   scrollbar-gutter: stable;
 }
 
+/* The list's own display would beat the hidden attribute's: hidden under a search, it is gone. */
+.list[hidden] {
+  display: none;
+}
+
 .list > li {
   border-bottom: 1px solid var(--border);
 }

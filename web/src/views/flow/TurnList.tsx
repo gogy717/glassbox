@@ -305,12 +305,14 @@ export const TurnList = memo(function TurnList({
   const roving = useRovingFocus(listRef, ids, selectedId);
 
   // Follow moves the selection to each new turn and a link may select an old one: keep it in view.
+  // So does clearing a search, under which the list was hidden and not laid out.
+  const listShown = hits === null;
   useEffect(() => {
     const list = listRef.current;
-    if (!list || !selectedId) return;
+    if (!list || !selectedId || !listShown) return;
     for (const li of list.children)
       if (li instanceof HTMLElement && li.dataset.turn === selectedId) reveal(list, li);
-  }, [selectedId]);
+  }, [selectedId, listShown]);
 
   const field = t(everything ? 'flow.searchAll' : 'flow.filterTurns');
   return (
