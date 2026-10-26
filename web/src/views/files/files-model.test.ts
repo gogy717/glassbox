@@ -106,6 +106,40 @@ describe('touchesOf', () => {
       });
     });
 
+    it('says where an edit landed, as its result recorded it, in the file as the edit left it', () => {
+      const edit = (lineChanges: [number, number, number][]) =>
+        touchesOf(
+          call('Edit', { file_path: '/r/a.ts', old_string: 'a', new_string: 'b' }, { lineChanges }),
+        )[0]?.lines;
+      expect(edit([[41, 1, 3]])).toBe('41-43');
+      // The second change sits three lines lower once the first put three in.
+      expect(
+        edit([
+          [36, 0, 3],
+          [41, 1, 3],
+        ]),
+      ).toBe('36-38, 44-46');
+      // Lines only removed: where they were.
+      expect(edit([[5, 2, 0]])).toBe('5');
+      expect(
+        edit([
+          [1, 0, 1],
+          [10, 1, 1],
+          [20, 1, 1],
+          [30, 1, 1],
+        ]),
+      ).toBe('1, 11, 21, …');
+      const over = call(
+        'Write',
+        { file_path: '/r/a.ts', content: 'x' },
+        { resultPreview: 'The file /r/a.ts has been updated.', lineChanges: [[2, 1, 1]] },
+      );
+      expect(touchesOf(over)[0]?.lines).toBe('2');
+      // A patch names its own files: a call's line changes are never its sections'.
+      const patch = call('apply_patch', { input: PATCH }, { lineChanges: [[1, 1, 1]] });
+      expect(touchesOf(patch).map((t) => t.lines)).toEqual([null, null, null]);
+    });
+
     it('creates a file with Write, or edits it when the result says the file was there', () => {
       const created = call('Write', { file_path: '/r/new.ts', content: 'export {};\n' });
       expect(touchesOf(created)).toEqual([

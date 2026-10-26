@@ -38,6 +38,7 @@ import {
   type ToolState,
   type TurnState,
 } from './agent-state.js';
+import { lineChangesOf } from './line-changes.js';
 import {
   type ApiRequestRecord,
   type AssistantRecord,
@@ -1123,6 +1124,9 @@ export class ClaudeSessionParser implements SessionParser {
 
   private toolView(t: ToolState): ToolCall {
     const endedAt = t.result?.at ?? null;
+    // Where an edit landed, as its result recorded it.
+    const lineChanges =
+      t.result && !t.result.isError ? lineChangesOf(t.result.toolUseResult) : null;
     return {
       id: t.id,
       agentId: t.agentId,
@@ -1136,6 +1140,7 @@ export class ClaudeSessionParser implements SessionParser {
       resultPreview: t.result ? preview(t.result.content) : null,
       hasFullResult: t.result !== null,
       spawned: this.spawnOf.get(t.id) ?? null,
+      ...(lineChanges ? { lineChanges } : {}),
     };
   }
 

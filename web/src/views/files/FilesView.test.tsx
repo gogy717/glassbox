@@ -86,6 +86,20 @@ describe('FilesView', () => {
     expect(rows()).toHaveLength(6);
   });
 
+  it('says on a call which lines its edit changed, as a read says which it read', () => {
+    renderFiles(
+      'main',
+      withTool(demoOpen(), {
+        name: 'Edit',
+        input: { file_path: '/Users/demo/Dev/glassbox/src/x.ts', old_string: 'a', new_string: 'b' },
+        lineChanges: [[41, 1, 3]],
+      }),
+    );
+    fireEvent.click(row(/^x\.ts/));
+    const calls = within(screen.getByRole('list', { name: 'Tool calls' })).getAllByRole('button');
+    expect(calls.map((c) => c.textContent)).toEqual([expect.stringMatching(/^Edit:41-43·edited·/)]);
+  });
+
   it('unfolds a row into the calls behind it, each a link to its card in the execution chain', () => {
     const { navigate, setFollow } = renderFiles();
     fireEvent.click(row(/^store\.ts/));

@@ -397,6 +397,38 @@ describe('tool calls', () => {
     expect(p.toolResult('nope')).toBeUndefined();
   });
 
+  it('an edit says which lines it changed, as its result records them; other calls say nothing', () => {
+    const s = parseMain(
+      userPrompt(),
+      assistantBlocks({
+        requestId: 'req-edit',
+        blocks: [
+          {
+            type: 'tool_use',
+            id: 'toolu_e',
+            name: 'Edit',
+            input: { file_path: '/a.ts', old_string: 'b', new_string: 'c\nd' },
+          },
+        ],
+        blockTs: [at(10)],
+      }),
+      callBash('toolu_b', at(11)),
+      toolResult({
+        toolUseId: 'toolu_e',
+        content: 'The file /a.ts has been updated.',
+        toolUseResult: {
+          filePath: '/a.ts',
+          structuredPatch: [
+            { oldStart: 1, oldLines: 3, newStart: 1, newLines: 4, lines: [' a', '-b', '+c', '+d'] },
+          ],
+        },
+      }),
+      toolResult({ toolUseId: 'toolu_b', content: 'a.txt', toolUseResult: { stdout: 'a.txt' } }),
+    ).snapshot();
+    expect(s.toolCalls.find((t) => t.id === 'toolu_e')?.lineChanges).toEqual([[2, 1, 2]]);
+    expect(s.toolCalls.find((t) => t.id === 'toolu_b')).not.toHaveProperty('lineChanges');
+  });
+
   it('a result that arrives before its tool_use still closes the call', () => {
     const s = parseMain(
       userPrompt(),

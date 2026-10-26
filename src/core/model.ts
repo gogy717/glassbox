@@ -334,6 +334,13 @@ export type ToolStatus = 'running' | 'complete' | 'error' | 'unknown';
 
 export type SpawnRef = { kind: 'agent'; agentId: string } | { kind: 'workflow'; runId: string };
 
+/**
+ * One run of lines an edit changed, in the file as the edit found it: the first line it removed
+ * (1-based), how many it removed there, and how many it put in their place. Lines only put in
+ * (`removed` 0) go before line `at`.
+ */
+export type LineChange = [at: number, removed: number, added: number];
+
 export interface ToolCall {
   /** The agent's tool-use id. */
   id: string;
@@ -351,6 +358,12 @@ export interface ToolCall {
   hasFullResult: boolean;
   /** Set when this call launched a sub-agent or a workflow run. */
   spawned: SpawnRef | null;
+  /**
+   * The lines an edit of one file changed, in order, as the agent recorded them once it was
+   * applied (Claude Code's Edit, MultiEdit and a Write over a file). Absent when the agent
+   * records none: the edit's input alone does not say where in the file it landed.
+   */
+  lineChanges?: LineChange[];
 }
 
 /** A multi-agent orchestration run (Claude Code: the Workflow tool, "ultracode"). */
