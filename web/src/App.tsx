@@ -35,7 +35,7 @@ import { I18nContext, makeI18n, useI18n } from './i18n';
 import { lazyView } from './lib/lazy-view';
 import { isListed } from './lib/sessions';
 import { applyTheme, loadPrefs, type Prefs, savePrefs } from './prefs';
-import { formatRoute, pageOf, parseRoute, sessionLink, useRoute } from './router';
+import { formatRoute, pageOf, parseRoute, sessionLink, useRoute, youngWeek } from './router';
 import { UiContext } from './ui';
 import { Composer } from './views/composer/Composer';
 import { NewSessionDialog } from './views/composer/NewSessionDialog';
@@ -355,6 +355,8 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
                 selectedId={route.sessionId}
                 showProbes={prefs.showProbes}
                 failures={failures}
+                prefs={prefs}
+                onPrefs={onPrefs}
                 onSelect={(id) => {
                   navigate({ sessionId: id, agentId: 'main', turnId: null, requestId: null });
                   if (!floating) return;
@@ -378,6 +380,8 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
                       window={route.stats}
                       onWindow={(stats) => navigate({ stats }, { replace: true })}
                       showProbes={prefs.showProbes}
+                      noteSeen={prefs.statsNoteSeen}
+                      onNoteSeen={() => onPrefs({ ...prefs, statsNoteSeen: true })}
                       sessions={state.sessions}
                       quotas={state.quotas}
                     />
@@ -466,11 +470,16 @@ function HomeContainer(props: Omit<Parameters<typeof Home>[0], 'now'>) {
   return <Home {...props} now={now} />;
 }
 
-function StatsContainer(props: Omit<StatsPageProps, 'now'>) {
+function StatsContainer({
+  noteSeen,
+  ...props
+}: Omit<StatsPageProps, 'now' | 'note'> & { noteSeen: boolean }) {
   // Reset times and the head's span move by the minute at most.
   const now = useNow(30_000);
   const Page = statsModule?.StatsPage ?? LazyStatsPage;
-  return <Page {...props} now={now} />;
+  // Early in the week the nav's Stats link opens the last 7 days (`statsLink`): say why, once.
+  const note = props.window === '7d' && !noteSeen && youngWeek(now);
+  return <Page {...props} now={now} note={note} />;
 }
 
 function SidebarContainer(props: Omit<Parameters<typeof SessionSidebar>[0], 'now'>) {

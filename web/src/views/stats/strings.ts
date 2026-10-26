@@ -39,6 +39,8 @@ const en = {
   resets: 'resets {time}',
   noReset: 'no reset given',
   noQuota: 'No plan usage to show.',
+  defaultNote:
+    'Less than a day into the week, Stats opens on the last 7 days; This week counts from Monday.',
 };
 
 type Key = keyof typeof en;
@@ -77,6 +79,7 @@ const zh: Record<Key, string> = {
   resets: '{time} 重置',
   noReset: '没有重置时间',
   noQuota: '没有可显示的用量。',
+  defaultNote: '本周才开始不到一天，统计先显示最近 7 天；本周从周一起算。',
 };
 
 export type StatsKey = Key;

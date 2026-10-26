@@ -1,8 +1,10 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { useState } from 'react';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createDemoSessions } from '../../../src/core/fixtures/demo.js';
 import type { SessionSummary } from '../../../src/core/model.js';
 import { I18nContext, makeI18n } from '../i18n';
+import { DEFAULT_PREFS, type Prefs } from '../prefs';
 import { DEMO_NOW } from '../test/demo';
 import tagCss from './AgentTag.module.css';
 import { WAIT_MS } from './Delayed';
@@ -10,6 +12,8 @@ import rowCss from './SessionRow.module.css';
 import { SessionSidebar } from './SessionSidebar';
 
 const sessions = createDemoSessions(DEMO_NOW);
+// A session's row, not the pin beside it in the same list item.
+const isRow = (b: HTMLElement) => b.classList.contains(rowCss.row as string);
 
 function renderSidebar(onSelect = vi.fn()) {
   render(
@@ -57,7 +61,7 @@ describe('SessionSidebar', () => {
 
   it('marks every session with its agent, in that agent’s colours, even with one agent', () => {
     renderSidebar();
-    const items = screen.getAllByRole('button').filter((b) => b.closest('li'));
+    const items = screen.getAllByRole('button').filter(isRow);
     const tags = items.map((b) => b.querySelector('[data-agent]'));
     expect(tags.every((tag) => tag?.getAttribute('data-agent') === 'claude-code')).toBe(true);
     const tag = tags[0] as HTMLElement;
@@ -113,7 +117,7 @@ describe('SessionSidebar', () => {
     const group = screen.getByRole('group', { name: 'Filter by agent' });
     const chips = within(group).getAllByRole('button');
     expect(chips.map((c) => c.textContent)).toEqual(['All 3', 'Claude Code 2', 'Grok 1']);
-    const rows = () => screen.getAllByRole('button').filter((b) => b.closest('li'));
+    const rows = () => screen.getAllByRole('button').filter(isRow);
     expect(rows()).toHaveLength(sessions.length);
 
     const grok = within(group).getByRole('button', { name: /^Grok/ });
@@ -193,7 +197,7 @@ describe('SessionSidebar', () => {
     );
     const group = screen.getByRole('group', { name: 'Filter by agent' });
     fireEvent.click(within(group).getByRole('button', { name: /^Grok/ }));
-    const rows = screen.getAllByRole('button').filter((b) => b.closest('li'));
+    const rows = screen.getAllByRole('button').filter(isRow);
     expect(rows).toHaveLength(2);
     expect(rows.find((b) => b.getAttribute('aria-current') === 'true')).toHaveTextContent(
       open.title ?? '',
@@ -216,18 +220,21 @@ describe('SessionSidebar', () => {
     for (const chip of within(group).getAllByRole('button'))
       expect(chip).not.toHaveAttribute('data-roving');
     fireEvent.click(within(group).getByRole('button', { name: /^Grok/ }));
-    const rows = screen.getAllByRole('button').filter((b) => b.closest('li'));
+    const rows = screen.getAllByRole('button').filter(isRow);
     expect(rows).toHaveLength(sessions.length - 1);
     // One stop, on the first row the filter left.
     expect(rows.map((r) => r.tabIndex)).toEqual(rows.map((_, i) => (i === 0 ? 0 : -1)));
     (rows[0] as HTMLElement).focus();
+    // The next row is in another group: its title comes between (D, F7).
     fireEvent.keyDown(rows[0] as HTMLElement, { key: 'ArrowDown' });
+    expect(screen.getByRole('button', { name: 'blog' })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowDown' });
     expect(rows[1]).toHaveFocus();
     fireEvent.keyDown(rows[1] as HTMLElement, { key: 'End' });
     expect(rows.at(-1)).toHaveFocus();
     // Back to every agent: the stop stays on the row last focused.
     fireEvent.click(within(group).getByRole('button', { name: /^Grok/ }));
-    const all = screen.getAllByRole('button').filter((b) => b.closest('li'));
+    const all = screen.getAllByRole('button').filter(isRow);
     expect(all.filter((r) => r.tabIndex === 0)).toEqual([rows.at(-1)]);
   });
 
@@ -246,11 +253,9 @@ describe('SessionSidebar', () => {
     const { rerender } = render(sidebar(mixed));
     const group = screen.getByRole('group', { name: '按 agent 筛选' });
     fireEvent.click(within(group).getByRole('button', { name: /^Grok/ }));
-    expect(screen.getAllByRole('button').filter((b) => b.closest('li'))).toHaveLength(1);
+    expect(screen.getAllByRole('button').filter(isRow)).toHaveLength(1);
     rerender(sidebar(sessions));
-    expect(screen.getAllByRole('button').filter((b) => b.closest('li'))).toHaveLength(
-      sessions.length,
-    );
+    expect(screen.getAllByRole('button').filter(isRow)).toHaveLength(sessions.length);
   });
 
   it('cuts long text inside the row and puts all of it in the row’s tooltip', () => {
@@ -332,14 +337,16 @@ describe('SessionSidebar', () => {
 
   it('is one tab stop, at the selected session, with arrow keys across projects', () => {
     renderSidebar();
-    const items = screen.getAllByRole('button').filter((b) => b.closest('li'));
+    const items = screen.getAllByRole('button').filter(isRow);
     expect(items.filter((b) => b.tabIndex === 0)).toEqual([
       screen.getByRole('button', { name: /Live viewer research/ }),
     ]);
     const first = items[0] as HTMLElement;
     first.focus();
     fireEvent.keyDown(first, { key: 'ArrowDown' });
-    // The next session sits in another project's group.
+    // The next session sits in another project's group: its title comes first (D, F7).
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'shopfront' }));
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowDown' });
     expect(document.activeElement).toBe(items[1]);
     expect(items[1]?.closest('ul')).not.toBe(first.closest('ul'));
     fireEvent.keyDown(items[1] as HTMLElement, { key: 'End' });
@@ -383,7 +390,7 @@ describe('SessionSidebar', () => {
     const chips = within(group).getAllByRole('button');
     expect(chips.map((c) => c.textContent)).toEqual(['All', 'Running 2', 'Idle 1', 'Closed 1']);
     expect(chips[0]).toHaveAttribute('aria-pressed', 'true');
-    const rows = () => screen.getAllByRole('button').filter((b) => b.closest('li'));
+    const rows = () => screen.getAllByRole('button').filter(isRow);
 
     fireEvent.click(within(group).getByRole('button', { name: /^Running/ }));
     expect(
@@ -474,9 +481,7 @@ describe('SessionSidebar', () => {
       'aria-pressed',
       'true',
     );
-    expect(screen.getAllByRole('button').filter((b) => b.closest('li'))).toHaveLength(
-      sessions.length,
-    );
+    expect(screen.getAllByRole('button').filter(isRow)).toHaveLength(sessions.length);
   });
 
   it('clears a state filter whose sessions are gone, so the next one does not filter again', () => {
@@ -504,9 +509,7 @@ describe('SessionSidebar', () => {
     expect(document.activeElement).toBe(all);
     // A session starts running again: the list stays whole.
     rerender(sidebar(sessions));
-    expect(screen.getAllByRole('button').filter((b) => b.closest('li'))).toHaveLength(
-      sessions.length,
-    );
+    expect(screen.getAllByRole('button').filter(isRow)).toHaveLength(sessions.length);
     expect(within(group()).getByRole('button', { name: 'All' })).toHaveAttribute(
       'aria-pressed',
       'true',
@@ -537,7 +540,7 @@ describe('SessionSidebar', () => {
     expect(all).toHaveAttribute('aria-pressed', 'true');
     expect(document.activeElement).toBe(all);
     rerender(sidebar(three));
-    expect(screen.getAllByRole('button').filter((b) => b.closest('li'))).toHaveLength(three.length);
+    expect(screen.getAllByRole('button').filter(isRow)).toHaveLength(three.length);
   });
 
   it('keeps a chip row while its filter is armed, even with one choice left, so All can clear it', () => {
@@ -568,5 +571,302 @@ describe('SessionSidebar', () => {
     fireEvent.click(within(group).getByRole('button', { name: /^All/ }));
     // Nothing armed and one choice: no row.
     expect(screen.queryByRole('group', { name: 'Filter by agent' })).toBeNull();
+  });
+});
+
+/** The sidebar with its prefs held in state, as the app holds them. */
+function Harness({
+  sessions: list,
+  selectedId = null,
+  locale = 'en',
+  prefs: initial = DEFAULT_PREFS,
+  onPrefs,
+}: {
+  sessions: SessionSummary[];
+  selectedId?: string | null;
+  locale?: 'en' | 'zh';
+  prefs?: Prefs;
+  onPrefs?(p: Prefs): void;
+}) {
+  const [prefs, setPrefs] = useState(initial);
+  return (
+    <I18nContext.Provider value={makeI18n(locale)}>
+      <SessionSidebar
+        sessions={list}
+        selectedId={selectedId}
+        now={DEMO_NOW.getTime()}
+        prefs={prefs}
+        onPrefs={(p) => {
+          setPrefs(p);
+          onPrefs?.(p);
+        }}
+        onSelect={vi.fn()}
+      />
+    </I18nContext.Provider>
+  );
+}
+
+const lists = () => screen.getAllByRole('list').map((l) => l.getAttribute('aria-label'));
+const titles = (list: HTMLElement) =>
+  within(list)
+    .getAllByRole('button')
+    .filter(isRow)
+    .map((r) => r.querySelector(`.${rowCss.title}`)?.textContent);
+const pinOf = (row: HTMLElement) =>
+  within(row.parentElement as HTMLElement).getByRole('button', { name: 'Pin' });
+
+// Branch D (F7) item 2: pins, a first group of their own, kept in the prefs by id.
+describe('SessionSidebar pins', () => {
+  it('pins a session from the button beside its row into a first Pinned group, in the order pinned', () => {
+    const onPrefs = vi.fn();
+    render(<Harness sessions={sessions} onPrefs={onPrefs} />);
+    const pin = pinOf(screen.getByRole('button', { name: /Fix flaky login/ }));
+    expect(pin).toHaveAttribute('aria-pressed', 'false');
+    expect(pin).toHaveAttribute('title', 'Pin · P');
+    // Not a tab stop of its own: the rows are one, and P on a row pins it.
+    expect(pin.tabIndex).toBe(-1);
+    fireEvent.click(pin);
+    expect(onPrefs).toHaveBeenLastCalledWith(
+      expect.objectContaining({ pinned: [sessions[1]?.id] }),
+    );
+    expect(lists()).toEqual(['Pinned', 'glassbox', 'blog']);
+    fireEvent.click(pinOf(screen.getByRole('button', { name: /Untitled session/ })));
+    expect(lists()).toEqual(['Pinned', 'glassbox']);
+    const pinned = screen.getByRole('list', { name: 'Pinned' });
+    expect(titles(pinned)).toEqual(['Fix flaky login test', 'Untitled session']);
+    const pressed = within(pinned).getAllByRole('button', { name: 'Pin', pressed: true });
+    expect(pressed).toHaveLength(2);
+    expect(pressed[0]).toHaveAttribute('title', 'Unpin · P');
+    // Unpinned, a session goes back to its project.
+    fireEvent.click(pressed[0] as HTMLElement);
+    expect(lists()).toEqual(['Pinned', 'glassbox', 'shopfront']);
+    expect(onPrefs).toHaveBeenLastCalledWith(
+      expect.objectContaining({ pinned: [sessions[2]?.id] }),
+    );
+  });
+
+  it('pins and unpins the focused row with P, and keeps focus on it where it lands', () => {
+    render(<Harness sessions={sessions} />);
+    const row = screen.getByRole('button', { name: /Fix flaky login/ });
+    row.focus();
+    fireEvent.keyDown(row, { key: 'p' });
+    const moved = within(screen.getByRole('list', { name: 'Pinned' })).getByRole('button', {
+      name: /Fix flaky login/,
+    });
+    expect(moved).toHaveFocus();
+    expect(moved.tabIndex).toBe(0);
+    // With a modifier it is some other key (⌘P prints).
+    fireEvent.keyDown(moved, { key: 'p', metaKey: true });
+    expect(screen.getByRole('list', { name: 'Pinned' })).toBeInTheDocument();
+    fireEvent.keyDown(moved, { key: 'P' });
+    expect(screen.queryByRole('list', { name: 'Pinned' })).toBeNull();
+    expect(screen.getByRole('button', { name: /Fix flaky login/ })).toHaveFocus();
+  });
+
+  it('lists the saved pins first, and names the group in Chinese too', () => {
+    render(
+      <Harness
+        sessions={sessions}
+        locale="zh"
+        prefs={{ ...DEFAULT_PREFS, pinned: [sessions[2]?.id as string, sessions[0]?.id as string] }}
+      />,
+    );
+    expect(lists()).toEqual(['已置顶', 'shopfront']);
+    expect(titles(screen.getByRole('list', { name: '已置顶' }))).toEqual([
+      '未命名会话',
+      'Live viewer research (demo)',
+    ]);
+    expect(screen.getAllByRole('button', { name: '置顶', pressed: true })).toHaveLength(2);
+  });
+});
+
+// Branch D (F7) item 1: a group folds from its title; the folded set is kept in the prefs.
+describe('SessionSidebar folding', () => {
+  it('folds a group from its title, which keeps its count and the dots of its running sessions', () => {
+    const onPrefs = vi.fn();
+    render(<Harness sessions={sessions} onPrefs={onPrefs} />);
+    const title = screen.getByRole('button', { name: 'glassbox' });
+    expect(title).toHaveAttribute('aria-expanded', 'true');
+    // The directory its sessions ran in, as the tooltip.
+    expect(title).toHaveAttribute('title', '/Users/demo/Dev/glassbox');
+    expect(title).toHaveAttribute(
+      'aria-controls',
+      screen.getByRole('list', { name: 'glassbox' }).id,
+    );
+    fireEvent.click(title);
+    expect(onPrefs).toHaveBeenLastCalledWith(expect.objectContaining({ folded: ['glassbox'] }));
+    expect(lists()).toEqual(['shopfront', 'blog']);
+    const folded = screen.getByRole('button', { name: /^glassbox/ });
+    expect(folded).toHaveAttribute('aria-expanded', 'false');
+    expect(folded).not.toHaveAttribute('aria-controls');
+    expect(folded).toHaveAccessibleName('glassbox 1 session 1 running');
+    expect(folded.querySelector('.figure')).toHaveTextContent('1');
+    expect(folded.querySelector('[data-state="busy"]')).not.toBeNull();
+    fireEvent.click(folded);
+    expect(onPrefs).toHaveBeenLastCalledWith(expect.objectContaining({ folded: [] }));
+    expect(lists()).toEqual(['glassbox', 'shopfront', 'blog']);
+  });
+
+  it('keeps the open session’s row on show in a folded group, and says who waits in it', () => {
+    // A waiting session beside the open one in shopfront, as saved folded.
+    const two = sessions.map((s, i) =>
+      i === 2
+        ? { ...s, live: 'waiting' as const, project: 'shopfront', cwd: sessions[1]?.cwd ?? null }
+        : s,
+    );
+    render(
+      <Harness
+        sessions={two}
+        selectedId={sessions[1]?.id ?? null}
+        prefs={{ ...DEFAULT_PREFS, folded: ['shopfront'] }}
+      />,
+    );
+    const title = screen.getByRole('button', { name: /^shopfront/ });
+    expect(title).toHaveAttribute('aria-expanded', 'false');
+    expect(title).toHaveAccessibleName('shopfront 2 sessions 1 waiting for you');
+    expect(title.querySelector('[data-state="waiting"]')).not.toBeNull();
+    expect(titles(screen.getByRole('list', { name: 'shopfront' }))).toEqual([
+      'Fix flaky login test',
+    ]);
+  });
+
+  it('folds from the keyboard: the titles sit among the rows under the list’s one tab stop', () => {
+    render(<Harness sessions={sessions} />);
+    const first = screen.getByRole('button', { name: /Live viewer research/ });
+    // Tab enters the list at a row, not at a title, until something was focused.
+    expect(screen.getByRole('button', { name: 'shopfront' }).tabIndex).toBe(-1);
+    expect(first.tabIndex).toBe(0);
+    first.focus();
+    fireEvent.keyDown(first, { key: 'ArrowDown' });
+    const title = screen.getByRole('button', { name: 'shopfront' });
+    expect(title).toHaveFocus();
+    expect(title.tabIndex).toBe(0);
+    // A native button: Enter and Space press it (jsdom does not), as a click does.
+    fireEvent.click(title);
+    expect(title).toHaveAttribute('aria-expanded', 'false');
+    expect(title).toHaveFocus();
+    fireEvent.keyDown(title, { key: 'ArrowDown' });
+    expect(screen.getByRole('button', { name: 'blog' })).toHaveFocus();
+  });
+
+  it('speaks a folded group in Chinese', () => {
+    render(
+      <Harness
+        sessions={sessions}
+        locale="zh"
+        prefs={{ ...DEFAULT_PREFS, folded: ['glassbox'] }}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /^glassbox/ })).toHaveAccessibleName(
+      'glassbox 1 个会话 1 个运行中',
+    );
+  });
+});
+
+// Branch D (F7) item 4: a group lists its running and idle sessions and the 5 most recently
+// closed; "N more" unfolds the rest, for this page only.
+describe('SessionSidebar "N more"', () => {
+  const idle = sessions[1] as SessionSummary;
+  const minutesAgo = (n: number) => new Date(DEMO_NOW.getTime() - n * 60_000).toISOString();
+  // shopfront: the idle session, then eight closed ones, newest first.
+  const many = [
+    sessions[0] as SessionSummary,
+    idle,
+    ...Array.from({ length: 8 }, (_, i) => ({
+      ...idle,
+      id: `claude-code:closed-${i}`,
+      title: `Closed ${i}`,
+      live: 'closed' as const,
+      updatedAt: minutesAgo(100 + i),
+    })),
+  ];
+  const shopfront = () => titles(screen.getByRole('list', { name: 'shopfront' }));
+
+  it('lists the 5 most recent closed sessions, then "N more", which unfolds the rest', () => {
+    render(<Harness sessions={many} />);
+    expect(shopfront()).toEqual([
+      'Fix flaky login test',
+      'Closed 0',
+      'Closed 1',
+      'Closed 2',
+      'Closed 3',
+      'Closed 4',
+    ]);
+    const more = screen.getByRole('button', { name: '3 more' });
+    // Under the list's one tab stop, after the group's rows.
+    expect(more).toHaveAttribute('data-roving');
+    const last = screen.getByRole('button', { name: /Closed 4/ });
+    last.focus();
+    fireEvent.keyDown(last, { key: 'ArrowDown' });
+    expect(more).toHaveFocus();
+    fireEvent.click(more);
+    expect(shopfront()).toHaveLength(9);
+    expect(screen.queryByRole('button', { name: /more$/ })).toBeNull();
+    // Focus moves on to the first row revealed.
+    expect(screen.getByRole('button', { name: /Closed 5/ })).toHaveFocus();
+  });
+
+  it('shows every closed session under a search or the Closed filter', () => {
+    render(<Harness sessions={many} />);
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'closed' } });
+    expect(screen.queryByRole('button', { name: /more$/ })).toBeNull();
+    expect(shopfront()).toHaveLength(8);
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: '' } });
+    expect(screen.getByRole('button', { name: '3 more' })).toBeInTheDocument();
+    const states = screen.getByRole('group', { name: 'Filter by state' });
+    fireEvent.click(within(states).getByRole('button', { name: /^Closed/ }));
+    expect(screen.queryByRole('button', { name: /more$/ })).toBeNull();
+    expect(shopfront()).toHaveLength(8);
+  });
+
+  it('keeps the open session on show past the 5, and says N more in Chinese', () => {
+    render(<Harness sessions={many} locale="zh" selectedId="claude-code:closed-7" />);
+    expect(shopfront()).toEqual([
+      'Fix flaky login test',
+      'Closed 0',
+      'Closed 1',
+      'Closed 2',
+      'Closed 3',
+      'Closed 4',
+      'Closed 7',
+    ]);
+    expect(screen.getByRole('button', { name: '还有 2 个' })).toBeInTheDocument();
+  });
+});
+
+// Branch D (F7) item 3: Group by Project · Time, in the head; the choice is kept in the prefs.
+describe('SessionSidebar grouping', () => {
+  it('groups by time from the switch, today to earlier, and remembers the choice', () => {
+    const onPrefs = vi.fn();
+    render(<Harness sessions={sessions} onPrefs={onPrefs} />);
+    const by = screen.getByRole('radiogroup', { name: 'Group by' });
+    expect(within(by).getByRole('radio', { name: 'Project' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    fireEvent.click(within(by).getByRole('radio', { name: 'Time' }));
+    expect(onPrefs).toHaveBeenLastCalledWith(expect.objectContaining({ groupBy: 'time' }));
+    // The demo: two sessions today, one earlier this week; nothing yesterday or earlier.
+    expect(lists()).toEqual(['Today', 'This week']);
+    expect(titles(screen.getByRole('list', { name: 'Today' }))).toEqual([
+      'Live viewer research (demo)',
+      'Fix flaky login test',
+    ]);
+    // A time group folds like a project, by its own key.
+    fireEvent.click(screen.getByRole('button', { name: 'This week' }));
+    expect(onPrefs).toHaveBeenLastCalledWith(
+      expect.objectContaining({ folded: ['/week'], groupBy: 'time' }),
+    );
+    expect(lists()).toEqual(['Today']);
+    fireEvent.click(within(by).getByRole('radio', { name: 'Project' }));
+    expect(lists()).toEqual(['glassbox', 'shopfront', 'blog']);
+  });
+
+  it('names the time groups in Chinese', () => {
+    render(
+      <Harness sessions={sessions} locale="zh" prefs={{ ...DEFAULT_PREFS, groupBy: 'time' }} />,
+    );
+    expect(screen.getByRole('radiogroup', { name: '分组' })).toBeInTheDocument();
+    expect(lists()).toEqual(['今天', '本周']);
   });
 });

@@ -1511,3 +1511,105 @@ describe('App pages: Home · Session · Stats', () => {
     ).toEqual(['本周', '最近 7 天']);
   });
 });
+
+// Branch D (F7): the list's grouping, folds and pins live in the prefs, so they survive a reload.
+describe('App session list prefs', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(DEMO_NOW);
+    window.location.hash = '';
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    localStorage.clear();
+    window.location.hash = '';
+  });
+
+  it('lists as the saved prefs say, and saves a change to them', () => {
+    const [, idle] = createDemoSessions(DEMO_NOW);
+    localStorage.setItem(
+      'glassbox.prefs',
+      JSON.stringify({ groupBy: 'time', pinned: [idle?.id], folded: ['/today'] }),
+    );
+    const store = createStore();
+    store.applyEvent({ type: 'sessions', sessions: createDemoSessions(DEMO_NOW) });
+    render(<App store={store} connect={noConnect} runs={fakeRuns()} />);
+    const list = sidebar();
+    expect(
+      within(list)
+        .getAllByRole('list')
+        .map((l) => l.getAttribute('aria-label')),
+    ).toEqual(['Pinned', 'This week']);
+    expect(within(list).getByRole('button', { name: /^Today/ })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    fireEvent.click(within(list).getByRole('radio', { name: 'Project' }));
+    const saved = JSON.parse(localStorage.getItem('glassbox.prefs') ?? '{}');
+    expect(saved).toMatchObject({ groupBy: 'project', pinned: [idle?.id], folded: ['/today'] });
+  });
+});
+
+// Branch D (F7) item 6: early in the week the nav's Stats link opens the last 7 days, and the
+// page says why, once. `#/stats` itself keeps meaning this week.
+describe('App Stats default window', () => {
+  // A Monday afternoon, local time.
+  const MONDAY = new Date(2026, 9, 26, 14, 0, 0);
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    window.location.hash = '';
+    // Stats reads the week: here it never answers.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise<Response>(() => {})),
+    );
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    localStorage.clear();
+    window.location.hash = '';
+  });
+  const pages = () => within(screen.getByRole('banner')).getByRole('navigation', { name: 'Pages' });
+  const stats = () => within(pages()).getByRole('link', { name: 'Stats' });
+  const note = /Less than a day into the week/;
+
+  it('points Stats at the last 7 days while the week is under a day old, and notes why once', async () => {
+    vi.setSystemTime(MONDAY);
+    render(<App store={createStore()} connect={noConnect} runs={fakeRuns()} />);
+    expect(stats()).toHaveAttribute('href', '#/stats?window=7d');
+    fireEvent.click(stats());
+    await waitFor(() => expect(window.location.hash).toBe('#/stats?window=7d'));
+    expect(await screen.findByText(note)).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem('glassbox.prefs') ?? '{}').statsNoteSeen).toBe(true);
+    // Said once: the next visit does without it.
+    fireEvent.click(within(pages()).getByRole('link', { name: 'Home' }));
+    await waitFor(() =>
+      expect(within(pages()).getByRole('link', { name: 'Home' })).toHaveAttribute(
+        'aria-current',
+        'page',
+      ),
+    );
+    fireEvent.click(stats());
+    await screen.findByRole('radiogroup', { name: 'Window' });
+    expect(screen.queryByText(note)).toBeNull();
+  });
+
+  it('keeps #/stats meaning this week, without the note; later in the week the link says so too', async () => {
+    vi.setSystemTime(MONDAY);
+    window.location.hash = '#/stats';
+    const first = render(<App store={createStore()} connect={noConnect} runs={fakeRuns()} />);
+    const windows = await screen.findByRole('radiogroup', { name: 'Window' });
+    expect(within(windows).getByRole('radio', { name: 'This week' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    expect(screen.queryByText(note)).toBeNull();
+    first.unmount();
+    // A Friday.
+    vi.setSystemTime(DEMO_NOW);
+    window.location.hash = '';
+    render(<App store={createStore()} connect={noConnect} runs={fakeRuns()} />);
+    expect(stats()).toHaveAttribute('href', '#/stats');
+  });
+});

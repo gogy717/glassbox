@@ -562,3 +562,49 @@ const agentNameOf = (kind: string) =>
     'oh-my-pi': 'oh-my-pi',
     opencode: 'OpenCode',
   })[kind] ?? kind;
+
+// Branch D (F7) item 6: the note under the switch, for the visit that opened on the last 7 days.
+describe('the Stats page’s note on its default window', () => {
+  const noted = (store: Store, kind: WeekWindowKind, note: boolean, onNoteSeen = vi.fn()) => (
+    <StoreContext.Provider value={store}>
+      <I18nContext.Provider value={makeI18n('en')}>
+        <StatsPage
+          window={kind}
+          onWindow={vi.fn()}
+          showProbes={false}
+          sessions={[]}
+          quotas={[]}
+          now={WEEK_NOW}
+          note={note}
+          onNoteSeen={onNoteSeen}
+        />
+      </I18nContext.Provider>
+    </StoreContext.Provider>
+  );
+  const text = /Less than a day into the week, Stats opens on the last 7 days/;
+
+  it('says why the window is the last 7 days, once told, and goes with This week', async () => {
+    serve({ week, d7 });
+    const store = createStore();
+    const onNoteSeen = vi.fn();
+    const { rerender } = render(noted(store, '7d', true, onNoteSeen));
+    expect(screen.getByText(text)).toBeInTheDocument();
+    expect(onNoteSeen).toHaveBeenCalledTimes(1);
+    // Remembered by the caller, the prop drops; the note stays for this visit, said no second time.
+    rerender(noted(store, '7d', false, onNoteSeen));
+    expect(screen.getByText(text)).toBeInTheDocument();
+    expect(onNoteSeen).toHaveBeenCalledTimes(1);
+    rerender(noted(store, 'week', false, onNoteSeen));
+    expect(screen.queryByText(text)).toBeNull();
+    await screen.findByText(/Data as of/);
+  });
+
+  it('is not said when the page opened without it', async () => {
+    serve({ week, d7 });
+    const onNoteSeen = vi.fn();
+    render(noted(createStore(), '7d', false, onNoteSeen));
+    expect(screen.queryByText(text)).toBeNull();
+    expect(onNoteSeen).not.toHaveBeenCalled();
+    await screen.findByText(/Data as of/);
+  });
+});

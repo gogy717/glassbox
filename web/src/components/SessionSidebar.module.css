@@ -77,6 +77,16 @@
   color: var(--muted);
 }
 
+/* Group by Project · Time: the two-word switch after the chips, its label in the chips' face. */
+.groupBy {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 0 6px;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+
 .list {
   flex: 1;
   min-height: 0;
@@ -93,18 +103,131 @@
   text-align: center;
 }
 
+/* A group: its title, which folds it, then its rows. The titles sit among the rows under the
+   list's one tab stop, so the arrow keys reach them. */
 .group {
+  margin: 0;
+  padding: 0;
+}
+
+.groupTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 14px 14px 6px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+  cursor: pointer;
+  transition: color var(--motion);
+}
+
+.groupTitle:hover {
+  color: var(--text);
+}
+
+.groupTitle:focus-visible {
+  outline-offset: -2px;
+}
+
+.groupTitle > svg {
+  flex: none;
+}
+
+.groupName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Folded: its count in the mono face, and a dot per running or waiting session, so nothing
+   urgent hides. */
+.groupCount {
+  flex: none;
+  letter-spacing: 0;
+}
+
+.groupDots {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  margin-left: 2px;
+}
+
+.rows {
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.groupTitle {
-  padding: 14px 14px 6px;
+/* "12 more": the rest of a group's closed sessions, as a quiet row at its foot. */
+.more {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--accent);
+  font-size: var(--fs-small);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--motion);
+}
+
+.more:hover {
+  background: var(--layer-3);
+}
+
+.more:focus-visible {
+  outline-offset: -2px;
+}
+
+/* A row and its pin, in the row's top right corner (the title leaves it room): shown on hover or
+   focus, and always once pinned. Beside the row, not in it: a button holds no button. */
+.item {
+  position: relative;
+}
+
+.pin {
+  position: absolute;
+  top: 7px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-m);
+  background: transparent;
   color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  opacity: 0;
+  cursor: pointer;
+  transition:
+    opacity var(--motion),
+    color var(--motion),
+    background var(--motion);
+}
+
+.item:hover .pin,
+.item:focus-within .pin,
+.pin[aria-pressed="true"] {
+  opacity: 1;
+}
+
+.pin:hover {
+  background: var(--layer-3);
+  color: var(--text);
+}
+
+.pin[aria-pressed="true"] {
+  color: var(--text);
 }
 
 /* "5 more sessions are idle or closed. Show all" */

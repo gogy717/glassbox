@@ -1,6 +1,6 @@
 import { useCallback, useSyncExternalStore } from 'react';
 import { MAIN_AGENT_ID } from '../../src/core/model.js';
-import type { WeekWindowKind } from '../../src/shared/week.js';
+import { type WeekWindowKind, weekStart } from '../../src/shared/week.js';
 
 export const TABS = ['flow', 'steps', 'tokens', 'time'] as const;
 export type Tab = (typeof TABS)[number];
@@ -86,6 +86,18 @@ export function formatRoute(r: Route): string {
 
 /** A link to a session as it opens: its main agent, on the flow tab, following its latest turn. */
 export const sessionLink = (sessionId: string) => formatRoute({ ...HOME, sessionId });
+
+const DAY_MS = 86_400_000;
+
+/** Whether the week is less than a day old: a Monday's "This week" holds little yet (D, F7). */
+export const youngWeek = (now: number): boolean => now - weekStart(now) < DAY_MS;
+
+/**
+ * Where the nav's Stats link goes: this week, or the last 7 days while the week is less than a
+ * day old. `#/stats` itself keeps meaning this week; only the link chooses.
+ */
+export const statsLink = (now: number): string =>
+  formatRoute({ ...HOME, stats: youngWeek(now) ? '7d' : 'week' });
 
 /** What the open card belongs to: moving any of these elsewhere leaves it behind. */
 const CARD_OWNERS = ['sessionId', 'agentId', 'turnId', 'requestId'] as const;

@@ -1,5 +1,6 @@
 import type { Locale } from './i18n';
 import { AGENT_TONES } from './lib/agent-names';
+import type { GroupBy } from './lib/sessions';
 
 export type ThemePref = 'system' | 'light' | 'dark';
 export interface Prefs {
@@ -11,16 +12,32 @@ export interface Prefs {
   rateAgent: string | null;
   /** A desktop notification when a session begins to wait for you; the browser must allow it. */
   notify: boolean;
+  /** How the session list groups its rows (D, F7): by project, or by when each last ran. */
+  groupBy: GroupBy;
+  /** The list's folded groups, by key: a project's name, or `/pinned`, `/today` … `/earlier`. */
+  folded: string[];
+  /** Pinned sessions, by id, in the order pinned. */
+  pinned: string[];
+  /** Whether Stats has said, once, why it opened on the last 7 days early in a week. */
+  statsNoteSeen: boolean;
 }
 
 const KEY = 'glassbox.prefs';
-const DEFAULTS: Prefs = {
+export const DEFAULT_PREFS: Prefs = {
   locale: 'en',
   theme: 'system',
   showProbes: false,
   rateAgent: null,
   notify: false,
+  groupBy: 'project',
+  folded: [],
+  pinned: [],
+  statsNoteSeen: false,
 };
+
+/** The strings of a saved list, each once; anything else that landed there is dropped. */
+const strings = (v: unknown): string[] =>
+  Array.isArray(v) ? [...new Set(v.filter((x): x is string => typeof x === 'string'))] : [];
 
 /** Storage can be unavailable (private windows, blocked site data); prefs are a convenience. */
 export function loadPrefs(): Prefs {
@@ -36,9 +53,13 @@ export function loadPrefs(): Prefs {
         ? (raw?.rateAgent as string)
         : null,
       notify: raw?.notify === true,
+      groupBy: raw?.groupBy === 'time' ? 'time' : 'project',
+      folded: strings(raw?.folded),
+      pinned: strings(raw?.pinned),
+      statsNoteSeen: raw?.statsNoteSeen === true,
     };
   } catch {
-    return DEFAULTS;
+    return { ...DEFAULT_PREFS, folded: [], pinned: [] };
   }
 }
 
