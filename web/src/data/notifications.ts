@@ -34,8 +34,11 @@ export interface NeedsYouOptions {
   enabled: boolean;
   /** The sessions waiting for you, as the board lists them (hidden probes left out). */
   waiting: SessionSummary[];
-  /** The running sessions with a sign of trouble (`trouble`), as the board lists them. */
-  stuck: SessionSummary[];
+  /**
+   * The running sessions, as the board lists them: those whose `trouble` the server has read (a
+   * sign, or null for none) are watched for one.
+   */
+  running: SessionSummary[];
   /** The session list has arrived: before that, nothing is known. */
   loaded: boolean;
   t: T;
@@ -51,14 +54,14 @@ export interface NeedsYouOptions {
  * ends takes its notification with it.
  *
  * And one per running session and kind of sign that it looks stuck, the sign at length as its
- * body ("Repeated npm test 4×"): never twice for one kind of one session, none for what looks
- * stuck when the list arrives or while the setting is off. A sign that goes takes its
- * notification with it.
+ * body ("Repeated npm test 4×"): never twice for one kind of one session, none for the sign the
+ * server first says of a session (on page load, once it opens one, once one runs again) or
+ * while the setting is off. A sign that goes takes its notification with it.
  */
 export function useNeedsYouNotifications({
   enabled,
   waiting,
-  stuck,
+  running,
   loaded,
   t,
   onOpen,
@@ -86,38 +89,48 @@ export function useNeedsYouNotifications({
     seen.current = next;
   }, [waiting, loaded, enabled]);
 
-  // Each session's kinds of sign told so far, and the notification of the one it shows now;
-  // null until the list first arrives.
-  const signs = useRef<Map<string, Told> | null>(null);
+  // Each session's kinds of sign told so far, whether its sign is known now, and the
+  // notification of the one it shows.
+  const told = useRef(new Map<string, Told>());
   useEffect(() => {
     if (!loaded) return;
-    const first = signs.current === null;
-    const told = signs.current ?? new Map<string, Told>();
-    signs.current = told;
-    const now = new Map<string, [SessionSummary, TroubleSignal]>();
-    for (const s of stuck) if (s.trouble) now.set(s.id, [s, s.trouble]);
-    // A sign that went, or gave way to another kind, takes its notification with it.
-    for (const [id, entry] of told)
-      if (entry.shown && now.get(id)?.[1].kind !== entry.shown.kind) {
+    const read = new Map<string, SessionSummary>();
+    for (const s of running) if (s.trouble !== undefined) read.set(s.id, s);
+    for (const [id, entry] of told.current) {
+      const sign = read.get(id)?.trouble;
+      // No longer read (it stopped running): what it says next is where it starts again.
+      if (!read.has(id)) entry.known = false;
+      // A sign that went, or gave way to another kind, takes its notification with it.
+      if (entry.shown && sign?.kind !== entry.shown.kind) {
         entry.shown.notification.close();
         entry.shown = null;
       }
-    for (const [id, [s, sign]] of now) {
-      const entry = told.get(id) ?? { kinds: new Set<TroubleKind>(), shown: null };
-      told.set(id, entry);
-      if (entry.kinds.has(sign.kind)) continue;
+    }
+    for (const [id, s] of read) {
+      const entry = told.current.get(id) ?? { kinds: new Set(), known: false, shown: null };
+      told.current.set(id, entry);
+      const sign = s.trouble ?? null;
+      // The first the server says of a session is not news: on page load, once it opens one in
+      // the background, or once one runs again, its sign may be an hour old.
+      const news = entry.known;
+      entry.known = true;
+      if (!sign || entry.kinds.has(sign.kind)) continue;
       entry.kinds.add(sign.kind);
-      // What looks stuck when the list arrives is not news; nor is a sign while the setting is off.
-      if (first || !enabled) continue;
+      // Nor is a sign while the setting is off.
+      if (!news || !enabled) continue;
       const notification = showStuck(s, sign, latest.current);
       entry.shown = notification && { kind: sign.kind, notification };
     }
-  }, [stuck, loaded, enabled]);
+  }, [running, loaded, enabled]);
 }
 
-/** A session's kinds of sign told so far, and the notification of the one it shows now. */
+/**
+ * A session's kinds of sign told so far, whether the server has said its sign since it last
+ * ran, and the notification of the one it shows now.
+ */
 interface Told {
   kinds: Set<TroubleKind>;
+  known: boolean;
   shown: { kind: TroubleKind; notification: Notification } | null;
 }
 

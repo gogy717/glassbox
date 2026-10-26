@@ -814,6 +814,21 @@ describe('App notifications', () => {
     ]);
   });
 
+  it('tells nothing of a sign the server says first, when it opens a running session', () => {
+    localStorage.setItem('glassbox.prefs', JSON.stringify({ notify: true }));
+    const store = createStore();
+    const [busy, ...rest] = createDemoSessions(DEMO_NOW);
+    if (!busy) throw new Error('fixture');
+    // Listed before the server has read it: its signs are not known yet.
+    store.applyEvent({ type: 'sessions', sessions: [busy, ...rest] });
+    render(<App store={store} connect={noConnect} runs={fakeRuns()} />);
+    const old = { kind: 'compaction' as const, params: { n: 4 }, at: null, since: null };
+    act(() =>
+      store.applyEvent({ type: 'sessions', sessions: [{ ...busy, trouble: old }, ...rest] }),
+    );
+    expect(FakeNotification.shown).toEqual([]);
+  });
+
   it('notifies once as a session begins to wait, not on page load, and opens it from the notification', async () => {
     localStorage.setItem('glassbox.prefs', JSON.stringify({ notify: true }));
     const store = createStore();

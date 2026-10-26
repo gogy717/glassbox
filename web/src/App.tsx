@@ -281,16 +281,16 @@ function Shell({ store, connect, runs, prefs, onPrefs }: ShellProps) {
   useEffect(() => {
     document.title = documentTitle(needsYou.length, sessionTitle);
   }, [needsYou.length, sessionTitle]);
-  // The running sessions that look stuck, by the server's sign of trouble.
-  const stuck = useMemo(
-    () => sessions.filter((s) => isListed(s, prefs.showProbes) && isRunning(s) && s.trouble),
+  // The running sessions, watched for a sign of trouble from the server.
+  const running = useMemo(
+    () => sessions.filter((s) => isListed(s, prefs.showProbes) && isRunning(s)),
     [sessions, prefs.showProbes],
   );
   // And, when asked for, a desktop notification as each one begins to wait or to look stuck.
   useNeedsYouNotifications({
     enabled: prefs.notify && notifyState() === 'granted',
     waiting: needsYou,
-    stuck,
+    running,
     loaded: state.sessionsLoaded,
     t,
     onOpen: (id) => {

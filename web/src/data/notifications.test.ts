@@ -48,7 +48,7 @@ function waiting(since: string | null, tool: string | null = 'Bash'): SessionSum
 
 type Props = {
   waiting: SessionSummary[];
-  stuck?: SessionSummary[];
+  running?: SessionSummary[];
   enabled?: boolean;
   loaded?: boolean;
 };
@@ -58,7 +58,7 @@ function hook(initial: Props) {
   const t = makeI18n('en').t;
   const r = renderHook(
     (p: Props) =>
-      useNeedsYouNotifications({ enabled: true, loaded: true, t, onOpen, stuck: [], ...p }),
+      useNeedsYouNotifications({ enabled: true, loaded: true, t, onOpen, running: [], ...p }),
     { initialProps: initial },
   );
   return { ...r, onOpen };
@@ -193,10 +193,17 @@ describe('useNeedsYouNotifications for sessions that look stuck', () => {
     vi.useRealTimers();
   });
 
-  it('tells each kind of sign once a session, its words the body, and opens it on click', () => {
-    const { rerender, onOpen } = hook({ waiting: [], stuck: [] });
+  /** `s` with another sign, or with none: `null`. */
+  const now = (s: SessionSummary, sign: Partial<TroubleSignal> | null) => ({
+    ...s,
+    trouble: sign && { ...(s.trouble as TroubleSignal), ...sign },
+  });
+
+  it('tells each new kind of sign once a session, its words the body, and opens it on click', () => {
     const s = stuck({ kind: 'repeat' });
-    rerender({ waiting: [], stuck: [s] });
+    // Known to look fine first: its sign is news.
+    const { rerender, onOpen } = hook({ waiting: [], running: [now(s, null)] });
+    rerender({ waiting: [], running: [s] });
     expect(FakeNotification.shown.map((x) => [x.title, x.options])).toEqual([
       [
         'shopfront / Session 1',
@@ -204,26 +211,17 @@ describe('useNeedsYouNotifications for sessions that look stuck', () => {
       ],
     ]);
     // The same sign on (its count grows): nothing more.
-    rerender({
-      waiting: [],
-      stuck: [
-        { ...s, trouble: { ...(s.trouble as TroubleSignal), params: { x: 'npm test', n: 5 } } },
-      ],
-    });
+    rerender({ waiting: [], running: [now(s, { params: { x: 'npm test', n: 5 } })] });
     expect(FakeNotification.shown).toHaveLength(1);
     // Another kind: its own, the first one gone with its sign.
-    const failing = {
-      ...s,
-      trouble: { ...(s.trouble as TroubleSignal), kind: 'failing' as const, params: { n: 3 } },
-    };
-    rerender({ waiting: [], stuck: [failing] });
+    rerender({ waiting: [], running: [now(s, { kind: 'failing', params: { n: 3 } })] });
     expect(FakeNotification.shown.map((x) => x.options?.body)).toEqual([
       'Repeated npm test 4×',
       '3 tool calls failed in a row',
     ]);
     expect(FakeNotification.shown[0]?.closed).toBe(true);
     // Back to the first kind: told already.
-    rerender({ waiting: [], stuck: [s] });
+    rerender({ waiting: [], running: [s] });
     expect(FakeNotification.shown).toHaveLength(2);
 
     const focus = vi.spyOn(window, 'focus').mockImplementation(() => {});
@@ -232,29 +230,47 @@ describe('useNeedsYouNotifications for sessions that look stuck', () => {
     focus.mockRestore();
   });
 
-  it('tells nothing on page load, nor while the setting is off, with no catching up', () => {
+  it('tells nothing of a sign the server says first: on page load, or once it opens a session', () => {
     const already = stuck({ kind: 'repeat' });
-    const { rerender } = hook({ waiting: [], stuck: [already], loaded: false });
-    rerender({ waiting: [], stuck: [already], loaded: true });
+    const { rerender } = hook({ waiting: [], running: [already], loaded: false });
+    rerender({ waiting: [], running: [already], loaded: true });
+    // Opened in the background seconds later, an hour into its compactions; one not yet read.
+    const opened = stuck({ kind: 'compaction', params: { n: 4 } });
+    const unread = { ...stuck({ kind: 'errors' }), trouble: undefined };
+    rerender({ waiting: [], running: [already, opened, unread] });
+    rerender({ waiting: [], running: [already, opened, { ...unread, trouble: null }] });
     expect(FakeNotification.shown).toEqual([]);
-    const later = stuck({ kind: 'compaction', params: { n: 3 } });
-    rerender({ waiting: [], stuck: [already, later], enabled: false });
-    rerender({ waiting: [], stuck: [already, later], enabled: true });
-    expect(FakeNotification.shown).toEqual([]);
+    // Since then: news.
     rerender({
       waiting: [],
-      stuck: [already, later, stuck({ kind: 'errors', params: { n: 2, of: 10 } })],
+      running: [already, now(opened, { kind: 'errors', params: { n: 2, of: 10 } })],
     });
     expect(FakeNotification.shown.map((x) => x.options?.body)).toEqual([
       '2 API errors in the last 10 model calls',
     ]);
   });
 
-  it('closes the notification when the sign goes', () => {
-    const { rerender } = hook({ waiting: [], stuck: [] });
+  it('starts again from what it says first when a session runs again', () => {
     const s = stuck({ kind: 'repeat' });
-    rerender({ waiting: [], stuck: [s] });
-    rerender({ waiting: [], stuck: [{ ...s, trouble: null }] });
+    const { rerender } = hook({ waiting: [], running: [now(s, null)] });
+    rerender({ waiting: [], running: [] });
+    rerender({ waiting: [], running: [s] });
+    expect(FakeNotification.shown).toEqual([]);
+  });
+
+  it('stays quiet while the setting is off, and does not catch up once it is on', () => {
+    const s = stuck({ kind: 'repeat' });
+    const { rerender } = hook({ waiting: [], running: [now(s, null)], enabled: false });
+    rerender({ waiting: [], running: [s], enabled: false });
+    rerender({ waiting: [], running: [s], enabled: true });
+    expect(FakeNotification.shown).toEqual([]);
+  });
+
+  it('closes the notification when the sign goes', () => {
+    const s = stuck({ kind: 'repeat' });
+    const { rerender } = hook({ waiting: [], running: [now(s, null)] });
+    rerender({ waiting: [], running: [s] });
+    rerender({ waiting: [], running: [now(s, null)] });
     expect(FakeNotification.shown[0]?.closed).toBe(true);
   });
 });
