@@ -35,10 +35,10 @@
 需要 Node.js ≥ 22.19 和本机已经在用的 Claude Code。
 
 ```sh
-npx --yes github:gogy717/glassbox
+npx --yes github:gogy717/glassbox#release
 ```
 
-第一次运行会下载并构建（约 1 分钟），然后自动在浏览器打开 `http://127.0.0.1:7788`。
+第一次运行会下载（几秒钟），然后自动在浏览器打开 `http://127.0.0.1:7788`。
 
 固定版本（推荐，避免内容随分支变化）：
 
@@ -64,7 +64,7 @@ npx --yes github:gogy717/glassbox#v0.8.0
 | `--demo`                                  | 用内置演示数据运行，不读取本机会话，不会启动 `claude`，也不向服务商查询用量                                                           |
 | `--help`                                  | 查看全部参数                                                                                                                          |
 
-想常驻安装：`npm install -g github:gogy717/glassbox`，之后直接运行 `glassbox`；卸载用 `npm uninstall -g glassbox`。升级：把命令里的版本号换成新的 tag 再运行一次。
+想常驻安装：`npm install -g github:gogy717/glassbox#release`，之后直接运行 `glassbox`；卸载用 `npm uninstall -g glassbox`。升级：再运行一次安装命令，`release` 始终指向最新的 tag，而固定的 `#v0.8.0` 不会变。git 地址后面要用 `#`，不是 `@`：npm 不认识 `glassbox@0.8.0` 这种写法。
 
 ## 能看到什么
 

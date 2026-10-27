@@ -35,10 +35,10 @@
 Requires Node.js ≥ 22.19 and Claude Code already in use on this machine.
 
 ```sh
-npx --yes github:gogy717/glassbox
+npx --yes github:gogy717/glassbox#release
 ```
 
-The first run downloads and builds (about a minute), then opens `http://127.0.0.1:7788` in your browser.
+The first run downloads it (a few seconds), then opens `http://127.0.0.1:7788` in your browser.
 
 Pin a version (recommended, so the contents do not change with the branch):
 
@@ -64,7 +64,7 @@ Common options:
 | `--demo`                                  | Run on built-in demo data: no local sessions are read, `claude` is never started and no provider is asked for plan usage                                     |
 | `--help`                                  | List every option                                                                                                                                            |
 
-To install it for good: `npm install -g github:gogy717/glassbox`, then run `glassbox`; uninstall with `npm uninstall -g glassbox`. To upgrade, run the command again with the new tag.
+To install it for good: `npm install -g github:gogy717/glassbox#release`, then run `glassbox`; uninstall with `npm uninstall -g glassbox`. To upgrade, run the install again: `release` follows the latest tag, and a pinned `#v0.8.0` stays put. Give the git URL a `#`, not an `@`: `glassbox@0.8.0` is not a ref npm understands.
 
 ## What you can see
 
