@@ -43,7 +43,7 @@ The first run downloads it (a few seconds), then opens `http://127.0.0.1:7788` i
 Pin a version (recommended, so the contents do not change with the branch):
 
 ```sh
-npx --yes github:gogy717/glassbox#v0.8.0
+npx --yes github:gogy717/glassbox#v0.8.1
 ```
 
 Common options:
