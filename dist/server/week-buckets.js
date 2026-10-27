@@ -1,0 +1,270 @@
+import { MAIN_AGENT_ID } from '../core/model.js';
+import { addUsage, emptyUsage } from '../core/usage.js';
+import { addChange, changesOf, fileOps, mergePathOps } from '../shared/crossing.js';
+import { ms, toolSpan } from '../shared/segments.js';
+import { toolCategory } from '../shared/tool-category.js';
+import { HOUR_MS, hourStart, nextHour, } from '../shared/week.js';
+export { HOUR_MS, hourStart, weekStart, weekWindow } from '../shared/week.js';
+/** Adds `u` to what `byModel` holds for `model`. */
+function addByModel(byModel, model, u) {
+    const held = byModel[model];
+    if (held)
+        addUsage(held, u);
+    else
+        byModel[model] = addUsage(emptyUsage(), u);
+}
+const emptyBucket = () => ({
+    activeMs: 0,
+    agentMs: 0,
+    requests: 0,
+    toolCalls: 0,
+    toolCats: {},
+    failures: 0,
+    usage: emptyUsage(),
+    usageByModel: {},
+    files: new Map(),
+});
+/** Entities handled between two pauses when a session is bucketed with pauses. */
+const STEP = 2_000;
+/**
+ * The session's buckets as of `now`: running turns and calls end there, and no time is counted
+ * after it (a turn that ended while the session was being read is cut there). Yields every
+ * `STEP` entities so a caller can pause between them. The parity with its receipt (web
+ * `receiptData`) is tested on the web side.
+ */
+function* bucketing(snap, now) {
+    let n = 0;
+    const hours = new Map();
+    const at = (t) => {
+        const h = hourStart(t);
+        let b = hours.get(h);
+        if (!b) {
+            b = emptyBucket();
+            hours.set(h, b);
+        }
+        return b;
+    };
+    /** Adds the length of [a, b) to each hour it overlaps. */
+    const spread = (a, b, add) => {
+        for (let h = hourStart(a); h < b; h = nextHour(h)) {
+            const part = Math.min(b, nextHour(h)) - Math.max(a, h);
+            if (part > 0)
+                add(at(h), part);
+        }
+    };
+    // The main agent and its descendants, as the Summary bar counts them.
+    const ids = new Set([MAIN_AGENT_ID]);
+    for (let grew = true; grew;) {
+        grew = false;
+        for (const a of snap.agents)
+            if (a.parentId !== null && ids.has(a.parentId) && !ids.has(a.id)) {
+                ids.add(a.id);
+                grew = true;
+            }
+    }
+    // Each agent's first and last moment at work: a sub-agent's life when its own are unknown.
+    const seen = new Map();
+    const saw = (agentId, a, b) => {
+        const was = seen.get(agentId);
+        seen.set(agentId, was ? [Math.min(was[0], a), Math.max(was[1], b)] : [a, b]);
+    };
+    // Agent time: every agent's own turns, a running one up to now (each agent's Summary bar active
+    // time); the main agent's are the session's active time too.
+    for (const t of snap.turns) {
+        if (++n % STEP === 0)
+            yield;
+        if (!ids.has(t.agentId))
+            continue;
+        const start = ms(t.startedAt);
+        const ended = t.endedAt ? ms(t.endedAt) : t.status === 'running' ? now : null;
+        if (start === null || ended === null)
+            continue;
+        const end = Math.min(ended, now);
+        saw(t.agentId, start, Math.max(start, end));
+        const main = t.agentId === MAIN_AGENT_ID;
+        spread(start, end, (b, part) => {
+            b.agentMs += part;
+            if (main)
+                b.activeMs += part;
+        });
+    }
+    // When a request or tool call without a start time happened: its turn's, else the session's.
+    const fallback = ms(snap.session.startedAt) ?? ms(snap.session.updatedAt) ?? now;
+    const turnStart = new Map(snap.turns.map((t) => [t.id, ms(t.startedAt)]));
+    const requestStart = new Map();
+    let reportsUsage = false;
+    for (const r of snap.requests) {
+        if (++n % STEP === 0)
+            yield;
+        const start = ms(r.startedAt) ?? (r.turnId ? turnStart.get(r.turnId) : null) ?? fallback;
+        requestStart.set(r.id, start);
+        saw(r.agentId, start, ms(r.endedAt) ?? (r.status === 'in-flight' ? now : start));
+        const b = at(start);
+        if (r.status === 'error')
+            b.failures++;
+        if (!ids.has(r.agentId))
+            continue;
+        b.requests++;
+        if (r.usage) {
+            addUsage(b.usage, r.usage);
+            addByModel(b.usageByModel, r.model ?? '', r.usage);
+            reportsUsage = true;
+        }
+    }
+    for (const t of snap.toolCalls) {
+        if (++n % STEP === 0)
+            yield;
+        const start = ms(t.startedAt) ?? requestStart.get(t.requestId) ?? fallback;
+        const b = at(start);
+        const span = toolSpan(t, now);
+        if (span)
+            saw(t.agentId, span[0], span[1]);
+        if (t.status === 'error')
+            b.failures++;
+        const cat = toolCategory(t.name, t.input);
+        b.toolCats[cat] = (b.toolCats[cat] ?? 0) + 1;
+        if (!ids.has(t.agentId))
+            continue;
+        b.toolCalls++;
+        for (const c of changesOf(t, snap.session.cwd, start))
+            addChange(b.files, c);
+    }
+    // Sub-agents' lives: from their start to their end, else to their first and last activity.
+    const subAgents = [];
+    for (const a of snap.agents) {
+        if (a.id === MAIN_AGENT_ID)
+            continue;
+        const start = ms(a.startedAt) ?? seen.get(a.id)?.[0];
+        if (start === undefined)
+            continue;
+        const end = ms(a.endedAt) ?? (a.status === 'running' ? now : (seen.get(a.id)?.[1] ?? start));
+        subAgents.push([start, Math.max(start, end)]);
+    }
+    const s = snap.session;
+    return {
+        id: s.id,
+        updatedAt: s.updatedAt,
+        agent: s.agent,
+        project: s.project,
+        cwd: s.cwd,
+        title: s.title,
+        hours,
+        subAgents,
+        reportsUsage,
+    };
+}
+/** The session's buckets: see `bucketing`. */
+export function sessionBuckets(snap, now) {
+    const steps = bucketing(snap, now);
+    for (;;) {
+        const step = steps.next();
+        if (step.done)
+            return step.value;
+    }
+}
+/**
+ * The same, awaiting `pause()` every few thousand entities: a session of hundreds of megabytes
+ * is bucketed without holding the event loop.
+ */
+export async function sessionBucketsPausing(snap, now, pause) {
+    const steps = bucketing(snap, now);
+    for (;;) {
+        const step = steps.next();
+        if (step.done)
+            return step.value;
+        await pause();
+    }
+}
+/**
+ * The window hour a bucket starting at `t` goes to: the last starting at or before it (an hour
+ * long at most), or -1 outside the window. A bucket starts on a local hour, as the window's hours
+ * mostly do; where they part (the last 7 days are hours of the clock, which Lord Howe's half-hour
+ * change of the clocks moves off its local hours), it goes to the hour it starts in, and one that
+ * starts before the window but runs into its first hour goes to that hour.
+ */
+function slotOf(hourStarts, t) {
+    let lo = 0;
+    let hi = hourStarts.length - 1;
+    let at = -1;
+    while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        if (hourStarts[mid] <= t) {
+            at = mid;
+            lo = mid + 1;
+        }
+        else
+            hi = mid - 1;
+    }
+    if (at < 0) {
+        const first = hourStarts[0];
+        return first !== undefined && t > first - HOUR_MS ? 0 : -1;
+    }
+    const end = hourStarts[at + 1] ?? hourStarts[at] + HOUR_MS;
+    return t < end ? at : -1;
+}
+/**
+ * What a session did in the given hours (a window's, or any run of hours), `tags` as it is
+ * listed; null if nothing.
+ */
+export function sliceSession(b, window, tags = []) {
+    const hours = window.hourStarts.map(() => 0);
+    const f = {
+        activeMs: 0,
+        agentMs: 0,
+        requests: 0,
+        toolCalls: 0,
+        toolCats: {},
+        subAgents: 0,
+        failures: 0,
+        usage: emptyUsage(),
+        usageByModel: {},
+    };
+    const files = new Map();
+    for (const [h, bucket] of b.hours) {
+        const i = slotOf(window.hourStarts, h);
+        if (i < 0)
+            continue;
+        // Two buckets can share an hour of the window where local hours part from it: add, not set.
+        hours[i] = (hours[i] ?? 0) + bucket.agentMs;
+        f.activeMs += bucket.activeMs;
+        f.agentMs += bucket.agentMs;
+        f.requests += bucket.requests;
+        f.toolCalls += bucket.toolCalls;
+        for (const [cat, n] of Object.entries(bucket.toolCats))
+            f.toolCats[cat] = (f.toolCats[cat] ?? 0) + n;
+        f.failures += bucket.failures;
+        addUsage(f.usage, bucket.usage);
+        for (const [model, u] of Object.entries(bucket.usageByModel))
+            addByModel(f.usageByModel, model, u);
+        mergePathOps(files, bucket.files.values());
+    }
+    const changed = fileOps(files);
+    if (changed)
+        f.files = changed;
+    const first = window.hourStarts[0];
+    const last = window.hourStarts.at(-1);
+    if (first !== undefined && last !== undefined) {
+        const end = last + HOUR_MS;
+        f.subAgents = b.subAgents.filter(([a, z]) => a < end && z >= first).length;
+    }
+    const any = f.activeMs > 0 ||
+        f.agentMs > 0 ||
+        f.requests > 0 ||
+        f.toolCalls > 0 ||
+        f.failures > 0 ||
+        f.subAgents > 0;
+    if (!any)
+        return null;
+    return {
+        id: b.id,
+        agent: b.agent,
+        project: b.project,
+        cwd: b.cwd,
+        title: b.title,
+        tags,
+        reportsUsage: b.reportsUsage,
+        inWindow: f,
+        hours,
+    };
+}
+//# sourceMappingURL=week-buckets.js.map

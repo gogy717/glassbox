@@ -1,0 +1,737 @@
+/**
+ * Permission rules mining: which calls a permission rule decides, keyed by the rule that would
+ * allow them, and how each was answered.
+ *
+ * A call counts when a rule decides it: Claude Code's Bash, its file edits, WebFetch, WebSearch,
+ * Skill and MCP tools, and a read outside the session's directory; Codex's commands that asked
+ * to leave its sandbox, and the commands and patches it was refused. Its key is the rule in its
+ * agent's syntax: `Bash(npm test:*)`, `Edit(src/**)`, `WebFetch(domain:docs.x.io)`,
+ * `mcp__server__tool`; Codex's `prefix_rule(pattern=["npm", "test"])`. It was denied when the
+ * person declined the prompt (the transcript's refusal, or a glassbox run's answer), allowed when
+ * the call ran: a rule or a mode may have let it through without asking, which no transcript
+ * says. Nothing records "don't ask again": Claude Code writes the rule to a settings file only.
+ *
+ * Pure, and free of Node built-ins: the web imports it.
+ *
+ * CONTRACT: the server and the web UI both depend on this file; change them together.
+ */
+import { hostOf, simpleCommands, summarizeCommand } from '../core/command-summary.js';
+import { secretShaped } from '../core/redact.js';
+import { mcpTool, pathField, SHELLS, shellCommand } from './tool-category.js';
+// --- keys ----------------------------------------------------------------------------------
+/** Commands that set up the ones after them: a rule is named by what they lead to. */
+const SETUP = new Set(['cd', 'pushd', 'popd', 'export', 'set', 'unset', 'source', '.', 'alias']);
+const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+/** Shell syntax that may stand before a command's program. */
+const SYNTAX = new Set(['{', '(', '((', '!']);
+/**
+ * Claude Code's read-only commands (the documented set, and git's read-only forms): it runs them
+ * without asking, in every mode, so a line of only these and set-up asks for no rule.
+ */
+const READ_ONLY = new Set([
+    'ls',
+    'cat',
+    'sed',
+    'sort',
+    'file',
+    'ps',
+    'echo',
+    'pwd',
+    'head',
+    'tail',
+    'grep',
+    'find',
+    'wc',
+    'which',
+    'diff',
+    'stat',
+    'du',
+    'true',
+    ':',
+    'test',
+    '[',
+    '[[',
+]);
+const READ_ONLY_GIT = new Set(['status', 'log', 'diff', 'show', 'rev-parse', 'ls-files', 'blame']);
+/** A find that acts on what it finds is not read-only. */
+const FIND_ACTIONS = new Set([
+    '-exec',
+    '-execdir',
+    '-ok',
+    '-okdir',
+    '-delete',
+    '-fprint',
+    '-fprint0',
+    '-fprintf',
+    '-fls',
+]);
+/**
+ * The wrappers Claude Code strips before it matches a rule, so the rule is the wrapped command's
+ * (`timeout 30 npm test` is `Bash(npm test:*)`); `command -v` looks up rather than runs, and
+ * `xargs` with options of its own runs as itself.
+ */
+const STRIPPED = new Set([
+    'timeout',
+    'time',
+    'nice',
+    'nohup',
+    'stdbuf',
+    'command',
+    'builtin',
+    'noglob',
+    'xargs',
+]);
+/** Stripped wrappers that take no options: the wrapped command is the next word. */
+const BARE_WRAPPERS = new Set(['nohup', 'builtin', 'noglob', 'xargs']);
+/** The options of the other stripped wrappers that take a value as the next word. */
+const WRAPPER_VALUES = {
+    timeout: ['-s', '--signal', '-k', '--kill-after'],
+    nice: ['-n', '--adjustment'],
+    stdbuf: ['-i', '-o', '-e', '--input', '--output', '--error'],
+    time: ['-f', '--format', '-o', '--output'],
+};
+const DELETES = new Set(['rm', 'rmdir', 'shred', 'unlink']);
+/** git subcommands whose rule can throw away work: `git reset --hard`, `git branch -D`. */
+const DISCARDS = new Set(['reset', 'checkout', 'restore', 'stash', 'branch']);
+const ADMIN = new Set(['sudo', 'su', 'doas']);
+const KILLS = new Set(['kill', 'pkill', 'killall']);
+const PERMS = new Set(['chmod', 'chown', 'chgrp']);
+/**
+ * Programs that run whatever command they are given, and the shell's own words that do (a rule
+ * for `for` allows every loop, whatever it runs); a stripped wrapper that could not be seen past
+ * is one too.
+ */
+const RUNS_ANY = new Set([
+    'for',
+    'while',
+    'until',
+    'if',
+    'case',
+    'select',
+    'function',
+    'sh',
+    'bash',
+    'zsh',
+    'fish',
+    'dash',
+    'ksh',
+    'eval',
+    'exec',
+    'env',
+    'watch',
+    'setsid',
+    'flock',
+    ...STRIPPED,
+]);
+/** Interpreters: alone, or with code on the line or from stdin, a rule for one runs any code. */
+const INTERPRETER = /^(?:python[\d.]*|py|pypy\d?|ipython|node|nodejs|deno|bun|tsx|ts-node|perl|ruby|php|lua|luajit|rscript|julia|osascript|java)$/i;
+/** awk's programs can run commands of their own. */
+const AWK = /^[gmn]?awk$/;
+/** Runners whose next word names what runs: a rule for `npx` alone runs any package. */
+const RUNNERS_ALONE = new Set(['npx', 'pnpx', 'bunx', 'uvx']);
+const RUNNER_SUBCOMMANDS = {
+    npm: ['exec', 'x'],
+    pnpm: ['exec', 'dlx'],
+    yarn: ['exec', 'dlx'],
+    bun: ['x'],
+    deno: ['run', 'eval'],
+    pipx: ['run'],
+    uv: ['run'],
+    poetry: ['run'],
+    pdm: ['run'],
+    pipenv: ['run'],
+    hatch: ['run'],
+    rye: ['run'],
+    pixi: ['run', 'exec'],
+    conda: ['run'],
+    docker: ['run', 'exec'],
+    podman: ['run', 'exec'],
+    kubectl: ['exec'],
+    direnv: ['exec'],
+    devbox: ['run'],
+    mise: ['exec', 'x'],
+    nix: ['run', 'shell', 'develop'],
+};
+const SHELL_PROGRAMS = new Set(['sh', 'bash', 'zsh', 'fish', 'dash', 'ksh']);
+const FETCHES = new Set(['curl', 'wget']);
+const FILE_EDITS = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit']);
+const FILE_READS = new Set(['Read', 'Glob', 'Grep']);
+const CODEX_PATCH = 'apply_patch';
+/** A program as named: its path's last part, without a leading backslash (`\rm` is `rm`). */
+const programName = (word) => (word.split('/').at(-1) ?? word).replace(/^\\/, '');
+/** A command's words without the assignments and shell syntax before its program. */
+function bare(words) {
+    let i = 0;
+    while (i < words.length &&
+        (ASSIGNMENT.test(words[i]) || SYNTAX.has(words[i])))
+        i++;
+    return words.slice(i);
+}
+/**
+ * Whether Claude Code runs `words` without asking. Of its read-only set, a few ask with some
+ * options: a find that acts on what it finds, a sed that edits in place, a sort that writes a
+ * file, a file that opens the paths an option names, a ps that could print environments.
+ */
+function readOnly(words) {
+    const [program = '', sub] = words;
+    const name = programName(program);
+    const args = words.slice(1);
+    switch (name) {
+        case 'git':
+            return READ_ONLY_GIT.has(sub ?? '');
+        case 'find':
+            return !args.some((w) => FIND_ACTIONS.has(w));
+        case 'sed':
+            return !args.some((w) => /^-[a-zA-Z]*i/.test(w) || w.startsWith('--in-place'));
+        case 'sort':
+            return !args.some((w) => /^-[a-zA-Z]*o/.test(w) || w.startsWith('--output'));
+        case 'file':
+            return !args.some((w) => /^-[a-zA-Z]*[mf]/.test(w) || w.startsWith('--magic-file') || w.startsWith('--files-from'));
+        case 'ps':
+            return !args.some((w) => w !== '-ef' && w !== '-e' && w.includes('e'));
+        default:
+            return READ_ONLY.has(name);
+    }
+}
+/** Where the command a wrapper with options runs begins: past its options, and timeout's time. */
+function pastOptions(words, name) {
+    const values = WRAPPER_VALUES[name] ?? [];
+    let i = 1;
+    while (i < words.length && words[i].startsWith('-'))
+        i += values.includes(words[i]) ? 2 : 1;
+    return name === 'timeout' ? i + 1 : i;
+}
+/**
+ * A command past the wrappers Claude Code strips, with its summary: the wrapped command is where
+ * the summary's program stands, else past the wrapper's options; for a wrapper without options,
+ * the next word. Left as it is where it cannot be told.
+ */
+function stripped(words, summary) {
+    let w = words;
+    let s = summary;
+    for (let depth = 0; depth < 4; depth++) {
+        const name = programName(w[0] ?? '');
+        if (!STRIPPED.has(name))
+            break;
+        if (name === 'command' && /^-[vV]$/.test(w[1] ?? ''))
+            break;
+        if (name === 'xargs' && (w[1] ?? '-').startsWith('-'))
+            break;
+        const inner = s?.split(' ')[0];
+        const named = w.findIndex((x, i) => i > 0 && programName(x) === inner);
+        const at = BARE_WRAPPERS.has(name) ? 1 : named > 0 ? named : pastOptions(w, name);
+        if (at < 1 || at >= w.length)
+            break;
+        w = bare(w.slice(at));
+        s = summarizeCommand(w);
+    }
+    return { words: w, summary: s };
+}
+/** Whether a rule for `prefix` runs any code or command it is handed. */
+function runsAny(program, rest) {
+    if (program === 'command' && /^-[vV]$/.test(rest[0] ?? ''))
+        return false;
+    if (RUNS_ANY.has(program) || AWK.test(program))
+        return true;
+    if (INTERPRETER.test(program)) {
+        const [first] = rest;
+        // Alone; with code on the line (-c, -e, --eval) or from stdin (-); any module (-m alone).
+        if (first === undefined || (first.startsWith('-') && first !== '-m'))
+            return true;
+        if (first === '-m' && rest.length < 2)
+            return true;
+    }
+    // A runner runs what its next word names: alone, anything; else judged as what it runs
+    // (`npx tsx` is an interpreter, `npx vitest` one tool).
+    if (RUNNERS_ALONE.has(program))
+        return rest.length === 0 || runsAny(programName(rest[0]), rest.slice(1));
+    const subcommands = RUNNER_SUBCOMMANDS[program];
+    if (!subcommands || !subcommands.includes(rest[0] ?? ''))
+        return false;
+    return rest.length === 1 || runsAny(programName(rest[1]), rest.slice(2));
+}
+/**
+ * The words a prefix rule for `line` names: the first command that asks (not set-up and, when
+ * `asking`, not one Claude Code runs without asking), past the wrappers Claude Code strips and
+ * any leading NAME=value, as its program and the subcommand words the command summary names
+ * that stand at its start (`npm test`, `git push`, `python3 -m pytest`, a script's path), else
+ * the program alone. And what harm such a rule may do. Null when it runs nothing that can be
+ * named, or nothing that asks.
+ */
+function commandPrefix(line, asking) {
+    const commands = simpleCommands(line).map((c) => stripped(bare(c.words), c.summary));
+    const named = commands.filter((c) => c.words.length > 0);
+    const chosen = named.find((c) => !SETUP.has(programName(c.words[0])) && !(asking && readOnly(c.words))) ??
+        (asking
+            ? undefined
+            : (named.find((c) => !SETUP.has(programName(c.words[0]))) ?? named[0]));
+    if (!chosen)
+        return null;
+    const { words, summary } = chosen;
+    const [program] = words;
+    if (!program || secretShaped(program))
+        return null;
+    // `command -v` looks a program up: its rule is that lookup's.
+    if (programName(program) === 'command' && /^-[vV]$/.test(words[1] ?? ''))
+        return { words: words.slice(0, 2), danger: null };
+    const said = summary?.split(' ') ?? [];
+    const prefix = [program];
+    const own = said[0] === programName(program);
+    if (own)
+        for (let i = 1; i < said.length && i < words.length; i++) {
+            const w = words[i];
+            if (said[i] !== w && said[i] !== programName(w))
+                break;
+            prefix.push(w);
+        }
+    // A summary that names another program saw past one the rule would not.
+    const wraps = summary !== null && summary !== undefined && !own;
+    return {
+        words: prefix,
+        danger: commandDanger(prefix, commands.map((c) => c.words), wraps),
+    };
+}
+function commandDanger(prefix, commands, wraps) {
+    const program = programName(prefix[0] ?? '');
+    const rest = prefix.slice(1);
+    const [sub] = rest;
+    if (ADMIN.has(program))
+        return 'sudo';
+    if (DELETES.has(program) || (program === 'git' && sub === 'clean'))
+        return 'delete';
+    if (program === 'git' && sub !== undefined && DISCARDS.has(sub))
+        return 'discard';
+    if (program === 'git' && (sub === undefined || sub === 'push'))
+        return 'force-push';
+    if (wraps || runsAny(program, rest))
+        return 'shell';
+    if (KILLS.has(program))
+        return 'kill';
+    if (PERMS.has(program))
+        return 'perms';
+    const programs = commands.map((words) => programName(words[0] ?? ''));
+    const fetchAt = programs.findIndex((p) => FETCHES.has(p));
+    if (fetchAt >= 0 && programs.slice(fetchAt + 1).some((p) => SHELL_PROGRAMS.has(p)))
+        return 'pipe-to-shell';
+    return null;
+}
+/** A path with `/` separators, `.` and `..` resolved; absolute when it starts with `/` or a drive. */
+function normalize(path) {
+    const p = path.replace(/\\/g, '/');
+    const rooted = p.startsWith('/');
+    const out = [];
+    for (const part of p.split('/')) {
+        if (part === '' || part === '.')
+            continue;
+        if (part === '..' && out.length > 0 && out.at(-1) !== '..')
+            out.pop();
+        else if (part !== '..' || !rooted)
+            out.push(part);
+    }
+    return (rooted ? '/' : '') + out.join('/');
+}
+const isAbsolute = (p) => p.startsWith('/') || /^[A-Za-z]:\//.test(p);
+/** `path` relative to `dir` when it is `dir` or inside it ('' for `dir` itself), else null. */
+function inside(dir, path) {
+    const d = normalize(dir);
+    if (path === d)
+        return '';
+    const base = d.endsWith('/') ? d : `${d}/`;
+    return path.startsWith(base) ? path.slice(base.length) : null;
+}
+const parentOf = (p) => p.slice(0, Math.max(p.lastIndexOf('/'), 0)) || '/';
+/** Where credentials are kept under home. */
+const SECRET_DIRS = [
+    '.ssh',
+    '.aws',
+    '.gnupg',
+    '.docker',
+    '.kube',
+    '.azure',
+    '.config/gh',
+    '.config/gcloud',
+    '.password-store',
+    '.claude',
+    '.codex',
+    '.grok',
+    '.omp',
+    '.local/share/keyrings',
+    'Library/Keychains',
+];
+/** Files that hold credentials wherever they are. */
+const SECRET_FILE = /(?:^|\/)(?:\.env(?:\.[^/]*)?|\.netrc|\.npmrc|\.pypirc|\.git-credentials|credentials(?:\.json)?|[^/]+\.(?:pem|key|p12|pfx)|id_(?:rsa|dsa|ecdsa|ed25519)[^/]*)$/;
+/**
+ * Whether a rule for `target` reaches credentials: a file that holds them, a place under home
+ * where they are kept, or, for a search (`dir`), a directory that holds such a place, home or the
+ * disk included.
+ */
+function reachesSecrets(target, home, dir) {
+    if (dir && (target === '/' || (home && (home === target || home.startsWith(`${target}/`)))))
+        return true;
+    const rel = home ? inside(home, target) : null;
+    if (rel !== null)
+        for (const d of SECRET_DIRS)
+            if (rel === d || rel.startsWith(`${d}/`) || (dir && d.startsWith(`${rel}/`)))
+                return true;
+    return !dir && SECRET_FILE.test(target);
+}
+/**
+ * The rule for a file call. Inside the session's directory: `<Tool>(<first segment>/**)`, or the
+ * file at its top (none for a read there: reads inside it are never asked). Outside it, under
+ * home as `~/…`, else from the root as `//…`: a read by its file, a search (`dir`) by its
+ * directory and all in it, an edit by its file's directory, or the file when that directory is
+ * home or the root. A rule reaching credentials is 'secrets'; an edit outside the working tree
+ * 'outside'.
+ */
+function fileKey(tool, path, place, dir) {
+    const home = place.home ? normalize(place.home) : null;
+    let p = normalize(path);
+    if (home && (path === '~' || path.startsWith('~/')))
+        p = normalize(`${home}/${path.slice(1)}`);
+    const abs = isAbsolute(p) ? p : place.cwd ? normalize(`${place.cwd}/${p}`) : null;
+    const local = abs === null ? p : place.cwd ? inside(place.cwd, abs) : null;
+    const secret = reachesSecrets(abs ?? p, home, dir);
+    if (local !== null) {
+        if (tool === 'Read')
+            return null;
+        const [first = '', ...rest] = local.split('/');
+        return {
+            key: `${tool}(${rest.length > 0 || dir ? `${first}/**` : first})`,
+            tool,
+            danger: secret ? 'secrets' : null,
+        };
+    }
+    const target = abs;
+    const spec = (at, all) => {
+        const rel = home ? inside(home, at) : null;
+        if (rel !== null)
+            return rel === '' ? (all ? '~/**' : '~') : `~/${rel}${all ? '/**' : ''}`;
+        return at === '/' ? (all ? '//**' : '/') : `/${at}${all ? '/**' : ''}`;
+    };
+    const folder = parentOf(target);
+    const key = dir
+        ? spec(target, true)
+        : tool === 'Read' || folder === home || folder === '/'
+            ? spec(target, false)
+            : spec(folder, true);
+    const tree = place.tree ?? place.cwd;
+    const outside = tool === 'Edit' && !(tree && inside(tree, target) !== null);
+    return {
+        key: `${tool}(${key})`,
+        tool,
+        danger: secret ? 'secrets' : outside ? 'outside' : null,
+    };
+}
+/**
+ * The rule a call would need, or null when no rule decides it: see the module's comment. Codex's
+ * rule is its `prefix_rule` whatever the call asked; whether the call counts is
+ * `permissionEvents`' to say.
+ */
+export function ruleKeyOf(agent, name, input, place) {
+    if (agent === 'codex') {
+        if (name === CODEX_PATCH)
+            return { key: CODEX_PATCH, tool: CODEX_PATCH, danger: null };
+        if (!SHELLS.has(name))
+            return null;
+        // Codex asks for what it asks for: a read-only command that left the sandbox counts too.
+        const command = shellCommand(input);
+        const prefix = command === null ? null : commandPrefix(command, false);
+        if (!prefix)
+            return null;
+        const pattern = prefix.words.map((w) => JSON.stringify(w)).join(', ');
+        return { key: `prefix_rule(pattern=[${pattern}])`, tool: 'prefix_rule', danger: prefix.danger };
+    }
+    if (agent !== 'claude-code')
+        return null;
+    if (name === 'Bash') {
+        const command = shellCommand(input);
+        const prefix = command === null ? null : commandPrefix(command, true);
+        return (prefix && { key: `Bash(${prefix.words.join(' ')}:*)`, tool: 'Bash', danger: prefix.danger });
+    }
+    if (FILE_EDITS.has(name) || FILE_READS.has(name)) {
+        const path = pathField(input);
+        if (!path)
+            return null;
+        return fileKey(FILE_EDITS.has(name) ? 'Edit' : 'Read', path, place, name !== 'Read' && !FILE_EDITS.has(name));
+    }
+    if (name === 'WebFetch') {
+        const url = typeof input?.url === 'string'
+            ? input.url
+            : '';
+        const host = hostOf(url)?.replace(/:\d+$/, '');
+        // A fetch it cannot name gets no rule: a bare WebFetch would allow every one.
+        return host && !host.includes('…')
+            ? { key: `WebFetch(domain:${host})`, tool: 'WebFetch', danger: null }
+            : null;
+    }
+    const mcp = name.startsWith('mcp__') ? mcpTool(name) : null;
+    if (mcp)
+        return { key: name, tool: `mcp__${mcp.server}`, danger: null };
+    if (name === 'WebSearch')
+        return { key: name, tool: name, danger: null };
+    if (name === 'Skill') {
+        // The skill by name: a bare Skill would allow every one.
+        const skill = input?.skill;
+        return typeof skill === 'string' && /^[\w:.-]+$/.test(skill) && !secretShaped(skill)
+            ? { key: `Skill(${skill})`, tool: 'Skill', danger: null }
+            : null;
+    }
+    return null;
+}
+// --- answers -------------------------------------------------------------------------------
+/** Claude Code's result for a prompt the person declined, with or without a reason. */
+const DECLINED = "The user doesn't want to proceed with this tool use.";
+/** How a glassbox run's deny begins, with or without the person's reason after it. */
+const DECLINED_IN_GLASSBOX = 'The user declined this action.';
+/**
+ * What a glassbox run tells Claude Code when the person denies: the same words first, so the
+ * transcript says it was declined after glassbox has forgotten the run, then their reason.
+ */
+export const glassboxDenial = (reason) => reason?.trim() ? `${DECLINED_IN_GLASSBOX} The user said: ${reason.trim()}` : DECLINED_IN_GLASSBOX;
+/** Refusals no person made: a deny rule, the auto-mode classifier, don't-ask mode. */
+const REFUSED = /^Permission (?:to use [\s\S]*? has been denied|for this action (?:has been|was) denied)/;
+/** A call stopped with the others when the person stopped the turn. */
+const CANCELLED = "The user doesn't want to take this action right now.";
+const CODEX_DECLINED = /^(?:\{"output":")?(?:exec command|patch) rejected by user/;
+/**
+ * How the prompt for `call` was answered, from its result: null when that cannot be told (no
+ * result yet, a refusal no person made, a call stopped with the turn) or when it never reached a
+ * prompt: a file tool's error comes from the checks made before one (a string not found, a file
+ * not read first), while a command, a fetch or an MCP call that failed did run.
+ */
+export function answerOf(agent, call) {
+    if (call.status === 'running' || call.status === 'unknown')
+        return null;
+    const text = (call.resultPreview ?? '').trimStart();
+    if (agent === 'codex')
+        return CODEX_DECLINED.test(text) ? 'denied' : 'allowed';
+    if (call.status !== 'error')
+        return 'allowed';
+    if (text.startsWith(DECLINED) || text.startsWith(DECLINED_IN_GLASSBOX))
+        return 'denied';
+    if (REFUSED.test(text) || text.startsWith(CANCELLED))
+        return null;
+    return FILE_EDITS.has(call.name) || FILE_READS.has(call.name) ? null : 'allowed';
+}
+/** A Codex command that asked to run outside its sandbox: the person was asked. */
+function escalated(input) {
+    if (typeof input !== 'object' || input === null)
+        return false;
+    const o = input;
+    return o.sandbox_permissions === 'require_escalated' || o.with_escalated_permissions === true;
+}
+/**
+ * Every call of the session a rule decides, in the session's order. A glassbox run's answers
+ * (`runDecisions`) win over what the transcript can tell: a deny with the person's own reason
+ * reads there like any failed call. Codex's commands count when they asked to leave the sandbox
+ * or were refused, its patches when refused: the rest ran in the sandbox without asking.
+ */
+export function permissionEvents(snapshot, place, decisions = new Map()) {
+    const { agent } = snapshot.session;
+    if (agent !== 'claude-code' && agent !== 'codex')
+        return [];
+    const requestStart = new Map(snapshot.requests.map((r) => [r.id, r.startedAt]));
+    const events = [];
+    for (const call of snapshot.toolCalls) {
+        const rule = ruleKeyOf(agent, call.name, call.input, place);
+        if (!rule)
+            continue;
+        const decided = decisions.get(call.id);
+        const answer = decided ? (decided === 'deny' ? 'denied' : 'allowed') : answerOf(agent, call);
+        if (!answer)
+            continue;
+        if (agent === 'codex' &&
+            answer === 'allowed' &&
+            !(SHELLS.has(call.name) && escalated(call.input)))
+            continue;
+        const at = call.startedAt ?? requestStart.get(call.requestId) ?? null;
+        if (!at)
+            continue;
+        events.push({ ...rule, agent, answer, at, toolCallId: call.id });
+    }
+    return events;
+}
+/** The prompts glassbox runs answered, by tool-use id; a withdrawn one was never answered. */
+export function runDecisions(runs) {
+    const out = new Map();
+    for (const run of runs)
+        for (const d of run.decidedPermissions ?? [])
+            if (d.decision !== 'cancelled')
+                out.set(d.id, d.decision);
+    return out;
+}
+export const RULES_WINDOWS = ['7d', '30d', 'all'];
+const DAY_MS = 86_400_000;
+/** When a window begins (epoch ms): 7 or 30 days before `now`; null for all of it. */
+export function rulesWindowStart(kind, now) {
+    return kind === 'all' ? null : now - (kind === '7d' ? 7 : 30) * DAY_MS;
+}
+/** The endpoint's path for a window. */
+export const rulesPath = (kind, refresh = false) => `/api/rules?window=${kind}${refresh ? '&refresh=1' : ''}`;
+/** Times a rule is asked, and always allowed, before it is suggested. */
+export const SUGGEST_AFTER = 5;
+/** Sessions it is asked in, at least: one session's run of the same call is not yet a habit. */
+export const SUGGEST_SESSIONS = 2;
+/** The gravest first: a rule keeps the gravest harm any of its calls showed. */
+const GRAVITY = [
+    'sudo',
+    'secrets',
+    'delete',
+    'discard',
+    'force-push',
+    'shell',
+    'pipe-to-shell',
+    'kill',
+    'perms',
+    'outside',
+];
+const graver = (a, b) => a === null ? b : b === null ? a : GRAVITY.indexOf(a) <= GRAVITY.indexOf(b) ? a : b;
+const later = (a, b) => (Date.parse(b) > Date.parse(a) ? b : a);
+/** A rule as its tool and its specifier: `Bash(npm test:*)` → Bash, `npm test:*`. */
+function parseRule(rule) {
+    const m = /^([^()]+?)(?:\(([\s\S]*)\))?$/.exec(rule.trim());
+    return m ? { tool: m[1].trim(), spec: m[2] ?? null } : null;
+}
+/** A Bash rule's prefix holds a key's at a word boundary; a command without `:*` only itself. */
+function bashHolds(spec, keySpec) {
+    if (spec === '*')
+        return true;
+    const prefix = /^(.*?)(?::\*| \*)$/.exec(spec)?.[1]?.trim();
+    if (prefix === undefined)
+        return false;
+    const key = keySpec.replace(/:\*$/, '');
+    return key === prefix || key.startsWith(`${prefix} `);
+}
+/**
+ * A path rule holds a key's pattern when equal, or when it ends in `/**` and its directory holds
+ * the key's; `**` holds every pattern inside the directory (not `~/…` or `//…`). `./x` is `x`, and
+ * a project's `/x` (from the settings file's directory) is taken as `x` too: the sessions it
+ * counts ran there.
+ */
+function pathHolds(spec, keySpec) {
+    const plain = (s) => s.replace(/^\.\//, '').replace(/^\/(?!\/)/, '');
+    const r = plain(spec);
+    const k = plain(keySpec);
+    if (r === k)
+        return true;
+    if (r === '**')
+        return !k.startsWith('~/') && !k.startsWith('//');
+    if (!r.endsWith('/**'))
+        return false;
+    const dir = r.slice(0, -3);
+    return k === dir || k.startsWith(`${dir}/`);
+}
+/** Whether settings rule `rule` allows (or denies) at least everything key `key` would. */
+export function holds(rule, key) {
+    if (rule.trim() === key)
+        return true;
+    const r = parseRule(rule);
+    const k = parseRule(key);
+    if (!r || !k)
+        return false;
+    const mcp = k.tool.startsWith('mcp__') ? mcpTool(k.tool) : null;
+    if (mcp)
+        return r.spec === null && [`mcp__${mcp.server}`, `mcp__${mcp.server}__*`].includes(r.tool);
+    if (r.tool !== k.tool)
+        return false;
+    if (r.spec === null || r.spec === '*')
+        return true;
+    if (k.spec === null)
+        return false;
+    if (k.tool === 'Bash')
+        return bashHolds(r.spec, k.spec);
+    if (k.tool === 'Edit' || k.tool === 'Read')
+        return pathHolds(r.spec, k.spec);
+    return r.spec === k.spec;
+}
+/** Every rule of `settings` that holds `key`, file by file, allow lists first. */
+function settingsHits(key, settings) {
+    const hits = [];
+    for (const f of settings)
+        for (const list of ['allow', 'deny'])
+            for (const rule of f[list])
+                if (holds(rule, key))
+                    hits.push({ path: f.path, scope: f.scope, root: f.root, list, rule });
+    return hits;
+}
+/**
+ * Where a rule's line goes: your own settings when it was asked in two projects or more (or in
+ * none named), else the one project's.
+ */
+export function scopeOf(row) {
+    const [only, ...more] = row.projects;
+    return only && more.length === 0 && only.root !== null
+        ? { scope: 'project', root: only.root, name: only.name }
+        : { scope: 'global' };
+}
+function suggestedRow(row) {
+    if (row.agent !== 'claude-code' || row.asked < SUGGEST_AFTER || row.denied > 0)
+        return false;
+    if (row.sessions < SUGGEST_SESSIONS)
+        return false;
+    if (row.danger !== null || row.inSettings.some((h) => h.list === 'deny'))
+        return false;
+    const where = scopeOf(row);
+    return !row.inSettings.some((h) => h.list === 'allow' &&
+        (h.scope === 'global' || (where.scope === 'project' && h.root === where.root)));
+}
+const counts = (at) => ({ asked: 0, allowed: 0, denied: 0, lastAsked: at });
+const count = (c, e) => {
+    c.asked++;
+    if (e.answer === 'allowed')
+        c.allowed++;
+    else
+        c.denied++;
+    c.lastAsked = later(c.lastAsked, e.at);
+};
+const mostAsked = (a, b) => b.asked - a.asked || Date.parse(b.lastAsked) - Date.parse(a.lastAsked);
+/**
+ * The rules asked since `from` (all when null), the most asked first: each with its counts, its
+ * sessions and projects, the gravest harm its calls showed, the settings rules that hold it, and
+ * whether it is suggested.
+ */
+export function ruleRows(sessions, opts) {
+    const rows = new Map();
+    for (const s of sessions) {
+        for (const e of s.events) {
+            if (opts.from !== null && !(Date.parse(e.at) >= opts.from))
+                continue;
+            const id = `${e.agent}\n${e.key}`;
+            let row = rows.get(id);
+            if (!row) {
+                row = {
+                    key: e.key,
+                    tool: e.tool,
+                    agent: e.agent,
+                    danger: null,
+                    ...counts(e.at),
+                    sessionIds: new Set(),
+                    byProject: new Map(),
+                };
+                rows.set(id, row);
+            }
+            count(row, e);
+            row.danger = graver(row.danger, e.danger);
+            row.sessionIds.add(s.sessionId);
+            const projectId = s.project.root ?? `\n${s.project.name}`;
+            let project = row.byProject.get(projectId);
+            if (!project) {
+                project = { ...s.project, ...counts(e.at) };
+                row.byProject.set(projectId, project);
+            }
+            count(project, e);
+        }
+    }
+    return [...rows.values()]
+        .map(({ sessionIds, byProject, ...row }) => {
+        const full = {
+            ...row,
+            sessions: sessionIds.size,
+            projects: [...byProject.values()].sort((a, b) => mostAsked(a, b) || a.name.localeCompare(b.name)),
+            inSettings: row.agent === 'claude-code' ? settingsHits(row.key, opts.settings) : [],
+        };
+        return { ...full, suggested: suggestedRow(full) };
+    })
+        .sort((a, b) => mostAsked(a, b) || a.key.localeCompare(b.key));
+}
+//# sourceMappingURL=permissions.js.map

@@ -1,0 +1,3 @@
+import{l as e}from"./jsx-runtime-BalxsYbH.js";import{Ot as t}from"./index-COI6tANM.js";var n=e({readWeek:()=>r});async function r(e,n,r,i){let a=await fetch(t(e,n),{signal:i});if(!a.ok||!a.body)throw Error(`HTTP ${a.status}`);let o=a.body.getReader(),s=new TextDecoder,c=``,l=null;for(;;){let{value:e,done:t}=await o.read();e&&(c+=s.decode(e,{stream:!t}));for(let e=c.indexOf(`
+`);e>=0;e=c.indexOf(`
+`)){let t=c.slice(0,e).trim();if(c=c.slice(e+1),!t)continue;let n=JSON.parse(t);if(n.type===`progress`)r(n.done,n.total);else if(n.type===`result`)l=n.result;else throw Error(n.error)}if(t)break}if(!l)throw Error(`no result`);return l}export{n as t};

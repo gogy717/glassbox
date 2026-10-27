@@ -1,0 +1,606 @@
+import { activityField, latestTurn } from '../core/activity.js';
+import { createDemoQuotas, createDemoSessions, createDemoSideSnapshots, createDemoSnapshot, DEMO_SESSION_ID, } from '../core/fixtures/demo.js';
+import { demoRequestDetail } from '../core/fixtures/demo-detail.js';
+import { lastReplyField, requestsById } from '../core/last-reply.js';
+import { MAIN_AGENT_ID } from '../core/model.js';
+import { emptyUsage, sumUsage } from '../core/usage.js';
+import { sessionBill } from '../shared/context-bill.js';
+import { MINUTE_MS, RATE_MINUTES, } from '../shared/rate.js';
+import { detectTrouble } from '../shared/trouble.js';
+import { troubleLabel } from './open-session.js';
+import { RateTracker } from './rate.js';
+import { RulesService } from './rules.js';
+import { createDemoRules, DEMO_HOME } from './rules-demo.js';
+import { compareSessions, isActive, listedSummary, withRepo } from './store.js';
+import { WeekService } from './week.js';
+import { createDemoWeek, demoRepo } from './week-demo.js';
+const TICK_MS = 2000;
+/**
+ * Believable token traffic for the rate: tokens per minute, per agent and token kind, around
+ * which each simulated session's spend wanders. The Claude Code session dominates, as the open
+ * demo session does; Grok works in bursts.
+ */
+const DEMO_TRAFFIC = [
+    {
+        session: 'demo-rate-claude',
+        agent: 'claude-code',
+        perMin: { input: 2_400, cacheRead: 880_000, cacheWrite: 36_000, output: 9_500 },
+        duty: 1,
+    },
+    {
+        session: 'demo-rate-codex',
+        agent: 'codex',
+        perMin: { input: 22_000, cacheRead: 160_000, cacheWrite: 0, output: 3_200 },
+        duty: 0.9,
+    },
+    {
+        session: 'demo-rate-grok',
+        agent: 'grok',
+        perMin: { input: 18_000, cacheRead: 40_000, cacheWrite: 0, output: 2_100 },
+        duty: 0.3,
+    },
+];
+/** How often the simulated sessions report while the past hour is filled in. */
+const HISTORY_STEP_MS = 30_000;
+/** Ticks a main-agent request stays in flight, and a tool stays running. */
+const THINK_TICKS = 2;
+const TOOL_TICKS = 1;
+const IDLE_TICKS = 2;
+/** Requests per demo turn; all but the last call a tool. */
+const REQUESTS_PER_TURN = 3;
+const DEMO_TOOLS = [
+    {
+        said: 'Reading the server’s routes before touching the stream.',
+        name: 'Read',
+        input: { file_path: '/repo/src/server/app.ts' },
+        result: '1\timport { Hono }…',
+    },
+    {
+        said: 'Now to find where each patch is sent from.',
+        name: 'Grep',
+        input: { pattern: 'onPatch', path: 'src' },
+        result: 'src/server/store.ts:142',
+    },
+    {
+        said: 'Running the tests before I change anything.',
+        name: 'Bash',
+        input: { command: 'npm test', description: 'Run tests' },
+        result: '89 passed',
+    },
+];
+/**
+ * Now and then the demo agent is stuck: in one prompt of every `STUCK_EVERY`, the first of them
+ * among the demo's own, it runs a flaky test again and again, each time a model call of its own,
+ * failing `STUCK_FAILS` times until a run passes, then answers; so the signs of trouble have
+ * something to show.
+ */
+const FLAKY = {
+    said: 'The login test is flaky; running it again.',
+    name: 'Bash',
+    input: { command: 'npm test -- login', description: 'Run the login test' },
+};
+const FLAKY_FAIL = 'FAIL tests/login.spec.ts > signs in\n  TimeoutError: waiting for #submit';
+const FLAKY_PASS = '1 passed (3.2s)';
+const STUCK_EVERY = 4;
+const STUCK_FAILS = 4;
+/**
+ * Serves the demo fixture for `--demo`, and keeps it moving so the UI's live paths can be
+ * built without a running Claude Code: every 2 s the main agent's in-flight request ages,
+ * completes, calls a tool, starts the next request or turn; early ticks also finish the
+ * fixture's running workflow. Every couple of minutes the agent is stuck for a while on a flaky
+ * test (`nextTool`), so the signs of trouble show.
+ */
+export class DemoStore {
+    snap;
+    others;
+    /** The other listed sessions, finished: they open but never change. */
+    sides;
+    quotas;
+    /** The rest of the week behind the weekly receipt: read by the week only, never listed. */
+    weekBehind;
+    /** The weekly receipt's data, read from the demo's sessions and the week behind them. */
+    week = new WeekService(this, { repoOf: demoRepo });
+    /** A permission history behind the demo's sessions: read by Rules only, never listed. */
+    rulesBehind;
+    /** The Rules page's data: the demo's sessions, the week behind them, and that history. */
+    rules;
+    sessionCbs = new Set();
+    patchCbs = new Set();
+    timer = null;
+    tickNo = 0;
+    serial = 0;
+    /** Prompts the demo has started, and the flaky test's runs in this one while it is stuck. */
+    prompts = 0;
+    flakyRuns = null;
+    lane;
+    /** The token rate, counted from simulated sessions as the real store counts real ones. */
+    rate;
+    rateClock;
+    rateTotals = new Map();
+    rateCbs = new Set();
+    /** A seeded generator: the same believable traffic on every run. */
+    seed = 0x2f6e2b1;
+    constructor() {
+        const now = new Date();
+        this.snap = createDemoSnapshot(now);
+        this.others = createDemoSessions(now).filter((s) => s.id !== DEMO_SESSION_ID);
+        this.sides = createDemoSideSnapshots(now);
+        this.quotas = createDemoQuotas(now);
+        this.weekBehind = createDemoWeek(now.getTime());
+        const history = createDemoRules(now.getTime());
+        this.rulesBehind = history.sessions;
+        this.rules = new RulesService({
+            weekSessions: () => [...this.weekSessions(), ...this.rulesBehind.map((s) => s.session)],
+            readSession: async (id) => {
+                const behind = this.rulesBehind.find((s) => s.session.id === id);
+                return behind ? { snapshot: structuredClone(behind), bytes: 0 } : this.readSession(id);
+            },
+        }, {
+            home: DEMO_HOME,
+            readSettings: async (projects) => history.settings(projects),
+            yourSettings: `${DEMO_HOME}/.claude/settings.json`,
+        });
+        const inFlight = this.snap.requests.find((r) => r.agentId === MAIN_AGENT_ID && r.status === 'in-flight');
+        this.lane = inFlight
+            ? { phase: 'thinking', ticksLeft: THINK_TICKS, requestId: inFlight.id }
+            : { phase: 'idle', ticksLeft: IDLE_TICKS };
+        // Fill in the past hour, so the rate has history to show from the first second.
+        this.rateClock = now.getTime() - RATE_MINUTES * MINUTE_MS;
+        this.rate = new RateTracker(() => this.rateClock);
+        this.spend(0);
+        for (let t = this.rateClock + HISTORY_STEP_MS; t <= now.getTime(); t += HISTORY_STEP_MS) {
+            this.rateClock = t;
+            this.spend(HISTORY_STEP_MS);
+        }
+        this.refreshActivity();
+    }
+    /** Each simulated session spends `ms` worth of its traffic, and the tracker sees its totals. */
+    spend(ms) {
+        for (const s of DEMO_TRAFFIC) {
+            const total = this.rateTotals.get(s.session) ?? emptyUsage();
+            // Working or not this step, and how hard: a slow swell around its usual rate, plus noise,
+            // as real sessions drift between long reads and quick steps.
+            if (ms > 0 && this.random() < s.duty) {
+                const phase = (this.rateClock / (11 * MINUTE_MS) + s.session.length) * Math.PI;
+                const k = (ms / MINUTE_MS) * (0.8 + 0.35 * Math.sin(phase) + this.random() * 0.25);
+                total.input += Math.round(s.perMin.input * k);
+                total.cacheRead += Math.round(s.perMin.cacheRead * k);
+                total.cacheWrite += Math.round(s.perMin.cacheWrite * k);
+                total.output += Math.round(s.perMin.output * k);
+            }
+            this.rateTotals.set(s.session, total);
+            this.rate.observe(s.session, s.agent, { ...total });
+        }
+    }
+    random() {
+        this.seed = (this.seed * 1_103_515_245 + 12_345) & 0x7fffffff;
+        return this.seed / 0x7fffffff;
+    }
+    async start() {
+        this.timer ??= setInterval(() => this.tick(), TICK_MS);
+    }
+    async stop() {
+        this.week.stop();
+        this.rules.stop();
+        if (this.timer)
+            clearInterval(this.timer);
+        this.timer = null;
+        this.sessionCbs.clear();
+        this.patchCbs.clear();
+    }
+    listSessions() {
+        // Listed as the real store lists them: idle sessions say since when.
+        return [structuredClone(this.snap.session), ...this.others]
+            .map((s) => withRepo(listedSummary(s), demoRepo))
+            .sort(compareSessions);
+    }
+    weekSessions() {
+        return [...this.listSessions(), ...this.weekBehind.map((s) => s.session)];
+    }
+    async readSession(sessionId) {
+        const snap = this.snapshotOf(sessionId) ?? this.weekBehind.find((s) => s.session.id === sessionId);
+        return snap ? { snapshot: structuredClone(snap), bytes: 0 } : null;
+    }
+    async getSnapshot(sessionId) {
+        // The week's sessions open too, though never listed: the Crossing panel shows their edits.
+        const snap = this.snapshotOf(sessionId) ?? this.weekBehind.find((s) => s.session.id === sessionId);
+        return snap ? structuredClone(snap) : null;
+    }
+    async getRequestDetail(sessionId, requestId) {
+        const snap = this.snapshotOf(sessionId);
+        return snap && this.findRequest(sessionId, requestId)?.hasDetail
+            ? demoRequestDetail(snap, requestId)
+            : null;
+    }
+    /** What the agent's finished requests carried, from what the demo's requests sent. */
+    async getContextBill(sessionId, agentId) {
+        const snap = this.snapshotOf(sessionId);
+        if (!snap)
+            return null;
+        const finished = snap.requests
+            .filter((r) => r.agentId === agentId && r.status !== 'in-flight')
+            .sort((a, b) => (a.startedAt ?? '').localeCompare(b.startedAt ?? ''));
+        return sessionBill(agentId, finished.map((request) => ({
+            request,
+            detail: request.hasDetail ? demoRequestDetail(snap, request.id) : null,
+        })), snap.session.cwd);
+    }
+    async getToolResult(sessionId, toolCallId) {
+        const tool = this.snapshotOf(sessionId)?.toolCalls.find((t) => t.id === toolCallId && t.hasFullResult);
+        return tool ? { found: true, result: tool.resultPreview } : { found: false, result: undefined };
+    }
+    /** Demo mode has exactly one session; scripted runs land in it. */
+    async expectSession(sessionId) {
+        return sessionId === DEMO_SESSION_ID;
+    }
+    listQuotas() {
+        return structuredClone(this.quotas);
+    }
+    getRate() {
+        return this.rate.snapshot(this.coverage());
+    }
+    /**
+     * The demo's own running sessions, as the real store covers its own: each one counted. Not the
+     * simulated spenders, which the list never shows.
+     */
+    coverage() {
+        const c = { running: 0, counted: 0, agents: {} };
+        for (const s of this.listSessions()) {
+            if (!isActive(s.live))
+                continue;
+            const agent = c.agents[s.agent] ?? { running: 0, counted: 0 };
+            c.agents[s.agent] = agent;
+            c.running++;
+            c.counted++;
+            agent.running++;
+            agent.counted++;
+        }
+        return c;
+    }
+    onRate(cb) {
+        this.rateCbs.add(cb);
+        return () => this.rateCbs.delete(cb);
+    }
+    /** The demo quota never changes. */
+    onQuota(_cb) {
+        return () => { };
+    }
+    onSessions(cb) {
+        this.sessionCbs.add(cb);
+        return () => {
+            this.sessionCbs.delete(cb);
+        };
+    }
+    onPatch(sessionId, cb) {
+        if (sessionId !== DEMO_SESSION_ID)
+            return () => { };
+        this.patchCbs.add(cb);
+        return () => {
+            this.patchCbs.delete(cb);
+        };
+    }
+    // ── Simulation ────────────────────────────────────────────────────────────────────────
+    tick() {
+        this.tickNo++;
+        const now = new Date().toISOString();
+        const changed = {
+            agents: new Set(),
+            turns: new Set(),
+            requests: new Set(),
+            toolCalls: new Set(),
+            workflows: new Set(),
+        };
+        if (this.tickNo === 3)
+            this.finishRunningTools(now, changed);
+        if (this.tickNo === 5)
+            this.finishWorkflow(now, changed);
+        this.advanceLane(now, changed);
+        for (const id of changed.turns)
+            this.refreshTurn(id);
+        for (const t of this.snap.turns)
+            if (changed.turns.has(t.id))
+                changed.agents.add(t.agentId);
+        for (const id of changed.agents)
+            this.refreshAgent(id);
+        this.refreshSession(now);
+        const pick = (items, ids) => items.filter((x) => ids.has(x.id));
+        const patch = structuredClone({
+            session: this.snap.session,
+            agents: pick(this.snap.agents, changed.agents),
+            turns: pick(this.snap.turns, changed.turns),
+            requests: pick(this.snap.requests, changed.requests),
+            toolCalls: pick(this.snap.toolCalls, changed.toolCalls),
+            workflows: pick(this.snap.workflows, changed.workflows),
+            diagnostics: null,
+        });
+        for (const cb of this.patchCbs)
+            cb(patch);
+        const list = this.listSessions();
+        for (const cb of this.sessionCbs)
+            cb(list);
+        // The rate moves with the clock: the simulated sessions spend another tick's worth.
+        this.rateClock = Date.now();
+        this.spend(TICK_MS);
+        const rate = this.getRate();
+        for (const cb of this.rateCbs)
+            cb(rate);
+    }
+    advanceLane(now, changed) {
+        const lane = this.lane;
+        lane.ticksLeft--;
+        if (lane.phase !== 'idle')
+            changed.requests.add(lane.requestId);
+        if (lane.ticksLeft > 0)
+            return;
+        if (lane.phase === 'thinking') {
+            const request = this.request(lane.requestId);
+            const turn = this.turn(request.turnId);
+            const toolSpec = this.nextTool(request);
+            this.completeRequest(request, now, toolSpec !== null, toolSpec?.said);
+            changed.turns.add(turn.id);
+            if (toolSpec) {
+                const tool = this.startTool(request, toolSpec, now);
+                changed.toolCalls.add(tool.id);
+                this.lane = {
+                    phase: 'tool',
+                    ticksLeft: TOOL_TICKS,
+                    requestId: request.id,
+                    toolId: tool.id,
+                    tool: toolSpec,
+                };
+            }
+            else {
+                this.snap.session.live = 'idle';
+                this.lane = { phase: 'idle', ticksLeft: IDLE_TICKS };
+            }
+        }
+        else if (lane.phase === 'tool') {
+            const tool = this.toolCall(lane.toolId);
+            this.completeTool(tool, now, lane.tool.result, lane.tool.failed);
+            changed.toolCalls.add(tool.id);
+            const turnId = this.request(lane.requestId).turnId;
+            const next = this.startRequest(turnId, now);
+            changed.requests.add(next.id);
+            changed.turns.add(turnId);
+            this.lane = { phase: 'thinking', ticksLeft: THINK_TICKS, requestId: next.id };
+        }
+        else {
+            const turn = this.startTurn(now);
+            const next = this.startRequest(turn.id, now);
+            this.snap.session.live = 'busy';
+            changed.turns.add(turn.id);
+            changed.requests.add(next.id);
+            this.lane = { phase: 'thinking', ticksLeft: THINK_TICKS, requestId: next.id };
+        }
+    }
+    /** The fixture's running tools (a workflow agent's WebFetch) finish early on. */
+    finishRunningTools(now, changed) {
+        for (const tool of this.snap.toolCalls) {
+            if (tool.status !== 'running' || tool.agentId === MAIN_AGENT_ID)
+                continue;
+            this.completeTool(tool, now, 'ok');
+            changed.toolCalls.add(tool.id);
+            changed.turns.add(this.request(tool.requestId).turnId);
+        }
+    }
+    /** The workflow's last in-flight agent answers and the run completes. */
+    finishWorkflow(now, changed) {
+        for (const workflow of this.snap.workflows) {
+            for (const request of this.snap.requests) {
+                if (request.status !== 'in-flight' || !workflow.agentIds.includes(request.agentId))
+                    continue;
+                this.completeRequest(request, now, false);
+                request.blocks.push({ kind: 'text', text: '{"summary": "…"}', at: now });
+                changed.requests.add(request.id);
+                changed.turns.add(request.turnId);
+            }
+            workflow.status = 'complete';
+            workflow.endedAt = now;
+            changed.workflows.add(workflow.id);
+        }
+    }
+    /**
+     * The tool the request that just finished calls, or null when it answers: the usual round, two
+     * calls a prompt; while the agent is stuck, the flaky test until a run passes.
+     */
+    nextTool(request) {
+        if (this.flakyRuns !== null) {
+            const run = this.flakyRuns++;
+            if (run < STUCK_FAILS)
+                return { ...FLAKY, result: FLAKY_FAIL, failed: true };
+            if (run === STUCK_FAILS)
+                return { ...FLAKY, result: FLAKY_PASS };
+            return null;
+        }
+        if (request.index >= REQUESTS_PER_TURN)
+            return null;
+        return DEMO_TOOLS[this.serial % DEMO_TOOLS.length];
+    }
+    startTurn(now) {
+        this.flakyRuns = this.prompts++ % STUCK_EVERY === 0 ? 0 : null;
+        const index = this.snap.turns.filter((t) => t.agentId === MAIN_AGENT_ID).length + 1;
+        const turn = {
+            id: `turn_live_${++this.serial}`,
+            agentId: MAIN_AGENT_ID,
+            index,
+            origin: 'human',
+            prompt: `Demo prompt #${index}: keep going`,
+            startedAt: now,
+            endedAt: null,
+            status: 'running',
+            requestIds: [],
+        };
+        this.snap.turns.push(turn);
+        return turn;
+    }
+    startRequest(turnId, now) {
+        const turn = this.turn(turnId);
+        const request = {
+            id: `req_live_${++this.serial}`,
+            agentId: turn.agentId,
+            turnId,
+            index: turn.requestIds.length + 1,
+            model: 'claude-opus-5-5',
+            effort: 'max',
+            startedAt: now,
+            firstBlockAt: null,
+            endedAt: null,
+            status: 'in-flight',
+            stopReason: null,
+            usage: null,
+            blocks: [],
+            toolCallIds: [],
+            hasDetail: true,
+            error: null,
+        };
+        turn.requestIds.push(request.id);
+        this.snap.requests.push(request);
+        return request;
+    }
+    /** `said`: what the reply says before the tool it calls, as agents often do. */
+    completeRequest(request, now, callsTool, said) {
+        const started = Date.parse(request.startedAt ?? now);
+        const elapsed = Math.max(1000, Date.parse(now) - started);
+        const firstBlockAt = new Date(started + elapsed * 0.6).toISOString();
+        const n = ++this.serial;
+        const context = 60_000 + n * 3_500;
+        request.status = 'complete';
+        request.endedAt = now;
+        request.firstBlockAt = firstBlockAt;
+        request.stopReason = callsTool ? 'tool_use' : 'end_turn';
+        request.usage = {
+            ...emptyUsage(),
+            input: 6,
+            cacheRead: context - 3_500 - 6,
+            cacheWrite: 3_500,
+            cacheWrite1h: 3_500,
+            output: 600 + (n % 4) * 300,
+            thinking: 300 + (n % 3) * 150,
+        };
+        request.blocks.push({
+            kind: 'thinking',
+            text: n % 2 ? 'Checking the next file before changing anything.' : null,
+            durationMs: Math.round(elapsed * 0.6),
+            at: firstBlockAt,
+        });
+        if (said)
+            request.blocks.push({ kind: 'text', text: said, at: now });
+        if (!callsTool)
+            request.blocks.push({ kind: 'text', text: 'Done with this step.', at: now });
+    }
+    startTool(request, spec, now) {
+        const tool = {
+            id: `tu_live_${++this.serial}`,
+            agentId: request.agentId,
+            requestId: request.id,
+            name: spec.name,
+            input: structuredClone(spec.input),
+            status: 'running',
+            startedAt: now,
+            endedAt: null,
+            durationMs: null,
+            resultPreview: null,
+            hasFullResult: false,
+            spawned: null,
+        };
+        request.toolCallIds.push(tool.id);
+        request.blocks.push({ kind: 'tool-use', toolCallId: tool.id, at: now });
+        this.snap.toolCalls.push(tool);
+        return tool;
+    }
+    completeTool(tool, now, result, failed = false) {
+        tool.status = failed ? 'error' : 'complete';
+        tool.endedAt = now;
+        tool.durationMs = Date.parse(now) - Date.parse(tool.startedAt ?? now);
+        tool.resultPreview = result;
+        tool.hasFullResult = true;
+    }
+    refreshTurn(turnId) {
+        const turn = this.turn(turnId);
+        const requests = turn.requestIds.map((id) => this.request(id));
+        const running = requests.some((r) => r.status === 'in-flight') ||
+            this.snap.toolCalls.some((t) => t.status === 'running' && turn.requestIds.includes(t.requestId));
+        turn.status = running ? 'running' : 'complete';
+        turn.endedAt = running ? null : (requests.at(-1)?.endedAt ?? null);
+    }
+    refreshAgent(agentId) {
+        const agent = this.snap.agents.find((a) => a.id === agentId);
+        const requests = this.snap.requests.filter((r) => r.agentId === agentId);
+        const turns = this.snap.turns.filter((t) => t.agentId === agentId);
+        const running = turns.some((t) => t.status === 'running');
+        agent.status = running ? 'running' : 'complete';
+        agent.startedAt = requests[0]?.startedAt ?? null;
+        agent.endedAt = running ? null : (requests.at(-1)?.endedAt ?? null);
+        agent.usage = sumUsage(requests.map((r) => r.usage));
+        agent.counts = {
+            turns: turns.length,
+            requests: requests.length,
+            toolCalls: this.snap.toolCalls.filter((t) => t.agentId === agentId).length,
+        };
+    }
+    refreshSession(now) {
+        const s = this.snap;
+        s.session.updatedAt = now;
+        s.session.usage = sumUsage(s.requests.map((r) => r.usage));
+        s.session.counts = {
+            turns: s.turns.filter((t) => t.agentId === MAIN_AGENT_ID).length,
+            requests: s.requests.length,
+            toolCalls: s.toolCalls.length,
+            agents: s.agents.length,
+        };
+        this.refreshActivity();
+    }
+    /**
+     * What the demo session is doing and what it last said, worked out as a parser would, and
+     * its strongest sign of trouble as the server reads one of a session it has open.
+     */
+    refreshActivity() {
+        const s = this.snap;
+        const { activity: _old, trouble: _sign, lastReply: _said, ...session } = s.session;
+        const next = {
+            ...session,
+            ...activityField({
+                live: s.session.live,
+                toolCalls: s.toolCalls,
+                requests: s.requests,
+                lastTurn: latestTurn(s.turns),
+                updatedAt: s.session.updatedAt,
+            }),
+            ...lastReplyField({
+                live: s.session.live,
+                lastTurn: latestTurn(s.turns),
+                request: requestsById(s.requests),
+            }),
+        };
+        if (isActive(next.live)) {
+            const byId = (items) => new Map(items.map((x) => [x.id, x]));
+            const input = {
+                session: next,
+                agents: byId(s.agents),
+                turns: byId(s.turns),
+                requests: byId(s.requests),
+                toolCalls: byId(s.toolCalls),
+            };
+            next.trouble = detectTrouble(input, MAIN_AGENT_ID, Date.now(), troubleLabel)[0] ?? null;
+        }
+        s.session = next;
+    }
+    snapshotOf(sessionId) {
+        return sessionId === DEMO_SESSION_ID
+            ? this.snap
+            : this.sides.find((s) => s.session.id === sessionId);
+    }
+    findRequest(sessionId, requestId) {
+        return this.snapshotOf(sessionId)?.requests.find((r) => r.id === requestId);
+    }
+    request(id) {
+        return this.snap.requests.find((r) => r.id === id);
+    }
+    turn(id) {
+        return this.snap.turns.find((t) => t.id === id);
+    }
+    toolCall(id) {
+        return this.snap.toolCalls.find((t) => t.id === id);
+    }
+}
+//# sourceMappingURL=demo-store.js.map
