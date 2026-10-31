@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { createDemoSnapshot } from '../../../src/core/fixtures/demo.js';
+import { sessionBuckets, sliceSession, weekWindow } from '../../../src/server/week-buckets.js';
+import { fromSnapshot } from '../data/store';
 import { DEMO_NOW, demoOpen, pendingFor, withRunningTool } from '../test/demo';
 import {
   activeMs,
@@ -307,5 +310,40 @@ describe('waiting for approval', () => {
     expect(timeBreakdown(plainOpen, 'main', NOW, stray)).toEqual(
       timeBreakdown(plainOpen, 'main', NOW),
     );
+  });
+});
+
+describe('waiting on the person, as the week adds it up', () => {
+  it('gives the session’s waits the week’s figure for them, agent by agent', () => {
+    const snap = createDemoSnapshot(new Date(NOW));
+    const ask = snap.toolCalls.find((t) => t.agentId === 'main' && t.endedAt);
+    if (!ask?.startedAt || !ask.endedAt) throw new Error('fixture');
+    const from = Date.parse(ask.startedAt);
+    const to = Date.parse(ask.endedAt);
+    // One call is a question the person answered, another a permission prompt answered part way.
+    const questioned = { ...ask, name: 'AskUserQuestion', input: { questions: [] } };
+    snap.toolCalls = snap.toolCalls.map((t) => (t.id === ask.id ? questioned : t));
+    const prompted = snap.toolCalls.find(
+      (t) => t.id !== ask.id && t.agentId === 'main' && t.startedAt && t.endedAt,
+    );
+    if (!prompted?.startedAt || !prompted.endedAt) throw new Error('fixture');
+    const approvals = new Map([
+      [
+        prompted.id,
+        { requestedAt: Date.parse(prompted.startedAt), decidedAt: Date.parse(prompted.endedAt) },
+      ],
+    ]);
+    const open = fromSnapshot(snap.session.id, snap);
+
+    const shown = snap.agents.reduce(
+      (sum, a) => sum + timeBreakdown(open, a.id, NOW, approvals).approval,
+      0,
+    );
+    const week = sliceSession(sessionBuckets(snap, NOW, approvals), weekWindow('7d', NOW));
+    expect(shown).toBe(week?.inWindow.waiting?.ms);
+    expect(week?.inWindow.waiting?.byKind).toEqual({
+      question: to - from,
+      permission: Date.parse(prompted.endedAt) - Date.parse(prompted.startedAt),
+    });
   });
 });

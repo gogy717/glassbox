@@ -7,6 +7,7 @@ import {
   type SegmentKind,
   toolSpan,
 } from '../../../src/shared/segments.js';
+import { waitMs, waitsOf } from '../../../src/shared/waiting.js';
 import type { Approvals } from '../data/approvals';
 import type { OpenSession } from '../data/store';
 import { agentTree } from './agents';
@@ -99,7 +100,10 @@ export interface TimeBreakdown {
   tools: Partial<Record<ToolCategory, number>>;
   /** Gaps between the agent's turns, e.g. waiting for the person to reply. */
   idle: number;
-  /** Tools blocked on a permission prompt: also time spent waiting for the person. */
+  /**
+   * Time the agent waited on the person: its tools blocked on a permission prompt, its questions
+   * and plan approvals (`shared/waiting.ts`, the same waits the week's "Waiting on you" adds up).
+   */
   approval: number;
 }
 
@@ -122,20 +126,17 @@ export function timeBreakdown(
     }
   }
   const byCategory = new Map<ToolCategory, Segment[]>();
-  const blocked: Segment[] = [];
-  for (const t of open.toolCalls.values()) {
-    if (t.agentId !== agentId) continue;
+  const mine = [...open.toolCalls.values()].filter((t) => t.agentId === agentId);
+  for (const t of mine) {
     for (const s of toolSegments(t, now, approvals, true)) {
-      if (s.kind === 'approval') blocked.push(s);
-      else if (s.category) {
-        const list = byCategory.get(s.category);
-        if (list) list.push(s);
-        else byCategory.set(s.category, [s]);
-      }
+      if (s.kind === 'approval' || !s.category) continue;
+      const list = byCategory.get(s.category);
+      if (list) list.push(s);
+      else byCategory.set(s.category, [s]);
     }
   }
   for (const [category, segs] of byCategory) out.tools[category] = activeMs(segs);
-  out.approval = activeMs(blocked);
+  out.approval = waitMs(waitsOf(mine, now, approvals));
   const turns = [...open.turns.values()]
     .filter((t) => t.agentId === agentId)
     .sort((a, b) => a.startedAt.localeCompare(b.startedAt));

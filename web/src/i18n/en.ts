@@ -832,4 +832,6 @@ export const en: Record<MessageKey, string> = {
   'files.diff': 'Change',
   'files.writeSize': '{lines} {lines|line|lines} · {chars} {chars|character|characters}',
   'files.cell': 'Cell {id}',
+  // Package G (round 3): the time the agents waited on the person.
+  'time.waitingYou': 'Waiting for you',
 };

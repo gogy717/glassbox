@@ -111,7 +111,7 @@ export function TimeView({ open, agentId, navigate }: Props) {
     { key: 'idle', label: t('time.idle'), ms: breakdown.idle, color: 'var(--hatch-idle)' },
     {
       key: 'approval',
-      label: t('time.approval'),
+      label: t('time.waitingYou'),
       ms: breakdown.approval,
       color: 'var(--seg-approval)',
     },

@@ -806,6 +806,8 @@ export const zh = {
   'files.diff': '改动',
   'files.writeSize': '{lines} 行 · {chars} 字符',
   'files.cell': '单元格 {id}',
+  // Package G (round 3): the time the agents waited on the person.
+  'time.waitingYou': '等待用户',
 } as const;
 
 export type MessageKey = keyof typeof zh;
