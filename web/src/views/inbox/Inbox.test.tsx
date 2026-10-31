@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionActivity, SessionSummary, TroubleSignal } from '../../../../src/core/model.js';
 import type { PermissionRequest } from '../../../../src/shared/runs.js';
@@ -200,6 +200,36 @@ describe('Inbox', () => {
         },
       ),
     ).toBeVisible();
+  });
+
+  it('prints a separator only between two things, in every kind of item', () => {
+    const permission = held(ask('tu_1', 'Bash', 90, { command: 'npm test' }));
+    const question = held(ask('tu_2', 'AskUserQuestion', 80));
+    const plan = held(ask('tu_3', 'ExitPlanMode', 70, { plan: '1. Split the parser' }));
+    const turn = session('waiting', { activity: waitingOn(null, 60) });
+    const terminal = session('waiting', { activity: waitingOn('Bash', 50, 'git push') });
+    const bare = session('waiting', { activity: waitingOn('Edit', 40) });
+    const stuck = session('busy', { trouble: sign('repeat', 300) });
+    for (const locale of ['en', 'zh'] as const) {
+      renderInbox(
+        {
+          sessions: [permission, question, plan]
+            .map((h) => h.session)
+            .concat(turn, terminal, bare, stuck),
+          prompts: new Map([permission, question, plan].map((h) => [h.session.id, h.prompt])),
+        },
+        { locale },
+      );
+      const seps = screen.getAllByText('·', { selector: '[class*="sep"]', exact: false });
+      expect(seps.length).toBeGreaterThan(4);
+      for (const sep of seps) {
+        const side = (n: Node | null) => (n?.textContent ?? '').trim();
+        const item = sep.closest('article')?.textContent ?? '';
+        expect(side(sep.previousSibling), item).not.toBe('');
+        expect(side(sep.nextSibling), item).not.toBe('');
+      }
+      cleanup();
+    }
   });
 
   it('opens a session from its title, and a stuck one from Open', () => {

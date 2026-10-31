@@ -133,6 +133,39 @@ describe('SessionRow', () => {
   });
 
   describe('at card density', () => {
+    it('prints a separator only between two things, whatever the row holds', () => {
+      // Home's board: each "·" stands between words on both sides, across the states a row has.
+      const bare = { ...idle, usage: null };
+      const rows: [SessionSummary, { failure?: string | null }][] = [
+        [bare, {}],
+        [idle, {}],
+        [running, {}],
+        [reading, {}],
+        [{ ...running, activity: undefined }, {}],
+        [{ ...running, live: 'waiting', activity: undefined }, {}],
+        [{ ...running, trouble: { kind: 'waiting', params: {}, at: null, since: since(840) } }, {}],
+        [bare, { failure: null }],
+        [idle, { failure: 'missing file' }],
+      ];
+      let seen = 0;
+      for (const [session, more] of rows) {
+        for (const locale of ['en', 'zh'] as const) {
+          const row = renderRow(session as SessionSummary, false, vi.fn(), locale, {
+            density: 'card',
+            ...more,
+          });
+          for (const sep of row.querySelectorAll(`.${css.sep}, [class*="sep"]`)) {
+            seen++;
+            const side = (n: Node | null) => (n?.textContent ?? '').trim();
+            expect(side(sep.previousSibling), row.textContent ?? '').not.toBe('');
+            expect(side(sep.nextSibling), row.textContent ?? '').not.toBe('');
+          }
+          cleanup();
+        }
+      }
+      expect(seen).toBeGreaterThan(20);
+    });
+
     it('reads tag, project and title, then the activity with its clock and the tokens', () => {
       vi.useFakeTimers();
       vi.setSystemTime(DEMO_NOW);
