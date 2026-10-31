@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEMO_SESSION_ID } from '../core/fixtures/demo.js';
 import { burnSince, topBurn } from '../shared/quota-burn.js';
-import { DemoStore } from './demo-store.js';
+import { CONTEXT_DEMO_ID, DemoStore } from './demo-store.js';
 import { createDemoBurn } from './quota-burn-demo.js';
 
 // Monday 7:00, before the demo week's morning block: the week places its sessions by the time of
@@ -26,14 +26,17 @@ const demo = () => {
 };
 
 describe("the demo's Who used it", () => {
-  it('lists Claude’s five-hour window, mostly the open demo session, with more than five sessions', async () => {
+  it('lists Claude’s five-hour window, led by the two running demo sessions, with more than five sessions', async () => {
     const store = demo();
     const now = Date.now();
     const quota = store.listQuotas().find((q) => q.provider === 'anthropic');
     const burn = await store.burn.compute('anthropic', burnSince(quota, now));
     expect(burn.counted).toBe('tokens');
-    expect(burn.sessions[0]?.id).toBe(DEMO_SESSION_ID);
-    expect(burn.sessions[0]?.share).toBeGreaterThan(0.5);
+    // The session near its context window read the most (its 22 calls each carry the context);
+    // the open demo session comes second. Neither holds over half, so "mostly" stays off.
+    expect(burn.sessions.slice(0, 2).map((s) => s.id)).toEqual([CONTEXT_DEMO_ID, DEMO_SESSION_ID]);
+    expect(burn.sessions[0]?.share).toBeGreaterThan(0.4);
+    expect(burn.sessions[1]?.share).toBeGreaterThan(0.2);
     const { top, more } = topBurn(burn.sessions, 5);
     expect(top).toHaveLength(5);
     expect(more.count).toBeGreaterThan(0);

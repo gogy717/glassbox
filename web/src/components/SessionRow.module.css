@@ -95,6 +95,13 @@
   flex-shrink: 0;
 }
 
+/* Home's board: the agent tag at the head of a card row keeps its size and sits centred. It
+   comes before the compact rows below, which name a first child more specifically. */
+.head > :first-child {
+  flex: none;
+  align-self: center;
+}
+
 /* Beside a sign of trouble in the sidebar, no "·" stands beside nothing: the activity keeps its
    dot and about a word, the sign its glyph after its "·", and the age and tokens, which give way
    too, a figure after theirs. */
@@ -133,11 +140,6 @@
   align-items: baseline;
   gap: 8px;
   min-width: 0;
-}
-
-.head > :first-child {
-  flex: none;
-  align-self: center;
 }
 
 .row[data-density="card"] .title {
