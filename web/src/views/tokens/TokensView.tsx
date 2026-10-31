@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react';
 import type { ModelRequest } from '../../../../src/core/model.js';
 import { MAIN_AGENT_ID } from '../../../../src/core/model.js';
 import { totalTokens } from '../../../../src/core/usage.js';
+import { contextUse } from '../../../../src/shared/context-use.js';
 import { FigureText } from '../../components/FigureText';
 import { TokenBar, TokenLegend } from '../../components/TokenBar';
 import { usePriceTable } from '../../data/price-table';
@@ -23,8 +24,10 @@ import {
 import type { Navigate } from '../../router';
 import { useUi } from '../../ui';
 import { AgentBreakdown } from './AgentBreakdown';
+import { CacheBreaks } from './CacheBreaks';
 import { ContextBill } from './ContextBill';
 import { ContextChart } from './ContextChart';
+import { McpUsage } from './McpUsage';
 import css from './TokensView.module.css';
 import { TopRequests } from './TopRequests';
 
@@ -45,6 +48,11 @@ export function TokensView({ open, agentId, navigate }: Props) {
   const costs = useMemo(() => rollupCosts(open, prices), [open, prices]);
   const found = useMemo(() => insights(open), [open]);
   const series = useMemo(() => contextSeries(open, agentId), [open, agentId]);
+  // The window of the agent's model, as its latest call names it: the curve's ceiling.
+  const windowTokens = useMemo(
+    () => contextUse(open.requests.values(), agentId)?.window ?? null,
+    [open, agentId],
+  );
   const top = useMemo(() => topRequests(open, TOP_N, subtreeIds(open, agentId)), [open, agentId]);
   const selected = rows.find((r) => r.kind === 'agent' && r.id === agentId);
   const total = selected?.total;
@@ -71,12 +79,16 @@ export function TokensView({ open, agentId, navigate }: Props) {
     [navigate, setFollow],
   );
 
-  // "Yet" only while the agent may still add to it.
+  // "Yet" only while the agent may still add to it. Its MCP servers still count: they have no
+  // tokens of their own.
   if (!total || totalTokens(total) === 0)
     return (
-      <p className={css.empty}>
-        {t(mayStillRun(open, agentId) ? 'tokens.noData' : 'tokens.noDataDone')}
-      </p>
+      <div className={css.view}>
+        <p className={css.empty}>
+          {t(mayStillRun(open, agentId) ? 'tokens.noData' : 'tokens.noDataDone')}
+        </p>
+        <McpUsage open={open} agentId={agentId} navigate={navigate} />
+      </div>
     );
 
   return (
@@ -125,6 +137,7 @@ export function TokensView({ open, agentId, navigate }: Props) {
           <ContextChart
             agent={agentName}
             points={series}
+            windowTokens={windowTokens}
             onPick={(id) => {
               const req = open.requests.get(id);
               if (req) openInFlow(req);
@@ -134,7 +147,10 @@ export function TokensView({ open, agentId, navigate }: Props) {
         </div>
       </div>
 
+      <CacheBreaks open={open} agentId={agentId} navigate={navigate} />
+
       <ContextBill open={open} agentId={agentId} navigate={navigate} />
+      <McpUsage open={open} agentId={agentId} navigate={navigate} />
     </div>
   );
 }

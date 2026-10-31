@@ -4,17 +4,27 @@
  * for the rest (`st`). A session is a link only while the session list has it (R32). Each card
  * draws again only when its own figures change: a hover in the grid draws none of them.
  */
-import { memo, type RefObject, useEffect, useRef, useState } from 'react';
+import { Fragment, memo, type RefObject, useEffect, useRef, useState } from 'react';
 import type { QuotaSnapshot, QuotaWindow } from '../../../../src/core/model.js';
+import {
+  burnSince,
+  burnWindow,
+  type QuotaBurn,
+  topBurn,
+} from '../../../../src/shared/quota-burn.js';
 import { firstCountedIndex, ratePerMinute, rateSeries } from '../../../../src/shared/rate.js';
+import type { WaitKind } from '../../../../src/shared/waiting.js';
 import type { WeekWindowKind } from '../../../../src/shared/week.js';
 import { AgentTag } from '../../components/AgentTag';
 import { UiCjk } from '../../components/CompactFigure';
+import { sharePct } from '../../components/QuotaBurn';
+import burnCss from '../../components/QuotaBurn.module.css';
 import { Sparkline } from '../../components/RateCharts';
 import { count, partsText } from '../../components/receipt/format';
 import { rt } from '../../components/receipt/strings';
 import { unreportedLine } from '../../components/receipt/week';
 import { cliParts, shareText } from '../../components/receipt/weekFigures';
+import { type BurnAsk, useListedIds, useQuotaBurns } from '../../data/quotaBurn';
 import { useRate } from '../../data/store';
 import { type Locale, useI18n } from '../../i18n';
 import { agentName } from '../../lib/agent-names';
@@ -24,6 +34,7 @@ import { providerShortName } from '../../lib/provider-names';
 import { quotaWindowName } from '../../lib/quota';
 import { paceOf, quotaLevel } from '../../lib/quota-pace';
 import { sessionLink } from '../../router';
+import mcp from './Mcp.module.css';
 import css from './StatsPage.module.css';
 import {
   type HourIndex,
@@ -31,12 +42,14 @@ import {
   hourSpan,
   type Isolate,
   longestSessions,
+  mcpServers,
   type SessionLine,
   type StatsWeek,
   sameIsolate,
   timeText,
+  waitingOf,
 } from './statsData';
-import { st } from './strings';
+import { type StatsKey, st } from './strings';
 import type { Cell } from './WeekGrid';
 
 /** A card's head: its name, in capitals, and what its figures are, muted. */
@@ -187,12 +200,20 @@ export const HourCard = memo(function HourCard(p: {
           </h2>
           <p className={css.hourLine}>
             {hour.topCli
-              ? st(L, 'hourLine', {
+              ? // Each part whole ("Claude Code 1 小时 22 分"): the line breaks only between them.
+                st(L, 'hourLine', {
                   time: timeText(hour.ms, L),
                   n: hour.sessions.length,
                   cli: agentName(hour.topCli.agent),
                   cliTime: timeText(hour.topCli.ms, L),
                 })
+                  .split(' · ')
+                  .map((part, i) => (
+                    <Fragment key={part}>
+                      {i > 0 && ' · '}
+                      <span className={css.keep}>{part}</span>
+                    </Fragment>
+                  ))
               : st(L, 'hourIdle')}
           </p>
           <HourSessions key={hour.start} rows={hour.sessions} listed={p.listed} locale={L} />
@@ -347,6 +368,66 @@ export const LongestCard = memo(function LongestCard({
   );
 });
 
+/** The card's name for each kind of wait. */
+const WAIT_NAME: Record<WaitKind, StatsKey> = {
+  permission: 'waitingPermission',
+  question: 'waitingQuestion',
+  plan: 'waitingPlan',
+  turn: 'waitingTurn',
+};
+
+/**
+ * Waiting on you: the time the agents waited on the person in the window, by kind, and the
+ * longest wait with its session (a link while the list has it). Its footnote says what is not
+ * counted.
+ */
+export const WaitingCard = memo(function WaitingCard({
+  w,
+  listed,
+  locale,
+}: {
+  w: StatsWeek;
+  listed: Set<string>;
+  locale: Locale;
+}) {
+  const f = waitingOf(w);
+  return (
+    <section className={css.card} data-area="waiting" aria-labelledby="stats-waiting">
+      <Head id="stats-waiting" name={st(locale, 'waiting')} note={st(locale, 'waitingNote')} />
+      {f ? (
+        <>
+          <p className={css.waitFigure}>
+            <span className={`${css.rateFigure} figure`}>
+              <UiCjk text={timeText(f.ms, locale)} />
+            </span>
+            <span className={css.note}>
+              {st(locale, 'waitingLine', { n: f.count, time: timeText(f.longest.ms, locale) })}
+            </span>
+          </p>
+          <ul className={css.waitKinds}>
+            {f.byKind.map((k) => (
+              <li key={k.kind} className={css.waitKind}>
+                <span className={css.waitName}>{st(locale, WAIT_NAME[k.kind])}</span>
+                <span className={`${css.track} ${css.waitTrack}`} aria-hidden="true">
+                  <span style={{ width: `${(k.ms / f.ms) * 100}%` }} />
+                </span>
+                <span className={`${css.waitValue} figure`}>
+                  <UiCjk text={timeText(k.ms, locale)} />
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className={css.hint}>{st(locale, 'waitingLongest')}</p>
+          <SessionRows rows={[f.longest]} listed={listed} locale={locale} />
+          <p className={css.hint}>{st(locale, 'waitingFoot')}</p>
+        </>
+      ) : (
+        <p className={css.hint}>{st(locale, 'waitingNone')}</p>
+      )}
+    </section>
+  );
+});
+
 const KINDS = ['cacheRead', 'cacheWrite', 'uncached', 'output'] as const;
 const KIND_COLOUR = {
   cacheRead: 'var(--tok-cache-read)',
@@ -409,17 +490,21 @@ export const TokensCard = memo(function TokensCard({
               </span>
               <span className="section-label">{rt(locale, 'cacheHit')}</span>
             </div>
-            <div className={css.figure} data-total>
-              <span className={`${css.value} figure`}>
-                <UiCjk text={fmt(tk.total)} />
-              </span>
-              <span className="section-label">{rt(locale, 'total')}</span>
-            </div>
-            <div className={css.figure} data-cost title={costTitle}>
-              <span className={`${css.value} figure`}>
-                {tk.cost.priced ? `≈ ${formatUsdShort(tk.cost.usd, intl)}` : '—'}
-              </span>
-              <span className="section-label">{st(locale, 'apiCost')}</span>
+            {/* The total and its cost, at the right as one: short of room they go under
+                together, never the cost alone. */}
+            <div className={css.sums}>
+              <div className={css.figure} data-total>
+                <span className={`${css.value} figure`}>
+                  <UiCjk text={fmt(tk.total)} />
+                </span>
+                <span className="section-label">{rt(locale, 'total')}</span>
+              </div>
+              <div className={css.figure} data-cost title={costTitle}>
+                <span className={`${css.value} figure`}>
+                  {tk.cost.priced ? `≈ ${formatUsdShort(tk.cost.usd, intl)}` : '—'}
+                </span>
+                <span className="section-label">{st(locale, 'apiCost')}</span>
+              </div>
             </div>
           </div>
           {note && <p className={css.hint}>{note}</p>}
@@ -522,6 +607,131 @@ export const NowCard = memo(function NowCard({
         </ul>
       ) : (
         <p className={css.hint}>{st(locale, 'noQuota')}</p>
+      )}
+      <BurnLine quotas={quotas} now={now} />
+    </section>
+  );
+});
+
+/** Sessions named on Right now's line. */
+const BURN_LINE_ROWS = 3;
+
+/**
+ * Who used the plan of the provider closest to a limit (as the top bar's lead meter) of those
+ * glassbox saw any use of, on one line under the meters: the top three sessions of its listed
+ * window (its 5-hour one when it has one) and their shares, each a link while listed; the quota's
+ * details list more. Read again each minute.
+ */
+function BurnLine({ quotas, now }: { quotas: QuotaSnapshot[]; now: number }) {
+  const { t, locale } = useI18n();
+  const topPct = (q: QuotaSnapshot) =>
+    Math.max(
+      -1,
+      ...q.windows
+        .filter((w) => !w.resetsAt || Date.parse(w.resetsAt) > now)
+        .map((w) => w.usedPercent),
+    );
+  // Closest to a limit first; the first of them with a list is named.
+  const candidates = quotas
+    .filter(
+      (q, i) => burnWindow(q, now) && quotas.findIndex((o) => o.provider === q.provider) === i,
+    )
+    .sort((a, b) => topPct(b) - topPct(a));
+  const asks: BurnAsk[] = candidates.map((q) => ({
+    provider: q.provider,
+    since: burnSince(q, now),
+  }));
+  const states = useQuotaBurns(asks, true, Math.floor(now / 60_000));
+  const listed = useListedIds();
+  let shown: { lead: QuotaSnapshot; window: QuotaWindow; burn: QuotaBurn } | null = null;
+  for (const q of candidates) {
+    const state = states.get(q.provider);
+    const window = burnWindow(q, now);
+    if (window && state?.status === 'ok' && state.burn.sessions.length > 0) {
+      shown = { lead: q, window, burn: state.burn };
+      break;
+    }
+  }
+  if (!shown) return null;
+  const { lead, window, burn } = shown;
+  const { top } = topBurn(burn.sessions, BURN_LINE_ROWS);
+  const hint = st(locale, burn.counted === 'requests' ? 'burnHintRequests' : 'burnHint');
+  return (
+    <p className={burnCss.line} title={hint}>
+      <span className={burnCss.lead}>
+        {st(locale, 'burnLead', {
+          name: providerShortName(lead.provider),
+          window: quotaWindowName(window, t),
+        })}
+      </span>{' '}
+      <span className={burnCss.items}>
+        {top.map((s, i) => {
+          const title = s.title ?? t('sidebar.untitled');
+          return (
+            <span key={s.id} className={burnCss.item}>
+              {i > 0 && <span className={burnCss.sep}> · </span>}
+              {listed === null || listed.has(s.id) ? (
+                <a href={sessionLink(s.id)} className={burnCss.itemName}>
+                  {title}
+                </a>
+              ) : (
+                <span className={burnCss.itemName}>{title}</span>
+              )}{' '}
+              <span className={`${burnCss.itemShare} figure`}>{sharePct(s.share)}</span>
+            </span>
+          );
+        })}
+      </span>
+    </p>
+  );
+}
+// Package F (round 3): MCP servers.
+
+/**
+ * MCP servers: the window's servers by calls, each with its failures in the error tone and its
+ * calls' time; the bar is its calls against the busiest server's. Says so when none was called.
+ */
+export const McpCard = memo(function McpCard({ w, locale }: { w: StatsWeek; locale: Locale }) {
+  const { intl } = useI18n();
+  const rows = mcpServers(w);
+  const top = rows[0]?.calls ?? 0;
+  return (
+    <section className={css.card} data-area="mcp" aria-labelledby="stats-mcp">
+      <Head id="stats-mcp" name={st(locale, 'mcp')} note={st(locale, 'mcpNote')} />
+      {rows.length > 0 ? (
+        <ul className={mcp.servers}>
+          {rows.map((s) => (
+            <li
+              key={s.server}
+              className={mcp.server}
+              title={st(locale, 'mcpTitle', { n: s.resultChars.toLocaleString(intl) })}
+            >
+              <span className={mcp.serverName} data-name>
+                {s.server}
+              </span>
+              <span className={mcp.serverValue}>
+                <span className={`${mcp.serverMeta} figure`}>
+                  <UiCjk text={st(locale, 'mcpCalls', { n: s.calls })} />
+                </span>
+                {s.failures > 0 && (
+                  <span className={`${mcp.failed} figure`} data-failed>
+                    <UiCjk text={st(locale, 'mcpFailed', { n: s.failures })} />
+                  </span>
+                )}
+                <span className="figure">
+                  <UiCjk text={timeText(s.ms, locale)} />
+                </span>
+              </span>
+              <span className={mcp.serverTrack} aria-hidden="true">
+                <span style={{ width: `${top > 0 ? (s.calls / top) * 100 : 0}%` }} />
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className={css.hint}>
+          {st(locale, w.result.window.kind === 'week' ? 'mcpNone' : 'mcpNone7')}
+        </p>
       )}
     </section>
   );

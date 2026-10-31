@@ -1,9 +1,10 @@
 /**
  * Signs that an agent left alone is stuck, read from a session's entities: the same call over
  * and over, calls failing in a row, model calls erroring, a prompt running far longer than the
- * others, the context compacted again and again, a wait for the person going on. Agent-neutral
- * and pure: the summary bar lists them for the agent it shows, and the server sends a session's
- * strongest (`SessionSummary.trouble`) so its row can say it.
+ * others, the context compacted again and again, a wait for the person going on; and one that
+ * it is about to lose what it knows, its context nearly full. Agent-neutral and pure: the
+ * summary bar lists them for the agent it shows, and the server sends a session's strongest
+ * (`SessionSummary.trouble`) so its row can say it.
  */
 import type {
   AgentNode,
@@ -17,16 +18,23 @@ import type {
   Turn,
 } from '../core/model.js';
 import { MAIN_AGENT_ID } from '../core/model.js';
+import { CONTEXT_FULL, type ContextRequest, type ContextUse, contextUse } from './context-use.js';
 import { SHELL_TOOLS, shellCommand } from './tool-category.js';
 
 export type { TroubleKind, TroubleRef, TroubleSignal };
 
-/** Strongest first: the order in which the summary bar lists them, and the server picks one. */
+/**
+ * Strongest first: the order in which the summary bar lists them, and the server picks one. A
+ * context nearly full ranks under a wait for you (the agent can do nothing until you answer)
+ * and over a long prompt (a prompt that runs long is likely what is filling it, and compaction
+ * is what will cost you); the loops and failures above it are the agent stuck now.
+ */
 export const TROUBLE_KINDS: readonly TroubleKind[] = [
   'repeat',
   'failing',
   'errors',
   'waiting',
+  'context-full',
   'long-turn',
   'compaction',
 ];
@@ -36,7 +44,8 @@ type Prompt = Pick<Turn, 'id' | 'agentId' | 'startedAt' | 'endedAt' | 'status'>;
 type Request = Pick<
   ModelRequest,
   'id' | 'agentId' | 'turnId' | 'status' | 'startedAt' | 'compactedBefore'
->;
+> &
+  ContextRequest;
 type Tool = Pick<
   ToolCall,
   'id' | 'agentId' | 'requestId' | 'name' | 'input' | 'status' | 'startedAt'
@@ -243,6 +252,24 @@ function compaction(requests: Request[]): TroubleSignal | null {
   };
 }
 
+/** The agent's context at `CONTEXT_FULL` or more of a known window. */
+function contextFull(
+  use: ContextUse | null,
+  requests: ReadonlyMap<string, Request>,
+): TroubleSignal | null {
+  if (!use || use.window === null || use.tokens < CONTEXT_FULL * use.window) return null;
+  return {
+    kind: 'context-full',
+    params: {
+      pct: Math.floor((use.tokens / use.window) * 100),
+      tokens: use.tokens,
+      window: use.window,
+    },
+    at: { kind: 'request', agentId: use.agentId, requestId: use.requestId },
+    since: requests.get(use.requestId)?.startedAt ?? null,
+  };
+}
+
 const median = (xs: number[]) => {
   const s = [...xs].sort((a, b) => a - b);
   const mid = Math.floor(s.length / 2);
@@ -271,7 +298,8 @@ function longTurn(turns: Prompt[], now: number): TroubleSignal | null {
 /**
  * The signs of trouble of `agentId` and its sub-agents, strongest first; none: empty. A
  * sub-agent counts while it runs (one that finished is not stuck, however it ended, its calls
- * and its model calls alike); the agent asked about counts always. Streaks count model steps
+ * and its model calls alike); the agent asked about counts always, and alone for a context
+ * nearly full, while the session runs (busy or waiting). Streaks count model steps
  * within the prompt each agent runs (`stepsOf`). `label` names a repeated call: what a row may
  * show of it.
  */
@@ -306,6 +334,9 @@ export function detectTrouble<T extends Tool>(
   const turns = byStart([...s.turns.values()].filter((t) => t.agentId === agentId));
   const prompt = turns.filter((t) => t.status === 'running' && t.endedAt === null).at(-1);
   if (s.session.live === 'busy') add(longTurn(turns, now));
+  // Nearly full is the agent's own context, the figure its page shows: a sub-agent's is its own.
+  if (s.session.live === 'busy' || s.session.live === 'waiting')
+    add(contextFull(contextUse(s.requests.values(), agentId), s.requests));
   // Waiting is the session's; it is this agent's when the one it waits on is in its tree.
   const waiter = s.session.activity?.agentId ?? MAIN_AGENT_ID;
   if (s.session.live === 'waiting' && ids.has(waiter)) {

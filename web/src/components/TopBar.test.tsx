@@ -93,7 +93,9 @@ describe('the top bar by page', () => {
     const open = renderBar({ connection: 'open' }).getByRole('status');
     expect(open).toHaveAttribute('data-state', 'open');
     expect(baseRules(sheet)).toMatch(/\.conn\[data-state="open"\] \{[^}]*clip-path: inset\(50%\)/);
-    for (const block of mediaBlocks(sheet)) expect(block.body).not.toMatch(/\.conn\b/);
+    // No width hides or shows it; the narrow bar only moves it to its second line.
+    for (const block of mediaBlocks(sheet))
+      expect(block.body).not.toMatch(/\.conn\b[^{]*\{[^}]*(display|clip|position|width|height)/);
   });
 });
 
@@ -206,6 +208,34 @@ describe('the top bar as it narrows (D4 DR1)', () => {
     const session = mediaBlocks(sheet).find((b) => b.max === 1469);
     expect(session?.body).toMatch(/\.bar\[data-session\] \.toggleLabel/);
     expect(session?.body).not.toMatch(/\.pageLabel/);
+  });
+
+  it('takes two lines at 720 px and under: the pages first, the session and instruments under', () => {
+    // At 375 px the bar asked for ~600px on Home and ~560px in a session (ZH, measured): the
+    // menu, the mark, the five pages, Jump and Settings alone take ~350px.
+    const narrow = mediaBlocks(sheet).find((b) => b.max === 720)?.body ?? '';
+    const rule = (selector: string) =>
+      new RegExp(`(^|\\n)\\s*${selector.replace(/[.[\]()]/g, '\\$&')} \\{([^}]*)\\}`).exec(
+        narrow,
+      )?.[2] ?? '';
+    expect(rule('.bar')).toMatch(/flex-wrap: wrap;/);
+    // The break: a line of nothing between the two, so each holds whatever its width.
+    expect(rule('.bar::after')).toMatch(/order: 2;/);
+    expect(rule('.bar::after')).toMatch(/flex-basis: 100%;/);
+    // The first line: the pages where every page has them, Jump and Settings at its right.
+    expect(narrow).toMatch(/\.jump,\s*\.settings \{\s*order: 1;/);
+    // The second: the session, its title giving way first, then the instruments at the right.
+    expect(narrow).toMatch(/\.session,\s*\.instruments,\s*\.conn,\s*\.toggle \{\s*order: 3;/);
+    expect(rule('.session')).toMatch(/flex: 1 1 0;/);
+    expect(rule('.instruments')).toMatch(/margin-left: auto;/);
+    // The rate and the quota go as one, a box of the bar's own.
+    renderBar();
+    expect(
+      screen.getByRole('banner').querySelector(':scope > [class*="instruments"]'),
+    ).not.toBeNull();
+    // Under 460 px a session's title has room again where its agent's tag was.
+    const tiny = mediaBlocks(sheet).find((b) => b.max === 460)?.body ?? '';
+    expect(tiny).toMatch(/\.session > \[data-agent\] \{\s*display: none;/);
   });
 
   it('keeps the wordmark’s word out of a session below 1320, where the page nav has its words', () => {

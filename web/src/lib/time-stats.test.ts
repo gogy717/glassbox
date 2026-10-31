@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { createDemoSnapshot } from '../../../src/core/fixtures/demo.js';
+import { sessionBuckets, sliceSession, weekWindow } from '../../../src/server/week-buckets.js';
+import { fromSnapshot } from '../data/store';
 import { DEMO_NOW, demoOpen, pendingFor, withRunningTool } from '../test/demo';
 import {
   activeMs,
@@ -307,5 +310,66 @@ describe('waiting for approval', () => {
     expect(timeBreakdown(plainOpen, 'main', NOW, stray)).toEqual(
       timeBreakdown(plainOpen, 'main', NOW),
     );
+  });
+});
+
+describe('waiting on the person, as the week adds it up', () => {
+  /** The demo session with a question answered, a prompt answered, and a run live throughout. */
+  const waited = () => {
+    const snap = createDemoSnapshot(new Date(NOW));
+    const ask = snap.toolCalls.find((t) => t.agentId === 'main' && t.endedAt);
+    if (!ask?.startedAt || !ask.endedAt) throw new Error('fixture');
+    const questioned = { ...ask, name: 'AskUserQuestion', input: { questions: [] } };
+    snap.toolCalls = snap.toolCalls.map((t) => (t.id === ask.id ? questioned : t));
+    const prompted = snap.toolCalls.find(
+      (t) => t.id !== ask.id && t.agentId === 'main' && t.startedAt && t.endedAt,
+    );
+    if (!prompted?.startedAt || !prompted.endedAt) throw new Error('fixture');
+    const approvals = new Map([
+      [
+        prompted.id,
+        { requestedAt: Date.parse(prompted.startedAt), decidedAt: Date.parse(prompted.endedAt) },
+      ],
+    ]);
+    const live = [[NOW - 86_400_000, null]] as const;
+    return { snap, ask: questioned, prompted, approvals, live };
+  };
+
+  it('gives the session’s waits the week’s figure for them, agent by agent', () => {
+    const { snap, ask, prompted, approvals, live } = waited();
+    const open = fromSnapshot(snap.session.id, snap);
+    const shown = snap.agents.reduce(
+      (sum, a) => sum + timeBreakdown(open, a.id, NOW, approvals, live).you.ms,
+      0,
+    );
+    const week = sliceSession(
+      sessionBuckets(snap, NOW, { approvals, live }),
+      weekWindow('7d', NOW),
+    );
+    expect(shown).toBe(week?.inWindow.waiting?.ms);
+    const span = (t: { startedAt: string | null; endedAt: string | null }) =>
+      Date.parse(t.endedAt ?? '') - Date.parse(t.startedAt ?? '');
+    expect(week?.inWindow.waiting?.byKind).toMatchObject({
+      question: span(ask),
+      permission: span(prompted),
+    });
+    expect(week?.inWindow.waiting?.byKind.turn).toBeGreaterThan(0);
+  });
+
+  it('takes a question out of its tool time and a live gap out of idle, and leaves the receipt’s approval alone', () => {
+    const { snap, ask, approvals, live } = waited();
+    const open = fromSnapshot(snap.session.id, snap);
+    const b = timeBreakdown(open, 'main', NOW, approvals, live);
+    const plain = timeBreakdown(open, 'main', NOW, approvals);
+    const span = Date.parse(ask.endedAt ?? '') - Date.parse(ask.startedAt ?? '');
+    expect(b.you.tools.ask).toBe(span);
+    expect(b.you.idle).toBeGreaterThan(0);
+    expect(b.you.idle).toBeLessThanOrEqual(b.idle);
+    expect(b.you.ms).toBe(plain.you.ms + b.you.idle);
+    // The receipt's figures are as they were: the permission prompts only, tools and idle whole.
+    expect(b.approval).toBe(plain.approval);
+    expect(b.tools).toEqual(plain.tools);
+    expect(b.idle).toBe(plain.idle);
+    expect(plain.you.idle).toBe(0);
   });
 });

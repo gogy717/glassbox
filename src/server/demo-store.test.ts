@@ -5,6 +5,7 @@ import type { SessionPatch, SessionSnapshot, SessionSummary } from '../core/mode
 import { hourTotal, ratePerMinute, rateSeries, type TokenRate } from '../shared/rate.js';
 import { applyPatch } from './__tests__/apply-patch.js';
 import { DemoStore } from './demo-store.js';
+import { sessionBuckets, sliceSession, weekWindow } from './week-buckets.js';
 
 let store: DemoStore;
 
@@ -30,13 +31,36 @@ describe('DemoStore', () => {
     const list = store.listSessions();
     expect(list.map((s) => s.id)[0]).toBe(DEMO_SESSION_ID);
     expect(list[0]?.live).toBe('busy');
-    expect(list).toHaveLength(3);
+    expect(list).toHaveLength(4);
   });
 
-  it('reads the running demo session’s signs of trouble as the server does; the rest carry none', () => {
+  it('reads the running demo sessions’ signs of trouble as the server does; the rest carry none', () => {
     const [demo, ...rest] = store.listSessions();
     expect(demo).toHaveProperty('trouble', null);
-    for (const s of rest) expect(s).not.toHaveProperty('trouble');
+    for (const s of rest)
+      if (s.live === 'busy') expect(s.trouble?.kind).toBe('context-full');
+      else expect(s).not.toHaveProperty('trouble');
+  });
+
+  it('lists a second running session, its context nearly full: a sign on its row', async () => {
+    const full = store.listSessions().filter((s) => s.trouble?.kind === 'context-full');
+    expect(full).toHaveLength(1);
+    const s = full[0] as SessionSummary;
+    expect(s.live).toBe('busy');
+    expect(s.activity?.kind).toBe('thinking');
+    expect(s.trouble?.params).toEqual({ pct: 92, tokens: 184_000, window: 200_000 });
+    expect(s.contextUse).toMatchObject({ agentId: 'main', tokens: 184_000, window: 200_000 });
+    // It opens like any other, and stays put while the demo session moves.
+    const snap = (await store.getSnapshot(s.id)) as SessionSnapshot;
+    expect(checkSnapshot(snap)).toEqual([]);
+    await vi.advanceTimersByTimeAsync(20_000);
+    const again = store.listSessions().find((x) => x.id === s.id);
+    expect(again?.trouble?.kind).toBe('context-full');
+    // The demo session itself levels off well under its window, never drifting into the sign.
+    await vi.advanceTimersByTimeAsync(600_000);
+    const demo = store.listSessions().find((x) => x.id === DEMO_SESSION_ID);
+    expect(demo?.contextUse?.window).toBe(200_000);
+    expect(demo?.contextUse?.tokens).toBeLessThan(0.7 * 200_000);
   });
 
   // The sidebar offers every listed session; each must open (audit #25).
@@ -156,10 +180,12 @@ describe('DemoStore', () => {
     await vi.advanceTimersByTimeAsync(80_000);
     expect([...seen.keys()].sort()).toEqual(['idle', 'thinking', 'tool']);
     expect(seen.get('tool')).toBeTruthy();
-    // The others are listed as the real store lists unopened sessions: idle since the last write.
+    // The others are listed as the real store lists them: an unopened idle one idle since the
+    // last write, a running one (opened in the background) as its parser says, a closed one bare.
     for (const other of store.listSessions().filter((x) => x.id !== DEMO_SESSION_ID)) {
       if (other.live === 'idle')
         expect(other.activity).toMatchObject({ kind: 'idle', since: other.updatedAt });
+      else if (other.live === 'busy') expect(other.activity?.kind).toBe('thinking');
       else expect(other).not.toHaveProperty('activity');
     }
   });
@@ -243,15 +269,16 @@ describe('DemoStore token rate', () => {
     expect(rateSeries(rate).filter((n) => n > 0).length).toBeGreaterThan(50);
   });
 
-  // F-web HO2: the coverage matches the demo's own list, which runs one session, not the three
-  // simulated spenders ("Counting 3 of 3" beside one running row).
+  // F-web HO2: the coverage matches the demo's own list, which runs two sessions (the demo
+  // session and the one near its window), not the three simulated spenders ("Counting 3 of 3"
+  // beside one running row).
   it('counts the running sessions the demo lists, each one counted', async () => {
     const running = store.listSessions().filter((s) => s.live === 'busy' || s.live === 'waiting');
-    expect(running.map((s) => s.agent)).toEqual(['claude-code']);
+    expect(running.map((s) => s.agent)).toEqual(['claude-code', 'claude-code']);
     const coverage = {
-      running: 1,
-      counted: 1,
-      agents: { 'claude-code': { running: 1, counted: 1 } },
+      running: 2,
+      counted: 2,
+      agents: { 'claude-code': { running: 2, counted: 2 } },
     };
     expect(store.getRate().coverage).toEqual(coverage);
     const pushed: TokenRate[] = [];
@@ -297,5 +324,35 @@ describe('DemoStore.expectSession', () => {
     const demo = new DemoStore();
     expect(await demo.expectSession(DEMO_SESSION_ID)).toBe(true);
     expect(await demo.expectSession('claude-code:nope')).toBe(false);
+  });
+});
+
+// Package F (round 3): MCP servers.
+describe('DemoStore MCP calls', () => {
+  it('has the demo session call a docs and a tracker server, a sub-agent too, one call failing', async () => {
+    const snap = (await store.getSnapshot(DEMO_SESSION_ID)) as SessionSnapshot;
+    expect(checkSnapshot(snap)).toEqual([]);
+    const mcp = snap.toolCalls.filter((t) => t.name.startsWith('mcp__'));
+    expect(new Set(mcp.map((t) => t.name.split('__')[1]))).toEqual(new Set(['docs', 'tracker']));
+    expect(mcp.filter((t) => t.status === 'error')).toHaveLength(1);
+    expect(mcp.some((t) => t.agentId !== 'main')).toBe(true);
+    expect(mcp.every((t) => typeof t.resultChars === 'number')).toBe(true);
+    // Each is a call of its request, as the execution chain draws it.
+    for (const t of mcp) {
+      const req = snap.requests.find((r) => r.id === t.requestId);
+      expect(req?.toolCallIds).toContain(t.id);
+      expect(req?.blocks.some((b) => b.kind === 'tool-use' && b.toolCallId === t.id)).toBe(true);
+    }
+    expect(snap.session.counts?.toolCalls).toBe(snap.toolCalls.length);
+  });
+
+  it('counts the demo session’s MCP calls in the week', async () => {
+    // The week reads the session as the server's week does (`WeekService`, with its pauses).
+    const now = Date.now();
+    const read = await store.readSession(DEMO_SESSION_ID);
+    if (!read) throw new Error('no demo session');
+    const demo = sliceSession(sessionBuckets(read.snapshot, now), weekWindow('7d', now));
+    expect(demo?.inWindow.mcp?.tracker?.failures).toBe(1);
+    expect(Object.keys(demo?.inWindow.mcp ?? {}).sort()).toEqual(['docs', 'tracker']);
   });
 });

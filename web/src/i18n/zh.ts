@@ -272,8 +272,6 @@ export const zh = {
   'flow.chipTools': '工具 {n}',
   'flow.chipContext': '上下文 {n}',
   'flow.runTool': '运行工具',
-  'flow.agent': '子代理',
-  'flow.workflow': '工作流',
   'flow.phaseProgress': '{title} {done}/{total}',
   'flow.moreAgents': '还有 {n} 个',
   'flow.noTurns': '这个代理还没有轮次',
@@ -806,6 +804,74 @@ export const zh = {
   'files.diff': '改动',
   'files.writeSize': '{lines} 行 · {chars} 字符',
   'files.cell': '单元格 {id}',
+  // Package B (round 3): the Rules page's tag for a rule that writes.
+  'rules.danger.writes': '会改动文件或提交历史',
+  // Round 3, A: the session list's groups and folds.
+  'sidebar.goneTree': '已删除',
+  'sidebar.foldedOpenMark': '当前',
+  'sidebar.foldedOpen': '含当前打开的会话',
+  // Package D (round 3): context nearly full.
+  'trouble.long.contextFull': '上下文已用 {pct}%，即将压缩',
+  'trouble.short.contextFull': '上下文 {pct}%',
+  'context.label': '上下文',
+  'context.of': '/ {window} · {pct}',
+  'context.tip':
+    '最近一次模型调用读入的上下文，模型窗口为 {window}。用满之前代理会压缩对话：换成一份摘要，细节随之丢失。',
+  'context.tipUnknown': '最近一次模型调用读入的上下文。不知道这个模型的窗口大小，所以不显示占比。',
+  'tokens.window': '窗口 {window}',
+  // Package H (round 3): prompt-cache breaks, in Where tokens went and the execution chain.
+  'cacheBreaks.title': '缓存失效',
+  'cacheBreaks.summary': '缓存失效了 {n} 次 · 约 {k} token 重新写入',
+  'cacheBreaks.cost': '按 API 价格 {cost}',
+  'cacheBreaks.notAvailable': '不适用于 {agent}：它没有按请求记录缓存读写。',
+  'cacheBreaks.row': '{time} · {reason} · 约 {k} token 重新写入',
+  'cacheBreaks.reason.compaction': '已压缩',
+  'cacheBreaks.reason.shape': '提示变了',
+  'cacheBreaks.reason.expired': '已过期',
+  'cacheBreaks.reason.rewound': '回退',
+  'cacheBreaks.reason.unknown': '原因不明',
+  'cacheBreaks.why.compaction': '缓存失效：对话被压缩了，新的上下文要重新写入缓存。',
+  'cacheBreaks.why.shape':
+    '缓存失效：系统提示或工具定义和上一次请求不同，之前缓存的内容都读不回来了。',
+  'cacheBreaks.why.expired': '缓存失效：距上一次请求过去了 {idle}，超过了缓存的有效期（{ttl}）。',
+  'cacheBreaks.why.rewound':
+    '缓存失效：上下文变短了却没有压缩，可能改了一条消息，或从更早的地方接着对话。',
+  'cacheBreaks.why.unknown': '缓存失效：这次请求几乎没读回上一次的上下文，记录里看不出原因。',
+  'cacheBreaks.note':
+    '均为估算：一次请求读回的缓存不到上一次上下文（超过 2 万 token）的一半，算一次失效；重新写入的 token 已扣除一轮正常的新增。',
+  'cacheBreaks.ttl5m': '5 分钟',
+  'cacheBreaks.ttl1h': '1 小时',
+  'flow.cacheBreak': '缓存 · {reason}',
+  // Package E (r3/quota-burn): who used the plan window, in the quota's details.
+  'quota.burnTitle': '谁用掉的',
+  'quota.burnSince': '{clock} 以来',
+  'quota.burnRow': '{title}：{share} · {tokens} token · {n} 次请求',
+  'quota.burnRowRequests': '{title}：{share} · {n} 次请求',
+  'quota.burnMore': '还有 {n} 个会话 · {share}',
+  'quota.burnNote':
+    '份额按 glassbox 在这台机器上看到的 token 算，缓存读取也算在内；别的机器和应用用掉的看不到。',
+  'quota.burnNoteRequests':
+    '这些会话没有上报 token，份额按请求数算；只算 glassbox 在这台机器上看到的，别的机器和应用用掉的看不到。',
+  'quota.burnNone': '这个窗口里，glassbox 在这台机器上没看到发给它的请求。',
+  'quota.burnReading': '正在读取会话…',
+  'quota.burnFailed': '读不到这些会话。',
+  'quota.mostly': '主要是 {title}',
+  // Package F (round 3): MCP servers in Where tokens went.
+  'mcp.title': 'MCP 服务器',
+  'mcp.includeSub': '包括子代理',
+  'mcp.calls': '{n} 次调用',
+  'mcp.failed': '{n} 次失败',
+  'mcp.running': '{n} 次进行中',
+  'mcp.total': '共 {time}',
+  'mcp.median': '中位 {time}',
+  'mcp.tokens': '≈ {n} token',
+  'mcp.chars': '结果 {n} 字符',
+  'mcp.tools': '{server} 的工具',
+  'mcp.more': '再显示 {n} 次',
+  'mcp.noneAgent': '这个代理自己没有调用 MCP 服务器',
+  'mcp.note': '结果大小是各次调用带回上下文的字符数，之后每次请求都要再付一次；token 按字符估算。',
+  // Package G (round 3): the time the agents waited on the person.
+  'time.waitingYou': '等待用户',
 } as const;
 
 export type MessageKey = keyof typeof zh;

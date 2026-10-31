@@ -1,6 +1,7 @@
 import { Receipt } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Suspense, useMemo, useRef, useState } from 'react';
+import { CONTEXT_FULL, contextUse } from '../../../src/shared/context-use.js';
 import type { TokenRate } from '../../../src/shared/rate.js';
 import { usePriceTable } from '../data/price-table';
 import { useCommand } from '../data/shortcuts';
@@ -40,7 +41,12 @@ interface Figure {
   narrowOnly?: boolean;
   /** The tooltip, when it is not `exact`: what an estimate is made from. */
   title?: string;
+  /** Muted, or in the warning's amber: how near its window the context is. */
+  tone?: 'muted' | 'warn';
 }
+
+/** Below this share of its window, the context figure is muted: nothing to watch yet. */
+const CONTEXT_CALM = 0.7;
 
 // The receipt's dialog, drawing and export are loaded on first use: the app's first load stays.
 const ReceiptDialog = lazyView(() =>
@@ -107,6 +113,7 @@ export function SummaryBar({
   const s = useMemo(() => summarize(open, agentId, now), [open, agentId, now]);
   const prices = usePriceTable();
   const cost = useMemo(() => subtreeCost(open, agentId, prices), [open, agentId, prices]);
+  const use = useMemo(() => contextUse(open.requests.values(), agentId), [open, agentId]);
   // No call reported usage yet (Grok before a turn total): unknown, not zero. A token count is
   // read compact ("1.84M", "184万"), the exact count in the tooltip and for screen readers.
   const tokens = (n: number) =>
@@ -129,6 +136,8 @@ export function SummaryBar({
           </>
         ) : undefined,
     },
+    // Before the token counts, where the bar is seen without scrolling it sideways.
+    ...(use ? [contextFigure(use.tokens, use.window)] : []),
     { label: t('summary.input'), value: tokens(s.input), exact: exact(s.input), more: true },
     { label: t('summary.cacheHit'), value: formatPercent(s.cacheHitRate, intl), more: true },
     {
@@ -152,6 +161,36 @@ export function SummaryBar({
       more: true,
     },
   ];
+  /**
+   * The agent's context as of its latest finished call, of its model's window where known:
+   * "184K of 200K · 92%". The share is in whole percent rounded down, as the sign's. Behind
+   * "More figures" on a narrow screen until it nears the window.
+   */
+  function contextFigure(tokens: number, window: number | null): Figure {
+    const label = t('context.label');
+    if (window === null)
+      return {
+        label,
+        value: <CompactFigure value={formatCompact(tokens, intl)} />,
+        exact: formatNumber(tokens, intl),
+        title: t('context.tipUnknown'),
+        more: true,
+      };
+    const share = tokens / window;
+    const pct = new Intl.NumberFormat(intl, { style: 'percent', maximumFractionDigits: 0 }).format(
+      Math.floor(share * 100) / 100,
+    );
+    const warn = share >= CONTEXT_FULL;
+    return {
+      label,
+      value: <CompactFigure value={formatCompact(tokens, intl)} />,
+      aside: t('context.of', { window: formatCompact(window, intl), pct }),
+      exact: `${formatNumber(tokens, intl)} ${t('context.of', { window: formatNumber(window, intl), pct })}`,
+      title: t('context.tip', { window: formatCompact(window, intl) }),
+      tone: warn ? 'warn' : share < CONTEXT_CALM ? 'muted' : undefined,
+      more: !warn,
+    };
+  }
   if (rate)
     figures.push({
       label: t('summary.rate'),
@@ -169,6 +208,7 @@ export function SummaryBar({
             className={css.metric}
             data-extra={f.more || undefined}
             data-narrow-only={f.narrowOnly || undefined}
+            data-tone={f.tone}
             title={f.title ?? f.exact}
           >
             {/* A compact figure is for the eye; the exact one beside it is what is read out. */}

@@ -7,7 +7,13 @@
  */
 import type { AgentKind } from '../../../../src/core/model.js';
 import { crossings, type RepoCrossing } from '../../../../src/shared/crossing.js';
-import type { WeekResult, WeekSession, WeekWindowKind } from '../../../../src/shared/week.js';
+import type { WaitKind } from '../../../../src/shared/waiting.js';
+import type {
+  McpFigures,
+  WeekResult,
+  WeekSession,
+  WeekWindowKind,
+} from '../../../../src/shared/week.js';
 import { clock, day, durationParts, partsText, shortDay } from '../../components/receipt/format';
 import { projectNames, projectTreeNames } from '../../components/receipt/printed';
 import {
@@ -132,6 +138,49 @@ export function longestSessions(w: StatsWeek, n = 5): SessionLine[] {
     .map((s) => lineOf(w, s, s.inWindow.activeMs));
 }
 
+/** The kinds of wait, in the order the card lists them. */
+const WAIT_KINDS: WaitKind[] = ['permission', 'question', 'plan', 'turn'];
+
+/** The window's waits on the person, as the Waiting on you card prints them. */
+export interface WaitingFigures {
+  /** The waits' lengths added up, and how many there were. */
+  ms: number;
+  count: number;
+  /** The kinds that waited, most time first. */
+  byKind: { kind: WaitKind; ms: number }[];
+  /** The session with the longest wait, and that wait. */
+  longest: SessionLine;
+}
+
+/** The window's waits on the person, from each session's figures; null when none. */
+export function waitingOf(w: StatsWeek): WaitingFigures | null {
+  let ms = 0;
+  let count = 0;
+  const byKind = new Map<WaitKind, number>();
+  let top: { s: WeekSession; longestMs: number } | null = null;
+  for (const s of w.result.sessions) {
+    const x = s.inWindow.waiting;
+    if (!x) continue;
+    ms += x.ms;
+    count += x.count;
+    for (const kind of WAIT_KINDS) {
+      const part = x.byKind[kind];
+      if (part) byKind.set(kind, (byKind.get(kind) ?? 0) + part);
+    }
+    if (!top || x.longestMs > top.longestMs) top = { s, longestMs: x.longestMs };
+  }
+  if (!top || count === 0) return null;
+  return {
+    ms,
+    count,
+    byKind: WAIT_KINDS.flatMap((kind) => {
+      const part = byKind.get(kind);
+      return part ? [{ kind, ms: part }] : [];
+    }).sort((a, b) => b.ms - a.ms),
+    longest: lineOf(w, top.s, top.longestMs),
+  };
+}
+
 /** Where the busiest hour sits in the grid, selected when the page opens; null with none. */
 export function busiestCell(w: StatsWeek): { row: number; col: number } | null {
   const { busiest } = w.receipt;
@@ -246,4 +295,35 @@ export function cellLabels(w: StatsWeek, kind: WeekWindowKind, L: Locale): CellL
       };
     }),
   );
+}
+
+// Package F (round 3): MCP servers.
+
+/** One MCP server's calls in the window, its sessions' added up. */
+export interface McpServerLine extends McpFigures {
+  server: string;
+}
+
+/**
+ * The MCP servers the window's sessions called (`WeekFigures.mcp`), most calls first: the MCP
+ * servers card. Worked out once per week result.
+ */
+const mcpOf = new WeakMap<WeekResult, McpServerLine[]>();
+export function mcpServers(w: StatsWeek): McpServerLine[] {
+  let rows = mcpOf.get(w.result);
+  if (!rows) {
+    const by = new Map<string, McpServerLine>();
+    for (const s of w.result.sessions)
+      for (const [server, m] of Object.entries(s.inWindow.mcp ?? {})) {
+        const row = by.get(server) ?? { server, calls: 0, failures: 0, ms: 0, resultChars: 0 };
+        row.calls += m.calls;
+        row.failures += m.failures;
+        row.ms += m.ms;
+        row.resultChars += m.resultChars;
+        by.set(server, row);
+      }
+    rows = [...by.values()].sort((a, b) => b.calls - a.calls || a.server.localeCompare(b.server));
+    mcpOf.set(w.result, rows);
+  }
+  return rows;
 }

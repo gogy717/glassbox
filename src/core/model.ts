@@ -104,6 +104,32 @@ export interface SessionSummary {
    * session, as `activity`; absent otherwise.
    */
   lastReply?: string | null;
+  /**
+   * True when `repo` is null and nothing is left at `cwd` (a removed worktree, a deleted scratch
+   * directory), as the server finds when it lists the session. Absent otherwise: the directory
+   * is there, a repository was found, or the server has not looked (an older server, the demo).
+   */
+  cwdGone?: boolean;
+  /**
+   * How full the main agent's context is (`src/shared/context-use.ts`): its latest finished
+   * model call, against its model's window where known. Only a session whose process is
+   * running carries it, from the session the server has open, as `trouble`; null when no call
+   * of the main agent has finished yet (or the one after a compaction is still in flight);
+   * absent otherwise.
+   */
+  contextUse?: ContextUse | null;
+}
+
+/**
+ * How full an agent's context is, as of its latest finished model call: `tokens` that call read
+ * (uncached input + cache reads + cache writes, the chain's "context") and the window of its
+ * model, null when not known. Data only: the UI words it and works out the share.
+ */
+export interface ContextUse {
+  agentId: string;
+  requestId: string;
+  tokens: number;
+  window: number | null;
 }
 
 /**
@@ -143,8 +169,18 @@ export interface SessionActivity {
  * - 'waiting': waiting for the person since `since`, past ten minutes.
  * - 'long-turn': the running prompt, since `since`, past three times the others' `median` (ms).
  * - 'compaction': the context was compacted `n` times.
+ * - 'context-full': the agent's latest model call read `tokens` of its model's `window`, `pct`
+ *   percent (whole, rounded down), 85 or more: it compacts soon. Raised only while the session
+ *   runs, and only where the window is known.
  */
-export type TroubleKind = 'repeat' | 'failing' | 'errors' | 'waiting' | 'long-turn' | 'compaction';
+export type TroubleKind =
+  | 'repeat'
+  | 'failing'
+  | 'errors'
+  | 'waiting'
+  | 'long-turn'
+  | 'compaction'
+  | 'context-full';
 
 /** What a sign points at: a tool call, a model call or a prompt, and whose it is. */
 export type TroubleRef =
@@ -328,6 +364,12 @@ export interface ModelRequest {
   error: { message: string; status: number | null; retryAttempt: number | null } | null;
   /** True on the first request after the agent's context was compacted. */
   compactedBefore?: boolean;
+  /**
+   * Identifies the system prompt and tool definitions the request sent: two requests with
+   * different hashes could not share a cached prefix. Claude Code (`api-request.shapeHash`) only;
+   * absent where the agent does not record it.
+   */
+  shapeHash?: string;
 }
 
 export type ToolStatus = 'running' | 'complete' | 'error' | 'unknown';
@@ -364,6 +406,12 @@ export interface ToolCall {
    * records none: the edit's input alone does not say where in the file it landed.
    */
   lineChanges?: LineChange[];
+  /**
+   * Characters of the whole result as text, as the agent recorded it (`resultPreview` is its
+   * start): what the call brought back into the context, paid for by every later request.
+   * Absent while there is no result, and in records made before it was counted.
+   */
+  resultChars?: number;
 }
 
 /** A multi-agent orchestration run (Claude Code: the Workflow tool, "ultracode"). */

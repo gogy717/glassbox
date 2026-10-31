@@ -621,6 +621,7 @@ export class OpenCodeSessionParser implements SessionParser {
           ? Math.max(0, part.endMs - part.startMs)
           : null,
       resultPreview: result !== null ? result.slice(0, PREVIEW_CHARS) : null,
+      ...(result !== null ? { resultChars: result.length } : {}),
       hasFullResult: result !== null,
       spawned:
         part.childSessionId && childIds.has(part.childSessionId)

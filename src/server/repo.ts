@@ -71,6 +71,23 @@ export function repoOf(cwd: string, fs: RepoFs = nodeRepoFs): RepoIdentity | nul
   return null;
 }
 
+/** `lookup` with its answers kept per directory for `ttlMs`, misses included. */
+function cachedPerDir<T>(
+  lookup: (cwd: string) => T,
+  ttlMs: number,
+  now: () => number,
+): (cwd: string) => T {
+  const cache = new Map<string, { at: number; value: T }>();
+  return (cwd) => {
+    const hit = cache.get(cwd);
+    const t = now();
+    if (hit && t - hit.at < ttlMs) return hit.value;
+    const value = lookup(cwd);
+    cache.set(cwd, { at: t, value });
+    return value;
+  };
+}
+
 /**
  * `repoOf` with its answers kept per directory for `ttlMs` (a repository does not move between
  * two polls, and the store lists sessions often), misses included.
@@ -80,13 +97,17 @@ export function createRepoLookup(
   ttlMs = 60_000,
   now: () => number = Date.now,
 ): (cwd: string) => RepoIdentity | null {
-  const cache = new Map<string, { at: number; repo: RepoIdentity | null }>();
-  return (cwd) => {
-    const hit = cache.get(cwd);
-    const t = now();
-    if (hit && t - hit.at < ttlMs) return hit.repo;
-    const repo = repoOf(cwd, fs);
-    cache.set(cwd, { at: t, repo });
-    return repo;
-  };
+  return cachedPerDir((cwd) => repoOf(cwd, fs), ttlMs, now);
+}
+
+/**
+ * Whether nothing is left at `cwd` (a removed worktree, a deleted scratch directory), kept per
+ * directory for `ttlMs` like `createRepoLookup`. Only the path itself is looked at.
+ */
+export function createGoneLookup(
+  fs: RepoFs = nodeRepoFs,
+  ttlMs = 60_000,
+  now: () => number = Date.now,
+): (cwd: string) => boolean {
+  return cachedPerDir((cwd) => fs.kind(resolve(cwd)) === null, ttlMs, now);
 }

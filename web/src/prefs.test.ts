@@ -34,7 +34,7 @@ describe('prefs', () => {
       rateAgent: 'codex',
       notify: true,
       groupBy: 'time',
-      folded: ['glassbox', '/earlier'],
+      folded: ['/p/home/dev/glassbox', '/earlier'],
       pinned: ['claude-code:a', 'codex:b'],
       statsNoteSeen: true,
       prices: {
@@ -62,9 +62,20 @@ describe('prefs', () => {
   it('keeps only the strings of the folded and pinned lists, each once', () => {
     localStorage.setItem(
       'glassbox.prefs',
-      '{"folded":["a",2,"a","b"],"pinned":["x:1",null,"x:1"]}',
+      '{"folded":["/p/a",2,"/p/a","/today"],"pinned":["x:1",null,"x:1"]}',
     );
-    expect(loadPrefs()).toEqual({ ...defaults, folded: ['a', 'b'], pinned: ['x:1'] });
+    expect(loadPrefs()).toEqual({ ...defaults, folded: ['/p/a', '/today'], pinned: ['x:1'] });
+  });
+
+  // Round 3, A: folds were saved by a project's name, which changes with the list; they are now
+  // saved by what the group gathers by (`/p/…`, `/n/…`). A name saved before is dropped: that
+  // group opens once, and folds by its new key from then on.
+  it('drops a fold saved by a project’s name, keeping those saved by key', () => {
+    localStorage.setItem(
+      'glassbox.prefs',
+      '{"folded":["glassbox","Personal/glassbox","/pinned","/week","/p/home/dev/glassbox","/n/codex"]}',
+    );
+    expect(loadPrefs().folded).toEqual(['/pinned', '/week', '/p/home/dev/glassbox', '/n/codex']);
   });
 
   // API prices (estimate): a model's row is kept whole, five prices of zero or more, or not at all.

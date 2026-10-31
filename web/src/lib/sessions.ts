@@ -4,15 +4,21 @@ import { weekStart } from '../../../src/shared/week.js';
 /** How the sidebar groups sessions: by project (the default), or by when each was last active. */
 export type GroupBy = 'project' | 'time';
 
-/** The pinned group's key. Project names are directory names, so none starts with a slash. */
+/** The pinned group's key; a project group's starts with `/p/` or `/n/`, a time group's is its bucket. */
 export const PINNED_KEY = '/pinned';
 
 export type SessionGroup =
   | { kind: 'pinned'; key: typeof PINNED_KEY; sessions: SessionSummary[] }
   | {
       kind: 'project';
-      /** The project's name (`groupNames`), which is the group's key. */
+      /**
+       * What the group gathers by, which does not change with the rest of the list (folds are
+       * kept by it): `projectKey` of the repository's root or the directory, or `/n/` and the
+       * server's name for sessions with neither.
+       */
       key: string;
+      /** The name the group reads as (`groupNames`), which can change as the list does. */
+      name: string;
       /**
        * The directory every session of the group ran in, when they share one; else the
        * repository's root when the group is a repository's.
@@ -20,7 +26,8 @@ export type SessionGroup =
       cwd: string | null;
       /**
        * The group's working trees, when its sessions come from more than one of one repository
-       * (`worktreesOf`): the main one first, then the others, running first. Null otherwise.
+       * (`worktreesOf`), removed ones included: the main one first, then the others, running
+       * first. Null otherwise.
        */
       worktrees: Worktree[] | null;
       sessions: SessionSummary[];
@@ -29,12 +36,14 @@ export type SessionGroup =
 
 /** One working tree of a repository group and its sessions, in the group's order. */
 export interface Worktree {
-  /** The working tree's directory, as its sessions' `repo.dir`. */
+  /** The working tree's directory: its sessions' `repo.dir`, or `cwd` for a removed one. */
   dir: string;
   /** The directory's last segment: the repository's name for the main one. */
   name: string;
   /** The repository's main working tree, whose `.git` is a directory. */
   main: boolean;
+  /** Removed: its sessions have no repository and the server found nothing at their directory. */
+  gone: boolean;
   sessions: SessionSummary[];
 }
 
@@ -81,8 +90,8 @@ export interface GroupOptions {
 }
 
 /**
- * Sidebar grouping: the pinned sessions first, in the order pinned; then by project, named from
- * paths (`groupNames`), the groups with a running session first and then the most recently
+ * Sidebar grouping: the pinned sessions first, in the order pinned; then by project (`homesOf`),
+ * keyed by what each gathers by and named from paths (`groupNames`), the groups with a running session first and then the most recently
  * updated; or by time, today to earlier. Within a group, running sessions first, then the most
  * recently updated. `query` matches title or cwd, case-insensitively, and composes with the agent
  * and live filters; pins answer to them like any row.
@@ -103,10 +112,14 @@ export function groupSessions(
     (!q || (s.title ?? '').toLowerCase().includes(q) || (s.cwd ?? '').toLowerCase().includes(q));
   // Names come from every session, not from what the search and the filters leave: a group does
   // not read differently while typing.
-  const nameOf = groupNames(sessions);
+  const homeOf = homesOf(sessions);
+  const nameOf = groupNames(sessions, homeOf);
   const now = opts.now ?? Date.now();
-  const keyOf = (s: SessionSummary) =>
-    opts.groupBy === 'time' ? `/${timeBucket(s.updatedAt, now)}` : nameOf(s);
+  const keyOf = (s: SessionSummary) => {
+    if (opts.groupBy === 'time') return `/${timeBucket(s.updatedAt, now)}`;
+    const home = homeOf(s);
+    return home ? projectKey(home.path) : `/n/${s.project}`;
+  };
   const pinnedIds = new Set(opts.pinned ?? []);
   const pinnedFound = new Map<string, SessionSummary>();
   const groups = new Map<string, SessionSummary[]>();
@@ -137,12 +150,14 @@ export function groupSessions(
   }
   const projects = [...groups].map(([key, list]) => {
     const sorted = list.sort(busyFirst);
-    const root = sorted.find((s) => s.repo)?.repo?.root ?? null;
+    const first = sorted[0] as SessionSummary;
+    const home = homeOf(first)?.path ?? null;
     return {
       kind: 'project' as const,
       key,
-      cwd: sharedCwd(sorted) ?? root,
-      worktrees: worktreesOf(sorted),
+      name: nameOf(first),
+      cwd: sharedCwd(sorted) ?? home,
+      worktrees: worktreesOf(sorted, home),
       sessions: sorted,
     };
   });
@@ -155,21 +170,32 @@ export function groupSessions(
 
 /**
  * A repository group's working trees, when its sessions ran in more than one: the main one
- * first, then the others as their first (running-first) session ranks them. Null for one tree
- * or when a session's repository is not known: nothing to split by.
+ * (the one at `root`, by default the first repository root a session names) first, then the
+ * others as their first (running-first) session ranks them. A session without a repository
+ * counts in the tree of its own directory: a removed worktree, gathered by `homesOf`. Null for
+ * one tree, or when a session names no directory at all: nothing to split by.
  */
-export function worktreesOf(sessions: readonly SessionSummary[]): Worktree[] | null {
+export function worktreesOf(
+  sessions: readonly SessionSummary[],
+  root: string | null = sessions.find((s) => s.repo)?.repo?.root ?? null,
+): Worktree[] | null {
+  const main = root === null ? null : segments(root).join('/');
   const trees = new Map<string, Worktree>();
   for (const s of sessions) {
-    if (!s.repo) return null;
-    const key = segments(s.repo.dir).join('/');
+    const dir = s.repo?.dir ?? s.cwd;
+    if (!dir) return null;
+    const gone = !s.repo && s.cwdGone === true;
+    const key = segments(dir).join('/');
     const tree = trees.get(key);
-    if (tree) tree.sessions.push(s);
-    else
+    if (tree) {
+      tree.sessions.push(s);
+      tree.gone &&= gone;
+    } else
       trees.set(key, {
-        dir: s.repo.dir,
-        name: segments(s.repo.dir).at(-1) ?? s.repo.name,
-        main: key === segments(s.repo.root).join('/'),
+        dir,
+        name: segments(dir).at(-1) ?? s.repo?.name ?? s.project,
+        main: key === main,
+        gone,
         sessions: [s],
       });
   }
@@ -226,31 +252,117 @@ const segments = (dir: string) => dir.split(/[\\/]+/).filter(Boolean);
 
 type Named = Pick<SessionSummary, 'cwd' | 'project' | 'repo'>;
 
-/**
- * What a session groups by: its repository's root when the server read one (every worktree of
- * a repository gathers under it, wherever it is), else its own directory; null without either.
- */
-const identityOf = (s: Named): string[] | null =>
-  s.repo ? segments(s.repo.root) : s.cwd ? segments(s.cwd) : null;
+/** What a project group gathers by: a repository's root or a directory, and its segments. */
+export interface Home {
+  path: string;
+  segs: string[];
+}
+
+/** A project group's key: `/p/` and the directory's segments, whichever separator, joined. */
+export const projectKey = (dir: string): string => `/p/${segments(dir).join('/')}`;
 
 /**
- * The name each session's group reads as (no project file is read): the repository's name
- * when the server knows the repository, else its directory's last segment, as the server names
- * it, but with the parent directory's name before it ("glassbox/weever") in two cases:
- * - a worktree the server could not tell: the parent is named like another session's own
- *   directory (the repository, `…/src/glassbox`) without being one itself
- *   (`…/work/glassbox/weever`). Worktrees whose repository has no session of its own keep their
- *   directory's name: from paths alone, a folder of worktrees and a folder of unrelated projects
- *   look the same;
+ * What a session groups by on its own: its repository's root when the server read one (every
+ * worktree of a repository gathers under it, wherever it is), else its own directory; null
+ * without either (or for the filesystem's root, which names nothing).
+ */
+function identityOf(s: Named): Home | null {
+  const path = s.repo?.root ?? s.cwd;
+  if (!path) return null;
+  const segs = segments(path);
+  return segs.length > 0 ? { path, segs } : null;
+}
+
+/**
+ * What each session's group gathers by (its `Home`): `identityOf`, except for a session the
+ * server read no repository for (a worktree whose directory was removed, a server that does
+ * not look), which joins a repository it can tell from paths:
+ * - the one whose working tree is that very directory, as another session says;
+ * - else the one its parent directory is named like (`…/work/glassbox/whitefish` and a session
+ *   in repository `glassbox`, or in a directory `…/src/glassbox`), when the parent is not
+ *   itself a session's directory (that is a subdirectory, `…/src/api/web`). Two repositories
+ *   of that name: the one with a working tree beside it, else neither.
+ * A repository that itself joined another hosts nothing: no chains. A session without a
+ * directory joins the one home named as the server names its project, if there is one.
+ */
+export function homesOf(sessions: readonly Named[]): (s: Named) => Home | null {
+  const own = new Map<string, Home>();
+  // Each repository's working trees' parents, and each working tree's repository, by segments.
+  const beside = new Map<string, Set<string>>();
+  const treeOf = new Map<string, Home>();
+  for (const s of sessions) {
+    const home = identityOf(s);
+    if (!home) continue;
+    const canon = home.segs.join('/');
+    own.set(canon, home);
+    if (!s.repo) continue;
+    const dir = segments(s.repo.dir);
+    treeOf.set(dir.join('/'), home);
+    const parents = beside.get(canon) ?? new Set<string>();
+    parents.add(dir.slice(0, -1).join('/'));
+    beside.set(canon, parents);
+  }
+  const byName = new Map<string, string[]>();
+  for (const [canon, home] of own) {
+    const name = home.segs.at(-1) as string;
+    byName.set(name, [...(byName.get(name) ?? []), canon]);
+  }
+  const joined = new Map<string, Home>();
+  for (const s of sessions) {
+    if (s.repo || !s.cwd) continue;
+    const segs = segments(s.cwd);
+    const canon = segs.join('/');
+    if (joined.has(canon)) continue;
+    const tree = treeOf.get(canon);
+    if (tree) {
+      joined.set(canon, tree);
+      continue;
+    }
+    const parent = segs.slice(0, -1).join('/');
+    const parentName = segs.at(-2);
+    if (parentName === undefined || own.has(parent)) continue;
+    const named = (byName.get(parentName) ?? []).filter((c) => c !== canon);
+    const near = named.filter((c) => beside.get(c)?.has(parent));
+    const host =
+      near.length === 1 ? near[0] : near.length === 0 && named.length === 1 ? named[0] : undefined;
+    const home = host === undefined ? undefined : own.get(host);
+    if (home) joined.set(canon, home);
+  }
+  const guests = new Set(joined.keys());
+  for (const [canon, home] of joined)
+    if (guests.has(home.segs.join('/')) && !treeOf.has(canon)) joined.delete(canon);
+  return (s) => {
+    if (s.repo) return identityOf(s);
+    if (!s.cwd) {
+      const named = byName.get(s.project) ?? [];
+      return named.length === 1 ? (own.get(named[0] as string) ?? null) : null;
+    }
+    return joined.get(segments(s.cwd).join('/')) ?? identityOf(s);
+  };
+}
+
+/**
+ * The name each session's group (`homesOf`) reads as (no project file is read): the
+ * repository's name when the server knows the repository or `homesOf` tells it, else its
+ * directory's last segment, as the server names it, but with the parent directory's name before
+ * it ("glassbox/weever") in two cases:
+ * - a worktree the server could not tell and `homesOf` could not place: the parent is named
+ *   like more than one other session's own directory or repository, without being one itself
+ *   (`…/work/glassbox/weever` beside `/a/glassbox` and `/b/glassbox`). Worktrees whose
+ *   repository has no session of its own keep their directory's name: from paths alone, a folder
+ *   of worktrees and a folder of unrelated projects look the same;
  * - two directories (or repositories) that would read alike (`…/work/api` and `…/home/api`),
  *   which take as many parent segments as tell them apart.
  * A session without a directory keeps the server's name.
  */
-export function groupNames(sessions: readonly Named[]): (s: Named) => string {
-  // Each distinct identity once, by its segments joined: "/w/x" and "/w/x/" are one.
+export function groupNames(
+  sessions: readonly Named[],
+  homeOf: (s: Named) => Home | null = homesOf(sessions),
+): (s: Named) => string {
+  // Each distinct home once, by its segments joined: "/w/x" and "/w/x/" are one.
   const dirs = new Map<string, string[]>();
   for (const s of sessions) {
-    const segs = identityOf(s);
+    const segs = homeOf(s)?.segs;
     if (segs) dirs.set(segs.join('/'), segs);
   }
   const bases = new Map<string, number>();
@@ -284,7 +396,7 @@ export function groupNames(sessions: readonly Named[]): (s: Named) => string {
     }
   }
   return (s) => {
-    const segs = identityOf(s);
+    const segs = homeOf(s)?.segs;
     return (segs && names.get(segs.join('/'))) || s.project;
   };
 }

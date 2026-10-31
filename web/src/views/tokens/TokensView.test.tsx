@@ -2,13 +2,15 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { AgentKind, QuotaSnapshot } from '../../../../src/core/model.js';
+import { createDemoSnapshot } from '../../../../src/core/fixtures/demo.js';
+import type { AgentKind, QuotaSnapshot, ToolCall } from '../../../../src/core/model.js';
 import { emptyUsage } from '../../../../src/core/usage.js';
+import { stageCacheBreaks } from '../../../../src/server/demo-cache-breaks.js';
 import { SessionAgentContext } from '../../data/session-agent';
-import { createStore, StoreContext } from '../../data/store';
+import { createStore, fromSnapshot, type OpenSession, StoreContext } from '../../data/store';
 import { I18nContext, makeI18n } from '../../i18n';
 import type { ContextPoint } from '../../lib/token-stats';
-import { demoOpen } from '../../test/demo';
+import { DEMO_NOW, demoOpen } from '../../test/demo';
 import { UiContext } from '../../ui';
 import { ContextChart } from './ContextChart';
 import { TokensView } from './TokensView';
@@ -60,6 +62,30 @@ const anthropic = (over: Partial<QuotaSnapshot> = {}): QuotaSnapshot => ({
   ...over,
 });
 
+/** The demo with one MCP call by `agentId`, on one of its finished requests. */
+function withMcpCall(open: OpenSession, agentId = 'main'): OpenSession {
+  const req = [...open.requests.values()].find(
+    (r) => r.agentId === agentId && r.status === 'complete',
+  );
+  if (!req) throw new Error('fixture');
+  const call: ToolCall = {
+    id: 'mcp1',
+    agentId,
+    requestId: req.id,
+    name: 'mcp__tracker__list_issues',
+    input: {},
+    status: 'complete',
+    startedAt: req.endedAt,
+    endedAt: req.endedAt,
+    durationMs: 700,
+    resultPreview: '[]',
+    hasFullResult: true,
+    spawned: null,
+    resultChars: 2,
+  };
+  return { ...open, toolCalls: new Map(open.toolCalls).set(call.id, call) };
+}
+
 describe('TokensView', () => {
   it('says a sub-agent never seen to end ended unknown, not that it waits', () => {
     const open = demoOpen();
@@ -105,6 +131,18 @@ describe('TokensView', () => {
   it('labels the tree / spend switch as the rows’ order', () => {
     renderTokens();
     expect(screen.getByRole('radiogroup', { name: 'Order' })).toBeInTheDocument();
+  });
+
+  it('shows the cache breaks between the request lists and what the context held', () => {
+    const snap = stageCacheBreaks(createDemoSnapshot(DEMO_NOW));
+    renderTokens('main', fromSnapshot(snap.session.id, snap));
+    const headings = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
+    const at = headings.findIndex((h) => h?.startsWith('Cache breaks'));
+    expect(at).toBeGreaterThan(0);
+    expect(headings[at + 1]).toMatch(/^What the context held/);
+    cleanup();
+    renderTokens();
+    expect(screen.queryByRole('heading', { name: /Cache breaks/ })).toBeNull();
   });
 
   it('leads with the conclusions', () => {
@@ -291,6 +329,39 @@ describe('TokensView', () => {
       expect.anything(),
     );
     vi.unstubAllGlobals();
+  });
+
+  it('ends with the MCP servers called, after what the context held, only when there are some', () => {
+    const fetch = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal('fetch', fetch);
+    renderTokens();
+    expect(screen.queryByRole('region', { name: /^MCP servers/ })).toBeNull();
+    cleanup();
+    const open = withMcpCall(demoOpen());
+    renderTokens('main', open);
+    const held = screen.getByRole('region', { name: /^What the context held/ });
+    const mcp = screen.getByRole('region', { name: 'MCP servers · Main' });
+    expect(held.compareDocumentPosition(mcp) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(mcp.parentElement?.lastElementChild).toBe(mcp);
+    vi.unstubAllGlobals();
+  });
+
+  it('shows the MCP servers of an agent that reports no tokens', () => {
+    const open = withMcpCall(demoOpen(), 'a1b2c3d4e5f60718');
+    const zero = emptyUsage();
+    open.requests = new Map(
+      [...open.requests].map(([id, r]) => [
+        id,
+        r.agentId === 'a1b2c3d4e5f60718' ? { ...r, usage: zero } : r,
+      ]),
+    );
+    open.agents = new Map(open.agents).set('a1b2c3d4e5f60718', {
+      ...(open.agents.get('a1b2c3d4e5f60718') as NonNullable<ReturnType<typeof open.agents.get>>),
+      usage: zero,
+    });
+    renderTokens('a1b2c3d4e5f60718', open);
+    expect(screen.getByText(/^No token data/)).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /^MCP servers/ })).toBeInTheDocument();
   });
 
   it('ranks the costliest requests and jumps to one in the flow tab', () => {

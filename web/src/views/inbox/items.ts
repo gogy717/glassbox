@@ -3,6 +3,7 @@ import type { SessionSummary, TroubleSignal } from '../../../../src/core/model.j
 import { needsYou } from '../../data/needs-you';
 import { type OpenPrompt, type PromptKind, promptKind } from '../../data/runs';
 import { isListed, isRunning } from '../../lib/sessions';
+import { looksStuck } from '../../lib/trouble';
 
 /**
  * One thing to see to. A glassbox run's prompt is answered here: a tool's permission, a question,
@@ -27,7 +28,7 @@ function oldestSignFirst(a: TroubleSignal, b: TroubleSignal): number {
  * The Inbox's items: first what waits for you, the sessions Home lists under Needs you, in its
  * order (the oldest wait first), each a run's prompt (`prompts`) or a terminal's wait; then the
  * running sessions the server sees a sign of trouble in, the oldest sign first, those already
- * listed as waiting aside. Pass the sessions with the runs' prompts folded in (`withWaiting`).
+ * listed as waiting aside, and those whose sign is only a context nearly full. Pass the sessions with the runs' prompts folded in (`withWaiting`).
  */
 export function inboxItems(
   sessions: readonly SessionSummary[],
@@ -44,7 +45,14 @@ export function inboxItems(
   const stuck: Extract<InboxItem, { kind: 'stuck' }>[] = [];
   for (const session of sessions) {
     const sign = session.trouble;
-    if (sign && isListed(session, showProbes) && isRunning(session) && session.live !== 'waiting')
+    // A context nearly full is not stuck: Home's row says it, the Inbox does not.
+    if (
+      sign &&
+      looksStuck(sign) &&
+      isListed(session, showProbes) &&
+      isRunning(session) &&
+      session.live !== 'waiting'
+    )
       stuck.push({ id: `stuck:${session.id}`, kind: 'stuck', session, sign });
   }
   stuck.sort((a, b) => oldestSignFirst(a.sign, b.sign));

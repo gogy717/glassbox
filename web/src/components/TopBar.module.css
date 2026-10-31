@@ -100,6 +100,14 @@
   flex: 1;
 }
 
+/* The rate and the quota, spaced as the bar spaces its own items. */
+.instruments {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+
 /* The connection, only while it is news: a chip with a 6px dot and the word, in red while it
    reconnects. Connected, it shows nothing (F5): the word stays in the page, read but not seen,
    so the status region announces a drop and the recovery alike. */
@@ -386,5 +394,57 @@
     overflow: hidden;
     clip-path: inset(50%);
     white-space: nowrap;
+  }
+}
+
+/* 720 and under: the menu, the mark, the five pages, Jump and Settings alone fill a line at
+   375px (a session asked ~560px of it, Home ~600px), so the bar takes two. The first: the pages
+   where every page has them, Jump and Settings at its right; the second: the session, its title
+   giving way first, then the rate and the quota, the connection and Follow at its right. */
+@media (max-width: 720px) {
+  .bar {
+    flex-wrap: wrap;
+    row-gap: 3px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
+  /* The break: a line of nothing between the two (its row gaps space them). */
+  .bar::after {
+    content: "";
+    order: 2;
+    flex-basis: 100%;
+    height: 0;
+  }
+
+  .jump,
+  .settings {
+    order: 1;
+  }
+
+  .session,
+  .instruments,
+  .conn,
+  .toggle {
+    order: 3;
+  }
+
+  /* First on its line: no rule before it, and only the room the others leave (from nothing, so
+     its title never pushes them onto a third line). */
+  .session {
+    flex: 1 1 0;
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .instruments {
+    margin-left: auto;
+  }
+}
+
+/* A phone's width: the session's title has the room its agent's tag had. */
+@media (max-width: 460px) {
+  .session > [data-agent] {
+    display: none;
   }
 }

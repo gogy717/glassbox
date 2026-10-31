@@ -1,0 +1,55 @@
+/* MCP servers: a server a row, its calls as a bar of the busiest server's, as Top projects. */
+.servers {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.server {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 6px 12px;
+  font-size: var(--fs-body);
+}
+
+.serverName {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.serverValue {
+  display: inline-flex;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.serverMeta {
+  font-size: var(--fs-small);
+  color: var(--muted);
+}
+
+.failed {
+  font-size: var(--fs-small);
+  color: var(--error);
+}
+
+.serverTrack {
+  display: block;
+  grid-column: 1 / -1;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--layer-3);
+  overflow: hidden;
+}
+
+.serverTrack > span {
+  display: block;
+  height: 100%;
+  background: var(--ink);
+}

@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { createDemoQuotas } from '../../../../src/core/fixtures/demo.js';
@@ -6,9 +7,11 @@ import { createStore, StoreContext } from '../../data/store';
 import { I18nContext, type Locale, makeI18n } from '../../i18n';
 import { priceTable } from '../../lib/prices';
 import { DEMO_NOW } from '../../test/demo';
+import { moduleCssValue } from '../../test/module-css';
 import { demoWeek } from '../../test/week';
-import { HourCard, NowCard, TokensCard } from './StatsCards';
-import { busiestCell, indexHours, statsWeek } from './statsData';
+import { HourCard, McpCard, NowCard, TokensCard, WaitingCard } from './StatsCards';
+import classes from './StatsPage.module.css';
+import { busiestCell, indexHours, mcpServers, statsWeek } from './statsData';
 import type { Cell } from './WeekGrid';
 
 describe('the Right now card', () => {
@@ -79,6 +82,22 @@ describe('the Tokens card', () => {
       'title',
       `${TITLE} · Left out, no price: claude-opus-5-5, claude-sonnet-5-5, gpt-5.5-codex`,
     );
+  });
+
+  it('keeps the total and its cost together at the right: the cost never wraps under the total', () => {
+    renderCard(statsWeek(demoWeek(), false), 'zh');
+    const card = screen.getByRole('region', { name: /TOKEN/ });
+    const total = within(card).getByText('总量').parentElement as HTMLElement;
+    const sums = within(card).getByText('API 费用（估）').parentElement
+      ?.parentElement as HTMLElement;
+    expect(total.parentElement).toBe(sums);
+    const css = join(import.meta.dirname, 'StatsPage.module.css');
+    const value = (el: Element, prop: string) => moduleCssValue(css, classes, el, prop);
+    // The two go to the next line as one, at its right, and the total keeps its hairline.
+    expect(value(sums, 'display')).toBe('flex');
+    expect(value(sums, 'flex-wrap') ?? 'nowrap').toBe('nowrap');
+    expect(value(sums, 'margin-left')).toBe('auto');
+    expect(value(total, 'border-left')).toBe('1px solid var(--border)');
   });
 
   it('speaks Chinese', () => {
@@ -166,6 +185,22 @@ describe('the hour card', () => {
     expect(screen.getByRole('button', { name: '3 more' })).toBeInTheDocument();
   });
 
+  it('breaks the line under its heading only between its parts, never inside a figure', () => {
+    // At 1440 px in ZH it read "… · Claude Code 1 小时 / 22 分": each part is now kept whole.
+    render(hourCard(busiest, { locale: 'zh' }));
+    const line = document.getElementById('stats-hour')?.nextElementSibling as HTMLElement;
+    const parts = [...line.children] as HTMLElement[];
+    expect(parts.map((p) => p.textContent)).toEqual([
+      expect.stringMatching(/^代理时长 \d/),
+      expect.stringMatching(/^\d+ 个会话$/),
+      expect.stringMatching(/^Claude Code \d/),
+    ]);
+    expect(line).toHaveTextContent(/^代理时长 .+ · \d+ 个会话 · Claude Code .+$/);
+    const sheet = join(import.meta.dirname, 'StatsPage.module.css');
+    for (const part of parts)
+      expect(moduleCssValue(sheet, classes, part, 'white-space')).toBe('nowrap');
+  });
+
   it('says it in Chinese', () => {
     render(hourCard(busiest, { locale: 'zh' }));
     expect(screen.getByRole('button', { name: '还有 3 个' })).toBeInTheDocument();
@@ -178,5 +213,84 @@ describe('the hour card', () => {
     expect(titles().length).toBeGreaterThan(0);
     expect(titles().length).toBeLessThanOrEqual(8);
     expect(screen.queryByRole('button', { name: /more/ })).toBeNull();
+  });
+});
+
+// Package F (round 3): MCP servers.
+describe('the MCP servers card', () => {
+  const renderCard = (w: ReturnType<typeof statsWeek>, locale: Locale = 'en') =>
+    render(
+      <I18nContext.Provider value={makeI18n(locale)}>
+        <McpCard w={w} locale={locale} />
+      </I18nContext.Provider>,
+    );
+
+  it('lists the servers by calls, failures in the error tone, with their time', () => {
+    const w = statsWeek(demoWeek('7d'), false);
+    renderCard(w);
+    const card = screen.getByRole('region', { name: /MCP servers/i });
+    const rows = within(card).getAllByRole('listitem');
+    expect(rows.map((li) => li.querySelector('[data-name]')?.textContent)).toEqual(
+      mcpServers(w).map((s) => s.server),
+    );
+    const tracker = rows.find((li) => li.textContent?.startsWith('tracker'));
+    const failed = tracker?.querySelector('[data-failed]');
+    expect(failed).toHaveTextContent(/1 failed/);
+    expect(failed?.className).toMatch(/failed/);
+    expect(within(card).queryByText('No MCP server called in the last 7 days')).toBeNull();
+  });
+
+  it('says none were called when the window has no MCP call, in the window’s words', () => {
+    const r = demoWeek('week');
+    const none = {
+      ...r,
+      sessions: r.sessions.map((s) => ({ ...s, inWindow: { ...s.inWindow, mcp: undefined } })),
+    };
+    renderCard(statsWeek(none, false));
+    expect(screen.getByText('No MCP server called this week')).toBeInTheDocument();
+  });
+
+  it('speaks Chinese', () => {
+    renderCard(statsWeek(demoWeek('7d'), false), 'zh');
+    const card = screen.getByRole('region', { name: /MCP 服务器/ });
+    expect(within(card).getAllByRole('listitem')[0]).toHaveTextContent(/次调用/);
+  });
+});
+
+// Package G (round 3): the time the agents waited on the person.
+describe('the Waiting on you card', () => {
+  const renderCard = (w: ReturnType<typeof statsWeek>, locale: Locale = 'en') =>
+    render(
+      <I18nContext.Provider value={makeI18n(locale)}>
+        <WaitingCard w={w} listed={new Set(w.result.sessions.map((s) => s.id))} locale={locale} />
+      </I18nContext.Provider>,
+    );
+
+  it('says how long the agents waited on the person, by kind, and names the longest wait', () => {
+    const w = statsWeek(demoWeek(), false);
+    renderCard(w);
+    const card = screen.getByRole('region', { name: /Waiting on you/i });
+    expect(within(card).getByText(/\d+ (wait|waits) · longest/)).toBeInTheDocument();
+    expect(within(card).getByText('Question')).toBeInTheDocument();
+    expect(within(card).getByText('Longest wait')).toBeInTheDocument();
+    // The longest wait's session is a link, as the session list has it.
+    expect(within(card).getByRole('link')).toHaveAttribute('href', expect.stringContaining('/'));
+    expect(within(card).getByText(/Other sessions’ gaps are not counted/)).toBeInTheDocument();
+  });
+
+  it('says so, in Chinese too, when no agent waited on the person', () => {
+    const whole = statsWeek(demoWeek(), false);
+    const quiet = {
+      ...whole,
+      result: {
+        ...whole.result,
+        sessions: whole.result.sessions.map((s) => ({
+          ...s,
+          inWindow: { ...s.inWindow, waiting: undefined },
+        })),
+      },
+    };
+    renderCard(quiet, 'zh');
+    expect(screen.getByText('这个时间范围内没有代理在等你。')).toBeInTheDocument();
   });
 });

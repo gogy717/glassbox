@@ -7,6 +7,7 @@ import { useApprovalsContext } from '../../data/approvals';
 import { useSessionAgent } from '../../data/session-agent';
 import type { OpenSession } from '../../data/store';
 import { useI18n } from '../../i18n';
+import { type CacheBreak, reasonSentence, reasonWord } from '../../lib/cache-breaks';
 import { DASH, formatClock, formatCompact, formatDuration, formatNumber } from '../../lib/format';
 import css from './CallRow.module.css';
 import { Arrow, type CardKey, FinalReply, RequestCard, ResponseCard, ToolCard } from './cards';
@@ -24,6 +25,8 @@ interface Props {
   onEnterAgent(agentId: string): void;
   /** Opens a call's card, wherever it is: a result in the request's context links to its call. */
   onOpenCall?(call: ToolCall): void;
+  /** Set when this request broke the prompt cache. */
+  cacheBreak?: CacheBreak | null;
 }
 
 /** A word and its compact figure ("context 195K", "上下文 19.5万"): a CJK unit out of the mono face. */
@@ -119,6 +122,11 @@ export const CallRow = memo(function CallRow(p: Props) {
             </span>
           )}
           <span className={css.status}>
+            {p.cacheBreak && (
+              <span className={css.cacheTag} title={reasonSentence(p.cacheBreak, t)}>
+                {t('flow.cacheBreak', { reason: reasonWord(p.cacheBreak, t) })}
+              </span>
+            )}
             <StatusMark status={status} />
           </span>
         </div>
@@ -194,6 +202,7 @@ function sameRow(a: Props, b: Props): boolean {
     a.onSelect === b.onSelect &&
     a.onEnterAgent === b.onEnterAgent &&
     a.onOpenCall === b.onOpenCall &&
+    sameBreak(a.cacheBreak, b.cacheBreak) &&
     a.tools.length === b.tools.length &&
     a.tools.every((t, i) => t === b.tools[i]) &&
     a.open.id === b.open.id &&
@@ -202,3 +211,7 @@ function sameRow(a: Props, b: Props): boolean {
     a.open.workflows === b.open.workflows
   );
 }
+
+/** Breaks are found afresh on every patch: the same tag and tooltip count as the same break. */
+const sameBreak = (a: CacheBreak | null | undefined, b: CacheBreak | null | undefined) =>
+  a === b || (!!a && !!b && a.reason === b.reason && a.idleMs === b.idleMs && a.ttlMs === b.ttlMs);

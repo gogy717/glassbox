@@ -1,8 +1,8 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { OpenSession } from '../../data/store';
+import { createStore, type OpenSession, StoreContext } from '../../data/store';
 import { I18nContext, makeI18n } from '../../i18n';
-import { DEMO_NOW, demoOpen } from '../../test/demo';
+import { DEMO_NOW, demoOpen, testRun } from '../../test/demo';
 import { UiContext } from '../../ui';
 import { TimeView } from './TimeView';
 
@@ -80,6 +80,48 @@ describe('TimeView', () => {
       'Tools · Delegate250ms',
       'Idle (between prompts)36m54s',
     ]);
+  });
+
+  it('counts a gap between prompts as waiting for the person while a glassbox run was live', () => {
+    const open = demoOpen();
+    const store = createStore();
+    store.applyEvent({
+      type: 'run',
+      run: testRun({ sessionId: open.id, status: 'idle', startedAt: '2000-01-01T00:00:00.000Z' }),
+    });
+    render(
+      <StoreContext.Provider value={store}>
+        <I18nContext.Provider value={makeI18n('en')}>
+          <UiContext.Provider value={{ follow: true, setFollow: vi.fn() }}>
+            <TimeView open={open} agentId="main" navigate={vi.fn()} />
+          </UiContext.Provider>
+        </I18nContext.Provider>
+      </StoreContext.Provider>,
+    );
+    const card = screen.getByRole('region', { name: 'Where the time went · Main' });
+    const rows = within(card)
+      .getAllByRole('listitem')
+      .map((li) => li.textContent);
+    expect(rows).toContain('Waiting for you36m54s');
+    expect(rows.some((r) => r?.startsWith('Idle'))).toBe(false);
+  });
+
+  it('counts a question’s time as waiting for the person, not as tool time', () => {
+    const open = demoOpen();
+    const [id, tool] = [...open.toolCalls].find(([, t]) => t.agentId === 'main' && t.endedAt) ?? [];
+    if (!id || !tool) throw new Error('fixture');
+    const toolCalls = new Map(open.toolCalls).set(id, {
+      ...tool,
+      name: 'AskUserQuestion',
+      input: { questions: [] },
+    });
+    renderTime('main', { ...open, toolCalls });
+    const card = screen.getByRole('region', { name: 'Where the time went · Main' });
+    const rows = within(card)
+      .getAllByRole('listitem')
+      .map((li) => li.textContent);
+    expect(rows.some((r) => r?.startsWith('Waiting for you'))).toBe(true);
+    expect(rows.some((r) => r?.startsWith('Tools · Ask'))).toBe(false);
   });
 
   it('lists the slowest steps and opens one in the execution chain', () => {

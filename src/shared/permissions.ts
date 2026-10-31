@@ -27,8 +27,9 @@ export type PermissionAnswer = 'allowed' | 'denied';
 /**
  * Why a rule should never be ticked for you: it runs as root, reaches where secrets are kept,
  * deletes files, can throw work away or force a push, runs whatever command or code it is handed,
- * ran a download through a shell, stops processes, changes file permissions, or edits outside the
- * working tree.
+ * ran a download through a shell, stops processes, changes file permissions, edits outside the
+ * working tree, or changes files or the history some other way (moves, copies or overwrites them,
+ * edits in place, writes through a redirection, merges, rebases or commits).
  */
 export type DangerKind =
   | 'sudo'
@@ -40,7 +41,8 @@ export type DangerKind =
   | 'pipe-to-shell'
   | 'kill'
   | 'perms'
-  | 'outside';
+  | 'outside'
+  | 'writes';
 
 /** Where a session ran: file rules are written relative to `cwd`, home as "~". */
 export interface SessionPlace {
@@ -145,8 +147,62 @@ const WRAPPER_VALUES: Record<string, readonly string[]> = {
   time: ['-f', '--format', '-o', '--output'],
 };
 const DELETES = new Set(['rm', 'rmdir', 'shred', 'unlink']);
-/** git subcommands whose rule can throw away work: `git reset --hard`, `git branch -D`. */
-const DISCARDS = new Set(['reset', 'checkout', 'restore', 'stash', 'branch']);
+/**
+ * git subcommands whose rule can throw away work: `git reset --hard`, `git branch -D`,
+ * `git switch --discard-changes`.
+ */
+const DISCARDS = new Set(['reset', 'checkout', 'switch', 'restore', 'stash', 'branch']);
+/**
+ * git subcommands that change the files or the history: a rule for `git commit` allows `--amend`
+ * too, one for `git config` a hook path.
+ */
+const GIT_WRITES = new Set([
+  'merge',
+  'rebase',
+  'commit',
+  'cherry-pick',
+  'revert',
+  'pull',
+  'am',
+  'apply',
+  'mv',
+  'tag',
+  'config',
+  'worktree',
+  'update-ref',
+  'replace',
+  'filter-branch',
+  'filter-repo',
+]);
+/**
+ * Programs that write, move or overwrite the files they are given; and sed and sort, which ask
+ * only when they write (`-i`, `-o`), and whose rule allows that whatever it was asked for.
+ */
+const WRITES = new Set([
+  'tee',
+  'mv',
+  'cp',
+  'ln',
+  'truncate',
+  'install',
+  'patch',
+  'dd',
+  'rsync',
+  'ditto',
+  'tar',
+  'unzip',
+  'zip',
+  'gzip',
+  'gunzip',
+  'bzip2',
+  'bunzip2',
+  'xz',
+  'unxz',
+  'sed',
+  'sort',
+]);
+/** A redirection's target that is no file: a descriptor (`&1`), or a device that keeps nothing. */
+const NOT_A_FILE = /^(?:&\d*-?|\/dev\/(?:null|stdout|stderr|tty|fd\/\d+))$/;
 const ADMIN = new Set(['sudo', 'su', 'doas']);
 const KILLS = new Set(['kill', 'pkill', 'killall']);
 const PERMS = new Set(['chmod', 'chown', 'chgrp']);
@@ -175,6 +231,8 @@ const RUNS_ANY = new Set([
   'watch',
   'setsid',
   'flock',
+  // `-exec`, and `-delete` besides.
+  'find',
   ...STRIPPED,
 ]);
 /** Interpreters: alone, or with code on the line or from stdin, a rule for one runs any code. */
@@ -307,7 +365,7 @@ function runsAny(program: string, rest: readonly string[]): boolean {
   if (RUNNERS_ALONE.has(program))
     return rest.length === 0 || runsAny(programName(rest[0] as string), rest.slice(1));
   const subcommands = RUNNER_SUBCOMMANDS[program];
-  if (!subcommands || !subcommands.includes(rest[0] ?? '')) return false;
+  if (!subcommands?.includes(rest[0] ?? '')) return false;
   return rest.length === 1 || runsAny(programName(rest[1] as string), rest.slice(2));
 }
 
@@ -354,18 +412,37 @@ function commandPrefix(
     words: prefix,
     danger: commandDanger(
       prefix,
+      words,
       commands.map((c) => c.words),
       wraps,
     ),
   };
 }
 
-function commandDanger(prefix: string[], commands: string[][], wraps: boolean): DangerKind | null {
+/** Whether a command's words send output to a file: `> f`, `>> f`, `2> f`, `&> f`, `>f`. */
+function redirectsToFile(words: readonly string[]): boolean {
+  return words.some((w, i) => {
+    const m = /^(?:\d*|&)>>?(.*)$/.exec(w);
+    return m !== null && !NOT_A_FILE.test(m[1] || words[i + 1] || '');
+  });
+}
+
+/**
+ * The harm a rule for `prefix` may do, as the command it was asked for (`own`) and the rest of
+ * its line (`commands`) show it; the gravest first.
+ */
+function commandDanger(
+  prefix: string[],
+  own: readonly string[],
+  commands: string[][],
+  wraps: boolean,
+): DangerKind | null {
   const program = programName(prefix[0] ?? '');
   const rest = prefix.slice(1);
   const [sub] = rest;
   if (ADMIN.has(program)) return 'sudo';
-  if (DELETES.has(program) || (program === 'git' && sub === 'clean')) return 'delete';
+  if (DELETES.has(program) || (program === 'git' && (sub === 'clean' || sub === 'rm')))
+    return 'delete';
   if (program === 'git' && sub !== undefined && DISCARDS.has(sub)) return 'discard';
   if (program === 'git' && (sub === undefined || sub === 'push')) return 'force-push';
   if (wraps || runsAny(program, rest)) return 'shell';
@@ -375,6 +452,9 @@ function commandDanger(prefix: string[], commands: string[][], wraps: boolean): 
   const fetchAt = programs.findIndex((p) => FETCHES.has(p));
   if (fetchAt >= 0 && programs.slice(fetchAt + 1).some((p) => SHELL_PROGRAMS.has(p)))
     return 'pipe-to-shell';
+  if (WRITES.has(program) || (program === 'git' && sub !== undefined && GIT_WRITES.has(sub)))
+    return 'writes';
+  if (redirectsToFile(own)) return 'writes';
   return null;
 }
 
@@ -779,6 +859,7 @@ const GRAVITY: readonly DangerKind[] = [
   'kill',
   'perms',
   'outside',
+  'writes',
 ];
 const graver = (a: DangerKind | null, b: DangerKind | null) =>
   a === null ? b : b === null ? a : GRAVITY.indexOf(a) <= GRAVITY.indexOf(b) ? a : b;

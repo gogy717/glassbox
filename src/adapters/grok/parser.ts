@@ -1126,9 +1126,10 @@ export class GrokSessionParser implements SessionParser {
       startedAt: tool.startedAt,
       endedAt: status === 'running' ? null : endedAt,
       durationMs: duration,
-      resultPreview: tool.hasResult ? preview(tool.result) : null,
+      resultPreview: null,
       hasFullResult: tool.hasResult,
       spawned: null,
+      ...(tool.hasResult ? resultView(tool.result) : {}),
     };
   }
 
@@ -1222,10 +1223,11 @@ export class GrokSessionParser implements SessionParser {
   }
 }
 
-function preview(value: unknown): string {
+/** A tool result's preview and its size, in characters. */
+function resultView(value: unknown): Pick<ToolCall, 'resultPreview' | 'resultChars'> {
   const text = textOf(value);
   const shown = text !== '' ? text : jsonText(value);
-  return shown.slice(0, PREVIEW_CHARS);
+  return { resultPreview: shown.slice(0, PREVIEW_CHARS), resultChars: shown.length };
 }
 
 /** JSON text of `value`; empty when it is nested too deep to serialise. */

@@ -7,7 +7,7 @@ import selectorParser from 'postcss-selector-parser';
  * The value a CSS module gives `prop` on a rendered element: the most specific matching rule,
  * then the last. jsdom applies no module CSS, so the module's rules are matched here, with each
  * `.name` read as the hashed class the component received (`classes`, the module's import).
- * Rules inside at-rules (keyframes, media) are left out.
+ * `:global(.x)` is matched as `.x`. Rules inside at-rules (keyframes, media) are left out.
  */
 export function moduleCssValue(
   file: string,
@@ -21,6 +21,10 @@ export function moduleCssValue(
     if (rule.parent?.type !== 'root') return;
     const decl = rule.nodes.findLast((n) => n.type === 'decl' && n.prop === prop);
     selectorParser((root) => {
+      // `:global(.x)` names a class as it is, unhashed: matched as `.x`.
+      root.walkPseudos((p) => {
+        if (p.value === ':global' && p.nodes[0]) p.replaceWith(...p.nodes[0].nodes);
+      });
       for (const selector of root.nodes) {
         let spec = 0;
         selector.walk((node) => {

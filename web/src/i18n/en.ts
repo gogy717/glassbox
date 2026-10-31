@@ -274,8 +274,6 @@ export const en: Record<MessageKey, string> = {
   'flow.chipTools': 'tools {n}',
   'flow.chipContext': 'context {n}',
   'flow.runTool': 'Run tool',
-  'flow.agent': 'Agent',
-  'flow.workflow': 'Workflow',
   'flow.phaseProgress': '{title} {done}/{total}',
   'flow.moreAgents': '{n} more',
   'flow.noTurns': 'No prompts for this agent yet',
@@ -832,4 +830,77 @@ export const en: Record<MessageKey, string> = {
   'files.diff': 'Change',
   'files.writeSize': '{lines} {lines|line|lines} · {chars} {chars|character|characters}',
   'files.cell': 'Cell {id}',
+  // Package B (round 3): the Rules page's tag for a rule that writes.
+  'rules.danger.writes': 'Changes files or history',
+  // Round 3, A: the session list's groups and folds.
+  'sidebar.goneTree': 'removed',
+  'sidebar.foldedOpenMark': 'open',
+  'sidebar.foldedOpen': 'including the open session',
+  // Package D (round 3): context nearly full.
+  'trouble.long.contextFull': 'Context {pct}% full; compaction soon',
+  'trouble.short.contextFull': 'Context {pct}%',
+  'context.label': 'Context',
+  'context.of': 'of {window} · {pct}',
+  'context.tip':
+    'What the latest model call read, of the model’s {window} window. Before it fills, the agent compacts the conversation: a summary takes its place and the detail is lost.',
+  'context.tipUnknown':
+    'What the latest model call read. This model’s window is not known, so no share is shown.',
+  'tokens.window': '{window} window',
+  // Package H (round 3): prompt-cache breaks, in Where tokens went and the execution chain.
+  'cacheBreaks.title': 'Cache breaks',
+  'cacheBreaks.summary': 'The cache broke {n} {n|time|times} · ≈ {k} tokens written again',
+  'cacheBreaks.cost': '{cost} at API prices',
+  'cacheBreaks.notAvailable': 'Not available for {agent}: it records no cache reads per request.',
+  'cacheBreaks.row': '{time} · {reason} · ≈ {k} tokens written again',
+  'cacheBreaks.reason.compaction': 'compacted',
+  'cacheBreaks.reason.shape': 'prompt changed',
+  'cacheBreaks.reason.expired': 'expired',
+  'cacheBreaks.reason.rewound': 'rewound',
+  'cacheBreaks.reason.unknown': 'cause unknown',
+  'cacheBreaks.why.compaction':
+    'The cache broke: the conversation was compacted, so its new context was written to the cache again.',
+  'cacheBreaks.why.shape':
+    'The cache broke: the system prompt or the tools changed since the previous request, so nothing cached before could be read back.',
+  'cacheBreaks.why.expired':
+    'The cache broke: {idle} passed since the previous request, longer than the cache lives ({ttl}).',
+  'cacheBreaks.why.rewound':
+    'The cache broke: the context shrank without a compaction; a message was edited, or the conversation resumed from an earlier point.',
+  'cacheBreaks.why.unknown':
+    'The cache broke: this request read back little of the previous context, for no reason the records show.',
+  'cacheBreaks.note':
+    'Estimates: a request that read back less than half of the previous context (over 20K tokens) broke the cache; tokens written again leave out a usual turn of new ones.',
+  'cacheBreaks.ttl5m': '5 minutes',
+  'cacheBreaks.ttl1h': 'an hour',
+  'flow.cacheBreak': 'cache · {reason}',
+  // Package E (r3/quota-burn): who used the plan window, in the quota's details.
+  'quota.burnTitle': 'Who used it',
+  'quota.burnSince': 'since {clock}',
+  'quota.burnRow': '{title}: {share} · {tokens} tokens · {n} {n|request|requests}',
+  'quota.burnRowRequests': '{title}: {share} · {n} {n|request|requests}',
+  'quota.burnMore': 'and {n} more · {share}',
+  'quota.burnNote':
+    'Shares of the tokens glassbox saw on this machine, cache reads included; other machines and apps are not seen.',
+  'quota.burnNoteRequests':
+    'These sessions report no tokens, so the shares are of their requests, as glassbox saw them on this machine; other machines and apps are not seen.',
+  'quota.burnNone': 'glassbox saw no request to it on this machine in this window.',
+  'quota.burnReading': 'Reading sessions…',
+  'quota.burnFailed': 'Could not read the sessions.',
+  'quota.mostly': 'mostly {title}',
+  // Package F (round 3): MCP servers in Where tokens went.
+  'mcp.title': 'MCP servers',
+  'mcp.includeSub': 'Include sub-agents',
+  'mcp.calls': '{n} {n|call|calls}',
+  'mcp.failed': '{n} failed',
+  'mcp.running': '{n} running',
+  'mcp.total': '{time} in all',
+  'mcp.median': 'median {time}',
+  'mcp.tokens': '≈ {n} tokens',
+  'mcp.chars': 'results of {n} {n|character|characters}',
+  'mcp.tools': 'Tools of {server}',
+  'mcp.more': 'Show {n} more',
+  'mcp.noneAgent': 'This agent made no MCP call of its own',
+  'mcp.note':
+    'Result size is what each call brought back into the context, paid for again by every later request; tokens are estimated from its characters.',
+  // Package G (round 3): the time the agents waited on the person.
+  'time.waitingYou': 'Waiting for you',
 };

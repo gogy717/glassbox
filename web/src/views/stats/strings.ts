@@ -74,9 +74,37 @@ const en = {
   crossingHint:
     'Lines are numbered as each worktree found the file; neighbouring lines count as the same, as in a merge.',
   crossingCut: 'A session that changed more than 400 files is compared on its latest 400.',
+  // Package E (r3/quota-burn): who used the plan window, on Right now.
+  burnLead: 'Who used {name} · {window}:',
+  burnHint:
+    'Shares of the tokens glassbox saw on this machine; other machines and apps are not seen',
+  burnHintRequests:
+    'Shares of the requests glassbox saw on this machine (these sessions report no tokens); other machines and apps are not seen',
+  // Package F (round 3): MCP servers.
+  mcp: 'MCP servers',
+  mcpNote: 'calls · failures · time',
+  mcpCalls: '{n} {n|call|calls}',
+  mcpFailed: '{n} failed',
+  mcpNone: 'No MCP server called this week',
+  mcpNone7: 'No MCP server called in the last 7 days',
+  mcpTitle: 'Results of {n} {n|character|characters} came back into the context',
+  // Package G (round 3): the Waiting on you card.
+  waiting: 'Waiting on you',
+  waitingNote: 'time the agents waited on you',
+  waitingLine: '{n} {n|wait|waits} · longest {time}',
+  waitingLongest: 'Longest wait',
+  waitingPermission: 'Permission',
+  waitingQuestion: 'Question',
+  waitingPlan: 'Plan approval',
+  waitingTurn: 'Between prompts',
+  waitingFoot:
+    'Counts questions and plan approvals; in sessions glassbox ran, also its permission prompts and the gaps between prompts while its run was live. Other sessions’ gaps are not counted: no transcript says the session was live through them.',
+  waitingNone: 'No agent waited on you in this window.',
 };
 
 type Key = keyof typeof en;
+/** A Stats string's key, for a table that names strings by kind (the Waiting card's kinds). */
+export type StatsKey = Key;
 
 const zh: Record<Key, string> = {
   window: '时间范围',
@@ -145,9 +173,33 @@ const zh: Record<Key, string> = {
   crossingNoChange: '时间范围内没有改动这个文件。',
   crossingHint: '行号按各工作树开始改动时的文件算；相邻的行也算同一处，和合并时一样。',
   crossingCut: '改过 400 个以上文件的会话，只比较它最近改的 400 个。',
+  // Package E (r3/quota-burn): who used the plan window, on Right now.
+  burnLead: '{name} · {window}的用量：',
+  burnHint: '按 glassbox 在这台机器上看到的 token 算；别的机器和应用用掉的看不到',
+  burnHintRequests:
+    '按 glassbox 在这台机器上看到的请求数算（这些会话没有上报 token）；别的机器和应用用掉的看不到',
+  // Package F (round 3): MCP servers.
+  mcp: 'MCP 服务器',
+  mcpNote: '调用 · 失败 · 用时',
+  mcpCalls: '{n} 次调用',
+  mcpFailed: '{n} 次失败',
+  mcpNone: '本周没有调用 MCP 服务器',
+  mcpNone7: '最近 7 天没有调用 MCP 服务器',
+  mcpTitle: '带回上下文的结果共 {n} 字符',
+  // Package G (round 3): the Waiting on you card.
+  waiting: '等待用户',
+  waitingNote: '代理等你的时间',
+  waitingLine: '{n} 次 · 最长 {time}',
+  waitingLongest: '等得最久的一次',
+  waitingPermission: '权限确认',
+  waitingQuestion: '提问',
+  waitingPlan: '计划确认',
+  waitingTurn: '轮次之间',
+  waitingFoot:
+    '计入提问和计划确认；glassbox 运行的会话还计入它显示的权限确认，以及运行在线期间轮次之间的空档。其他会话的空档不计，因为转录里看不出会话当时是否在线。',
+  waitingNone: '这个时间范围内没有代理在等你。',
 };
 
-export type StatsKey = Key;
 const STRINGS: Record<Locale, Record<Key, string>> = { en, zh };
 
 /**

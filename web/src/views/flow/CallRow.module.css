@@ -75,7 +75,16 @@
 .status {
   display: inline-flex;
   grid-column: 5;
+  align-items: baseline;
+  gap: 8px;
   justify-self: end;
+}
+
+/* "cache · expired": the request broke the prompt cache, said quietly beside its status. */
+.cacheTag {
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  white-space: nowrap;
 }
 
 /* The call's reason, aligned with "#1": two lines at most, the rest is in the steps view. */

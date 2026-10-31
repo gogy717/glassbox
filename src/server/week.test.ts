@@ -452,3 +452,26 @@ describe('the weekly receipt’s data', () => {
     expect(steady(undefined)).toBeUndefined();
   });
 });
+
+describe('waits on the person in the weekly figures', () => {
+  it('takes the permission prompts the wait source gives for each session, and no others', async () => {
+    const snap = createDemoSnapshot(new Date(NOW));
+    const call = snap.toolCalls.find((t) => t.status === 'complete' && t.startedAt && t.endedAt);
+    if (!call?.startedAt || !call.endedAt) throw new Error('fixture');
+    const from = Date.parse(call.startedAt);
+    const to = Date.parse(call.endedAt);
+    const f = fakeStore([snap, old(1, 'claude-code:other')]);
+    const svc = new WeekService(f.store, { now: () => NOW });
+    svc.setWaitSource((id) =>
+      id === snap.session.id
+        ? { approvals: new Map([[call.id, { requestedAt: from, decidedAt: to }]]) }
+        : undefined,
+    );
+    const result = await svc.compute('7d');
+    const mine = result.sessions.find((s) => s.id === snap.session.id);
+    expect(mine?.inWindow.waiting?.byKind).toEqual({ permission: to - from });
+    expect(result.sessions.find((s) => s.id === 'claude-code:other')?.inWindow).not.toHaveProperty(
+      'waiting',
+    );
+  });
+});

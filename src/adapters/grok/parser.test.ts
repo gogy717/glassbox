@@ -560,6 +560,7 @@ describe('GrokSessionParser', () => {
       ],
     }).snapshot();
     expect(snap.toolCalls[0]?.resultPreview).toHaveLength(500);
+    expect(snap.toolCalls[0]?.resultChars).toBe(600);
     expect(checkSnapshot(snap)).toEqual([]);
 
     const empty = new GrokSessionParser(makeSource('closed')).snapshot();

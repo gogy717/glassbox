@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { QuotaWindow } from '../../../src/core/model.js';
-import { paceOf } from './quota-pace';
+import { emptyUsage } from '../../../src/core/usage.js';
+import type { BurnSession, QuotaBurn } from '../../../src/shared/quota-burn.js';
+import { mostlyOf, paceOf } from './quota-pace';
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -106,5 +108,40 @@ describe('paceOf', () => {
   it('reads a reset further away than the window is long as the window just starting', () => {
     const odd = weekly(30, 8 * DAY);
     expect(paceOf(odd, NOW)).toMatchObject({ elapsed: 0, verdict: 'early' });
+  });
+});
+
+const burnRow = (id: string, share: number): BurnSession => ({
+  id,
+  agent: 'claude-code',
+  project: 'demo',
+  cwd: null,
+  title: `Task ${id}`,
+  usage: emptyUsage(),
+  requests: 1,
+  tokens: Math.round(share * 1000),
+  share,
+});
+
+const burnOf = (...rows: BurnSession[]): QuotaBurn => ({
+  provider: 'anthropic',
+  since: NOW - HOUR,
+  asOf: NOW,
+  sessions: rows,
+  tokens: rows.reduce((n, r) => n + r.tokens, 0),
+  counted: 'tokens',
+});
+
+describe('mostlyOf', () => {
+  it('names the session holding over half of what the window’s list counted', () => {
+    expect(mostlyOf(burnOf(burnRow('a', 0.62), burnRow('b', 0.38)))?.id).toBe('a');
+    expect(mostlyOf(burnOf(burnRow('a', 1)))?.id).toBe('a');
+  });
+
+  it('names none at half or under, and none without a list', () => {
+    expect(mostlyOf(burnOf(burnRow('a', 0.5), burnRow('b', 0.5)))).toBeNull();
+    expect(mostlyOf(burnOf(burnRow('a', 0.4), burnRow('b', 0.35), burnRow('c', 0.25)))).toBeNull();
+    expect(mostlyOf(burnOf())).toBeNull();
+    expect(mostlyOf(null)).toBeNull();
   });
 });
