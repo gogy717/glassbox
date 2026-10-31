@@ -462,7 +462,7 @@ describe('waits on the person in the weekly figures', () => {
     const to = Date.parse(call.endedAt);
     const f = fakeStore([snap, old(1, 'claude-code:other')]);
     const svc = new WeekService(f.store, { now: () => NOW });
-    svc.useApprovals((id) =>
+    svc.setApprovalSource((id) =>
       id === snap.session.id
         ? new Map([[call.id, { requestedAt: from, decidedAt: to }]])
         : undefined,

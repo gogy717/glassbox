@@ -104,7 +104,7 @@ export class WeekService {
   private readonly now: () => number;
   private readonly log: (msg: string) => void;
   private readonly repoOf: ((cwd: string) => RepoIdentity | null) | null;
-  /** The permission prompts glassbox's runs showed for a session (`useApprovals`). */
+  /** The permission prompts glassbox's runs showed for a session (`setApprovalSource`). */
   private approvalsOf: ((sessionId: string) => ApprovalWindows | undefined) | null = null;
 
   constructor(
@@ -124,7 +124,7 @@ export class WeekService {
    * exist once the store does. A session already read keeps the prompts it was read with, until
    * it is written again. Null: no permission wait is known.
    */
-  useApprovals(source: ((sessionId: string) => ApprovalWindows | undefined) | null): void {
+  setApprovalSource(source: ((sessionId: string) => ApprovalWindows | undefined) | null): void {
     this.approvalsOf = source;
   }
 

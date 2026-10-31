@@ -502,7 +502,7 @@ function addWaits(week: SessionSnapshot[], random: () => number): Map<string, Ap
     const plan = others.length > 0 && random() < 0.4 ? pickOf(others) : null;
     const add = (
       room: (typeof rooms)[number],
-      spec: typeof ASK,
+      spec: { name: string; input: unknown },
       suffix: string,
       minutes: number,
     ) => {
@@ -554,7 +554,7 @@ function addWaits(week: SessionSnapshot[], random: () => number): Map<string, Ap
 /** The demo week: its sessions, and the permission prompts their glassbox runs showed. */
 export interface DemoWeek {
   sessions: SessionSnapshot[];
-  /** By session id, then tool call id: see `WeekService.useApprovals`. */
+  /** By session id, then tool call id: see `WeekService.setApprovalSource`. */
   approvals: Map<string, ApprovalWindows>;
 }
 
