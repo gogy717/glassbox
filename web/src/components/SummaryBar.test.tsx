@@ -150,7 +150,8 @@ describe('SummaryBar', () => {
     const extra = [...bar.querySelectorAll('[data-extra]')].map(
       (m) => m.querySelector('.section-label')?.textContent,
     );
-    expect(extra).toEqual(['Tool calls', 'Input', 'Cache hit', 'API cost (est.)']);
+    // The context figure too, while far from its window (SummaryBar.context.test.tsx).
+    expect(extra).toEqual(['Tool calls', 'Input', 'Cache hit', 'API cost (est.)', 'Context']);
     const more = within(bar).getByRole('button', { name: 'More figures' });
     expect(more).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(more);
@@ -231,7 +232,7 @@ describe('SummaryBar API cost', () => {
     const labels = [
       ...screen.getByRole('region', { name: 'Summary' }).querySelectorAll('.section-label'),
     ].map((l) => l.textContent);
-    expect(labels.slice(-2)).toEqual(['Output (thinking)', 'API cost (est.)']);
+    expect(labels.slice(-3, -1)).toEqual(['Output (thinking)', 'API cost (est.)']);
   });
 
   it('prices by the table in force, Settings’ prices over the defaults', () => {
