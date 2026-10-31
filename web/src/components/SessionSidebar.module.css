@@ -150,6 +150,13 @@
   letter-spacing: 0;
 }
 
+/* Folded with the open session in it: said in the ink tone, as the open row would be marked. */
+.groupOpen {
+  flex: none;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
 .groupDots {
   display: inline-flex;
   flex: none;

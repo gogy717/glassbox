@@ -808,6 +808,8 @@ export const zh = {
   'files.cell': '单元格 {id}',
   // Round 3, A: the session list's groups and folds.
   'sidebar.goneTree': '已删除',
+  'sidebar.foldedOpenMark': '当前',
+  'sidebar.foldedOpen': '含当前打开的会话',
 } as const;
 
 export type MessageKey = keyof typeof zh;

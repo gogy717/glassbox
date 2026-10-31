@@ -834,4 +834,6 @@ export const en: Record<MessageKey, string> = {
   'files.cell': 'Cell {id}',
   // Round 3, A: the session list's groups and folds.
   'sidebar.goneTree': 'removed',
+  'sidebar.foldedOpenMark': 'open',
+  'sidebar.foldedOpen': 'including the open session',
 };

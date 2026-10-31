@@ -11,6 +11,7 @@ import tagCss from './AgentTag.module.css';
 import { WAIT_MS } from './Delayed';
 import rowCss from './SessionRow.module.css';
 import { SessionSidebar } from './SessionSidebar';
+import css from './SessionSidebar.module.css';
 
 const sessions = createDemoSessions(DEMO_NOW);
 // A session's row, not the pin beside it in the same list item.
@@ -816,7 +817,9 @@ describe('SessionSidebar folding', () => {
     expect(lists()).toEqual(['glassbox', 'shopfront', 'blog']);
   });
 
-  it('keeps the open session’s row on show in a folded group, and says who waits in it', () => {
+  // Round 3, A: folded means every row hidden, the open session's too; the title says the open
+  // session is in it, and the list's tab stop sits on the title in its place.
+  it('hides every row of a folded group, the open session’s too, and says the open one is in it', () => {
     // A waiting session beside the open one in shopfront, as saved folded.
     const two = sessions.map((s, i) =>
       i === 2
@@ -832,11 +835,53 @@ describe('SessionSidebar folding', () => {
     );
     const title = screen.getByRole('button', { name: /^shopfront/ });
     expect(title).toHaveAttribute('aria-expanded', 'false');
-    expect(title).toHaveAccessibleName('shopfront 2 sessions 1 waiting for you');
+    expect(title).toHaveAccessibleName(
+      'shopfront 2 sessions including the open session 1 waiting for you',
+    );
     expect(title.querySelector('[data-state="waiting"]')).not.toBeNull();
-    expect(titles(screen.getByRole('list', { name: 'shopfront' }))).toEqual([
-      'Fix flaky login test',
-    ]);
+    expect(title.querySelector(`.${css.groupOpen}`)).toHaveTextContent('· open');
+    expect(lists()).toEqual(['glassbox']);
+    expect(screen.queryByRole('button', { name: /Fix flaky login test/ })).toBeNull();
+    // Tab enters the list at the title that holds the open session.
+    expect(title.tabIndex).toBe(0);
+    // Unfolded, the mark goes: the row says it.
+    fireEvent.click(title);
+    expect(screen.getByRole('button', { name: 'shopfront' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(document.querySelector(`.${css.groupOpen}`)).toBeNull();
+  });
+
+  it('folds a repository’s working trees with it, names and rows, and says so in Chinese', () => {
+    const repo = (root: string, dir = root) => ({ root, dir, name: 'glassbox' });
+    const trees: SessionSummary[] = [
+      {
+        ...(sessions[0] as SessionSummary),
+        id: 'main',
+        cwd: '/home/dev/src/glassbox',
+        repo: repo('/home/dev/src/glassbox'),
+      },
+      {
+        ...(sessions[1] as SessionSummary),
+        id: 'tree',
+        cwd: '/home/dev/work/glassbox/weever',
+        repo: repo('/home/dev/src/glassbox', '/home/dev/work/glassbox/weever'),
+      },
+    ];
+    render(
+      <Harness
+        sessions={trees}
+        selectedId="tree"
+        locale="zh"
+        prefs={{ ...DEFAULT_PREFS, folded: [projectKey('/home/dev/src/glassbox')] }}
+      />,
+    );
+    expect(screen.queryAllByRole('list')).toEqual([]);
+    expect(screen.queryByText('weever')).toBeNull();
+    expect(screen.getByRole('button', { name: /^glassbox/ })).toHaveAccessibleName(
+      'glassbox 2 个会话 含当前打开的会话 1 个运行中',
+    );
   });
 
   it('folds from the keyboard: the titles sit among the rows under the list’s one tab stop', () => {
