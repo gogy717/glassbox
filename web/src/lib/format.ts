@@ -225,13 +225,6 @@ export function formatRelative(iso: string | null | undefined, now: number, loca
   return DASH;
 }
 
-/** Milliseconds between two ISO times; null when either is missing. */
-export function spanMs(start: string | null | undefined, end: string | null | undefined) {
-  if (!start || !end) return null;
-  const d = Date.parse(end) - Date.parse(start);
-  return Number.isFinite(d) ? d : null;
-}
-
 /** Time until a reset: "45s", "1h37m", "3d5h"; null once it has passed. */
 export function formatCountdown(ms: number): string | null {
   if (!Number.isFinite(ms) || ms <= 0) return null;

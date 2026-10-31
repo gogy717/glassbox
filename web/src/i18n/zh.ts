@@ -272,8 +272,6 @@ export const zh = {
   'flow.chipTools': '工具 {n}',
   'flow.chipContext': '上下文 {n}',
   'flow.runTool': '运行工具',
-  'flow.agent': '子代理',
-  'flow.workflow': '工作流',
   'flow.phaseProgress': '{title} {done}/{total}',
   'flow.moreAgents': '还有 {n} 个',
   'flow.noTurns': '这个代理还没有轮次',
@@ -806,6 +804,8 @@ export const zh = {
   'files.diff': '改动',
   'files.writeSize': '{lines} 行 · {chars} 字符',
   'files.cell': '单元格 {id}',
+  // Package B (round 3): the Rules page's tag for a rule that writes.
+  'rules.danger.writes': '会改动文件或提交历史',
 } as const;
 
 export type MessageKey = keyof typeof zh;

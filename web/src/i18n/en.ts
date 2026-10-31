@@ -274,8 +274,6 @@ export const en: Record<MessageKey, string> = {
   'flow.chipTools': 'tools {n}',
   'flow.chipContext': 'context {n}',
   'flow.runTool': 'Run tool',
-  'flow.agent': 'Agent',
-  'flow.workflow': 'Workflow',
   'flow.phaseProgress': '{title} {done}/{total}',
   'flow.moreAgents': '{n} more',
   'flow.noTurns': 'No prompts for this agent yet',
@@ -832,4 +830,6 @@ export const en: Record<MessageKey, string> = {
   'files.diff': 'Change',
   'files.writeSize': '{lines} {lines|line|lines} · {chars} {chars|character|characters}',
   'files.cell': 'Cell {id}',
+  // Package B (round 3): the Rules page's tag for a rule that writes.
+  'rules.danger.writes': 'Changes files or history',
 };

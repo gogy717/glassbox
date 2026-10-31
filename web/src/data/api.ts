@@ -4,7 +4,6 @@ import {
   api,
   type ContextBillResponse,
   type RequestDetailResponse,
-  type SessionsResponse,
   type ToolResultResponse,
 } from '../../../src/shared/protocol.js';
 
@@ -25,9 +24,6 @@ async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   }
   return (await res.json()) as T;
 }
-
-export const fetchSessions = (signal?: AbortSignal) =>
-  getJson<SessionsResponse>(api.sessions(), signal);
 
 /** A session as it is now, read once (the open session comes over the event stream instead). */
 export const fetchSnapshot = (sessionId: string, signal?: AbortSignal) =>

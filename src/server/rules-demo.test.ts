@@ -57,6 +57,10 @@ describe('the demo’s Rules', () => {
     expect(row('Bash(for:*)').danger).toBe('shell');
     expect(row('Bash(curl:*)').danger).toBe('pipe-to-shell');
     expect(row('Edit(~/notes/**)').danger).toBe('outside');
+    // Asked often and always allowed, yet it edits files in place: never suggested.
+    expect(row('Bash(sed:*)')).toMatchObject({ danger: 'writes', denied: 0, suggested: false });
+    expect(row('Bash(sed:*)').asked).toBeGreaterThanOrEqual(5);
+    expect(result.rows.filter((r) => r.suggested && r.danger !== null)).toEqual([]);
     // Held by your settings, and denied by a project's.
     expect(row('Bash(npm test:*)').inSettings[0]).toMatchObject({ scope: 'global', list: 'allow' });
     expect(row('Bash(rm:*)').inSettings[0]).toMatchObject({ scope: 'project', list: 'deny' });
