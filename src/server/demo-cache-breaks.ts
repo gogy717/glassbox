@@ -102,15 +102,15 @@ export function stageCacheBreaks(snap: SessionSnapshot): SessionSnapshot {
       }
   }
 
-  // recon:prior-art: compacted to 30K before call #4 (the system prompt and tools still cached),
-  // and call #7 picks up from a 40K context, of which 30K was still cached.
+  // recon:prior-art, 8K a turn: compacted to 36K before call #4 (the system prompt and tools
+  // still cached), and call #7 picks up from a 40K context of which only 12K was still cached.
   const prior = of(PRIOR_ART);
   const compacted = prior[3];
   if (compacted) compacted.compactedBefore = true;
   rewrite(
     prior,
-    [24_000, 45_000, 66_000, 30_000, 51_000, 72_000, 40_000, 61_000, 82_000],
-    { 3: 14_000, 6: 30_000 },
+    [40_000, 48_000, 56_000, 36_000, 44_000, 52_000, 40_000, 48_000, 56_000],
+    { 3: 14_000, 6: 12_000 },
     false,
   );
 
