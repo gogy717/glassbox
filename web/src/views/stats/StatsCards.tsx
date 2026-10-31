@@ -588,22 +588,24 @@ function BurnLine({ quotas, now }: { quotas: QuotaSnapshot[]; now: number }) {
           window: quotaWindowName(window, t),
         })}
       </span>{' '}
-      {top.map((s, i) => {
-        const title = s.title ?? t('sidebar.untitled');
-        return (
-          <span key={s.id} className={burnCss.item}>
-            {i > 0 && ' · '}
-            {listed === null || listed.has(s.id) ? (
-              <a href={sessionLink(s.id)} className={burnCss.itemName}>
-                {title}
-              </a>
-            ) : (
-              <span className={burnCss.itemName}>{title}</span>
-            )}{' '}
-            <span className="figure">{sharePct(s.share)}</span>
-          </span>
-        );
-      })}
+      <span className={burnCss.items}>
+        {top.map((s, i) => {
+          const title = s.title ?? t('sidebar.untitled');
+          return (
+            <span key={s.id} className={burnCss.item}>
+              {i > 0 && <span className={burnCss.sep}> · </span>}
+              {listed === null || listed.has(s.id) ? (
+                <a href={sessionLink(s.id)} className={burnCss.itemName}>
+                  {title}
+                </a>
+              ) : (
+                <span className={burnCss.itemName}>{title}</span>
+              )}{' '}
+              <span className={`${burnCss.itemShare} figure`}>{sharePct(s.share)}</span>
+            </span>
+          );
+        })}
+      </span>
     </p>
   );
 }

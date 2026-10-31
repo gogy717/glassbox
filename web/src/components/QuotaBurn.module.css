@@ -84,27 +84,45 @@ a.name:hover {
   line-height: 1.4;
 }
 
-/* The same, one line on Stats' Right now: the top three, titles cut to fit. */
+/* The same on Stats' Right now: what it is, then the top three on one line, each title cut to
+   its share of the width. */
 .line {
+  display: grid;
+  gap: 2px;
   margin: 0;
-  overflow: hidden;
   font-size: var(--fs-meta);
   color: var(--text);
+}
+
+.lead {
+  overflow: hidden;
+  color: var(--muted);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.lead {
+.items {
+  display: flex;
+  min-width: 0;
+}
+
+.item {
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: pre;
+}
+
+.sep {
+  flex: none;
   color: var(--muted);
 }
 
 .itemName {
-  display: inline-block;
-  max-width: 14ch;
+  min-width: 2ch;
   overflow: hidden;
   color: var(--text);
   text-overflow: ellipsis;
-  vertical-align: bottom;
   white-space: nowrap;
 }
 
@@ -116,6 +134,6 @@ a.itemName:hover {
   text-decoration: underline;
 }
 
-.item {
-  white-space: nowrap;
+.itemShare {
+  flex: none;
 }
