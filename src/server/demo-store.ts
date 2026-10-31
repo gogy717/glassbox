@@ -128,6 +128,94 @@ const FLAKY_PASS = '1 passed (3.2s)';
 const STUCK_EVERY = 4;
 const STUCK_FAILS = 4;
 
+/**
+ * The demo session's MCP calls (package F, round 3): its main agent asks a `tracker` and a `docs`
+ * server about the bug it fixes, one call failing, and its sub-agent reads the docs too. Each is
+ * a call of the request named, started as that request ends, beside its other calls.
+ */
+const DEMO_MCP: {
+  requestId: string;
+  name: string;
+  input: unknown;
+  result: string;
+  /** The whole result's characters: the preview is its start. */
+  chars: number;
+  sec: number;
+  failed?: true;
+}[] = [
+  {
+    requestId: 'req_m1',
+    name: 'mcp__tracker__list_issues',
+    input: { project: 'WEB', state: 'open', label: 'stream' },
+    result: '[{"id":"WEB-412","title":"Patches arrive out of order after a reconnect"},…',
+    chars: 3_840,
+    sec: 0.9,
+  },
+  {
+    requestId: 'req_m1',
+    name: 'mcp__tracker__get_issue',
+    input: { id: 'WEB-412' },
+    result: 'WEB-412 · Patches arrive out of order after a reconnect\nSteps: open a session, …',
+    chars: 2_150,
+    sec: 0.6,
+  },
+  {
+    requestId: 'req_m4',
+    name: 'mcp__docs__search',
+    input: { query: 'server-sent events reconnect Last-Event-ID', limit: 5 },
+    result: '1. Server-sent events: reconnecting with Last-Event-ID\n2. EventSource retry…',
+    chars: 11_400,
+    sec: 1.8,
+  },
+  {
+    requestId: 'req_m4',
+    name: 'mcp__tracker__add_comment',
+    input: { id: 'WEB-412', body: 'Fixed by ordering patches by sequence number.' },
+    result: 'tracker: issue WEB-412 is locked',
+    chars: 32,
+    sec: 1.2,
+    failed: true,
+  },
+  {
+    requestId: 'req_s2',
+    name: 'mcp__docs__fetch',
+    input: { url: 'https://docs.example.com/sse#reconnect' },
+    result: '# Reconnecting\nWhen the connection drops, the client waits `retry` ms, then…',
+    chars: 8_900,
+    sec: 1.1,
+  },
+];
+
+/** Adds `DEMO_MCP` to the demo session, its requests' calls, and its counts. */
+function withDemoMcp(snap: SessionSnapshot): void {
+  DEMO_MCP.forEach((c, i) => {
+    const request = snap.requests.find((r) => r.id === c.requestId);
+    if (!request?.endedAt) return;
+    const start = Date.parse(request.endedAt) + 100 * (request.toolCallIds.length + 1);
+    const tool: ToolCall = {
+      id: `tu_mcp_${i + 1}`,
+      agentId: request.agentId,
+      requestId: request.id,
+      name: c.name,
+      input: c.input,
+      status: c.failed ? 'error' : 'complete',
+      startedAt: new Date(start).toISOString(),
+      endedAt: new Date(start + c.sec * 1000).toISOString(),
+      durationMs: Math.round(c.sec * 1000),
+      resultPreview: c.result,
+      hasFullResult: true,
+      spawned: null,
+      resultChars: c.chars,
+    };
+    request.toolCallIds.push(tool.id);
+    request.blocks.push({ kind: 'tool-use', toolCallId: tool.id, at: tool.startedAt as IsoTime });
+    snap.toolCalls.push(tool);
+    const agent = snap.agents.find((a) => a.id === request.agentId);
+    if (agent?.counts) agent.counts.toolCalls += 1;
+    if (snap.session.counts) snap.session.counts.toolCalls += 1;
+  });
+}
+
 type Lane =
   | { phase: 'thinking'; ticksLeft: number; requestId: string }
   | { phase: 'tool'; ticksLeft: number; requestId: string; toolId: string; tool: DemoTool }
@@ -182,6 +270,7 @@ export class DemoStore implements AppStore, WeekStore {
   constructor() {
     const now = new Date();
     this.snap = createDemoSnapshot(now);
+    withDemoMcp(this.snap);
     this.others = createDemoSessions(now).filter((s) => s.id !== DEMO_SESSION_ID);
     this.sides = createDemoSideSnapshots(now);
     this.quotas = createDemoQuotas(now);
