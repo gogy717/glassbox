@@ -24,6 +24,7 @@ import { providerShortName } from '../../lib/provider-names';
 import { quotaWindowName } from '../../lib/quota';
 import { paceOf, quotaLevel } from '../../lib/quota-pace';
 import { sessionLink } from '../../router';
+import mcp from './Mcp.module.css';
 import css from './StatsPage.module.css';
 import {
   type HourIndex,
@@ -31,6 +32,7 @@ import {
   hourSpan,
   type Isolate,
   longestSessions,
+  mcpServers,
   type SessionLine,
   type StatsWeek,
   sameIsolate,
@@ -522,6 +524,58 @@ export const NowCard = memo(function NowCard({
         </ul>
       ) : (
         <p className={css.hint}>{st(locale, 'noQuota')}</p>
+      )}
+    </section>
+  );
+});
+
+// Package F (round 3): MCP servers.
+
+/**
+ * MCP servers: the window's servers by calls, each with its failures in the error tone and its
+ * calls' time; the bar is its calls against the busiest server's. Says so when none was called.
+ */
+export const McpCard = memo(function McpCard({ w, locale }: { w: StatsWeek; locale: Locale }) {
+  const { intl } = useI18n();
+  const rows = mcpServers(w);
+  const top = rows[0]?.calls ?? 0;
+  return (
+    <section className={css.card} data-area="mcp" aria-labelledby="stats-mcp">
+      <Head id="stats-mcp" name={st(locale, 'mcp')} note={st(locale, 'mcpNote')} />
+      {rows.length > 0 ? (
+        <ul className={mcp.servers}>
+          {rows.map((s) => (
+            <li
+              key={s.server}
+              className={mcp.server}
+              title={st(locale, 'mcpTitle', { n: s.resultChars.toLocaleString(intl) })}
+            >
+              <span className={mcp.serverName} data-name>
+                {s.server}
+              </span>
+              <span className={mcp.serverValue}>
+                <span className={`${mcp.serverMeta} figure`}>
+                  <UiCjk text={st(locale, 'mcpCalls', { n: s.calls })} />
+                </span>
+                {s.failures > 0 && (
+                  <span className={`${mcp.failed} figure`} data-failed>
+                    <UiCjk text={st(locale, 'mcpFailed', { n: s.failures })} />
+                  </span>
+                )}
+                <span className="figure">
+                  <UiCjk text={timeText(s.ms, locale)} />
+                </span>
+              </span>
+              <span className={mcp.serverTrack} aria-hidden="true">
+                <span style={{ width: `${top > 0 ? (s.calls / top) * 100 : 0}%` }} />
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className={css.hint}>
+          {st(locale, w.result.window.kind === 'week' ? 'mcpNone' : 'mcpNone7')}
+        </p>
       )}
     </section>
   );

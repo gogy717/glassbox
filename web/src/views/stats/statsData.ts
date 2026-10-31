@@ -7,7 +7,12 @@
  */
 import type { AgentKind } from '../../../../src/core/model.js';
 import { crossings, type RepoCrossing } from '../../../../src/shared/crossing.js';
-import type { WeekResult, WeekSession, WeekWindowKind } from '../../../../src/shared/week.js';
+import type {
+  McpFigures,
+  WeekResult,
+  WeekSession,
+  WeekWindowKind,
+} from '../../../../src/shared/week.js';
 import { clock, day, durationParts, partsText, shortDay } from '../../components/receipt/format';
 import { projectNames, projectTreeNames } from '../../components/receipt/printed';
 import {
@@ -246,4 +251,35 @@ export function cellLabels(w: StatsWeek, kind: WeekWindowKind, L: Locale): CellL
       };
     }),
   );
+}
+
+// Package F (round 3): MCP servers.
+
+/** One MCP server's calls in the window, its sessions' added up. */
+export interface McpServerLine extends McpFigures {
+  server: string;
+}
+
+/**
+ * The MCP servers the window's sessions called (`WeekFigures.mcp`), most calls first: the MCP
+ * servers card. Worked out once per week result.
+ */
+const mcpOf = new WeakMap<WeekResult, McpServerLine[]>();
+export function mcpServers(w: StatsWeek): McpServerLine[] {
+  let rows = mcpOf.get(w.result);
+  if (!rows) {
+    const by = new Map<string, McpServerLine>();
+    for (const s of w.result.sessions)
+      for (const [server, m] of Object.entries(s.inWindow.mcp ?? {})) {
+        const row = by.get(server) ?? { server, calls: 0, failures: 0, ms: 0, resultChars: 0 };
+        row.calls += m.calls;
+        row.failures += m.failures;
+        row.ms += m.ms;
+        row.resultChars += m.resultChars;
+        by.set(server, row);
+      }
+    rows = [...by.values()].sort((a, b) => b.calls - a.calls || a.server.localeCompare(b.server));
+    mcpOf.set(w.result, rows);
+  }
+  return rows;
 }

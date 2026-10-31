@@ -74,6 +74,14 @@ const en = {
   crossingHint:
     'Lines are numbered as each worktree found the file; neighbouring lines count as the same, as in a merge.',
   crossingCut: 'A session that changed more than 400 files is compared on its latest 400.',
+  // Package F (round 3): MCP servers.
+  mcp: 'MCP servers',
+  mcpNote: 'calls · failures · time',
+  mcpCalls: '{n} {n|call|calls}',
+  mcpFailed: '{n} failed',
+  mcpNone: 'No MCP server called this week',
+  mcpNone7: 'No MCP server called in the last 7 days',
+  mcpTitle: 'Results of {n} {n|character|characters} came back into the context',
 };
 
 type Key = keyof typeof en;
@@ -145,6 +153,14 @@ const zh: Record<Key, string> = {
   crossingNoChange: '时间范围内没有改动这个文件。',
   crossingHint: '行号按各工作树开始改动时的文件算；相邻的行也算同一处，和合并时一样。',
   crossingCut: '改过 400 个以上文件的会话，只比较它最近改的 400 个。',
+  // Package F (round 3): MCP servers.
+  mcp: 'MCP 服务器',
+  mcpNote: '调用 · 失败 · 用时',
+  mcpCalls: '{n} 次调用',
+  mcpFailed: '{n} 次失败',
+  mcpNone: '本周没有调用 MCP 服务器',
+  mcpNone7: '最近 7 天没有调用 MCP 服务器',
+  mcpTitle: '带回上下文的结果共 {n} 字符',
 };
 
 export type StatsKey = Key;

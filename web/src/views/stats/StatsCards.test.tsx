@@ -7,8 +7,8 @@ import { I18nContext, type Locale, makeI18n } from '../../i18n';
 import { priceTable } from '../../lib/prices';
 import { DEMO_NOW } from '../../test/demo';
 import { demoWeek } from '../../test/week';
-import { HourCard, NowCard, TokensCard } from './StatsCards';
-import { busiestCell, indexHours, statsWeek } from './statsData';
+import { HourCard, McpCard, NowCard, TokensCard } from './StatsCards';
+import { busiestCell, indexHours, mcpServers, statsWeek } from './statsData';
 import type { Cell } from './WeekGrid';
 
 describe('the Right now card', () => {
@@ -178,5 +178,46 @@ describe('the hour card', () => {
     expect(titles().length).toBeGreaterThan(0);
     expect(titles().length).toBeLessThanOrEqual(8);
     expect(screen.queryByRole('button', { name: /more/ })).toBeNull();
+  });
+});
+
+// Package F (round 3): MCP servers.
+describe('the MCP servers card', () => {
+  const renderCard = (w: ReturnType<typeof statsWeek>, locale: Locale = 'en') =>
+    render(
+      <I18nContext.Provider value={makeI18n(locale)}>
+        <McpCard w={w} locale={locale} />
+      </I18nContext.Provider>,
+    );
+
+  it('lists the servers by calls, failures in the error tone, with their time', () => {
+    const w = statsWeek(demoWeek('7d'), false);
+    renderCard(w);
+    const card = screen.getByRole('region', { name: /MCP servers/i });
+    const rows = within(card).getAllByRole('listitem');
+    expect(rows.map((li) => li.querySelector('[data-name]')?.textContent)).toEqual(
+      mcpServers(w).map((s) => s.server),
+    );
+    const tracker = rows.find((li) => li.textContent?.startsWith('tracker'));
+    const failed = tracker?.querySelector('[data-failed]');
+    expect(failed).toHaveTextContent(/1 failed/);
+    expect(failed?.className).toMatch(/failed/);
+    expect(within(card).queryByText('No MCP server called in the last 7 days')).toBeNull();
+  });
+
+  it('says none were called when the window has no MCP call, in the window’s words', () => {
+    const r = demoWeek('week');
+    const none = {
+      ...r,
+      sessions: r.sessions.map((s) => ({ ...s, inWindow: { ...s.inWindow, mcp: undefined } })),
+    };
+    renderCard(statsWeek(none, false));
+    expect(screen.getByText('No MCP server called this week')).toBeInTheDocument();
+  });
+
+  it('speaks Chinese', () => {
+    renderCard(statsWeek(demoWeek('7d'), false), 'zh');
+    const card = screen.getByRole('region', { name: /MCP 服务器/ });
+    expect(within(card).getAllByRole('listitem')[0]).toHaveTextContent(/次调用/);
   });
 });

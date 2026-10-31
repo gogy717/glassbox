@@ -500,7 +500,8 @@ describe('the Stats page (D4)', () => {
     const crossing = await screen.findByRole('region', { name: /^Crossing/ });
     const main = crossing.closest('[data-column="main"]') as HTMLElement;
     const order = [...main.querySelectorAll('[data-area]')].map((c) => c.getAttribute('data-area'));
-    expect(order).toEqual(['grid', 'cli', 'projects', 'crossing', 'tokens']);
+    // MCP servers (package F) close the column, after Tokens.
+    expect(order).toEqual(['grid', 'cli', 'projects', 'crossing', 'tokens', 'mcp']);
     expect(crossing).toHaveTextContent('3 files changed from more than one worktree of glassbox');
   });
 
@@ -678,5 +679,18 @@ describe('the Stats page’s note on its default window', () => {
     expect(screen.queryByText(text)).toBeNull();
     expect(onNoteSeen).not.toHaveBeenCalled();
     await screen.findByText(/Data as of/);
+  });
+});
+
+// Package F (round 3): MCP servers.
+describe('the Stats page MCP servers', () => {
+  it('shows the demo week’s MCP servers in a card after the tokens', async () => {
+    serve({ week });
+    render(page(createStore()));
+    const card = await screen.findByRole('region', { name: /^MCP servers/ });
+    expect(within(card).getByText('tracker')).toBeInTheDocument();
+    expect(within(card).getByText('docs')).toBeInTheDocument();
+    const tokens = document.getElementById('stats-tokens')?.closest('section') as HTMLElement;
+    expect(tokens.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

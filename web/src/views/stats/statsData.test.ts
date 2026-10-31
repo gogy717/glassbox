@@ -10,6 +10,7 @@ import {
   indexHours,
   isolated,
   longestSessions,
+  mcpServers,
   sameIsolate,
   statsWeek,
   timeText,
@@ -178,5 +179,28 @@ describe('the Stats page figures', () => {
     expect(topProjects(empty)).toEqual([]);
     expect(longestSessions(empty)).toEqual([]);
     expect(empty.receipt.now).toBe(WEEK_NOW);
+  });
+});
+
+// Package F (round 3): MCP servers.
+describe('the Stats page MCP servers', () => {
+  it('add each server up over the window’s sessions, most calls first', () => {
+    const rows = mcpServers(w);
+    expect(rows.map((s) => s.server)).toEqual(
+      [...rows].sort((a, b) => b.calls - a.calls).map((s) => s.server),
+    );
+    const of = (server: string, k: 'calls' | 'failures' | 'ms' | 'resultChars') =>
+      sum(w.result.sessions.map((s) => s.inWindow.mcp?.[server]?.[k] ?? 0));
+    for (const s of rows) {
+      expect(s.calls).toBe(of(s.server, 'calls'));
+      expect(s.failures).toBe(of(s.server, 'failures'));
+      expect(s.ms).toBe(of(s.server, 'ms'));
+      expect(s.resultChars).toBe(of(s.server, 'resultChars'));
+    }
+    expect(rows.map((s) => s.server).sort()).toEqual(['docs', 'tracker']);
+  });
+
+  it('have none in a week with no MCP call', () => {
+    expect(mcpServers(statsWeek({ ...r, sessions: [] }, false))).toEqual([]);
   });
 });
