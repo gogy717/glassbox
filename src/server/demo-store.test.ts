@@ -58,8 +58,8 @@ describe('DemoStore', () => {
     // The demo session itself levels off well under its window, never drifting into the sign.
     await vi.advanceTimersByTimeAsync(600_000);
     const demo = store.listSessions().find((x) => x.id === DEMO_SESSION_ID);
-    const use = demo?.contextUse;
-    expect(use && use.window && use.tokens / use.window).toBeLessThan(0.7);
+    expect(demo?.contextUse?.window).toBe(200_000);
+    expect(demo?.contextUse?.tokens).toBeLessThan(0.7 * 200_000);
   });
 
   // The sidebar offers every listed session; each must open (audit #25).
