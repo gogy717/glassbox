@@ -429,7 +429,7 @@ describe('waits on the person in a window', () => {
       call('bash', 'Bash', now - min(6), now - min(2)),
     ];
     const approvals = new Map([['bash', { requestedAt: now - min(6), decidedAt: now - min(3) }]]);
-    const b = sessionBuckets(snap, now, approvals);
+    const b = sessionBuckets(snap, now, { approvals });
     const w = sliceSession(b, everything(b))?.inWindow.waiting;
     expect(w).toEqual({
       ms: min(6),
@@ -457,11 +457,9 @@ describe('waits on the person in a window', () => {
       call('plan', 'ExitPlanMode', now - min(20), now - min(12)),
       call('read', 'Read', now - min(11), now - min(10)),
     ];
-    const b = sessionBuckets(
-      snap,
-      now,
-      new Map([['read', { requestedAt: now - min(11), decidedAt: now - min(10) }]]),
-    );
+    const b = sessionBuckets(snap, now, {
+      approvals: new Map([['read', { requestedAt: now - min(11), decidedAt: now - min(10) }]]),
+    });
     const s = sliceSession(b, everything(b));
     expect(s?.inWindow.waiting).toEqual({
       ms: min(8) + min(1),
@@ -475,8 +473,7 @@ describe('waits on the person in a window', () => {
     });
   });
 
-  it('counts no wait between two turns: no transcript says the session was live through it', () => {
-    const snap = bare();
+  describe('between prompts', () => {
     const turn = (id: string, index: number, from: number, to: number) => ({
       id,
       agentId: 'main',
@@ -488,13 +485,45 @@ describe('waits on the person in a window', () => {
       status: 'complete' as const,
       requestIds: [],
     });
-    snap.turns = [
-      turn('early', 1, now - min(180), now - min(170)),
-      turn('later', 2, now - min(20), now - min(10)),
-    ];
-    const b = sessionBuckets(snap, now);
-    expect(b.waits).toEqual([]);
-    expect(sliceSession(b, everything(b))?.inWindow).not.toHaveProperty('waiting');
+    const twoTurns = () => {
+      const snap = bare();
+      snap.turns = [
+        turn('early', 1, now - min(180), now - min(170)),
+        turn('later', 2, now - min(20), now - min(10)),
+      ];
+      return snap;
+    };
+
+    it('counts the gap to the next prompt while a glassbox run of the session was live', () => {
+      const b = sessionBuckets(twoTurns(), now, { live: [[now - min(200), null]] });
+      expect(sliceSession(b, everything(b))?.inWindow.waiting).toEqual({
+        ms: min(150),
+        count: 1,
+        longestMs: min(150),
+        byKind: { turn: min(150) },
+      });
+    });
+
+    it('counts nothing for a gap across a closed session, nor where no run says it was live', () => {
+      // The run closed five minutes after the reply; the next prompt came in a new run.
+      const closed = sessionBuckets(twoTurns(), now, {
+        live: [
+          [now - min(200), now - min(165)],
+          [now - min(20), null],
+        ],
+      });
+      expect(sliceSession(closed, everything(closed))?.inWindow.waiting?.ms).toBe(min(5));
+      const across = sessionBuckets(twoTurns(), now, {
+        live: [
+          [now - min(200), now - min(170)],
+          [now - min(20), null],
+        ],
+      });
+      expect(across.waits).toEqual([]);
+      const unknown = sessionBuckets(twoTurns(), now);
+      expect(unknown.waits).toEqual([]);
+      expect(sliceSession(unknown, everything(unknown))?.inWindow).not.toHaveProperty('waiting');
+    });
   });
 
   it('keeps the waiting figure last of the figures, after the files', () => {

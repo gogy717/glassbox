@@ -49,11 +49,13 @@ describe('the demo week', () => {
     expect(r.sessions.some((s) => s.agent === 'grok' && !s.reportsUsage)).toBe(true);
   });
 
-  it('shows the time the agents waited on the person: questions, plans and permission prompts', async () => {
+  it('shows the time the agents waited on the person: questions, plans, permission prompts and gaps between prompts', async () => {
     const r = await store.week.compute('7d');
     const waited = r.sessions.flatMap((s) => (s.inWindow.waiting ? [s.inWindow.waiting] : []));
     expect(waited.length).toBeGreaterThan(5);
-    expect(new Set(waited.flatMap((w) => Object.keys(w.byKind))).size).toBe(3);
+    expect(new Set(waited.flatMap((w) => Object.keys(w.byKind)))).toEqual(
+      new Set(['permission', 'question', 'plan', 'turn']),
+    );
     const longest = Math.max(...waited.map((w) => w.longestMs));
     expect(longest).toBeGreaterThan(60_000);
     // Each session's waits add up to its share of the week's, and its longest is one of them.

@@ -7,7 +7,7 @@ import {
   type SegmentKind,
   toolSpan,
 } from '../../../src/shared/segments.js';
-import { waitMs, waitsOf } from '../../../src/shared/waiting.js';
+import { type LiveSpan, turnWaitsOf, waitMs, waitsOf } from '../../../src/shared/waiting.js';
 import type { Approvals } from '../data/approvals';
 import type { OpenSession } from '../data/store';
 import { agentTree } from './agents';
@@ -100,11 +100,15 @@ export interface TimeBreakdown {
   tools: Partial<Record<ToolCategory, number>>;
   /** Gaps between the agent's turns, e.g. waiting for the person to reply. */
   idle: number;
-  /**
-   * Time the agent waited on the person: its tools blocked on a permission prompt, its questions
-   * and plan approvals (`shared/waiting.ts`, the same waits the week's "Waiting on you" adds up).
-   */
+  /** Tools blocked on a permission prompt: also time spent waiting for the person. */
   approval: number;
+  /**
+   * Time the agent waited on the person (`shared/waiting.ts`, the same waits the week's "Waiting
+   * on you" adds up): permission prompts, questions, plan approvals and the gaps between prompts
+   * while a glassbox run was live. `tools` and `idle` are the parts of it already counted in
+   * `tools` (a question's or a plan approval's span) and in `idle` (a live gap).
+   */
+  you: { ms: number; tools: Partial<Record<ToolCategory, number>>; idle: number };
 }
 
 export function timeBreakdown(
@@ -112,12 +116,14 @@ export function timeBreakdown(
   agentId: string,
   now: number,
   approvals?: Approvals,
+  live?: readonly LiveSpan[],
 ): TimeBreakdown {
   const out: TimeBreakdown = {
     model: { waiting: 0, thinking: 0, generating: 0 },
     tools: {},
     idle: 0,
     approval: 0,
+    you: { ms: 0, tools: {}, idle: 0 },
   };
   for (const r of open.requests.values()) {
     if (r.agentId !== agentId) continue;
@@ -126,20 +132,34 @@ export function timeBreakdown(
     }
   }
   const byCategory = new Map<ToolCategory, Segment[]>();
+  const blocked: Segment[] = [];
   const mine = [...open.toolCalls.values()].filter((t) => t.agentId === agentId);
   for (const t of mine) {
     for (const s of toolSegments(t, now, approvals, true)) {
-      if (s.kind === 'approval' || !s.category) continue;
-      const list = byCategory.get(s.category);
-      if (list) list.push(s);
-      else byCategory.set(s.category, [s]);
+      if (s.kind === 'approval') blocked.push(s);
+      else if (s.category) {
+        const list = byCategory.get(s.category);
+        if (list) list.push(s);
+        else byCategory.set(s.category, [s]);
+      }
     }
   }
   for (const [category, segs] of byCategory) out.tools[category] = activeMs(segs);
-  out.approval = waitMs(waitsOf(mine, now, approvals));
+  out.approval = activeMs(blocked);
   const turns = [...open.turns.values()]
     .filter((t) => t.agentId === agentId)
     .sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+  const toolWaits = waitsOf(mine, now, approvals);
+  const gapWaits = turnWaitsOf(turns, now, live);
+  out.you.ms = waitMs(toolWaits) + waitMs(gapWaits);
+  out.you.idle = waitMs(gapWaits);
+  for (const w of toolWaits) {
+    if (w.kind === 'permission') continue;
+    const t = open.toolCalls.get(w.of);
+    if (!t) continue;
+    const c = toolCategory(t.name, t.input);
+    out.you.tools[c] = (out.you.tools[c] ?? 0) + w.end - w.start;
+  }
   for (let i = 1; i < turns.length; i++) {
     const prevEnd = ms(turns[i - 1]?.endedAt);
     const start = ms(turns[i]?.startedAt);

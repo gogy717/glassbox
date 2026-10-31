@@ -199,7 +199,7 @@ describe('the Waiting on you card', () => {
     expect(within(card).getByText('Longest wait')).toBeInTheDocument();
     // The longest wait's session is a link, as the session list has it.
     expect(within(card).getByRole('link')).toHaveAttribute('href', expect.stringContaining('/'));
-    expect(within(card).getByText(/Gaps between prompts are not counted/)).toBeInTheDocument();
+    expect(within(card).getByText(/Other sessions’ gaps are not counted/)).toBeInTheDocument();
   });
 
   it('says so, in Chinese too, when no agent waited on the person', () => {

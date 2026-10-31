@@ -3,7 +3,7 @@ import { useCallback, useMemo } from 'react';
 import { MAIN_AGENT_ID } from '../../../../src/core/model.js';
 import { CategoryIcon } from '../../components/CategoryIcon';
 import { FigureText } from '../../components/FigureText';
-import { useApprovalsContext } from '../../data/approvals';
+import { useApprovalsContext, useLiveSpans } from '../../data/approvals';
 import type { OpenSession } from '../../data/store';
 import { useNow } from '../../data/useNow';
 import { useThrottled } from '../../data/useThrottled';
@@ -54,10 +54,11 @@ export function TimeView({ open, agentId, navigate }: Props) {
   const live = useMemo(() => isLive(view), [view]);
   const now = useNow(live ? 1000 : 60_000);
   const approvals = useApprovalsContext();
+  const liveSpans = useLiveSpans(open.id);
   const lanes = useMemo(() => timeSegments(view, now, approvals), [view, now, approvals]);
   const breakdown = useMemo(
-    () => timeBreakdown(view, agentId, now, approvals),
-    [view, agentId, now, approvals],
+    () => timeBreakdown(view, agentId, now, approvals, liveSpans),
+    [view, agentId, now, approvals, liveSpans],
   );
   const slow = useMemo(
     () => slowest(view, subtreeIds(view, agentId), now, SLOWEST_N),
@@ -105,14 +106,20 @@ export function TimeView({ open, agentId, navigate }: Props) {
     ...TOOL_ORDER.map((c) => ({
       key: `tool-${c}`,
       label: t('time.toolCat', { cat: t(`steps.cat.${c}` as MessageKey) }),
-      ms: breakdown.tools[c] ?? 0,
+      // A question's or a plan approval's time is the person's, below, not the tool's.
+      ms: Math.max(0, (breakdown.tools[c] ?? 0) - (breakdown.you.tools[c] ?? 0)),
       color: `var(--cat-${c})`,
     })),
-    { key: 'idle', label: t('time.idle'), ms: breakdown.idle, color: 'var(--hatch-idle)' },
+    {
+      key: 'idle',
+      label: t('time.idle'),
+      ms: Math.max(0, breakdown.idle - breakdown.you.idle),
+      color: 'var(--hatch-idle)',
+    },
     {
       key: 'approval',
       label: t('time.waitingYou'),
-      ms: breakdown.approval,
+      ms: breakdown.you.ms,
       color: 'var(--seg-approval)',
     },
   ].filter((p) => p.ms > 0);

@@ -1,8 +1,10 @@
-import { renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
+import { createElement, type ReactNode } from 'react';
 import { describe, expect, it } from 'vitest';
 import type { RunState } from '../../../src/shared/runs.js';
 import { testRun } from '../test/demo';
-import { approvalsFor, useApprovals } from './approvals';
+import { approvalsFor, useApprovals, useLiveSpans } from './approvals';
+import { createStore, StoreContext } from './store';
 
 const T = (s: number) => new Date(Date.UTC(2026, 9, 23, 10, 0, s)).toISOString();
 const ask = (id: string, at: string) => ({
@@ -61,5 +63,23 @@ describe('useApprovals', () => {
     const first = result.current;
     rerender({ r: runs() });
     expect(result.current).toBe(first);
+  });
+});
+
+describe('useLiveSpans', () => {
+  it('gives the session’s live stretches from the store’s runs, and none outside a store', () => {
+    const sid = testRun({}).sessionId;
+    const store = createStore();
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(StoreContext.Provider, { value: store }, children);
+    const { result } = renderHook(() => useLiveSpans(sid), { wrapper });
+    expect(result.current).toEqual([]);
+    const run = testRun({ id: 'r1', status: 'closed', startedAt: T(0), updatedAt: T(30) });
+    act(() => store.applyEvent({ type: 'run', run }));
+    expect(result.current).toEqual([[Date.parse(T(0)), Date.parse(T(30))]]);
+    const first = result.current;
+    act(() => store.applyEvent({ type: 'run', run: { ...run, partial: null } }));
+    expect(result.current).toBe(first);
+    expect(renderHook(() => useLiveSpans(sid)).result.current).toEqual([]);
   });
 });

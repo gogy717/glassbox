@@ -187,7 +187,7 @@ export class DemoStore implements AppStore, WeekStore {
     this.quotas = createDemoQuotas(now);
     const week = demoWeek(now.getTime());
     this.weekBehind = week.sessions;
-    this.week.setApprovalSource((id) => week.approvals.get(id));
+    this.week.setWaitSource((id) => week.waits.get(id));
     const history = createDemoRules(now.getTime());
     this.rulesBehind = history.sessions;
     this.rules = new RulesService(

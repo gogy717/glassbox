@@ -9,7 +9,7 @@
  * ready.
  */
 import type { RepoIdentity, SessionSnapshot, SessionSummary } from '../core/model.js';
-import type { ApprovalWindows } from '../shared/waiting.js';
+import type { WaitSource } from '../shared/waiting.js';
 import {
   type WeekLine,
   type WeekResult,
@@ -104,8 +104,8 @@ export class WeekService {
   private readonly now: () => number;
   private readonly log: (msg: string) => void;
   private readonly repoOf: ((cwd: string) => RepoIdentity | null) | null;
-  /** The permission prompts glassbox's runs showed for a session (`setApprovalSource`). */
-  private approvalsOf: ((sessionId: string) => ApprovalWindows | undefined) | null = null;
+  /** What glassbox's runs know of a session's waits (`setWaitSource`). */
+  private waitSourceOf: ((sessionId: string) => WaitSource | undefined) | null = null;
 
   constructor(
     private readonly store: WeekStore,
@@ -120,12 +120,13 @@ export class WeekService {
   }
 
   /**
-   * Where the permission prompts of a session come from: the glassbox runs of the server, which
-   * exist once the store does. A session already read keeps the prompts it was read with, until
-   * it is written again. Null: no permission wait is known.
+   * Where a session's permission prompts and live stretches come from (`waitSourceOf`): the
+   * glassbox runs of the server, which exist once the store does. A session already read keeps
+   * what it was read with, until it is written again. Null: no permission wait and no gap
+   * between prompts is known.
    */
-  setApprovalSource(source: ((sessionId: string) => ApprovalWindows | undefined) | null): void {
-    this.approvalsOf = source;
+  setWaitSource(source: ((sessionId: string) => WaitSource | undefined) | null): void {
+    this.waitSourceOf = source;
   }
 
   /** No more reading: a computation under way ends at its next session, and none starts. */
@@ -243,8 +244,8 @@ export class WeekService {
       if (this.stopped) return null;
       const got = await this.store.readSession(s.id);
       if (!got || this.stopped) return null;
-      const approvals = this.approvalsOf?.(s.id);
-      const buckets = await sessionBucketsPausing(got.snapshot, asOf, yieldToLoop, approvals);
+      const waits = this.waitSourceOf?.(s.id);
+      const buckets = await sessionBucketsPausing(got.snapshot, asOf, yieldToLoop, waits);
       if (this.stopped) return null;
       this.cache.set(s.id, { buckets, updatedAt: s.updatedAt, readAt: asOf, running: running(s) });
       return got.bytes;

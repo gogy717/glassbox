@@ -15,7 +15,7 @@ import type { AgentAdapter } from '../core/adapter.js';
 import type { SessionSummary } from '../core/model.js';
 import type { QuotaSource } from '../core/quota-source.js';
 import { runDecisions } from '../shared/permissions.js';
-import { approvalsOf } from '../shared/waiting.js';
+import { waitSourceOf } from '../shared/waiting.js';
 import { createApp } from './app.js';
 import {
   bindWarning,
@@ -166,8 +166,9 @@ async function main(): Promise<void> {
   const clients = new ClientCounter();
   const stopReaper = runs ? startRunReaper({ runs, clients, log }) : () => {};
   if (runs) linkRunSessions(runs, store);
-  // The week's waits: the permission prompts the runs showed (the transcript keeps none).
-  store.week.setApprovalSource((id) => approvalsOf(runs?.list() ?? [], id));
+  // The week's waits: the permission prompts the runs showed and when they were live (the
+  // transcript keeps neither). The demo keeps its own.
+  if (!opts.demo) store.week.setWaitSource((id) => waitSourceOf(runs?.list() ?? [], id));
   // The Rules page: the sessions' permission prompts, what glassbox runs answered, and the
   // permission lists of the settings (the demo keeps its own).
   const rules = opts.demo

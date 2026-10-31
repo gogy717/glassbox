@@ -1,7 +1,11 @@
-/** When the open session's tools waited for the person to answer a permission prompt. */
-import { createContext, useContext, useMemo } from 'react';
+/**
+ * When the open session's tools waited for the person to answer a permission prompt, and when
+ * its glassbox runs were live (so a gap between prompts was a wait on the person).
+ */
+import { createContext, useContext, useMemo, useSyncExternalStore } from 'react';
 import type { RunState } from '../../../src/shared/runs.js';
-import { approvalsOf } from '../../../src/shared/waiting.js';
+import { approvalsOf, type LiveSpan, liveSpansOf } from '../../../src/shared/waiting.js';
+import { StoreContext } from './store';
 
 /** Epoch ms; `decidedAt` is null while the prompt is still open. */
 export interface ApprovalWait {
@@ -42,4 +46,23 @@ export function useApprovals(
   const key = [...found].map(([id, w]) => `${id} ${w.requestedAt} ${w.decidedAt}`).join('\n');
   // biome-ignore lint/correctness/useExhaustiveDependencies: `key` is the content of `found`.
   return useMemo(() => (found.size ? found : NONE), [key]);
+}
+
+const NO_RUNS: ReadonlyMap<string, RunState> = new Map();
+const NO_SPANS: readonly LiveSpan[] = [];
+const noSubscription = () => () => {};
+
+/**
+ * The stretches the session's glassbox runs were live (`liveSpansOf`), from the store's runs; it
+ * keeps its identity while they stay the same. None outside a store.
+ */
+export function useLiveSpans(sessionId: string | null): readonly LiveSpan[] {
+  const store = useContext(StoreContext);
+  const runs = useSyncExternalStore(store ? store.subscribe : noSubscription, () =>
+    store ? store.getState().runs : NO_RUNS,
+  );
+  const found = liveSpansOf(runs.values(), sessionId);
+  const key = found.map(([start, end]) => `${start} ${end}`).join('\n');
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `key` is the content of `found`.
+  return useMemo(() => (found.length ? found : NO_SPANS), [key]);
 }

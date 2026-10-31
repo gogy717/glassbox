@@ -454,7 +454,7 @@ describe('the weekly receipt’s data', () => {
 });
 
 describe('waits on the person in the weekly figures', () => {
-  it('takes the permission prompts the approvals source gives for each session, and no others', async () => {
+  it('takes the permission prompts the wait source gives for each session, and no others', async () => {
     const snap = createDemoSnapshot(new Date(NOW));
     const call = snap.toolCalls.find((t) => t.status === 'complete' && t.startedAt && t.endedAt);
     if (!call?.startedAt || !call.endedAt) throw new Error('fixture');
@@ -462,9 +462,9 @@ describe('waits on the person in the weekly figures', () => {
     const to = Date.parse(call.endedAt);
     const f = fakeStore([snap, old(1, 'claude-code:other')]);
     const svc = new WeekService(f.store, { now: () => NOW });
-    svc.setApprovalSource((id) =>
+    svc.setWaitSource((id) =>
       id === snap.session.id
-        ? new Map([[call.id, { requestedAt: from, decidedAt: to }]])
+        ? { approvals: new Map([[call.id, { requestedAt: from, decidedAt: to }]]) }
         : undefined,
     );
     const result = await svc.compute('7d');

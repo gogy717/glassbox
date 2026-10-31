@@ -12,7 +12,7 @@ import { addUsage, emptyUsage } from '../core/usage.js';
 import { addChange, changesOf, fileOps, mergePathOps, type PathOps } from '../shared/crossing.js';
 import { ms, toolSpan } from '../shared/segments.js';
 import { type ToolCategory, toolCategory } from '../shared/tool-category.js';
-import { type ApprovalWindows, type Wait, waitsOf } from '../shared/waiting.js';
+import { turnWaitsOf, type Wait, type WaitSource, waitsOf } from '../shared/waiting.js';
 import {
   HOUR_MS,
   hourStart,
@@ -89,7 +89,7 @@ const STEP = 2_000;
 function* bucketing(
   snap: SessionSnapshot,
   now: number,
-  approvals?: ApprovalWindows,
+  waitSource?: WaitSource,
 ): Generator<void, SessionBuckets> {
   let n = 0;
   const hours = new Map<number, HourBucket>();
@@ -200,20 +200,24 @@ function* bucketing(
     hours,
     subAgents,
     reportsUsage,
-    waits: waitsOf(snap.toolCalls, now, approvals),
+    waits: [
+      ...waitsOf(snap.toolCalls, now, waitSource?.approvals),
+      ...turnWaitsOf(snap.turns, now, waitSource?.live),
+    ],
   };
 }
 
 /**
- * The session's buckets: see `bucketing`. `approvals`: the permission prompts glassbox's runs
- * showed for the session (`approvalsOf`); without them, no permission wait is known.
+ * The session's buckets: see `bucketing`. `waitSource`: what glassbox's runs know of the
+ * session's waits (`waitSourceOf`); without it, no permission prompt and no gap between prompts
+ * is known.
  */
 export function sessionBuckets(
   snap: SessionSnapshot,
   now: number,
-  approvals?: ApprovalWindows,
+  waitSource?: WaitSource,
 ): SessionBuckets {
-  const steps = bucketing(snap, now, approvals);
+  const steps = bucketing(snap, now, waitSource);
   for (;;) {
     const step = steps.next();
     if (step.done) return step.value;
@@ -228,9 +232,9 @@ export async function sessionBucketsPausing(
   snap: SessionSnapshot,
   now: number,
   pause: () => Promise<void>,
-  approvals?: ApprovalWindows,
+  waitSource?: WaitSource,
 ): Promise<SessionBuckets> {
-  const steps = bucketing(snap, now, approvals);
+  const steps = bucketing(snap, now, waitSource);
   for (;;) {
     const step = steps.next();
     if (step.done) return step.value;

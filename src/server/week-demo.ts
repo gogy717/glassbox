@@ -19,7 +19,7 @@ import type {
 } from '../core/model.js';
 import { MAIN_AGENT_ID } from '../core/model.js';
 import { emptyUsage, sumUsage } from '../core/usage.js';
-import type { ApprovalWindow, ApprovalWindows } from '../shared/waiting.js';
+import type { ApprovalWindow, WaitSource } from '../shared/waiting.js';
 
 const MIN = 60_000;
 
@@ -479,11 +479,13 @@ const PLAN = { name: 'ExitPlanMode', input: { plan: 'Fix the failing path, then 
 /**
  * The demo week's waits, drawn on a seed of their own so the sessions stay as they were: a
  * question and a plan approval hold open a call after a model call that is followed by a quiet
- * spell, and some shell commands wait on a permission prompt that a glassbox run showed (its
- * window, by session and tool call, is returned: the transcript keeps none).
+ * spell; about half the sessions ran in glassbox, whose run was live from the first prompt to a
+ * few minutes after the last reply (so the gaps between prompts were waits), and some of their
+ * shell commands waited on a permission prompt the run showed. What the runs knew is returned
+ * by session: the transcript keeps none of it.
  */
-function addWaits(week: SessionSnapshot[], random: () => number): Map<string, ApprovalWindows> {
-  const approvals = new Map<string, ApprovalWindows>();
+function addWaits(week: SessionSnapshot[], random: () => number): Map<string, WaitSource> {
+  const sources = new Map<string, WaitSource>();
   const pickOf = <T>(list: T[]) => list[Math.floor(random() * list.length)] as T;
   for (const snap of week) {
     if (snap.session.agent !== 'claude-code') continue;
@@ -536,6 +538,16 @@ function addWaits(week: SessionSnapshot[], random: () => number): Map<string, Ap
     if (ask) add(ask, ASK, 'ask', 6);
     if (plan) add(plan, PLAN, 'plan', 4);
 
+    // Run in glassbox, or not: only a glassbox run knows its prompts and when it was live.
+    if (random() >= 0.5) continue;
+    const mainTurns = snap.turns.filter((t) => t.agentId === MAIN_AGENT_ID);
+    const first = Date.parse(mainTurns[0]?.startedAt ?? '');
+    const last = Date.parse(mainTurns.at(-1)?.endedAt ?? '');
+    const live =
+      Number.isFinite(first) && Number.isFinite(last)
+        ? [[first, last + (1 + random() * 4) * MIN] as const]
+        : [];
+
     // Some shell commands: the prompt was shown when the call began, and answered part way in.
     const windows = new Map<string, ApprovalWindow>();
     for (const t of snap.toolCalls) {
@@ -546,16 +558,16 @@ function addWaits(week: SessionSnapshot[], random: () => number): Map<string, Ap
       const decided = Math.min(to, from + (10 + random() * 150) * 1000);
       windows.set(t.id, { requestedAt: from, decidedAt: decided });
     }
-    if (windows.size > 0) approvals.set(snap.session.id, windows);
+    sources.set(snap.session.id, { approvals: windows, live });
   }
-  return approvals;
+  return sources;
 }
 
-/** The demo week: its sessions, and the permission prompts their glassbox runs showed. */
+/** The demo week: its sessions, and what their glassbox runs knew of their waits. */
 export interface DemoWeek {
   sessions: SessionSnapshot[];
-  /** By session id, then tool call id: see `WeekService.setApprovalSource`. */
-  approvals: Map<string, ApprovalWindows>;
+  /** By session id: see `WeekService.setWaitSource`. */
+  waits: Map<string, WaitSource>;
 }
 
 /** The demo week with its waits: the sessions of the last eight days, as of `now`. */
@@ -563,8 +575,8 @@ export function demoWeek(now: number): DemoWeek {
   const random = rng(0x5eed_0043);
   const week = plan(now, random).map((p, i) => build(p, i + 1, random));
   intoWorktree(week);
-  const approvals = addWaits(week, rng(0x5eed_0047));
-  return { sessions: week, approvals };
+  const waits = addWaits(week, rng(0x5eed_0047));
+  return { sessions: week, waits };
 }
 
 /** The demo week's sessions, as of `now`. */

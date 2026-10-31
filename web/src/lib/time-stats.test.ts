@@ -314,13 +314,11 @@ describe('waiting for approval', () => {
 });
 
 describe('waiting on the person, as the week adds it up', () => {
-  it('gives the session’s waits the week’s figure for them, agent by agent', () => {
+  /** The demo session with a question answered, a prompt answered, and a run live throughout. */
+  const waited = () => {
     const snap = createDemoSnapshot(new Date(NOW));
     const ask = snap.toolCalls.find((t) => t.agentId === 'main' && t.endedAt);
     if (!ask?.startedAt || !ask.endedAt) throw new Error('fixture');
-    const from = Date.parse(ask.startedAt);
-    const to = Date.parse(ask.endedAt);
-    // One call is a question the person answered, another a permission prompt answered part way.
     const questioned = { ...ask, name: 'AskUserQuestion', input: { questions: [] } };
     snap.toolCalls = snap.toolCalls.map((t) => (t.id === ask.id ? questioned : t));
     const prompted = snap.toolCalls.find(
@@ -333,17 +331,45 @@ describe('waiting on the person, as the week adds it up', () => {
         { requestedAt: Date.parse(prompted.startedAt), decidedAt: Date.parse(prompted.endedAt) },
       ],
     ]);
-    const open = fromSnapshot(snap.session.id, snap);
+    const live = [[NOW - 86_400_000, null]] as const;
+    return { snap, ask: questioned, prompted, approvals, live };
+  };
 
+  it('gives the session’s waits the week’s figure for them, agent by agent', () => {
+    const { snap, ask, prompted, approvals, live } = waited();
+    const open = fromSnapshot(snap.session.id, snap);
     const shown = snap.agents.reduce(
-      (sum, a) => sum + timeBreakdown(open, a.id, NOW, approvals).approval,
+      (sum, a) => sum + timeBreakdown(open, a.id, NOW, approvals, live).you.ms,
       0,
     );
-    const week = sliceSession(sessionBuckets(snap, NOW, approvals), weekWindow('7d', NOW));
+    const week = sliceSession(
+      sessionBuckets(snap, NOW, { approvals, live }),
+      weekWindow('7d', NOW),
+    );
     expect(shown).toBe(week?.inWindow.waiting?.ms);
-    expect(week?.inWindow.waiting?.byKind).toEqual({
-      question: to - from,
-      permission: Date.parse(prompted.endedAt) - Date.parse(prompted.startedAt),
+    const span = (t: { startedAt: string | null; endedAt: string | null }) =>
+      Date.parse(t.endedAt ?? '') - Date.parse(t.startedAt ?? '');
+    expect(week?.inWindow.waiting?.byKind).toMatchObject({
+      question: span(ask),
+      permission: span(prompted),
     });
+    expect(week?.inWindow.waiting?.byKind.turn).toBeGreaterThan(0);
+  });
+
+  it('takes a question out of its tool time and a live gap out of idle, and leaves the receipt’s approval alone', () => {
+    const { snap, ask, approvals, live } = waited();
+    const open = fromSnapshot(snap.session.id, snap);
+    const b = timeBreakdown(open, 'main', NOW, approvals, live);
+    const plain = timeBreakdown(open, 'main', NOW, approvals);
+    const span = Date.parse(ask.endedAt ?? '') - Date.parse(ask.startedAt ?? '');
+    expect(b.you.tools.ask).toBe(span);
+    expect(b.you.idle).toBeGreaterThan(0);
+    expect(b.you.idle).toBeLessThanOrEqual(b.idle);
+    expect(b.you.ms).toBe(plain.you.ms + b.you.idle);
+    // The receipt's figures are as they were: the permission prompts only, tools and idle whole.
+    expect(b.approval).toBe(plain.approval);
+    expect(b.tools).toEqual(plain.tools);
+    expect(b.idle).toBe(plain.idle);
+    expect(plain.you.idle).toBe(0);
   });
 });

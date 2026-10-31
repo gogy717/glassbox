@@ -84,7 +84,7 @@ const en = {
   waitingPlan: 'Plan approval',
   waitingTurn: 'Between prompts',
   waitingFoot:
-    'Counts questions, plan approvals and the permission prompts glassbox showed. Gaps between prompts are not counted: no transcript says the session was live through them.',
+    'Counts questions and plan approvals; in sessions glassbox ran, also its permission prompts and the gaps between prompts while its run was live. Other sessions’ gaps are not counted: no transcript says the session was live through them.',
   waitingNone: 'No agent waited on you in this window.',
 };
 
@@ -167,7 +167,7 @@ const zh: Record<Key, string> = {
   waitingPlan: '计划确认',
   waitingTurn: '轮次之间',
   waitingFoot:
-    '只计提问、计划确认，以及 glassbox 显示过的权限确认；轮次之间的空档不计，因为转录里看不出会话当时是否在线。',
+    '计入提问和计划确认；glassbox 运行的会话还计入它显示的权限确认，以及运行在线期间轮次之间的空档。其他会话的空档不计，因为转录里看不出会话当时是否在线。',
   waitingNone: '这个时间范围内没有代理在等你。',
 };
 
