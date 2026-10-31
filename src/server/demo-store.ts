@@ -333,6 +333,9 @@ function withLiveFields(s: SessionSnapshot, now: number): SessionSummary {
     next.contextUse = contextUse(s.requests, MAIN_AGENT_ID);
   }
   return next;
+}
+
+/**
  * The demo session's MCP calls (package F, round 3): its main agent asks a `tracker` and a `docs`
  * server about the bug it fixes, one call failing, and its sub-agent reads the docs too. Each is
  * a call of the request named, started as that request ends, beside its other calls.
@@ -482,6 +485,7 @@ export class DemoStore implements AppStore, WeekStore {
     const now = new Date();
     // With a prompt-cache break of each kind, which only the demo server serves.
     this.snap = stageCacheBreaks(createDemoSnapshot(now));
+    withDemoMcp(this.snap);
     const full = createContextDemo(now);
     full.session = withLiveFields(full, now.getTime());
     this.others = [
@@ -489,10 +493,6 @@ export class DemoStore implements AppStore, WeekStore {
       full.session,
     ];
     this.sides = [...createDemoSideSnapshots(now), full];
-    this.snap = createDemoSnapshot(now);
-    withDemoMcp(this.snap);
-    this.others = createDemoSessions(now).filter((s) => s.id !== DEMO_SESSION_ID);
-    this.sides = createDemoSideSnapshots(now);
     this.quotas = createDemoQuotas(now);
     this.weekBehind = createDemoWeek(now.getTime());
     const history = createDemoRules(now.getTime());
