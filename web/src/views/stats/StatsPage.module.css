@@ -44,6 +44,11 @@
   color: var(--muted);
 }
 
+/* When the data is from, and Refresh: one line, never parted. */
+.asOf {
+  white-space: nowrap;
+}
+
 .printArea {
   display: flex;
   grid-row: 1;
@@ -306,6 +311,11 @@
   margin: -6px 0 0;
   font-size: var(--fs-body);
   color: var(--muted);
+}
+
+/* A part of the hour's line, whole: the line breaks between its parts, never inside a figure. */
+.keep {
+  white-space: nowrap;
 }
 
 .sessions {

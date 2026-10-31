@@ -12,8 +12,10 @@ import { createStore, type Store, StoreContext } from '../../data/store';
 import { I18nContext, makeI18n } from '../../i18n';
 import { priceTable } from '../../lib/prices';
 import { sessionLink } from '../../router';
+import { moduleCssValue } from '../../test/module-css';
 import { demoWeek, WEEK_NOW } from '../../test/week';
 import { StatsPage } from './StatsPage';
+import classes from './StatsPage.module.css';
 import { busiestCell, hourOfCell, hourSpan, isolated, statsWeek } from './statsData';
 
 // Each cell drawn asks its ink: counting the asks counts the cells drawn.
@@ -262,6 +264,15 @@ describe('the Stats page (D4)', () => {
     const b = busiestCell(w);
     const first = b && w.receipt.grid[b.row]?.[b.col];
     expect(hourTitle()).toBe(hourSpan(first ? (hourOfCell(w, first).start ?? 0) : 0, 'week', 'en'));
+  });
+
+  it('keeps when the data is from and Refresh on one line, whatever room the head gives them', async () => {
+    serve({ week });
+    render(page(createStore()));
+    await screen.findByText(/Data as of 20:41/);
+    const sheet = join(import.meta.dirname, 'StatsPage.module.css');
+    expect(moduleCssValue(sheet, classes, asOf(), 'white-space')).toBe('nowrap');
+    expect(asOf()).toContainElement(screen.getByRole('button', { name: 'Refresh' }));
   });
 
   it('says the week could not be read, keeping what it had, with Refresh to try again', async () => {

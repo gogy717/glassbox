@@ -185,6 +185,22 @@ describe('the hour card', () => {
     expect(screen.getByRole('button', { name: '3 more' })).toBeInTheDocument();
   });
 
+  it('breaks the line under its heading only between its parts, never inside a figure', () => {
+    // At 1440 px in ZH it read "… · Claude Code 1 小时 / 22 分": each part is now kept whole.
+    render(hourCard(busiest, { locale: 'zh' }));
+    const line = document.getElementById('stats-hour')?.nextElementSibling as HTMLElement;
+    const parts = [...line.children] as HTMLElement[];
+    expect(parts.map((p) => p.textContent)).toEqual([
+      expect.stringMatching(/^代理时长 \d/),
+      expect.stringMatching(/^\d+ 个会话$/),
+      expect.stringMatching(/^Claude Code \d/),
+    ]);
+    expect(line).toHaveTextContent(/^代理时长 .+ · \d+ 个会话 · Claude Code .+$/);
+    const sheet = join(import.meta.dirname, 'StatsPage.module.css');
+    for (const part of parts)
+      expect(moduleCssValue(sheet, classes, part, 'white-space')).toBe('nowrap');
+  });
+
   it('says it in Chinese', () => {
     render(hourCard(busiest, { locale: 'zh' }));
     expect(screen.getByRole('button', { name: '还有 3 个' })).toBeInTheDocument();

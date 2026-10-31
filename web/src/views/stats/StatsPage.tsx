@@ -216,7 +216,8 @@ function Status({
         </span>
       ) : (
         entry.result && (
-          <span>
+          // One line: the time and Refresh never part, whatever room the head gives them.
+          <span className={css.asOf}>
             {rt(locale, 'asOf', { time: clock(entry.result.asOf) })} ·{' '}
             {stale > 0 && <>{rt(locale, 'notRefreshed', { n: stale })} · </>}
             {action}
