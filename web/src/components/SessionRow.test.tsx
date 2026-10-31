@@ -334,10 +334,10 @@ describe('SessionRow', () => {
 
     // The tokens, else the age, take only the room the activity and the tag leave them: a basis
     // of nothing, grown up to their own width. The activity shrinks only once they are gone.
-    const givesWayFirst = (el: Element | null | undefined) => {
+    const givesWayFirst = (el: Element | null | undefined, floor = '0') => {
       expect(rule(el, 'flex-basis')).toBe('0');
       expect(rule(el, 'max-width')).toBe('max-content');
-      expect(rule(el, 'min-width')).toBe('0');
+      expect(rule(el, 'min-width')).toBe(floor);
     };
 
     it('keeps a clock whole: with nothing in the activity to give way, the tokens give way', () => {
@@ -378,7 +378,9 @@ describe('SessionRow', () => {
       };
       const meta = renderRow(stuck, false, vi.fn(), 'zh').lastElementChild as HTMLElement;
       const sign = meta.children[1];
-      givesWayFirst(sign);
+      // The sign gives way first, down to its "·" and glyph: never to nothing, so no separator
+      // stands beside nothing (the compact row's rule beside a sign).
+      givesWayFirst(sign, 'calc(0.75em + 12px)');
       expect(Number(rule(sign, 'flex-grow'))).toBeLessThan(
         Number(rule(meta.querySelector('[data-clip]'), 'flex-grow')),
       );
