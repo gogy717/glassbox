@@ -253,7 +253,7 @@ export function SessionSidebar({
   // A project group reads as its name; the pinned and time groups in the UI language.
   const label = (g: SessionGroup) =>
     g.kind === 'project'
-      ? g.key
+      ? g.name
       : g.kind === 'pinned'
         ? t('sidebar.pinned')
         : t(TIME_LABEL[g.bucket]);
@@ -411,14 +411,18 @@ export function SessionSidebar({
                       const shown = new Set(rows.map((s) => s.id));
                       const own = w.sessions.filter((s) => shown.has(s.id));
                       if (own.length === 0) return null;
-                      const treeName = w.main ? `${w.name} · ${t('sidebar.mainTree')}` : w.name;
+                      // The main tree says so; a removed one too (its directory is gone).
+                      const note = w.main
+                        ? t('sidebar.mainTree')
+                        : w.gone
+                          ? t('sidebar.goneTree')
+                          : null;
+                      const treeName = note ? `${w.name} · ${note}` : w.name;
                       return (
                         <li key={w.dir} className={css.tree}>
                           <div className={`${css.treeName} figure`} title={w.dir}>
                             {w.name}
-                            {w.main && (
-                              <span className={css.treeNote}> · {t('sidebar.mainTree')}</span>
-                            )}
+                            {note && <span className={css.treeNote}> · {note}</span>}
                           </div>
                           <ul aria-label={`${name} · ${treeName}`} className={css.rows}>
                             {own.map(rowItem)}

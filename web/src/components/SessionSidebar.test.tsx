@@ -4,6 +4,7 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createDemoSessions } from '../../../src/core/fixtures/demo.js';
 import type { SessionSummary } from '../../../src/core/model.js';
 import { I18nContext, makeI18n } from '../i18n';
+import { projectKey } from '../lib/sessions';
 import { DEFAULT_PREFS, type Prefs } from '../prefs';
 import { DEMO_NOW } from '../test/demo';
 import tagCss from './AgentTag.module.css';
@@ -609,6 +610,9 @@ function Harness({
 }
 
 const lists = () => screen.getAllByRole('list').map((l) => l.getAttribute('aria-label'));
+// The demo's project groups' keys: the directories they gather by.
+const GLASSBOX = projectKey('/Users/demo/Dev/glassbox');
+const SHOPFRONT = projectKey('/Users/demo/Dev/shopfront');
 const titles = (list: HTMLElement) =>
   within(list)
     .getAllByRole('button')
@@ -681,6 +685,44 @@ describe('SessionSidebar worktrees', () => {
       screen.getByRole('list', { name: 'glassbox · glassbox · 主工作树' }),
     ).toBeInTheDocument();
   });
+
+  // Round 3, A: a worktree whose directory was removed has no repository the server can read;
+  // its sessions still sit in the repository's group, as a sub-list marked removed.
+  const removed: SessionSummary[] = [
+    ...trees,
+    {
+      ...(sessions[2] as SessionSummary),
+      id: 'gone',
+      title: 'In a removed worktree',
+      cwd: '/home/dev/work/glassbox/whitefish',
+      repo: null,
+      cwdGone: true,
+    },
+  ];
+  it.each([
+    ['en', 'glassbox · whitefish · removed', 'removed'],
+    ['zh', 'glassbox · whitefish · 已删除', '已删除'],
+  ] as const)(
+    'lists a removed worktree under its repository, marked so (%s)',
+    (locale, name, note) => {
+      render(
+        <I18nContext.Provider value={makeI18n(locale)}>
+          <SessionSidebar
+            sessions={removed}
+            selectedId="main"
+            now={DEMO_NOW.getTime()}
+            onSelect={vi.fn()}
+          />
+        </I18nContext.Provider>,
+      );
+      const list = screen.getByRole('list', { name });
+      expect(titles(list)).toEqual(['In a removed worktree']);
+      const tree = (list.parentElement as HTMLElement).firstElementChild;
+      expect(tree).toHaveAttribute('title', '/home/dev/work/glassbox/whitefish');
+      expect(tree).toHaveTextContent(`whitefish · ${note}`);
+      expect(screen.queryByRole('button', { name: /whitefish/ })).toBeNull();
+    },
+  );
 });
 
 describe('SessionSidebar pins', () => {
@@ -761,7 +803,7 @@ describe('SessionSidebar folding', () => {
       screen.getByRole('list', { name: 'glassbox' }).id,
     );
     fireEvent.click(title);
-    expect(onPrefs).toHaveBeenLastCalledWith(expect.objectContaining({ folded: ['glassbox'] }));
+    expect(onPrefs).toHaveBeenLastCalledWith(expect.objectContaining({ folded: [GLASSBOX] }));
     expect(lists()).toEqual(['shopfront', 'blog']);
     const folded = screen.getByRole('button', { name: /^glassbox/ });
     expect(folded).toHaveAttribute('aria-expanded', 'false');
@@ -785,7 +827,7 @@ describe('SessionSidebar folding', () => {
       <Harness
         sessions={two}
         selectedId={sessions[1]?.id ?? null}
-        prefs={{ ...DEFAULT_PREFS, folded: ['shopfront'] }}
+        prefs={{ ...DEFAULT_PREFS, folded: [SHOPFRONT] }}
       />,
     );
     const title = screen.getByRole('button', { name: /^shopfront/ });
@@ -818,11 +860,7 @@ describe('SessionSidebar folding', () => {
 
   it('speaks a folded group in Chinese', () => {
     render(
-      <Harness
-        sessions={sessions}
-        locale="zh"
-        prefs={{ ...DEFAULT_PREFS, folded: ['glassbox'] }}
-      />,
+      <Harness sessions={sessions} locale="zh" prefs={{ ...DEFAULT_PREFS, folded: [GLASSBOX] }} />,
     );
     expect(screen.getByRole('button', { name: /^glassbox/ })).toHaveAccessibleName(
       'glassbox 1 个会话 1 个运行中',

@@ -832,4 +832,6 @@ export const en: Record<MessageKey, string> = {
   'files.diff': 'Change',
   'files.writeSize': '{lines} {lines|line|lines} · {chars} {chars|character|characters}',
   'files.cell': 'Cell {id}',
+  // Round 3, A: the session list's groups and folds.
+  'sidebar.goneTree': 'removed',
 };

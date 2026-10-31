@@ -806,6 +806,8 @@ export const zh = {
   'files.diff': '改动',
   'files.writeSize': '{lines} 行 · {chars} 字符',
   'files.cell': '单元格 {id}',
+  // Round 3, A: the session list's groups and folds.
+  'sidebar.goneTree': '已删除',
 } as const;
 
 export type MessageKey = keyof typeof zh;
