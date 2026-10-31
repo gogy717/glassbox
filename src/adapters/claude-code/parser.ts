@@ -1127,6 +1127,7 @@ export class ClaudeSessionParser implements SessionParser {
     // Where an edit landed, as its result recorded it.
     const lineChanges =
       t.result && !t.result.isError ? lineChangesOf(t.result.toolUseResult) : null;
+    const text = t.result ? resultText(t.result.content) : null;
     return {
       id: t.id,
       agentId: t.agentId,
@@ -1137,10 +1138,11 @@ export class ClaudeSessionParser implements SessionParser {
       startedAt: t.startedAt,
       endedAt,
       durationMs: durationBetween(t.startedAt, endedAt),
-      resultPreview: t.result ? preview(t.result.content) : null,
+      resultPreview: text === null ? null : text.slice(0, PREVIEW_CHARS),
       hasFullResult: t.result !== null,
       spawned: this.spawnOf.get(t.id) ?? null,
       ...(lineChanges ? { lineChanges } : {}),
+      ...(text === null ? {} : { resultChars: text.length }),
     };
   }
 
@@ -1177,8 +1179,8 @@ const NOTIFIED_STATUS: Record<string, RunStatus> = {
   stopped: 'interrupted',
 };
 
-/** First characters of a tool result as text; non-text blocks become "[type]". */
-function preview(content: unknown): string {
+/** A tool result as text; non-text blocks become "[type]". */
+function resultText(content: unknown): string {
   let text: string;
   if (typeof content === 'string') text = content;
   else if (Array.isArray(content))
@@ -1191,7 +1193,7 @@ function preview(content: unknown): string {
       })
       .join('\n');
   else text = content === undefined ? '' : jsonText(content);
-  return text.slice(0, PREVIEW_CHARS);
+  return text;
 }
 
 /** JSON text of `value`; empty when it is nested too deep to serialise. */

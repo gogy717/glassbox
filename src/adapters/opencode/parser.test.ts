@@ -261,6 +261,7 @@ describe('OpenCodeSessionParser: tools and sub-agents', () => {
       endedAt: at(26),
       durationMs: 1000,
       resultPreview: 'shears\n',
+      resultChars: 7,
       hasFullResult: true,
     });
     expect(parser.toolResult(ls?.id ?? '')).toBe('shears\n');

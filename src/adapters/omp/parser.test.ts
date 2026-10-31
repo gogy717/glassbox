@@ -89,6 +89,7 @@ describe('OmpSessionParser', () => {
         resultPreview: 'herb.txt\nmint.txt',
         hasFullResult: true,
         spawned: null,
+        resultChars: 17,
       },
     ]);
     expect(parser.toolResult('call-ls|fc_1')).toBe('herb.txt\nmint.txt');
