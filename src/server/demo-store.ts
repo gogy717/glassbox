@@ -39,7 +39,7 @@ import { RulesService } from './rules.js';
 import { createDemoRules, DEMO_HOME } from './rules-demo.js';
 import { compareSessions, isActive, listedSummary, withRepo } from './store.js';
 import { type WeekRead, WeekService, type WeekStore } from './week.js';
-import { createDemoWeek, demoRepo } from './week-demo.js';
+import { demoRepo, demoWeek } from './week-demo.js';
 
 const TICK_MS = 2000;
 
@@ -185,7 +185,9 @@ export class DemoStore implements AppStore, WeekStore {
     this.others = createDemoSessions(now).filter((s) => s.id !== DEMO_SESSION_ID);
     this.sides = createDemoSideSnapshots(now);
     this.quotas = createDemoQuotas(now);
-    this.weekBehind = createDemoWeek(now.getTime());
+    const week = demoWeek(now.getTime());
+    this.weekBehind = week.sessions;
+    this.week.useApprovals((id) => week.approvals.get(id));
     const history = createDemoRules(now.getTime());
     this.rulesBehind = history.sessions;
     this.rules = new RulesService(

@@ -49,6 +49,20 @@ describe('the demo week', () => {
     expect(r.sessions.some((s) => s.agent === 'grok' && !s.reportsUsage)).toBe(true);
   });
 
+  it('shows the time the agents waited on the person: questions, plans and permission prompts', async () => {
+    const r = await store.week.compute('7d');
+    const waited = r.sessions.flatMap((s) => (s.inWindow.waiting ? [s.inWindow.waiting] : []));
+    expect(waited.length).toBeGreaterThan(5);
+    expect(new Set(waited.flatMap((w) => Object.keys(w.byKind))).size).toBe(3);
+    const longest = Math.max(...waited.map((w) => w.longestMs));
+    expect(longest).toBeGreaterThan(60_000);
+    // Each session's waits add up to its share of the week's, and its longest is one of them.
+    for (const w of waited) {
+      expect(Object.values(w.byKind).reduce((a, b) => a + (b ?? 0), 0)).toBe(w.ms);
+      expect(w.longestMs).toBeLessThanOrEqual(w.ms);
+    }
+  });
+
   it('works on glassbox in a second worktree too, whose changes cross the main tree’s', async () => {
     const r = await new WeekService(store, { now: () => NOW, repoOf: demoRepo }).compute('7d');
     const repos = crossings(
