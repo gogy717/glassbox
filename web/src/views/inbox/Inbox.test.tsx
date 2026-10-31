@@ -178,6 +178,30 @@ describe('Inbox', () => {
     );
   });
 
+  it('prints a permission’s command once, in its block; the line at the buttons names the tool', () => {
+    const permission = held(
+      ask('tu_1', 'Bash', 90, { command: 'git push origin main', description: 'Push' }),
+    );
+    const edit = held(ask('tu_2', 'Edit', 80, { file_path: '/w/garden/src/beds.ts' }));
+    renderInbox({
+      sessions: [permission.session, edit.session],
+      prompts: new Map([permission, edit].map((h) => [h.session.id, h.prompt])),
+    });
+    const [push, beds] = items() as HTMLElement[];
+    expect(push?.textContent?.split('git push origin main')).toHaveLength(2);
+    const answers = within(push as HTMLElement).getByRole('group', { name: /^Permission/ });
+    expect(within(answers).getByText('Bash', { selector: 'code' })).toBeVisible();
+    // A call without a command keeps what it is about at the buttons: its file.
+    expect(
+      within(within(beds as HTMLElement).getByRole('group', { name: /^Permission/ })).getByText(
+        'beds.ts',
+        {
+          selector: 'code',
+        },
+      ),
+    ).toBeVisible();
+  });
+
   it('opens a session from its title, and a stuck one from Open', () => {
     const stuck = session('busy', { trouble: sign('failing', 60) });
     const terminal = session('waiting', { activity: waitingOn('Bash', 30) });
