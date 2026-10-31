@@ -95,6 +95,22 @@
   flex-shrink: 0;
 }
 
+/* Beside a sign of trouble in the sidebar, no "·" stands beside nothing: the activity keeps its
+   dot and about a word, the sign its glyph after its "·", and the age and tokens, which give way
+   too, a figure after theirs. */
+.row[data-density="compact"] .meta:has(> .sign) > :first-child {
+  min-width: 5em;
+}
+
+.row[data-density="compact"] .sign {
+  min-width: calc(0.75em + 12px);
+}
+
+.row[data-density="compact"] .meta:has(> .sign) > .when {
+  flex-shrink: 1;
+  min-width: calc(3ch + 0.75em);
+}
+
 .sep {
   color: var(--faint);
 }
