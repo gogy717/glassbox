@@ -29,6 +29,11 @@
   font-weight: 600;
 }
 
+/* A context nearly full is a warning, not a fault: the agent works on, and will soon forget. */
+.trouble[data-trouble="context-full"] {
+  color: var(--warning);
+}
+
 /* The dot sits a little apart from the word, as StatusMark's does. */
 .activity > :first-child {
   margin-right: 2px;

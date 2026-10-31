@@ -11,7 +11,14 @@ const KEYS: Record<TroubleKind, Record<TroubleForm, MessageKey>> = {
   waiting: { long: 'trouble.long.waiting', short: 'trouble.short.waiting' },
   'long-turn': { long: 'trouble.long.longTurn', short: 'trouble.short.longTurn' },
   compaction: { long: 'trouble.long.compaction', short: 'trouble.short.compaction' },
+  'context-full': { long: 'trouble.long.contextFull', short: 'trouble.short.contextFull' },
 };
+
+/**
+ * Whether a sign says the session looks stuck: all but a context nearly full, which says a
+ * working session will soon forget. The Inbox lists only the stuck.
+ */
+export const looksStuck = (s: TroubleSignal): boolean => s.kind !== 'context-full';
 
 /** How long, in whole minutes, past an hour with its hours: "14 min", "1 h 35 min". */
 export function troubleDuration(t: T, ms: number): string {

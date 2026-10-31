@@ -43,6 +43,16 @@
   color: var(--muted);
 }
 
+/* The context figure: muted while far from its window, amber once nearly full. */
+.metric[data-tone="muted"] .value {
+  color: var(--muted);
+}
+
+.metric[data-tone="warn"] .value,
+.metric[data-tone="warn"] .aside {
+  color: var(--warning);
+}
+
 .label {
   color: var(--muted);
   white-space: nowrap;

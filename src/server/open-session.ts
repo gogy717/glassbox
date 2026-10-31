@@ -8,6 +8,7 @@ import type {
 } from '../core/adapter.js';
 import { isEmptyChanges, mergeChanges } from '../core/changes.js';
 import {
+  type ContextUse,
   type EntityKind,
   type LiveState,
   MAIN_AGENT_ID,
@@ -18,6 +19,7 @@ import {
   type TroubleSignal,
 } from '../core/model.js';
 import { ContextLedger, type SessionContextBill } from '../shared/context-bill.js';
+import { contextUse } from '../shared/context-use.js';
 import { SHELL_TOOLS } from '../shared/tool-category.js';
 import { detectTrouble, type TroubleInput } from '../shared/trouble.js';
 import { Coalescer } from './coalescer.js';
@@ -144,6 +146,9 @@ class TroubleWatch {
         status: r.status,
         startedAt: r.startedAt,
         ...(r.compactedBefore ? { compactedBefore: true } : {}),
+        // What the context figure reads: the model and the usage, held by reference.
+        model: r.model,
+        usage: r.usage,
       });
     for (const t of p.toolCalls)
       this.toolCalls.set(t.id, {
@@ -164,6 +169,11 @@ class TroubleWatch {
     };
     for (const [kind, ids] of Object.entries(removed ?? {}) as [EntityKind, string[]][])
       for (const id of ids) maps[kind]?.delete(id);
+  }
+
+  /** How full the main agent's context is, as of its latest finished call. */
+  contextUse(): ContextUse | null {
+    return contextUse(this.requests.values(), MAIN_AGENT_ID);
   }
 
   /** The strongest sign of a running session now; none of one that is not running. */
@@ -337,10 +347,24 @@ export class OpenSession {
     }
   }
 
-  /** `summary` with its strongest sign while the session runs; none while it does not. */
+  /**
+   * `summary` with its strongest sign and how full its main context is while the session runs;
+   * neither while it does not.
+   */
   private withTrouble(summary: SessionSummary): SessionSummary {
     this.latest = summary;
-    return isActive(summary.live) ? { ...summary, trouble: this.trouble } : summary;
+    if (!isActive(summary.live)) return summary;
+    return { ...summary, trouble: this.trouble, contextUse: this.readContextUse() };
+  }
+
+  private readContextUse(): ContextUse | null {
+    try {
+      return this.watch.contextUse();
+    } catch (err) {
+      // As with the signs: a bug here must cost the figure, not the session's updates.
+      this.opts.log(`session ${this.id}: context figure failed: ${errorText(err)}`);
+      return null;
+    }
   }
 
   setLive(live: LiveState): void {

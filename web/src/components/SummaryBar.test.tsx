@@ -150,7 +150,8 @@ describe('SummaryBar', () => {
     const extra = [...bar.querySelectorAll('[data-extra]')].map(
       (m) => m.querySelector('.section-label')?.textContent,
     );
-    expect(extra).toEqual(['Tool calls', 'Input', 'Cache hit', 'API cost (est.)']);
+    // The context figure too, while far from its window (SummaryBar.context.test.tsx).
+    expect(extra).toEqual(['Tool calls', 'Context', 'Input', 'Cache hit', 'API cost (est.)']);
     const more = within(bar).getByRole('button', { name: 'More figures' });
     expect(more).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(more);

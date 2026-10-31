@@ -47,21 +47,33 @@ interface Props {
   /** Whose context this is: "Main", or a sub-agent's name. */
   agent: string;
   points: ContextPoint[];
+  /** The model's window, in tokens; null when not known. */
+  windowTokens?: number | null;
   onPick(requestId: string): void;
 }
 
 /**
- * Context size per request: a line on a hairline grid, a dot per request (click opens it in the
- * execution chain), compactions as amber dashed rules. No area fill: the line is the data.
+ * A window is drawn once the context has reached this share of it; below, the line would
+ * flatten the curve to a sliver, so the key only names the window.
  */
-export function ContextChart({ agent, points, onPick }: Props) {
+export const WINDOW_DRAWN = 0.5;
+
+/**
+ * Context size per request: a line on a hairline grid, a dot per request (click opens it in the
+ * execution chain), compactions as amber dashed rules, the model's window as a faint rule once
+ * the context nears it. No area fill: the line is the data.
+ */
+export function ContextChart({ agent, points, windowTokens = null, onPick }: Props) {
   const { t, intl } = useI18n();
   const boxRef = useRef<HTMLDivElement>(null);
   const width = useElementWidth(boxRef);
   const [hover, setHover] = useState<number | null>(null);
 
+  const peak = Math.max(0, ...points.map((p) => p.context));
+  const size = windowTokens;
+  const drawn = size !== null && size > 0 && peak >= WINDOW_DRAWN * size ? size : null;
   const geo = useMemo(() => {
-    const max = niceMax(Math.max(0, ...points.map((p) => p.context)));
+    const max = niceMax(Math.max(peak, drawn ?? 0));
     const innerW = Math.max(1, width - PAD.l - PAD.r);
     const step = points.length > 1 ? innerW / (points.length - 1) : 0;
     const x = (i: number) => labelX(i, points.length, width);
@@ -70,7 +82,7 @@ export function ContextChart({ agent, points, onPick }: Props) {
     const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * max);
     // Each point owns exactly its share of the width, so neighbouring hit areas never overlap.
     return { x, y, line, ticks, slot: points.length > 1 ? step : innerW };
-  }, [points, width]);
+  }, [points, width, peak, drawn]);
 
   const labels = useMemo(() => axisLabels(points.length, width), [points.length, width]);
   // Same numbering as the execution chain, so a point can be found there.
@@ -94,6 +106,12 @@ export function ContextChart({ agent, points, onPick }: Props) {
               {' · '}
               <span className={css.keyDash} />
               {t('tokens.compaction')}
+            </>
+          )}
+          {size !== null && drawn === null && (
+            <>
+              {' · '}
+              {t('tokens.window', { window: formatCompact(size, intl) })}
             </>
           )}
         </span>
@@ -141,6 +159,20 @@ export function ContextChart({ agent, points, onPick }: Props) {
                 </text>
               </g>
             ) : null,
+          )}
+          {drawn !== null && (
+            <g data-window>
+              <line
+                className={css.window}
+                x1={PAD.l}
+                x2={width - PAD.r}
+                y1={geo.y(drawn)}
+                y2={geo.y(drawn)}
+              />
+              <text className={css.windowLabel} x={PAD.l + 4} y={geo.y(drawn) - 3}>
+                {t('tokens.window', { window: formatCompact(drawn, intl) })}
+              </text>
+            </g>
           )}
           <path className={css.line} d={geo.line} />
           {hovered && hover !== null && (

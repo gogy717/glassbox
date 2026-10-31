@@ -810,6 +810,15 @@ export const zh = {
   'sidebar.goneTree': '已删除',
   'sidebar.foldedOpenMark': '当前',
   'sidebar.foldedOpen': '含当前打开的会话',
+  // Package D (round 3): context nearly full.
+  'trouble.long.contextFull': '上下文已用 {pct}%，即将压缩',
+  'trouble.short.contextFull': '上下文 {pct}%',
+  'context.label': '上下文',
+  'context.of': '/ {window} · {pct}',
+  'context.tip':
+    '最近一次模型调用读入的上下文，模型窗口为 {window}。用满之前代理会压缩对话：换成一份摘要，细节随之丢失。',
+  'context.tipUnknown': '最近一次模型调用读入的上下文。不知道这个模型的窗口大小，所以不显示占比。',
+  'tokens.window': '窗口 {window}',
 } as const;
 
 export type MessageKey = keyof typeof zh;
