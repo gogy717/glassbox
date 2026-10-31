@@ -72,7 +72,6 @@ export const api = {
 } as const;
 
 export type SessionsResponse = SessionSummary[];
-export type SessionResponse = SessionSnapshot;
 export type RequestDetailResponse = RequestDetail;
 export type ContextBillResponse = SessionContextBill;
 export interface ToolResultResponse {

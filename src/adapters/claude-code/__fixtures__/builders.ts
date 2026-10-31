@@ -493,18 +493,6 @@ export function aiTitle(o: { title: string; sessionId?: string }): string {
   return line({ type: 'ai-title', aiTitle: o.title, sessionId: o.sessionId ?? SESSION_ID });
 }
 
-export function costState(o: { totalCostUSD?: number; sessionId?: string } = {}): string {
-  return line({
-    type: 'cost-state',
-    sessionId: o.sessionId ?? SESSION_ID,
-    totalCostUSD: o.totalCostUSD ?? 1.25,
-    totalAPIDuration: 60000,
-    totalDuration: 120000,
-    startTime: BASE_MS,
-    modelUsage: { 'claude-opus-5-5': { inputTokens: 10, outputTokens: 50 } },
-  });
-}
-
 /** Any other record type, e.g. ones the parser ignores or has never seen. */
 export function rawRecord(type: string, fields: object = {}): string {
   return line({ type, sessionId: SESSION_ID, ...fields });
