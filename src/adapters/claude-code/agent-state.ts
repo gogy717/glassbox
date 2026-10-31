@@ -79,6 +79,8 @@ export interface RequestState {
   interruptedAt: string | null;
   error: ModelRequest['error'];
   compactedBefore: boolean;
+  /** The system prompt and tools the api-request sent, by hash; null without one. */
+  shapeHash: string | null;
 }
 
 export interface ToolState {
@@ -140,6 +142,7 @@ export function newRequest(
     interruptedAt: null,
     error: null,
     compactedBefore: false,
+    shapeHash: null,
   };
 }
 
