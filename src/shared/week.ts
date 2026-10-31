@@ -19,6 +19,7 @@
 import type { AgentKind, RepoIdentity, TokenUsage } from '../core/model.js';
 import type { FileOps } from './crossing.js';
 import type { ToolCategory } from './tool-category.js';
+import type { WaitKind } from './waiting.js';
 
 export type WeekWindowKind = 'week' | '7d';
 
@@ -75,6 +76,12 @@ export interface WeekFigures {
    * else its preview's). Absent when none was called.
    */
   mcp?: Record<string, McpFigures>;
+  /**
+   * The time the agents waited on the person in the window, cut to it: a question, a plan
+   * approval or a permission prompt (`shared/waiting.ts`), by the main agent and its sub-agents.
+   * Absent when none waited.
+   */
+  waiting?: WeekWaiting;
 }
 
 /** One MCP server's calls in a window: `WeekFigures.mcp`. */
@@ -83,6 +90,18 @@ export interface McpFigures {
   failures: number;
   ms: number;
   resultChars: number;
+}
+
+/** The waits of a window, as `WeekFigures.waiting`. */
+export interface WeekWaiting {
+  /** The waits' lengths added up. */
+  ms: number;
+  /** Waits that reach into the window. */
+  count: number;
+  /** The longest of them. */
+  longestMs: number;
+  /** Their time by kind; a kind with none is left out. */
+  byKind: Partial<Record<WaitKind, number>>;
 }
 
 export interface WeekSession {

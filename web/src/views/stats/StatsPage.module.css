@@ -592,6 +592,44 @@ a.sessionTitle:hover {
   background: var(--faint);
 }
 
+/* Waiting on you: the figure, then each kind's share of it as a bar, then the longest wait. */
+.waitFigure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 0;
+}
+
+.waitKinds {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.waitKind {
+  display: grid;
+  grid-template-columns: minmax(0, 120px) minmax(40px, 1fr) minmax(0, 80px);
+  align-items: center;
+  gap: 12px;
+}
+
+.waitTrack {
+  grid-column: 2;
+}
+
+.waitName {
+  font-size: var(--fs-small);
+  color: var(--muted);
+}
+
+.waitValue {
+  justify-self: end;
+  font-size: var(--fs-small);
+}
+
 /* Two columns beside the session list: the columns and the pair dissolve, and every card is
    the grid's own, in reading order; the wide cards and the hour take a row, By CLI and Top
    projects share one (D4), Crossing follows them across. */
@@ -610,6 +648,7 @@ a.sessionTitle:hover {
   .card[data-area="hour"],
   .card[data-area="crossing"],
   .card[data-area="longest"],
+  .card[data-area="waiting"],
   .card[data-area="tokens"],
   .card[data-area="now"] {
     grid-column: 1 / -1;
@@ -640,12 +679,16 @@ a.sessionTitle:hover {
     order: 5;
   }
 
-  .card[data-area="tokens"] {
+  .card[data-area="waiting"] {
     order: 6;
   }
 
-  .card[data-area="now"] {
+  .card[data-area="tokens"] {
     order: 7;
+  }
+
+  .card[data-area="now"] {
+    order: 8;
   }
 }
 

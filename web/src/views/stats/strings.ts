@@ -88,9 +88,23 @@ const en = {
   mcpNone: 'No MCP server called this week',
   mcpNone7: 'No MCP server called in the last 7 days',
   mcpTitle: 'Results of {n} {n|character|characters} came back into the context',
+  // Package G (round 3): the Waiting on you card.
+  waiting: 'Waiting on you',
+  waitingNote: 'time the agents waited on you',
+  waitingLine: '{n} {n|wait|waits} · longest {time}',
+  waitingLongest: 'Longest wait',
+  waitingPermission: 'Permission',
+  waitingQuestion: 'Question',
+  waitingPlan: 'Plan approval',
+  waitingTurn: 'Between prompts',
+  waitingFoot:
+    'Counts questions and plan approvals; in sessions glassbox ran, also its permission prompts and the gaps between prompts while its run was live. Other sessions’ gaps are not counted: no transcript says the session was live through them.',
+  waitingNone: 'No agent waited on you in this window.',
 };
 
 type Key = keyof typeof en;
+/** A Stats string's key, for a table that names strings by kind (the Waiting card's kinds). */
+export type StatsKey = Key;
 
 const zh: Record<Key, string> = {
   window: '时间范围',
@@ -172,6 +186,18 @@ const zh: Record<Key, string> = {
   mcpNone: '本周没有调用 MCP 服务器',
   mcpNone7: '最近 7 天没有调用 MCP 服务器',
   mcpTitle: '带回上下文的结果共 {n} 字符',
+  // Package G (round 3): the Waiting on you card.
+  waiting: '等待用户',
+  waitingNote: '代理等你的时间',
+  waitingLine: '{n} 次 · 最长 {time}',
+  waitingLongest: '等得最久的一次',
+  waitingPermission: '权限确认',
+  waitingQuestion: '提问',
+  waitingPlan: '计划确认',
+  waitingTurn: '轮次之间',
+  waitingFoot:
+    '计入提问和计划确认；glassbox 运行的会话还计入它显示的权限确认，以及运行在线期间轮次之间的空档。其他会话的空档不计，因为转录里看不出会话当时是否在线。',
+  waitingNone: '这个时间范围内没有代理在等你。',
 };
 
 const STRINGS: Record<Locale, Record<Key, string>> = { en, zh };

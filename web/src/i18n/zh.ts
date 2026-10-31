@@ -870,6 +870,8 @@ export const zh = {
   'mcp.more': '再显示 {n} 次',
   'mcp.noneAgent': '这个代理自己没有调用 MCP 服务器',
   'mcp.note': '结果大小是各次调用带回上下文的字符数，之后每次请求都要再付一次；token 按字符估算。',
+  // Package G (round 3): the time the agents waited on the person.
+  'time.waitingYou': '等待用户',
 } as const;
 
 export type MessageKey = keyof typeof zh;

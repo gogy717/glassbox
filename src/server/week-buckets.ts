@@ -12,6 +12,7 @@ import { addUsage, emptyUsage } from '../core/usage.js';
 import { addChange, changesOf, fileOps, mergePathOps, type PathOps } from '../shared/crossing.js';
 import { ms, toolSpan } from '../shared/segments.js';
 import { mcpTool, type ToolCategory, toolCategory } from '../shared/tool-category.js';
+import { turnWaitsOf, type Wait, type WaitSource, waitsOf } from '../shared/waiting.js';
 import {
   HOUR_MS,
   hourStart,
@@ -19,6 +20,7 @@ import {
   nextHour,
   type WeekFigures,
   type WeekSession,
+  type WeekWaiting,
   type WeekWindow,
 } from '../shared/week.js';
 
@@ -75,6 +77,8 @@ export interface SessionBuckets {
   subAgents: [number, number][];
   /** Whether any of its calls reported usage (the receipt's `measured`, for the whole session). */
   reportsUsage: boolean;
+  /** The waits on the person, whole and uncut: see `shared/waiting.ts`. */
+  waits: Wait[];
 }
 
 const emptyBucket = (): HourBucket => ({
@@ -98,7 +102,11 @@ const STEP = 2_000;
  * `STEP` entities so a caller can pause between them. The parity with its receipt (web
  * `receiptData`) is tested on the web side.
  */
-function* bucketing(snap: SessionSnapshot, now: number): Generator<void, SessionBuckets> {
+function* bucketing(
+  snap: SessionSnapshot,
+  now: number,
+  waitSource?: WaitSource,
+): Generator<void, SessionBuckets> {
   let n = 0;
   const hours = new Map<number, HourBucket>();
   const at = (t: number) => {
@@ -220,12 +228,24 @@ function* bucketing(snap: SessionSnapshot, now: number): Generator<void, Session
     hours,
     subAgents,
     reportsUsage,
+    waits: [
+      ...waitsOf(snap.toolCalls, now, waitSource?.approvals),
+      ...turnWaitsOf(snap.turns, now, waitSource?.live),
+    ],
   };
 }
 
-/** The session's buckets: see `bucketing`. */
-export function sessionBuckets(snap: SessionSnapshot, now: number): SessionBuckets {
-  const steps = bucketing(snap, now);
+/**
+ * The session's buckets: see `bucketing`. `waitSource`: what glassbox's runs know of the
+ * session's waits (`waitSourceOf`); without it, no permission prompt and no gap between prompts
+ * is known.
+ */
+export function sessionBuckets(
+  snap: SessionSnapshot,
+  now: number,
+  waitSource?: WaitSource,
+): SessionBuckets {
+  const steps = bucketing(snap, now, waitSource);
   for (;;) {
     const step = steps.next();
     if (step.done) return step.value;
@@ -240,8 +260,9 @@ export async function sessionBucketsPausing(
   snap: SessionSnapshot,
   now: number,
   pause: () => Promise<void>,
+  waitSource?: WaitSource,
 ): Promise<SessionBuckets> {
-  const steps = bucketing(snap, now);
+  const steps = bucketing(snap, now, waitSource);
   for (;;) {
     const step = steps.next();
     if (step.done) return step.value;
@@ -273,6 +294,27 @@ function slotOf(hourStarts: number[], t: number): number {
   }
   const end = hourStarts[at + 1] ?? (hourStarts[at] as number) + HOUR_MS;
   return t < end ? at : -1;
+}
+
+/**
+ * The waits that reach into the window, cut to it, added up; null when none does. The window
+ * runs from its first hour to the end of its last.
+ */
+function waitsIn(waits: Wait[], window: WeekWindow): WeekWaiting | null {
+  const first = window.hourStarts[0];
+  const last = window.hourStarts.at(-1);
+  if (first === undefined || last === undefined) return null;
+  const end = last + HOUR_MS;
+  const out: WeekWaiting = { ms: 0, count: 0, longestMs: 0, byKind: {} };
+  for (const w of waits) {
+    const part = Math.min(w.end, end) - Math.max(w.start, first);
+    if (part <= 0) continue;
+    out.ms += part;
+    out.count++;
+    out.longestMs = Math.max(out.longestMs, part);
+    out.byKind[w.kind] = (out.byKind[w.kind] ?? 0) + part;
+  }
+  return out.count > 0 ? out : null;
 }
 
 /**
@@ -319,6 +361,8 @@ export function sliceSession(
   const changed = fileOps(files);
   if (changed) f.files = changed;
   if (Object.keys(mcp).length > 0) f.mcp = mcp;
+  const waiting = waitsIn(b.waits, window);
+  if (waiting) f.waiting = waiting;
   const first = window.hourStarts[0];
   const last = window.hourStarts.at(-1);
   if (first !== undefined && last !== undefined) {
@@ -331,7 +375,8 @@ export function sliceSession(
     f.requests > 0 ||
     f.toolCalls > 0 ||
     f.failures > 0 ||
-    f.subAgents > 0;
+    f.subAgents > 0 ||
+    f.waiting !== undefined;
   if (!any) return null;
   return {
     id: b.id,

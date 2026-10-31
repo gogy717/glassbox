@@ -19,6 +19,7 @@ import type {
 } from '../core/model.js';
 import { MAIN_AGENT_ID } from '../core/model.js';
 import { emptyUsage, sumUsage } from '../core/usage.js';
+import type { ApprovalWindow, WaitSource } from '../shared/waiting.js';
 
 const MIN = 60_000;
 
@@ -495,11 +496,130 @@ function withMcp(week: SessionSnapshot[]): void {
   }
 }
 
-/** The demo week: the sessions of the last eight days, as of `now`. */
-export function createDemoWeek(now: number): SessionSnapshot[] {
+/** The demo's questions and plan approvals: what the agent asked, and the answer it waited for. */
+const ASK = {
+  name: 'AskUserQuestion',
+  input: {
+    questions: [
+      {
+        question: 'Which approach should the change take?',
+        header: 'Approach',
+        multiSelect: false,
+        options: [
+          { label: 'Keep it small', description: 'Touch only the failing path' },
+          { label: 'Rewrite it', description: 'Replace the whole module' },
+        ],
+      },
+    ],
+  },
+};
+const PLAN = { name: 'ExitPlanMode', input: { plan: 'Fix the failing path, then run the tests.' } };
+
+/**
+ * The demo week's waits, drawn on a seed of their own so the sessions stay as they were: a
+ * question and a plan approval hold open a call after a model call that is followed by a quiet
+ * spell; about half the sessions ran in glassbox, whose run was live from the first prompt to a
+ * few minutes after the last reply (so the gaps between prompts were waits), and some of their
+ * shell commands waited on a permission prompt the run showed. What the runs knew is returned
+ * by session: the transcript keeps none of it.
+ */
+function addWaits(week: SessionSnapshot[], random: () => number): Map<string, WaitSource> {
+  const sources = new Map<string, WaitSource>();
+  const pickOf = <T>(list: T[]) => list[Math.floor(random() * list.length)] as T;
+  for (const snap of week) {
+    if (snap.session.agent !== 'claude-code') continue;
+    const mains = snap.requests
+      .filter((r) => r.agentId === MAIN_AGENT_ID && r.endedAt)
+      .sort((a, b) => (a.startedAt ?? '').localeCompare(b.startedAt ?? ''));
+    // A model call that a quiet spell of two minutes or more follows: room for the answer.
+    const rooms = mains.flatMap((r, i) => {
+      const next = mains[i + 1];
+      const from = Date.parse(r.endedAt ?? '');
+      const to = Date.parse(next?.startedAt ?? '');
+      return next && to - from >= 2 * MIN ? [{ r, from, room: to - from - 30_000 }] : [];
+    });
+    const ask = rooms.length > 0 && random() < 0.6 ? pickOf(rooms) : null;
+    const others = rooms.filter((room) => room !== ask);
+    const plan = others.length > 0 && random() < 0.4 ? pickOf(others) : null;
+    const add = (
+      room: (typeof rooms)[number],
+      spec: { name: string; input: unknown },
+      suffix: string,
+      minutes: number,
+    ) => {
+      const { r, from } = room;
+      const dur = Math.min(room.room, (0.5 + random() * minutes) * MIN);
+      const id = `${r.id}-${suffix}`;
+      snap.toolCalls.push({
+        id,
+        agentId: MAIN_AGENT_ID,
+        requestId: r.id,
+        name: spec.name,
+        input: spec.input,
+        status: 'complete',
+        startedAt: iso(from),
+        endedAt: iso(from + dur),
+        durationMs: Math.round(dur),
+        resultPreview: 'answered',
+        hasFullResult: false,
+        spawned: null,
+      });
+      r.toolCallIds.push(id);
+      r.blocks.push({ kind: 'tool-use', toolCallId: id, at: iso(from) });
+      r.stopReason = 'tool_use';
+      snap.session.counts = snap.session.counts && {
+        ...snap.session.counts,
+        toolCalls: snap.session.counts.toolCalls + 1,
+      };
+      const main = snap.agents[0];
+      if (main) main.counts = { ...main.counts, toolCalls: main.counts.toolCalls + 1 };
+    };
+    if (ask) add(ask, ASK, 'ask', 6);
+    if (plan) add(plan, PLAN, 'plan', 4);
+
+    // Run in glassbox, or not: only a glassbox run knows its prompts and when it was live.
+    if (random() >= 0.5) continue;
+    const mainTurns = snap.turns.filter((t) => t.agentId === MAIN_AGENT_ID);
+    const first = Date.parse(mainTurns[0]?.startedAt ?? '');
+    const last = Date.parse(mainTurns.at(-1)?.endedAt ?? '');
+    const live =
+      Number.isFinite(first) && Number.isFinite(last)
+        ? [[first, last + (1 + random() * 4) * MIN] as const]
+        : [];
+
+    // Some shell commands: the prompt was shown when the call began, and answered part way in.
+    const windows = new Map<string, ApprovalWindow>();
+    for (const t of snap.toolCalls) {
+      if (t.name !== 'Bash' || t.agentId !== MAIN_AGENT_ID || !t.startedAt || !t.endedAt) continue;
+      if (random() >= 0.12) continue;
+      const from = Date.parse(t.startedAt);
+      const to = Date.parse(t.endedAt);
+      const decided = Math.min(to, from + (10 + random() * 150) * 1000);
+      windows.set(t.id, { requestedAt: from, decidedAt: decided });
+    }
+    sources.set(snap.session.id, { approvals: windows, live });
+  }
+  return sources;
+}
+
+/** The demo week: its sessions, and what their glassbox runs knew of their waits. */
+export interface DemoWeek {
+  sessions: SessionSnapshot[];
+  /** By session id: see `WeekService.setWaitSource`. */
+  waits: Map<string, WaitSource>;
+}
+
+/** The demo week with its waits: the sessions of the last eight days, as of `now`. */
+export function demoWeek(now: number): DemoWeek {
   const random = rng(0x5eed_0043);
   const week = plan(now, random).map((p, i) => build(p, i + 1, random));
   intoWorktree(week);
   withMcp(week);
-  return week;
+  const waits = addWaits(week, rng(0x5eed_0047));
+  return { sessions: week, waits };
+}
+
+/** The demo week's sessions, as of `now`. */
+export function createDemoWeek(now: number): SessionSnapshot[] {
+  return demoWeek(now).sessions;
 }

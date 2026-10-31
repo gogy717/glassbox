@@ -901,4 +901,6 @@ export const en: Record<MessageKey, string> = {
   'mcp.noneAgent': 'This agent made no MCP call of its own',
   'mcp.note':
     'Result size is what each call brought back into the context, paid for again by every later request; tokens are estimated from its characters.',
+  // Package G (round 3): the time the agents waited on the person.
+  'time.waitingYou': 'Waiting for you',
 };

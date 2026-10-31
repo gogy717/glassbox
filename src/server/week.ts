@@ -9,6 +9,7 @@
  * ready.
  */
 import type { RepoIdentity, SessionSnapshot, SessionSummary } from '../core/model.js';
+import type { WaitSource } from '../shared/waiting.js';
 import {
   type WeekLine,
   type WeekResult,
@@ -99,6 +100,8 @@ export class WeekService {
   private readonly now: () => number;
   private readonly log: (msg: string) => void;
   private readonly repoOf: ((cwd: string) => RepoIdentity | null) | null;
+  /** What glassbox's runs know of a session's waits (`setWaitSource`). */
+  private waitSourceOf: ((sessionId: string) => WaitSource | undefined) | null = null;
 
   constructor(
     private readonly store: WeekStore,
@@ -110,6 +113,16 @@ export class WeekService {
     this.reparseMs = opts.reparseMs ?? 30_000;
     this.now = opts.now ?? Date.now;
     this.log = opts.log ?? (() => {});
+  }
+
+  /**
+   * Where a session's permission prompts and live stretches come from (`waitSourceOf`): the
+   * glassbox runs of the server, which exist once the store does. A session already read keeps
+   * what it was read with, until it is written again. Null: no permission wait and no gap
+   * between prompts is known.
+   */
+  setWaitSource(source: ((sessionId: string) => WaitSource | undefined) | null): void {
+    this.waitSourceOf = source;
   }
 
   /** No more reading: a computation under way ends at its next session, and none starts. */
@@ -207,7 +220,8 @@ export class WeekService {
 
   /** Buckets one session read as of `asOf` (the computation's time) into the cache. */
   private async keep(s: SessionSummary, got: WeekRead, asOf: number): Promise<boolean> {
-    const buckets = await sessionBucketsPausing(got.snapshot, asOf, yieldToLoop);
+    const waits = this.waitSourceOf?.(s.id);
+    const buckets = await sessionBucketsPausing(got.snapshot, asOf, yieldToLoop, waits);
     if (this.stopped) return false;
     this.cache.set(s.id, { buckets, updatedAt: s.updatedAt, readAt: asOf, running: running(s) });
     return true;

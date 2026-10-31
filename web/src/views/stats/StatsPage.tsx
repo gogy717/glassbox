@@ -23,6 +23,7 @@ import {
   NowCard,
   ProjectsCard,
   TokensCard,
+  WaitingCard,
 } from './StatsCards';
 import css from './StatsPage.module.css';
 import {
@@ -245,6 +246,7 @@ function Skeleton() {
       <div className={css.column} data-column="side">
         <div className={css.card} data-area="hour" />
         <div className={css.card} data-area="longest" />
+        <div className={css.card} data-area="waiting" />
         <div className={css.card} data-area="now" />
       </div>
     </div>
@@ -431,6 +433,7 @@ function Week({
           onElsewhere={onElsewhere}
         />
         <LongestCard w={w} listed={listed} locale={L} />
+        <WaitingCard w={w} listed={listed} locale={L} />
         <NowCard quotas={quotas} now={now} />
       </div>
     </div>

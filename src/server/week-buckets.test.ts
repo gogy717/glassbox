@@ -317,6 +317,7 @@ describe('a session as hourly buckets', () => {
       ]),
       subAgents: [],
       reportsUsage: false,
+      waits: [],
     };
     const s = sliceSession(b, { kind: '7d', hourStarts: [h, h + HOUR_MS], now: h });
     expect(s?.hours).toEqual([15 * 60_000, 0]);
@@ -448,5 +449,143 @@ describe('a session as hourly buckets', () => {
     expect(totalTokens(byModel[''] ?? emptyUsage())).toBe(tokensOf(null));
     const sum = Object.values(byModel).reduce((n, u) => n + totalTokens(u), 0);
     expect(sum).toBe(totalTokens(s?.inWindow.usage ?? emptyUsage()));
+  });
+});
+
+describe('waits on the person in a window', () => {
+  const now = new Date(2026, 10, 21, 20, 41).getTime();
+  const min = (n: number) => n * 60_000;
+  /** A session with nothing in it but what each test adds: its waits, and turns where it says so. */
+  const bare = (): SessionSnapshot => ({
+    ...createDemoSnapshot(new Date(now)),
+    agents: [],
+    turns: [],
+    requests: [],
+    toolCalls: [] as ToolCall[],
+  });
+  const call = (id: string, name: string, from: number, to: number): ToolCall => ({
+    id,
+    agentId: 'main',
+    requestId: 'r-none',
+    name,
+    input: {},
+    status: 'complete',
+    startedAt: new Date(from).toISOString(),
+    endedAt: new Date(to).toISOString(),
+    durationMs: to - from,
+    resultPreview: null,
+    hasFullResult: false,
+    spawned: null,
+  });
+
+  it('counts a question as the time it was open, and a prompt as the time until it was answered', () => {
+    const snap = bare();
+    snap.toolCalls = [
+      call('ask', 'AskUserQuestion', now - min(10), now - min(7)),
+      call('bash', 'Bash', now - min(6), now - min(2)),
+    ];
+    const approvals = new Map([['bash', { requestedAt: now - min(6), decidedAt: now - min(3) }]]);
+    const b = sessionBuckets(snap, now, { approvals });
+    const w = sliceSession(b, everything(b))?.inWindow.waiting;
+    expect(w).toEqual({
+      ms: min(6),
+      count: 2,
+      longestMs: min(3),
+      byKind: { question: min(3), permission: min(3) },
+    });
+  });
+
+  it('cuts a wait that straddles the start of the window to the window', () => {
+    const snap = bare();
+    const window = weekWindow('7d', now);
+    const first = window.hourStarts[0] as number;
+    snap.toolCalls = [call('ask', 'AskUserQuestion', first - min(30), first + min(30))];
+    const w = sliceSession(sessionBuckets(snap, now), window)?.inWindow.waiting;
+    expect(w).toEqual({ ms: min(30), count: 1, longestMs: min(30), byKind: { question: min(30) } });
+    // The same wait is not in the window that begins after it.
+    const later = weekWindow('7d', first + min(31) + 3_600_000 * 200);
+    expect(sliceSession(sessionBuckets(snap, now), later)).toBeNull();
+  });
+
+  it('counts a plan approval, and a permission prompt only where a glassbox run showed one', () => {
+    const snap = bare();
+    snap.toolCalls = [
+      call('plan', 'ExitPlanMode', now - min(20), now - min(12)),
+      call('read', 'Read', now - min(11), now - min(10)),
+    ];
+    const b = sessionBuckets(snap, now, {
+      approvals: new Map([['read', { requestedAt: now - min(11), decidedAt: now - min(10) }]]),
+    });
+    const s = sliceSession(b, everything(b));
+    expect(s?.inWindow.waiting).toEqual({
+      ms: min(8) + min(1),
+      count: 2,
+      longestMs: min(8),
+      byKind: { plan: min(8), permission: min(1) },
+    });
+    const none = sessionBuckets(snap, now);
+    expect(sliceSession(none, everything(none))?.inWindow.waiting?.byKind).toEqual({
+      plan: min(8),
+    });
+  });
+
+  describe('between prompts', () => {
+    const turn = (id: string, index: number, from: number, to: number) => ({
+      id,
+      agentId: 'main',
+      index,
+      origin: 'human' as const,
+      prompt: 'Next',
+      startedAt: new Date(from).toISOString(),
+      endedAt: new Date(to).toISOString(),
+      status: 'complete' as const,
+      requestIds: [],
+    });
+    const twoTurns = () => {
+      const snap = bare();
+      snap.turns = [
+        turn('early', 1, now - min(180), now - min(170)),
+        turn('later', 2, now - min(20), now - min(10)),
+      ];
+      return snap;
+    };
+
+    it('counts the gap to the next prompt while a glassbox run of the session was live', () => {
+      const b = sessionBuckets(twoTurns(), now, { live: [[now - min(200), null]] });
+      expect(sliceSession(b, everything(b))?.inWindow.waiting).toEqual({
+        ms: min(150),
+        count: 1,
+        longestMs: min(150),
+        byKind: { turn: min(150) },
+      });
+    });
+
+    it('counts nothing for a gap across a closed session, nor where no run says it was live', () => {
+      // The run closed five minutes after the reply; the next prompt came in a new run.
+      const closed = sessionBuckets(twoTurns(), now, {
+        live: [
+          [now - min(200), now - min(165)],
+          [now - min(20), null],
+        ],
+      });
+      expect(sliceSession(closed, everything(closed))?.inWindow.waiting?.ms).toBe(min(5));
+      const across = sessionBuckets(twoTurns(), now, {
+        live: [
+          [now - min(200), now - min(170)],
+          [now - min(20), null],
+        ],
+      });
+      expect(across.waits).toEqual([]);
+      const unknown = sessionBuckets(twoTurns(), now);
+      expect(unknown.waits).toEqual([]);
+      expect(sliceSession(unknown, everything(unknown))?.inWindow).not.toHaveProperty('waiting');
+    });
+  });
+
+  it('keeps the waiting figure last of the figures, after the files', () => {
+    const snap = bare();
+    snap.toolCalls = [call('ask', 'AskUserQuestion', now - min(10), now - min(7))];
+    const b = sessionBuckets(snap, now);
+    expect(Object.keys(sliceSession(b, everything(b))?.inWindow ?? {}).at(-1)).toBe('waiting');
   });
 });
