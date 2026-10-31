@@ -11,10 +11,11 @@ import { MAIN_AGENT_ID } from '../core/model.js';
 import { addUsage, emptyUsage } from '../core/usage.js';
 import { addChange, changesOf, fileOps, mergePathOps, type PathOps } from '../shared/crossing.js';
 import { ms, toolSpan } from '../shared/segments.js';
-import { type ToolCategory, toolCategory } from '../shared/tool-category.js';
+import { mcpTool, type ToolCategory, toolCategory } from '../shared/tool-category.js';
 import {
   HOUR_MS,
   hourStart,
+  type McpFigures,
   nextHour,
   type WeekFigures,
   type WeekSession,
@@ -35,6 +36,21 @@ export interface HourBucket {
   usageByModel: Record<string, TokenUsage>;
   /** The files its calls changed, by path, as `WeekFigures.files`. */
   files: Map<string, PathOps>;
+  /** Its MCP calls by server, as `WeekFigures.mcp`; absent in an hour with none. */
+  mcp?: Record<string, McpFigures>;
+}
+
+/** Adds `f` to what `by` holds for `server`. */
+function addMcp(by: Record<string, McpFigures>, server: string, f: McpFigures): void {
+  const held = by[server];
+  if (!held) {
+    by[server] = { ...f };
+    return;
+  }
+  held.calls += f.calls;
+  held.failures += f.failures;
+  held.ms += f.ms;
+  held.resultChars += f.resultChars;
 }
 
 /** Adds `u` to what `byModel` holds for `model`. */
@@ -169,6 +185,18 @@ function* bucketing(snap: SessionSnapshot, now: number): Generator<void, Session
     if (!ids.has(t.agentId)) continue;
     b.toolCalls++;
     for (const c of changesOf(t, snap.session.cwd, start)) addChange(b.files, c);
+    const mcp = mcpTool(t.name);
+    if (mcp) {
+      // A finished call's own time, as the session's MCP section counts it; a running one none.
+      const own = t.status === 'running' ? null : toolSpan(t, now, true);
+      b.mcp ??= {};
+      addMcp(b.mcp, mcp.server, {
+        calls: 1,
+        failures: t.status === 'error' ? 1 : 0,
+        ms: own ? own[1] - own[0] : 0,
+        resultChars: t.resultChars ?? t.resultPreview?.length ?? 0,
+      });
+    }
   }
 
   // Sub-agents' lives: from their start to their end, else to their first and last activity.
@@ -269,6 +297,7 @@ export function sliceSession(
     usageByModel: {},
   };
   const files = new Map<string, PathOps>();
+  const mcp: Record<string, McpFigures> = {};
   for (const [h, bucket] of b.hours) {
     const i = slotOf(window.hourStarts, h);
     if (i < 0) continue;
@@ -285,9 +314,11 @@ export function sliceSession(
     for (const [model, u] of Object.entries(bucket.usageByModel))
       addByModel(f.usageByModel, model, u);
     mergePathOps(files, bucket.files.values());
+    for (const [server, m] of Object.entries(bucket.mcp ?? {})) addMcp(mcp, server, m);
   }
   const changed = fileOps(files);
   if (changed) f.files = changed;
+  if (Object.keys(mcp).length > 0) f.mcp = mcp;
   const first = window.hourStarts[0];
   const last = window.hourStarts.at(-1);
   if (first !== undefined && last !== undefined) {

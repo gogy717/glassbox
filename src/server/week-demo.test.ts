@@ -66,6 +66,26 @@ describe('the demo week', () => {
     expect(overlap.get('src/app.ts')).toBe(null);
   });
 
+  it('calls a few MCP servers, in both name shapes, one call failed, and counts them', async () => {
+    const week = createDemoWeek(NOW);
+    const names = week.flatMap((s) => s.toolCalls.map((t) => t.name));
+    expect(names.some((n) => n.startsWith('mcp__tracker__'))).toBe(true);
+    expect(names.some((n) => n.startsWith('mcp__docs__'))).toBe(true);
+    expect(names.some((n) => n.startsWith('tracker__'))).toBe(true);
+    const r = await new WeekService(store, { now: () => NOW }).compute('7d');
+    const servers = new Map<string, { calls: number; failures: number }>();
+    for (const s of r.sessions)
+      for (const [name, m] of Object.entries(s.inWindow.mcp ?? {})) {
+        const was = servers.get(name) ?? { calls: 0, failures: 0 };
+        servers.set(name, { calls: was.calls + m.calls, failures: was.failures + m.failures });
+      }
+    expect([...servers.keys()].sort()).toEqual(['docs', 'tracker']);
+    const calls = [...servers.values()].reduce((n, m) => n + m.calls, 0);
+    expect(calls).toBeGreaterThan(5);
+    expect(calls).toBeLessThan(80);
+    expect([...servers.values()].some((m) => m.failures > 0)).toBe(true);
+  });
+
   it('reads a worktree of a demo repository as that repository’s, and opens the week’s sessions', async () => {
     expect(demoRepo('/Users/demo/Dev/worktrees/glassbox-sidebar')).toEqual({
       root: '/Users/demo/Dev/glassbox',

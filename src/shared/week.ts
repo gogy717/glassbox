@@ -68,6 +68,21 @@ export interface WeekFigures {
    * themselves: those come from the session (`/api/sessions/:id`). Absent when none changed.
    */
   files?: FileOps;
+  /**
+   * The MCP servers the main agent and its sub-agents called, by server (`mcpTool`): each call
+   * counted in the hour it started, as every tool call is, with its failures, its time (a
+   * finished call's own: its duration, else its ends) and its result's characters (`resultChars`,
+   * else its preview's). Absent when none was called.
+   */
+  mcp?: Record<string, McpFigures>;
+}
+
+/** One MCP server's calls in a window: `WeekFigures.mcp`. */
+export interface McpFigures {
+  calls: number;
+  failures: number;
+  ms: number;
+  resultChars: number;
 }
 
 export interface WeekSession {
