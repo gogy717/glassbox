@@ -83,3 +83,39 @@ a.name:hover {
 .foot {
   line-height: 1.4;
 }
+
+/* The same, one line on Stats' Right now: the top three, titles cut to fit. */
+.line {
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--fs-meta);
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lead {
+  color: var(--muted);
+}
+
+.itemName {
+  display: inline-block;
+  max-width: 14ch;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+
+a.itemName {
+  text-decoration: none;
+}
+
+a.itemName:hover {
+  text-decoration: underline;
+}
+
+.item {
+  white-space: nowrap;
+}
