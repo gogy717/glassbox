@@ -307,7 +307,7 @@ function runsAny(program: string, rest: readonly string[]): boolean {
   if (RUNNERS_ALONE.has(program))
     return rest.length === 0 || runsAny(programName(rest[0] as string), rest.slice(1));
   const subcommands = RUNNER_SUBCOMMANDS[program];
-  if (!subcommands || !subcommands.includes(rest[0] ?? '')) return false;
+  if (!subcommands?.includes(rest[0] ?? '')) return false;
   return rest.length === 1 || runsAny(programName(rest[1] as string), rest.slice(2));
 }
 
