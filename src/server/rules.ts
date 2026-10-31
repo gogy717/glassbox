@@ -3,11 +3,11 @@
  * of the window read once and kept, in memory only, as its permission events; each request counts
  * them by rule, and reads the settings again (a rule just pasted shows at the next request).
  *
- * The reading is the week's (`week.ts`, whose comments say why): two sessions at a time with a
- * yield between them, the smallest first and one very large session at a time, a running one
+ * The reading is the week's (`window-sessions.ts`, shared with `week.ts`): two sessions at a time
+ * with a yield between them, the smallest first and one very large session at a time, a running one
  * parsed again no sooner than `reparseMs` unless a refresh asks; and one computation at a time: a
- * request for the window being read joins it, progress and all, any other waits its turn,
- * hearing meanwhile how many of its sessions are ready. Only the agents that have rules are read.
+ * request for the window being read joins it, progress and all, any other waits its turn, hearing
+ * meanwhile how many of its sessions are ready. Only the agents that have rules are read.
  */
 import type { RepoIdentity, SessionSummary } from '../core/model.js';
 import {
@@ -21,8 +21,14 @@ import {
   type SessionEvents,
   type SettingsFile,
 } from '../shared/permissions.js';
-import { isActive } from './live.js';
-import { steady, type WeekProgress, type WeekStore } from './week.js';
+import { steady, type WeekProgress, type WeekRead, type WeekStore } from './week.js';
+import {
+  BigReads,
+  readWindowSessions,
+  running,
+  staleSessions,
+  type WindowCached,
+} from './window-sessions.js';
 
 export interface RulesOptions {
   /**
@@ -49,14 +55,11 @@ export interface RulesOptions {
 /** Agents whose calls have permission rules glassbox can read. */
 const WITH_RULES = new Set(['claude-code', 'codex']);
 
-interface Cached {
+interface Cached extends WindowCached {
   events: PermissionEvent[];
   project: RuleProject;
   /** The working tree the session ran in, whose own settings count for its project. */
   tree: string | null;
-  updatedAt: string;
-  readAt: number;
-  running: boolean;
 }
 
 interface Job {
@@ -66,10 +69,6 @@ interface Job {
   listeners: Set<(p: WeekProgress) => void>;
   last: WeekProgress;
 }
-
-const yieldToLoop = () => new Promise<void>((resolve) => setImmediate(resolve));
-
-const running = (s: SessionSummary) => isActive(s.live);
 
 /** The session's repository as listed; a session without one is in its own directory. */
 function placeOf(s: SessionSummary): { project: RuleProject; tree: string | null } {
@@ -82,7 +81,7 @@ export class RulesService {
   private readonly cache = new Map<string, Cached>();
   private job: Job | null = null;
   private stopped = false;
-  private bigRead: Promise<void> = Promise.resolve();
+  private readonly bigReads = new BigReads();
   private readonly concurrency: number;
   private readonly bigBytes: number;
   private readonly reparseMs: number;
@@ -178,46 +177,26 @@ export class RulesService {
           WITH_RULES.has(s.agent) &&
           (running(s) || from === null || !(Date.parse(s.updatedAt) < from)),
       );
-    const stale = wanted.filter((s) => {
-      const c = this.cache.get(s.id);
-      return !c || running(s) || c.running || c.updatedAt !== s.updatedAt;
-    });
-    return { from, wanted, stale };
+    return { from, wanted, stale: staleSessions(wanted, this.cache) };
   }
 
-  /** Reads one session into the cache; its bytes, or null when it was not read. */
-  private async read(s: SessionSummary, size: number, asOf: number): Promise<number | null> {
-    const big = size >= this.bigBytes;
-    let release = () => {};
-    if (big) {
-      const before = this.bigRead;
-      this.bigRead = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      await before;
-    }
-    try {
-      if (this.stopped) return null;
-      const got = await this.store.readSession(s.id);
-      if (!got || this.stopped) return null;
-      const { project, tree } = placeOf(s);
-      const events = permissionEvents(
-        got.snapshot,
-        { cwd: s.cwd, tree, home: this.opts.home ?? null },
-        this.opts.decisions?.(),
-      );
-      this.cache.set(s.id, {
-        events,
-        project,
-        tree,
-        updatedAt: s.updatedAt,
-        readAt: asOf,
-        running: running(s),
-      });
-      return got.bytes;
-    } finally {
-      release();
-    }
+  /** Keeps one session read as its permission events. */
+  private async keep(s: SessionSummary, got: WeekRead, asOf: number): Promise<boolean> {
+    const { project, tree } = placeOf(s);
+    const events = permissionEvents(
+      got.snapshot,
+      { cwd: s.cwd, tree, home: this.opts.home ?? null },
+      this.opts.decisions?.(),
+    );
+    this.cache.set(s.id, {
+      events,
+      project,
+      tree,
+      updatedAt: s.updatedAt,
+      readAt: asOf,
+      running: running(s),
+    });
+    return true;
   }
 
   private async run(job: Job): Promise<RulesResult> {
@@ -234,40 +213,25 @@ export class RulesService {
     };
     emit();
 
-    const sizeOf = this.store.sizeOf?.bind(this.store);
-    const sized = await Promise.all(
-      stale.map(async (s) => ({ s, size: sizeOf ? await sizeOf(s.id).catch(() => 0) : 0 })),
-    );
-    const toRead = sized.filter(({ s, size }) => {
-      const c = this.cache.get(s.id);
-      return !c || job.refresh || size === 0 || !(running(s) && now - c.readAt < this.reparseMs);
-    });
-    if (toRead.length < sized.length) {
-      done += sized.length - toRead.length;
-      emit();
-    }
-    toRead.sort((a, b) => a.size - b.size);
-
-    let read = 0;
-    let failed = 0;
-    let next = 0;
-    const worker = async () => {
-      for (let item = toRead[next++]; item && !this.stopped; item = toRead[next++]) {
-        try {
-          if ((await this.read(item.s, item.size, now)) === null) failed++;
-          else read++;
-        } catch (err) {
-          failed++;
-          this.log(
-            `rules: could not read ${item.s.id}: ${err instanceof Error ? err.message : err}`,
-          );
-        }
-        done++;
+    const reads = await readWindowSessions({
+      store: this.store,
+      stale,
+      cache: this.cache,
+      now,
+      refresh: job.refresh,
+      reparseMs: this.reparseMs,
+      concurrency: this.concurrency,
+      bigBytes: this.bigBytes,
+      bigReads: this.bigReads,
+      stopped: () => this.stopped,
+      log: this.log,
+      label: 'rules',
+      advance: (by) => {
+        done += by;
         emit();
-        await yieldToLoop();
-      }
-    };
-    await Promise.all(Array.from({ length: Math.min(this.concurrency, toRead.length) }, worker));
+      },
+      keep: (s, got, asOf) => this.keep(s, got, asOf),
+    });
     if (this.stopped) throw new Error('stopped');
 
     const sessions: SessionEvents[] = [];
@@ -300,9 +264,9 @@ export class RulesService {
       asOf: now,
       stats: {
         considered: total,
-        read,
-        cached: total - toRead.length,
-        failed,
+        read: reads.read,
+        cached: total - reads.tried,
+        failed: reads.failed,
         ms: Math.round(performance.now() - started),
       },
     };
