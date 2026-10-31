@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { createDemoSideSnapshots, createDemoSnapshot } from '../core/fixtures/demo.js';
-import type { SessionSnapshot } from '../core/model.js';
+import type { SessionSnapshot, ToolCall } from '../core/model.js';
 import { emptyUsage, totalTokens } from '../core/usage.js';
 import { fileOpsOf } from '../shared/crossing.js';
 import type { WeekSession, WeekWindow } from '../shared/week.js';
@@ -369,6 +369,62 @@ describe('a session as hourly buckets', () => {
     expect((before?.edited ?? 0) + (after?.edited ?? 0)).toBe(
       store(sliceSession(b, everything(b)))?.edited,
     );
+  });
+
+  it('counts MCP calls by server in the hour each started, mcp last, none when there are none', () => {
+    const monday = new Date(2026, 10, 23, 0, 0).getTime();
+    const now = monday + 40_000;
+    const snap = createDemoSnapshot(new Date(now));
+    expect(
+      sliceSession(sessionBuckets(snap, now), weekWindow('week', now))?.inWindow,
+    ).not.toHaveProperty('mcp');
+    const req = snap.requests.find((r) => r.agentId === 'main');
+    if (!req) throw new Error('fixture');
+    const mcp = (id: string, name: string, at: number, over: Partial<ToolCall> = {}): ToolCall => ({
+      id,
+      agentId: 'main',
+      requestId: req.id,
+      name,
+      input: {},
+      status: 'complete',
+      startedAt: new Date(at).toISOString(),
+      endedAt: new Date(at + 2_000).toISOString(),
+      durationMs: 2_000,
+      resultPreview: 'ok',
+      hasFullResult: true,
+      spawned: null,
+      resultChars: 1_000,
+      ...over,
+    });
+    snap.toolCalls.push(
+      // Started a second before midnight, ended after it: last week's.
+      mcp('m1', 'mcp__tracker__list_issues', monday - 1_000),
+      mcp('m2', 'mcp__tracker__get_issue', monday + 5_000, {
+        status: 'error',
+        resultPreview: 'not found',
+        resultChars: undefined,
+      }),
+      mcp('m3', 'docs__search', monday + 9_000, { durationMs: 500 }),
+      // A call of an agent outside the session's tree is not the session's, as for every tool.
+      mcp('m4', 'mcp__docs__search', monday + 9_000, { agentId: 'stray' }),
+    );
+    const b = sessionBuckets(snap, now);
+    const before = sliceSession(b, weekWindow('week', monday - 1))?.inWindow;
+    const after = sliceSession(b, weekWindow('week', now))?.inWindow;
+    expect(before?.mcp).toEqual({
+      tracker: { calls: 1, failures: 0, ms: 2_000, resultChars: 1_000 },
+    });
+    expect(after?.mcp).toEqual({
+      tracker: { calls: 1, failures: 1, ms: 2_000, resultChars: 9 },
+      docs: { calls: 1, failures: 0, ms: 500, resultChars: 1_000 },
+    });
+    expect(Object.keys(after ?? {}).at(-1)).toBe('mcp');
+    expect(sliceSession(b, everything(b))?.inWindow.mcp?.tracker).toEqual({
+      calls: 2,
+      failures: 1,
+      ms: 4_000,
+      resultChars: 1_009,
+    });
   });
 
   it('keeps usage by the model of each call, adding up to the usage', () => {

@@ -400,6 +400,9 @@ describe('tool calls', () => {
     ).snapshot();
     expect(s.toolCalls[0]?.resultPreview).toHaveLength(500);
     expect(s.toolCalls[1]?.resultPreview).toBe('see\n[image]');
+    // What came back, whole: the preview is cut, the size is not.
+    expect(s.toolCalls[0]?.resultChars).toBe(800);
+    expect(s.toolCalls[1]?.resultChars).toBe('see\n[image]'.length);
   });
 
   it('toolResult() returns the full content and the structured result', () => {

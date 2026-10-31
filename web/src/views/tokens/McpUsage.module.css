@@ -1,0 +1,247 @@
+/* "MCP servers": a section of Where tokens went, under a hairline like "What the context held". */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 12px;
+  min-height: 22px;
+}
+
+.head h3 {
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+
+.agent {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+/* "Include sub-agents", as the Files tab's. */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-l);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--fs-small);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color var(--motion),
+    border-color var(--motion);
+}
+
+.toggle:hover {
+  color: var(--text);
+}
+
+.toggle[aria-pressed="true"] {
+  border-color: var(--ink);
+  color: var(--text);
+}
+
+.servers,
+.tools,
+.calls {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.servers {
+  display: flex;
+  flex-direction: column;
+}
+
+.server {
+  min-width: 0;
+}
+
+/* A server: its name and counts, its time, its results' tokens; it unfolds into its tools. */
+.rowHead {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 4px 16px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--radius-m);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--motion);
+}
+
+.rowHead:hover,
+.rowHead[aria-expanded="true"] {
+  background: var(--layer-2);
+}
+
+.chevron {
+  color: var(--faint);
+  transition: rotate var(--motion);
+}
+
+.rowHead[aria-expanded="true"] .chevron {
+  rotate: 90deg;
+}
+
+.what,
+.time {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.time {
+  align-items: flex-end;
+  font-size: var(--fs-small);
+  white-space: nowrap;
+}
+
+.name,
+.toolName {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.name {
+  font-weight: 500;
+}
+
+.meta {
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+
+.failed {
+  color: var(--error);
+}
+
+.running {
+  color: var(--accent);
+}
+
+.tokens {
+  font-size: var(--fs-body);
+  white-space: nowrap;
+}
+
+/* The tools under a server, indented past its chevron. */
+.tools {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 10px 12px 34px;
+}
+
+.tool {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.toolHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  min-width: 0;
+}
+
+.calls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 4px;
+}
+
+/* A call, as a link to it in the execution chain: when it started and how long it ran. */
+.call,
+.more {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 2px 8px 2px 6px;
+  border: 0;
+  border-radius: var(--radius-m);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--fs-small);
+  cursor: pointer;
+  transition:
+    background var(--motion),
+    color var(--motion);
+}
+
+.call:hover,
+.more:hover {
+  background: var(--layer-2);
+  color: var(--text);
+}
+
+.more {
+  color: var(--accent);
+}
+
+.arrow {
+  color: var(--faint);
+}
+
+.call:hover .arrow {
+  color: var(--text);
+}
+
+.note {
+  margin: 0;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+
+/* Narrow: the time and the tokens go under the name. */
+@media (max-width: 640px) {
+  .rowHead {
+    grid-template-columns: 14px minmax(0, 1fr) auto;
+  }
+
+  .time {
+    grid-column: 2;
+    flex-direction: row;
+    gap: 8px;
+    align-items: baseline;
+  }
+
+  .tokens {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .tools {
+    padding-left: 18px;
+  }
+}

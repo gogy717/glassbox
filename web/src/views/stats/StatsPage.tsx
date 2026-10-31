@@ -19,6 +19,7 @@ import {
   cliRowText,
   HourCard,
   LongestCard,
+  McpCard,
   NowCard,
   ProjectsCard,
   TokensCard,
@@ -414,6 +415,7 @@ function Week({
         </div>
         <CrossingCard w={w} locale={L} />
         <TokensCard w={w} locale={L} />
+        <McpCard w={w} locale={L} />
       </div>
       <div className={css.column} data-column="side">
         <HourCard

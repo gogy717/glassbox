@@ -5,6 +5,7 @@ import type { SessionPatch, SessionSnapshot, SessionSummary } from '../core/mode
 import { hourTotal, ratePerMinute, rateSeries, type TokenRate } from '../shared/rate.js';
 import { applyPatch } from './__tests__/apply-patch.js';
 import { DemoStore } from './demo-store.js';
+import { sessionBuckets, sliceSession, weekWindow } from './week-buckets.js';
 
 let store: DemoStore;
 
@@ -323,5 +324,35 @@ describe('DemoStore.expectSession', () => {
     const demo = new DemoStore();
     expect(await demo.expectSession(DEMO_SESSION_ID)).toBe(true);
     expect(await demo.expectSession('claude-code:nope')).toBe(false);
+  });
+});
+
+// Package F (round 3): MCP servers.
+describe('DemoStore MCP calls', () => {
+  it('has the demo session call a docs and a tracker server, a sub-agent too, one call failing', async () => {
+    const snap = (await store.getSnapshot(DEMO_SESSION_ID)) as SessionSnapshot;
+    expect(checkSnapshot(snap)).toEqual([]);
+    const mcp = snap.toolCalls.filter((t) => t.name.startsWith('mcp__'));
+    expect(new Set(mcp.map((t) => t.name.split('__')[1]))).toEqual(new Set(['docs', 'tracker']));
+    expect(mcp.filter((t) => t.status === 'error')).toHaveLength(1);
+    expect(mcp.some((t) => t.agentId !== 'main')).toBe(true);
+    expect(mcp.every((t) => typeof t.resultChars === 'number')).toBe(true);
+    // Each is a call of its request, as the execution chain draws it.
+    for (const t of mcp) {
+      const req = snap.requests.find((r) => r.id === t.requestId);
+      expect(req?.toolCallIds).toContain(t.id);
+      expect(req?.blocks.some((b) => b.kind === 'tool-use' && b.toolCallId === t.id)).toBe(true);
+    }
+    expect(snap.session.counts?.toolCalls).toBe(snap.toolCalls.length);
+  });
+
+  it('counts the demo session’s MCP calls in the week', async () => {
+    // The week reads the session as the server's week does (`WeekService`, with its pauses).
+    const now = Date.now();
+    const read = await store.readSession(DEMO_SESSION_ID);
+    if (!read) throw new Error('no demo session');
+    const demo = sliceSession(sessionBuckets(read.snapshot, now), weekWindow('7d', now));
+    expect(demo?.inWindow.mcp?.tracker?.failures).toBe(1);
+    expect(Object.keys(demo?.inWindow.mcp ?? {}).sort()).toEqual(['docs', 'tracker']);
   });
 });

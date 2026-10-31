@@ -80,6 +80,14 @@ const en = {
     'Shares of the tokens glassbox saw on this machine; other machines and apps are not seen',
   burnHintRequests:
     'Shares of the requests glassbox saw on this machine (these sessions report no tokens); other machines and apps are not seen',
+  // Package F (round 3): MCP servers.
+  mcp: 'MCP servers',
+  mcpNote: 'calls · failures · time',
+  mcpCalls: '{n} {n|call|calls}',
+  mcpFailed: '{n} failed',
+  mcpNone: 'No MCP server called this week',
+  mcpNone7: 'No MCP server called in the last 7 days',
+  mcpTitle: 'Results of {n} {n|character|characters} came back into the context',
 };
 
 type Key = keyof typeof en;
@@ -156,6 +164,14 @@ const zh: Record<Key, string> = {
   burnHint: '按 glassbox 在这台机器上看到的 token 算；别的机器和应用用掉的看不到',
   burnHintRequests:
     '按 glassbox 在这台机器上看到的请求数算（这些会话没有上报 token）；别的机器和应用用掉的看不到',
+  // Package F (round 3): MCP servers.
+  mcp: 'MCP 服务器',
+  mcpNote: '调用 · 失败 · 用时',
+  mcpCalls: '{n} 次调用',
+  mcpFailed: '{n} 次失败',
+  mcpNone: '本周没有调用 MCP 服务器',
+  mcpNone7: '最近 7 天没有调用 MCP 服务器',
+  mcpTitle: '带回上下文的结果共 {n} 字符',
 };
 
 const STRINGS: Record<Locale, Record<Key, string>> = { en, zh };

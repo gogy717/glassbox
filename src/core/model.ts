@@ -406,6 +406,12 @@ export interface ToolCall {
    * records none: the edit's input alone does not say where in the file it landed.
    */
   lineChanges?: LineChange[];
+  /**
+   * Characters of the whole result as text, as the agent recorded it (`resultPreview` is its
+   * start): what the call brought back into the context, paid for by every later request.
+   * Absent while there is no result, and in records made before it was counted.
+   */
+  resultChars?: number;
 }
 
 /** A multi-agent orchestration run (Claude Code: the Workflow tool, "ultracode"). */

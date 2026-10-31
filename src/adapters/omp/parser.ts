@@ -160,10 +160,13 @@ function scoped(agentId: string, id: string): string {
   return agentId === MAIN_AGENT_ID ? id : `${agentId}/${id}`;
 }
 
-function preview(text: string): string | null {
+/** A tool result's preview (null when it says nothing) and its size, in characters. */
+function resultView(text: string): Pick<ToolCall, 'resultPreview' | 'resultChars'> {
   const trimmed = text.trim();
-  if (trimmed === '') return null;
-  return trimmed.length > PREVIEW_CHARS ? trimmed.slice(0, PREVIEW_CHARS) : trimmed;
+  return {
+    resultPreview: trimmed === '' ? null : trimmed.slice(0, PREVIEW_CHARS),
+    resultChars: trimmed.length,
+  };
 }
 
 function plus(iso: string | null, ms: number | null): string | null {
@@ -941,9 +944,10 @@ export class OmpSessionParser implements SessionParser {
         endedAt,
         durationMs:
           startedAt && endedAt ? Math.max(0, Date.parse(endedAt) - Date.parse(startedAt)) : null,
-        resultPreview: result ? preview(result.text) : null,
+        resultPreview: null,
         hasFullResult: result !== null,
         spawned: spawned ? { kind: 'agent', agentId: spawned } : null,
+        ...(result ? resultView(result.text) : {}),
       };
     });
   }

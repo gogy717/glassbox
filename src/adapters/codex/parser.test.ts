@@ -80,6 +80,7 @@ describe('CodexSessionParser', () => {
         requestId: 'resp_1',
         durationMs: 40,
         resultPreview: 'herb.txt',
+        resultChars: 8,
         hasFullResult: true,
         spawned: null,
       }),

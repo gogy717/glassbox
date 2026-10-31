@@ -659,3 +659,11 @@ a.sessionTitle:hover {
     padding: 10px 16px;
   }
 }
+
+/* Package F (round 3): MCP servers, across both columns after Tokens where the columns dissolve. */
+@media (max-width: 1199px) {
+  .card[data-area="mcp"] {
+    grid-column: 1 / -1;
+    order: 6;
+  }
+}

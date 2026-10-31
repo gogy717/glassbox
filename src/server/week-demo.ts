@@ -456,10 +456,50 @@ function intoWorktree(week: SessionSnapshot[]): void {
   });
 }
 
+/**
+ * The week's MCP calls, made of calls it already has, so no other figure moves: one Claude Code
+ * web search in eight asks the `docs` or the `tracker` server instead (`mcp__server__tool`), and
+ * each Grok session's first file read asks the tracker for an issue (`server__tool`, as Grok
+ * names them), the last of those failing. Result sizes as such servers send them back.
+ */
+function withMcp(week: SessionSnapshot[]): void {
+  let k = 0;
+  for (const s of week)
+    for (const t of s.toolCalls) {
+      if (t.name !== 'WebSearch') continue;
+      const turn = k++ % 16;
+      if (turn === 0) {
+        t.name = 'mcp__docs__search';
+        t.input = { query: 'vite library mode', limit: 5 };
+        t.resultChars = 6_200 + ((k * 1_733) % 8_000);
+      } else if (turn === 8) {
+        t.name = 'mcp__tracker__list_issues';
+        t.input = { project: 'WEB', state: 'open' };
+        t.resultChars = 2_400 + ((k * 977) % 3_000);
+      }
+    }
+  let last: ToolCall | null = null;
+  for (const s of week) {
+    if (s.session.agent !== 'grok') continue;
+    const t = s.toolCalls.find((x) => x.name === 'read_file');
+    if (!t) continue;
+    t.name = 'tracker__get_issue';
+    t.input = { id: 'WEB-412' };
+    t.resultChars = 1_800;
+    last = t;
+  }
+  if (last) {
+    last.status = 'error';
+    last.resultPreview = 'tracker: issue WEB-412 not found';
+    last.resultChars = last.resultPreview.length;
+  }
+}
+
 /** The demo week: the sessions of the last eight days, as of `now`. */
 export function createDemoWeek(now: number): SessionSnapshot[] {
   const random = rng(0x5eed_0043);
   const week = plan(now, random).map((p, i) => build(p, i + 1, random));
   intoWorktree(week);
+  withMcp(week);
   return week;
 }

@@ -149,10 +149,13 @@ function openKey(agentId: string, turnId: string): string {
   return `${agentId}\0${turnId}`;
 }
 
-function preview(value: unknown): string | null {
+/** A tool result's preview (null when it says nothing) and its size, in characters. */
+function resultView(value: unknown): Pick<ToolCall, 'resultPreview' | 'resultChars'> {
   const text = textOf(value).trim();
-  if (text === '') return null;
-  return text.length > PREVIEW_CHARS ? text.slice(0, PREVIEW_CHARS) : text;
+  return {
+    resultPreview: text === '' ? null : text.slice(0, PREVIEW_CHARS),
+    resultChars: text.length,
+  };
 }
 
 function originOf(
@@ -1119,12 +1122,13 @@ export class CodexSessionParser implements SessionParser {
         startedAt: tool.startedAt,
         endedAt: tool.endedAt,
         durationMs: tool.durationMs,
-        resultPreview: tool.hasResult ? preview(tool.result) : null,
+        resultPreview: null,
         hasFullResult: tool.hasResult,
         spawned:
           tool.spawnedAgentId && this.agents.has(tool.spawnedAgentId)
-            ? { kind: 'agent', agentId: tool.spawnedAgentId }
+            ? ({ kind: 'agent', agentId: tool.spawnedAgentId } as const)
             : null,
+        ...(tool.hasResult ? resultView(tool.result) : {}),
       }));
   }
 
