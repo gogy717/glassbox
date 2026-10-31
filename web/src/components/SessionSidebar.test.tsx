@@ -5,7 +5,7 @@ import { createDemoSessions } from '../../../src/core/fixtures/demo.js';
 import type { SessionSummary } from '../../../src/core/model.js';
 import { I18nContext, makeI18n } from '../i18n';
 import { projectKey } from '../lib/sessions';
-import { DEFAULT_PREFS, type Prefs } from '../prefs';
+import { DEFAULT_PREFS, loadPrefs, type Prefs, savePrefs } from '../prefs';
 import { DEMO_NOW } from '../test/demo';
 import tagCss from './AgentTag.module.css';
 import { WAIT_MS } from './Delayed';
@@ -856,6 +856,40 @@ describe('SessionSidebar folding', () => {
     expect(title).toHaveFocus();
     fireEvent.keyDown(title, { key: 'ArrowDown' });
     expect(screen.getByRole('button', { name: 'blog' })).toHaveFocus();
+  });
+
+  // Round 3, A: a fold is kept by the directory the group gathers by, so it holds when the
+  // group's name changes with the list, and across a reload.
+  it('keeps a group folded when its name changes and after a reload', () => {
+    const onPrefs = vi.fn();
+    const { rerender, unmount } = render(<Harness sessions={sessions} onPrefs={onPrefs} />);
+    fireEvent.click(screen.getByRole('button', { name: 'glassbox' }));
+    // A like-named directory elsewhere: both groups read with their parents now.
+    const stranger = {
+      ...(sessions[2] as SessionSummary),
+      id: 'claude-code:stranger',
+      title: 'Stranger',
+      cwd: '/Users/demo/Notes/glassbox',
+      project: 'glassbox',
+    };
+    rerender(<Harness sessions={[...sessions, stranger]} onPrefs={onPrefs} />);
+    expect(screen.getByRole('button', { name: /^Dev\/glassbox/ })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(screen.getByRole('button', { name: 'Notes/glassbox' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    unmount();
+    localStorage.clear();
+    onTestFinished(() => localStorage.clear());
+    savePrefs(onPrefs.mock.lastCall?.[0] as Prefs);
+    render(<Harness sessions={sessions} prefs={loadPrefs()} />);
+    expect(screen.getByRole('button', { name: /^glassbox/ })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
   });
 
   it('speaks a folded group in Chinese', () => {
