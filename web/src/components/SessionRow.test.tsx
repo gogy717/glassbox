@@ -9,6 +9,7 @@ import type { SessionSummary } from '../../../src/core/model.js';
 import { I18nContext, makeI18n } from '../i18n';
 import { DEMO_NOW } from '../test/demo';
 import { moduleCssValue } from '../test/module-css';
+import tagCss from './AgentTag.module.css';
 import { SessionRow } from './SessionRow';
 import css from './SessionRow.module.css';
 
@@ -132,6 +133,39 @@ describe('SessionRow', () => {
   });
 
   describe('at card density', () => {
+    it('prints a separator only between two things, whatever the row holds', () => {
+      // Home's board: each "·" stands between words on both sides, across the states a row has.
+      const bare = { ...idle, usage: null };
+      const rows: [SessionSummary, { failure?: string | null }][] = [
+        [bare, {}],
+        [idle, {}],
+        [running, {}],
+        [reading, {}],
+        [{ ...running, activity: undefined }, {}],
+        [{ ...running, live: 'waiting', activity: undefined }, {}],
+        [{ ...running, trouble: { kind: 'waiting', params: {}, at: null, since: since(840) } }, {}],
+        [bare, { failure: null }],
+        [idle, { failure: 'missing file' }],
+      ];
+      let seen = 0;
+      for (const [session, more] of rows) {
+        for (const locale of ['en', 'zh'] as const) {
+          const row = renderRow(session as SessionSummary, false, vi.fn(), locale, {
+            density: 'card',
+            ...more,
+          });
+          for (const sep of row.querySelectorAll(`.${css.sep}, [class*="sep"]`)) {
+            seen++;
+            const side = (n: Node | null) => (n?.textContent ?? '').trim();
+            expect(side(sep.previousSibling), row.textContent ?? '').not.toBe('');
+            expect(side(sep.nextSibling), row.textContent ?? '').not.toBe('');
+          }
+          cleanup();
+        }
+      }
+      expect(seen).toBeGreaterThan(20);
+    });
+
     it('reads tag, project and title, then the activity with its clock and the tokens', () => {
       vi.useFakeTimers();
       vi.setSystemTime(DEMO_NOW);
@@ -298,20 +332,56 @@ describe('SessionRow', () => {
     });
     afterEach(() => vi.useRealTimers());
 
+    // The tokens, else the age, take only the room the activity and the tag leave them: a basis
+    // of nothing, grown up to their own width. The activity shrinks only once they are gone.
+    const givesWayFirst = (el: Element | null | undefined) => {
+      expect(rule(el, 'flex-basis')).toBe('0');
+      expect(rule(el, 'max-width')).toBe('max-content');
+      expect(rule(el, 'min-width')).toBe('0');
+    };
+
     it('keeps a clock whole: with nothing in the activity to give way, the tokens give way', () => {
       const { activity, when } = parts(renderRow(thinking, false, vi.fn(), 'zh'));
       expect(activity).toHaveTextContent('思考中 · 已 0:04');
-      expect(rule(activity, 'flex-shrink')).toBe('0');
-      expect(rule(when, 'flex-shrink')).toBeUndefined();
-      expect(rule(when, 'min-width')).toBe('0');
+      givesWayFirst(when);
       expect(rule(when, 'text-overflow')).toBe('ellipsis');
     });
 
     it('keeps a state’s word whole beside its age, which gives way', () => {
-      const { activity, when } = parts(renderRow(idle, false, vi.fn(), 'zh'));
-      expect(rule(activity, 'flex-shrink')).toBe('0');
+      const { when } = parts(renderRow(idle, false, vi.fn(), 'zh'));
       expect(when).toHaveAttribute('data-age');
-      expect(rule(when, 'flex-shrink')).toBeUndefined();
+      givesWayFirst(when);
+    });
+
+    it('never cuts the agent tag: short of room even so, the activity’s words end in an ellipsis', () => {
+      // "思考中 · 已 0:00 · 输出 5.07万" in ZH clipped the tag to "Claude Cod": the activity would not
+      // shrink, so the tag went past the line's edge.
+      const row = renderRow(thinking, false, vi.fn(), 'zh');
+      const { activity } = parts(row);
+      expect(rule(activity, 'flex-shrink')).toBe('1');
+      const words = activity?.lastElementChild;
+      expect(words).toHaveTextContent('思考中 · 已 0:04');
+      expect(rule(words, 'flex-shrink')).toBe('1');
+      expect(rule(words, 'min-width')).toBe('0');
+      expect(rule(words, 'overflow')).toBe('hidden');
+      expect(rule(words, 'text-overflow')).toBe('ellipsis');
+      const tag = row.querySelector('[data-agent]');
+      expect(tag).toHaveTextContent('Claude Code');
+      const tagSheet = join(import.meta.dirname, 'AgentTag.module.css');
+      expect(tag && moduleCssValue(tagSheet, tagCss, tag, 'flex')).toBe('none');
+    });
+
+    it('lets a sign give way before the age and tokens, beside a whole activity', () => {
+      const stuck: SessionSummary = {
+        ...thinking,
+        trouble: { kind: 'waiting', params: {}, at: null, since: since(840) },
+      };
+      const meta = renderRow(stuck, false, vi.fn(), 'zh').lastElementChild as HTMLElement;
+      const sign = meta.children[1];
+      givesWayFirst(sign);
+      expect(Number(rule(sign, 'flex-grow'))).toBeLessThan(
+        Number(rule(meta.querySelector('[data-clip]'), 'flex-grow')),
+      );
     });
 
     it('lets a target give way first, the tokens beside it whole', () => {

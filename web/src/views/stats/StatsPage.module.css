@@ -44,6 +44,11 @@
   color: var(--muted);
 }
 
+/* When the data is from, and Refresh: one line, never parted. */
+.asOf {
+  white-space: nowrap;
+}
+
 .printArea {
   display: flex;
   grid-row: 1;
@@ -308,6 +313,11 @@
   color: var(--muted);
 }
 
+/* A part of the hour's line, whole: the line breaks between its parts, never inside a figure. */
+.keep {
+  white-space: nowrap;
+}
+
 .sessions {
   display: grid;
   gap: 14px;
@@ -450,9 +460,17 @@ a.sessionTitle:hover {
   border-left: 1px solid var(--border);
 }
 
-.figure:first-child {
+.figures > .figure:first-child {
   padding-left: 0;
   border-left: 0;
+}
+
+/* The total and its cost: one unit at the right, going under as one when the line is full. */
+.sums {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  margin-left: auto;
 }
 
 .figure > :global(.section-label) {
@@ -463,10 +481,6 @@ a.sessionTitle:hover {
   font-size: 20px;
   font-weight: 500;
   white-space: nowrap;
-}
-
-.figure[data-total] {
-  margin-left: auto;
 }
 
 .figure[data-total] .value {

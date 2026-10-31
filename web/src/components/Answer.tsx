@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { SessionSummary } from '../../../src/core/model.js';
 import type { PermissionDecision } from '../../../src/shared/runs.js';
-import { shellCommand } from '../../../src/shared/tool-category.js';
+import { field, shellCommand } from '../../../src/shared/tool-category.js';
 import { type OpenPrompt, promptKind } from '../data/runs';
 import { useI18n } from '../i18n';
 import { summarizeInput } from '../lib/tool-category';
@@ -54,7 +54,8 @@ const planOf = (input: unknown): string => {
 /**
  * A glassbox run's prompt answered where it is listed: what it wants as its call card will say it
  * (the whole command in the tooltip), then Deny and Allow, sent through the run that holds it as
- * the dialog sends them; Deny without a reason, which the dialog can give. On a row a question
+ * the dialog sends them; Deny without a reason, which the dialog can give. Inline, under the
+ * command printed whole, it names the tool instead of the command again. On a row a question
  * and a plan to approve keep Open: the question's options, and the plan read whole, need the
  * dialog's room; `inline`, they have it here. Answered, the row moves on with the next update,
  * and nothing more can be pressed until then; a failure says why and lets it be sent again. Keyed
@@ -67,6 +68,8 @@ export function Answer({ session: s, prompt, armed, onDecide, onOpen, inline = f
   const { runId, request } = prompt;
   const title = s.title ?? t('sidebar.untitled');
   const wants = summarizeInput({ name: request.toolName, input: request.input });
+  // Inline, the Inbox prints a command whole in its block above: the line here names the tool.
+  const said = inline && field(request.input, 'command') ? request.toolName : wants;
   const kind = promptKind(request);
   const decide = async (d: PermissionDecision) => {
     setBusy(true);
@@ -158,7 +161,7 @@ export function Answer({ session: s, prompt, armed, onDecide, onOpen, inline = f
       aria-label={t('home.decide', { tool: request.toolName, title })}
     >
       <code className={css.wants} title={shellCommand(request.input) ?? wants}>
-        {wants || request.toolName}
+        {said || request.toolName}
       </code>
       {failure}
       <button

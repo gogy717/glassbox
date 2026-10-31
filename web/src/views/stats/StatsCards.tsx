@@ -4,7 +4,7 @@
  * for the rest (`st`). A session is a link only while the session list has it (R32). Each card
  * draws again only when its own figures change: a hover in the grid draws none of them.
  */
-import { memo, type RefObject, useEffect, useRef, useState } from 'react';
+import { Fragment, memo, type RefObject, useEffect, useRef, useState } from 'react';
 import type { QuotaSnapshot, QuotaWindow } from '../../../../src/core/model.js';
 import {
   burnSince,
@@ -198,12 +198,20 @@ export const HourCard = memo(function HourCard(p: {
           </h2>
           <p className={css.hourLine}>
             {hour.topCli
-              ? st(L, 'hourLine', {
+              ? // Each part whole ("Claude Code 1 小时 22 分"): the line breaks only between them.
+                st(L, 'hourLine', {
                   time: timeText(hour.ms, L),
                   n: hour.sessions.length,
                   cli: agentName(hour.topCli.agent),
                   cliTime: timeText(hour.topCli.ms, L),
                 })
+                  .split(' · ')
+                  .map((part, i) => (
+                    <Fragment key={part}>
+                      {i > 0 && ' · '}
+                      <span className={css.keep}>{part}</span>
+                    </Fragment>
+                  ))
               : st(L, 'hourIdle')}
           </p>
           <HourSessions key={hour.start} rows={hour.sessions} listed={p.listed} locale={L} />
@@ -420,17 +428,21 @@ export const TokensCard = memo(function TokensCard({
               </span>
               <span className="section-label">{rt(locale, 'cacheHit')}</span>
             </div>
-            <div className={css.figure} data-total>
-              <span className={`${css.value} figure`}>
-                <UiCjk text={fmt(tk.total)} />
-              </span>
-              <span className="section-label">{rt(locale, 'total')}</span>
-            </div>
-            <div className={css.figure} data-cost title={costTitle}>
-              <span className={`${css.value} figure`}>
-                {tk.cost.priced ? `≈ ${formatUsdShort(tk.cost.usd, intl)}` : '—'}
-              </span>
-              <span className="section-label">{st(locale, 'apiCost')}</span>
+            {/* The total and its cost, at the right as one: short of room they go under
+                together, never the cost alone. */}
+            <div className={css.sums}>
+              <div className={css.figure} data-total>
+                <span className={`${css.value} figure`}>
+                  <UiCjk text={fmt(tk.total)} />
+                </span>
+                <span className="section-label">{rt(locale, 'total')}</span>
+              </div>
+              <div className={css.figure} data-cost title={costTitle}>
+                <span className={`${css.value} figure`}>
+                  {tk.cost.priced ? `≈ ${formatUsdShort(tk.cost.usd, intl)}` : '—'}
+                </span>
+                <span className="section-label">{st(locale, 'apiCost')}</span>
+              </div>
             </div>
           </div>
           {note && <p className={css.hint}>{note}</p>}
