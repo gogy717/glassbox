@@ -1,0 +1,139 @@
+/* "Who used it", under a provider's windows in the quota's details. */
+.burn {
+  display: grid;
+  gap: 6px;
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.title {
+  font-weight: 600;
+}
+
+.since,
+.note,
+.more,
+.foot {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.rows {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The title, its share as a bar and a figure, and its tokens: titles cut, figures aligned. */
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48px 4ch 5ch;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.name {
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+a.name {
+  text-decoration: none;
+}
+
+a.name:hover {
+  text-decoration: underline;
+}
+
+.track {
+  display: block;
+  height: 4px;
+  border-radius: var(--radius-xs);
+  background: var(--layer-3);
+  overflow: hidden;
+}
+
+.track > span {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-xs);
+  background: var(--text);
+}
+
+.share,
+.amount {
+  text-align: right;
+}
+
+.amount {
+  color: var(--muted);
+}
+
+.foot {
+  line-height: 1.4;
+}
+
+/* The same on Stats' Right now: what it is, then the top three on one line, each title cut to
+   its share of the width. */
+.line {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  font-size: var(--fs-meta);
+  color: var(--text);
+}
+
+.lead {
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.items {
+  display: flex;
+  min-width: 0;
+}
+
+.item {
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: pre;
+}
+
+.sep {
+  flex: none;
+  color: var(--muted);
+}
+
+.itemName {
+  min-width: 2ch;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+a.itemName {
+  text-decoration: none;
+}
+
+a.itemName:hover {
+  text-decoration: underline;
+}
+
+.itemShare {
+  flex: none;
+}

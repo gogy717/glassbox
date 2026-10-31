@@ -6,15 +6,24 @@
  */
 import { memo, type RefObject, useEffect, useRef, useState } from 'react';
 import type { QuotaSnapshot, QuotaWindow } from '../../../../src/core/model.js';
+import {
+  burnSince,
+  burnWindow,
+  type QuotaBurn,
+  topBurn,
+} from '../../../../src/shared/quota-burn.js';
 import { firstCountedIndex, ratePerMinute, rateSeries } from '../../../../src/shared/rate.js';
 import type { WeekWindowKind } from '../../../../src/shared/week.js';
 import { AgentTag } from '../../components/AgentTag';
 import { UiCjk } from '../../components/CompactFigure';
+import { sharePct } from '../../components/QuotaBurn';
+import burnCss from '../../components/QuotaBurn.module.css';
 import { Sparkline } from '../../components/RateCharts';
 import { count, partsText } from '../../components/receipt/format';
 import { rt } from '../../components/receipt/strings';
 import { unreportedLine } from '../../components/receipt/week';
 import { cliParts, shareText } from '../../components/receipt/weekFigures';
+import { type BurnAsk, useListedIds, useQuotaBurns } from '../../data/quotaBurn';
 import { useRate } from '../../data/store';
 import { type Locale, useI18n } from '../../i18n';
 import { agentName } from '../../lib/agent-names';
@@ -523,6 +532,80 @@ export const NowCard = memo(function NowCard({
       ) : (
         <p className={css.hint}>{st(locale, 'noQuota')}</p>
       )}
+      <BurnLine quotas={quotas} now={now} />
     </section>
   );
 });
+
+/** Sessions named on Right now's line. */
+const BURN_LINE_ROWS = 3;
+
+/**
+ * Who used the plan of the provider closest to a limit (as the top bar's lead meter) of those
+ * glassbox saw any use of, on one line under the meters: the top three sessions of its listed
+ * window (its 5-hour one when it has one) and their shares, each a link while listed; the quota's
+ * details list more. Read again each minute.
+ */
+function BurnLine({ quotas, now }: { quotas: QuotaSnapshot[]; now: number }) {
+  const { t, locale } = useI18n();
+  const topPct = (q: QuotaSnapshot) =>
+    Math.max(
+      -1,
+      ...q.windows
+        .filter((w) => !w.resetsAt || Date.parse(w.resetsAt) > now)
+        .map((w) => w.usedPercent),
+    );
+  // Closest to a limit first; the first of them with a list is named.
+  const candidates = quotas
+    .filter(
+      (q, i) => burnWindow(q, now) && quotas.findIndex((o) => o.provider === q.provider) === i,
+    )
+    .sort((a, b) => topPct(b) - topPct(a));
+  const asks: BurnAsk[] = candidates.map((q) => ({
+    provider: q.provider,
+    since: burnSince(q, now),
+  }));
+  const states = useQuotaBurns(asks, true, Math.floor(now / 60_000));
+  const listed = useListedIds();
+  let shown: { lead: QuotaSnapshot; window: QuotaWindow; burn: QuotaBurn } | null = null;
+  for (const q of candidates) {
+    const state = states.get(q.provider);
+    const window = burnWindow(q, now);
+    if (window && state?.status === 'ok' && state.burn.sessions.length > 0) {
+      shown = { lead: q, window, burn: state.burn };
+      break;
+    }
+  }
+  if (!shown) return null;
+  const { lead, window, burn } = shown;
+  const { top } = topBurn(burn.sessions, BURN_LINE_ROWS);
+  const hint = st(locale, burn.counted === 'requests' ? 'burnHintRequests' : 'burnHint');
+  return (
+    <p className={burnCss.line} title={hint}>
+      <span className={burnCss.lead}>
+        {st(locale, 'burnLead', {
+          name: providerShortName(lead.provider),
+          window: quotaWindowName(window, t),
+        })}
+      </span>{' '}
+      <span className={burnCss.items}>
+        {top.map((s, i) => {
+          const title = s.title ?? t('sidebar.untitled');
+          return (
+            <span key={s.id} className={burnCss.item}>
+              {i > 0 && <span className={burnCss.sep}> · </span>}
+              {listed === null || listed.has(s.id) ? (
+                <a href={sessionLink(s.id)} className={burnCss.itemName}>
+                  {title}
+                </a>
+              ) : (
+                <span className={burnCss.itemName}>{title}</span>
+              )}{' '}
+              <span className={`${burnCss.itemShare} figure`}>{sharePct(s.share)}</span>
+            </span>
+          );
+        })}
+      </span>
+    </p>
+  );
+}

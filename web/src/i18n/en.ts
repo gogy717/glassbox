@@ -872,4 +872,18 @@ export const en: Record<MessageKey, string> = {
   'cacheBreaks.ttl5m': '5 minutes',
   'cacheBreaks.ttl1h': 'an hour',
   'flow.cacheBreak': 'cache · {reason}',
+  // Package E (r3/quota-burn): who used the plan window, in the quota's details.
+  'quota.burnTitle': 'Who used it',
+  'quota.burnSince': 'since {clock}',
+  'quota.burnRow': '{title}: {share} · {tokens} tokens · {n} {n|request|requests}',
+  'quota.burnRowRequests': '{title}: {share} · {n} {n|request|requests}',
+  'quota.burnMore': 'and {n} more · {share}',
+  'quota.burnNote':
+    'Shares of the tokens glassbox saw on this machine, cache reads included; other machines and apps are not seen.',
+  'quota.burnNoteRequests':
+    'These sessions report no tokens, so the shares are of their requests, as glassbox saw them on this machine; other machines and apps are not seen.',
+  'quota.burnNone': 'glassbox saw no request to it on this machine in this window.',
+  'quota.burnReading': 'Reading sessions…',
+  'quota.burnFailed': 'Could not read the sessions.',
+  'quota.mostly': 'mostly {title}',
 };

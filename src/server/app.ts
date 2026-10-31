@@ -17,15 +17,17 @@ import type {
   TokenResponse,
   ToolResultResponse,
 } from '../shared/protocol.js';
+import type { QuotaBurn } from '../shared/quota-burn.js';
 import type { WeekLine } from '../shared/week.js';
 import { jsonResponse, toJson } from './json.js';
+import { QuotaBurnService } from './quota-burn.js';
 import type { RulesService } from './rules.js';
 import type { ClientCounter } from './run-reaper.js';
 import type { RunService } from './run-service.js';
 import { registerRunRoutes, runEventPacer } from './runs-routes.js';
 import { createSecurity, type Security, securityHeaders } from './security.js';
 import type { SessionStore } from './store.js';
-import type { WeekService } from './week.js';
+import type { WeekService, WeekStore } from './week.js';
 
 /** Prompts and permission answers are small; nothing the UI sends comes near this. */
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -49,7 +51,9 @@ export type AppStore = Pick<
   week?: WeekService | null;
   /** The Rules page's data, when the store keeps one (the demo's does). */
   rules?: RulesService | null;
-};
+  /** Who used the plan window, when the store keeps its own (the demo's does). */
+  burn?: QuotaBurnService | null;
+} & Partial<WeekStore>;
 
 export interface AppDeps {
   store: AppStore;
@@ -68,8 +72,19 @@ export interface AppDeps {
   week?: WeekService | null;
   /** The Rules page's data; by default the store's own. */
   rules?: RulesService | null;
+  /**
+   * Who used the plan window; by default the store's own, else read from the store's sessions as
+   * the week reads them.
+   */
+  burn?: QuotaBurnService | null;
   log?: (msg: string) => void;
+  now?: () => number;
 }
+
+/** The longest window a burn may cover: a calendar month, and a day to spare. */
+const BURN_MAX_MS = 32 * 24 * 3_600_000;
+/** With no window given, the burn covers this much before now. */
+const BURN_DEFAULT_MS = 5 * 3_600_000;
 
 export function createApp(deps: AppDeps): Hono {
   const { store, staticDir } = deps;
@@ -82,6 +97,15 @@ export function createApp(deps: AppDeps): Hono {
     jsonResponse<ApiErrorResponse>(c, { error }, status);
   const week = deps.week !== undefined ? deps.week : (store.week ?? null);
   const rules = deps.rules !== undefined ? deps.rules : (store.rules ?? null);
+  const now = deps.now ?? Date.now;
+  const burn =
+    deps.burn !== undefined
+      ? deps.burn
+      : store.burn !== undefined
+        ? store.burn
+        : store.weekSessions && store.readSession
+          ? new QuotaBurnService(store as WeekStore, { log })
+          : null;
 
   // Outermost, so early answers (403s, 404s, errors) carry the headers too.
   app.use('*', securityHeaders);
@@ -98,6 +122,25 @@ export function createApp(deps: AppDeps): Hono {
   app.get('/api/token', (c) => jsonResponse<TokenResponse>(c, { token: security.token }));
 
   app.get('/api/quota', (c) => jsonResponse<QuotaResponse>(c, { quotas: store.listQuotas() }));
+  // Who used the plan window: `since` in epoch ms or ISO, else the last 5 hours (see
+  // src/shared/quota-burn.ts).
+  app.get('/api/quota/burn', async (c) => {
+    if (!burn) return fail(c, 404, 'not found');
+    const provider = c.req.query('provider') ?? '';
+    if (!/^[a-z0-9-]{1,40}$/.test(provider)) return fail(c, 400, 'provider must be a provider id');
+    const at = now();
+    const raw = c.req.query('since');
+    const since =
+      raw === undefined ? at - BURN_DEFAULT_MS : /^\d+$/.test(raw) ? Number(raw) : Date.parse(raw);
+    if (!Number.isFinite(since) || since > at) return fail(c, 400, 'since must be a past time');
+    try {
+      const result = await burn.compute(provider, Math.max(since, at - BURN_MAX_MS));
+      return jsonResponse<QuotaBurn>(c, result);
+    } catch (err) {
+      log(`quota burn (${provider}) failed: ${errorText(err)}`);
+      return fail(c, 500, 'could not read the sessions');
+    }
+  });
   app.get('/api/rate', (c) => jsonResponse<RateResponse>(c, { rate: store.getRate() }));
 
   app.get('/api/sessions', (c) => jsonResponse<SessionsResponse>(c, store.listSessions()));

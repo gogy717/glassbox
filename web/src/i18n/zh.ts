@@ -842,6 +842,20 @@ export const zh = {
   'cacheBreaks.ttl5m': '5 分钟',
   'cacheBreaks.ttl1h': '1 小时',
   'flow.cacheBreak': '缓存 · {reason}',
+  // Package E (r3/quota-burn): who used the plan window, in the quota's details.
+  'quota.burnTitle': '谁用掉的',
+  'quota.burnSince': '{clock} 以来',
+  'quota.burnRow': '{title}：{share} · {tokens} token · {n} 次请求',
+  'quota.burnRowRequests': '{title}：{share} · {n} 次请求',
+  'quota.burnMore': '还有 {n} 个会话 · {share}',
+  'quota.burnNote':
+    '份额按 glassbox 在这台机器上看到的 token 算，缓存读取也算在内；别的机器和应用用掉的看不到。',
+  'quota.burnNoteRequests':
+    '这些会话没有上报 token，份额按请求数算；只算 glassbox 在这台机器上看到的，别的机器和应用用掉的看不到。',
+  'quota.burnNone': '这个窗口里，glassbox 在这台机器上没看到发给它的请求。',
+  'quota.burnReading': '正在读取会话…',
+  'quota.burnFailed': '读不到这些会话。',
+  'quota.mostly': '主要是 {title}',
 } as const;
 
 export type MessageKey = keyof typeof zh;

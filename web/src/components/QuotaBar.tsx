@@ -1,15 +1,18 @@
 import { Gauge } from 'lucide-react';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { QuotaSnapshot, QuotaWindow } from '../../../src/core/model.js';
+import { burnSince, burnWindow } from '../../../src/shared/quota-burn.js';
+import { type BurnAsk, useListedIds, useQuotaBurns } from '../data/quotaBurn';
 import { type I18n, type MessageKey, useI18n } from '../i18n';
 import { agentName } from '../lib/agent-names';
 import { formatCountdown, formatRelative, formatResetTime } from '../lib/format';
 import { providerName, providerShortName } from '../lib/provider-names';
 import { quotaWindowName } from '../lib/quota';
-import { type Pace, paceOf, quotaLevel } from '../lib/quota-pace';
+import { mostlyOf, type Pace, paceOf, quotaLevel } from '../lib/quota-pace';
 import { FigureText } from './FigureText';
 import { useOnePopover, usePopoverDismiss } from './popover';
 import css from './QuotaBar.module.css';
+import { QuotaBurnList } from './QuotaBurn';
 
 interface Props {
   quotas: QuotaSnapshot[];
@@ -112,6 +115,19 @@ export function QuotaBar({ quotas, now, sessionOpen = false }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   usePopoverDismiss(ref, open, close, buttonRef);
+  // Who used each provider's window, read while the details are open.
+  const asks = useMemo(
+    () =>
+      quotas
+        .filter(
+          (q, i) =>
+            q.windows.length > 0 && quotas.findIndex((o) => o.provider === q.provider) === i,
+        )
+        .map((q): BurnAsk => ({ provider: q.provider, since: burnSince(q, now) })),
+    [quotas, now],
+  );
+  const burns = useQuotaBurns(asks, open);
+  const listed = useListedIds();
 
   const shown = quotas.filter((q) => q.windows.length > 0 || q.balance);
   if (shown.length === 0) return null;
@@ -242,60 +258,73 @@ export function QuotaBar({ quotas, now, sessionOpen = false }: Props) {
       </button>
       {open && (
         <div className={css.popover} role="dialog" aria-label={t('quota.title')}>
-          {meters.map(({ q, key }) => (
-            <section
-              key={key}
-              className={css.snapshot}
-              aria-label={heading(q)}
-              data-stale={q.stale || undefined}
-            >
-              <h3 className={css.provider}>{heading(q)}</h3>
-              {q.windows.map((w) => {
-                const pace = paceOfIn(q, w);
-                return (
-                  <div key={w.id} className={css.row} data-level={quotaLevel(w, pace)}>
-                    <div className={css.rowHead}>
-                      <span className={css.rowLabel}>{windowName(w)}</span>
-                      <span>
-                        <FigureText k="quota.used" params={{ pct: `${pct(w)}%` }} />
+          {meters.map(({ q, key }) => {
+            const burn = burns.get(q.provider);
+            const listedWindow = burnWindow(q, now);
+            // "mostly <title>": the session that used over half of the listed window.
+            const mostly = burn?.status === 'ok' ? mostlyOf(burn.burn) : null;
+            return (
+              <section
+                key={key}
+                className={css.snapshot}
+                aria-label={heading(q)}
+                data-stale={q.stale || undefined}
+              >
+                <h3 className={css.provider}>{heading(q)}</h3>
+                {q.windows.map((w) => {
+                  const pace = paceOfIn(q, w);
+                  return (
+                    <div key={w.id} className={css.row} data-level={quotaLevel(w, pace)}>
+                      <div className={css.rowHead}>
+                        <span className={css.rowLabel}>{windowName(w)}</span>
+                        <span>
+                          <FigureText k="quota.used" params={{ pct: `${pct(w)}%` }} />
+                        </span>
+                      </div>
+                      <span className={css.track} aria-hidden="true">
+                        <span style={{ width: `${pct(w)}%` }} />
                       </span>
+                      {w.resetsAt && (
+                        <span className={css.reset}>
+                          {resetText(w)} · {resetAt(w.resetsAt)}
+                        </span>
+                      )}
+                      {/* "57% of the week gone · on pace": the used share above, against the clock. */}
+                      {pace && (
+                        <span className={css.pace} data-verdict={pace.verdict}>
+                          <FigureText k={GONE[pace.span]} params={{ pct: gonePct(pace) }} /> ·{' '}
+                          {verdict(pace)}
+                          {mostly && listedWindow?.id === w.id && (
+                            <>
+                              {' · '}
+                              {t('quota.mostly', { title: mostly.title ?? t('sidebar.untitled') })}
+                            </>
+                          )}
+                        </span>
+                      )}
                     </div>
-                    <span className={css.track} aria-hidden="true">
-                      <span style={{ width: `${pct(w)}%` }} />
-                    </span>
-                    {w.resetsAt && (
-                      <span className={css.reset}>
-                        {resetText(w)} · {resetAt(w.resetsAt)}
-                      </span>
-                    )}
-                    {/* "57% of the week gone · on pace": the used share above, against the clock. */}
-                    {pace && (
-                      <span className={css.pace} data-verdict={pace.verdict}>
-                        <FigureText k={GONE[pace.span]} params={{ pct: gonePct(pace) }} /> ·{' '}
-                        {verdict(pace)}
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-              {q.balance && (
-                <p className={css.balance}>
-                  {t('quota.balance', { amount: formatBalance(q.balance, intl) })}
-                </p>
-              )}
-              {q.extraUsage && (
-                <p className={css.meta}>
-                  {t('quota.extra', {
-                    used: q.extraUsage.used.toLocaleString(intl),
-                    limit: `${q.extraUsage.limit === null ? '—' : q.extraUsage.limit.toLocaleString(intl)}${q.extraUsage.currency ? ` ${q.extraUsage.currency}` : ''}`,
-                  })}
-                </p>
-              )}
-              <p className={css.meta}>{age(q)}</p>
-              <StaleReason q={q} />
-              <p className={css.meta}>{t('quota.source', { source: sourceName(q.source) })}</p>
-            </section>
-          ))}
+                  );
+                })}
+                {burn && <QuotaBurnList state={burn} now={now} listed={listed} onOpen={close} />}
+                {q.balance && (
+                  <p className={css.balance}>
+                    {t('quota.balance', { amount: formatBalance(q.balance, intl) })}
+                  </p>
+                )}
+                {q.extraUsage && (
+                  <p className={css.meta}>
+                    {t('quota.extra', {
+                      used: q.extraUsage.used.toLocaleString(intl),
+                      limit: `${q.extraUsage.limit === null ? '—' : q.extraUsage.limit.toLocaleString(intl)}${q.extraUsage.currency ? ` ${q.extraUsage.currency}` : ''}`,
+                    })}
+                  </p>
+                )}
+                <p className={css.meta}>{age(q)}</p>
+                <StaleReason q={q} />
+                <p className={css.meta}>{t('quota.source', { source: sourceName(q.source) })}</p>
+              </section>
+            );
+          })}
           <p className={css.note}>{t('quota.note')}</p>
         </div>
       )}
