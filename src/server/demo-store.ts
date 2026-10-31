@@ -395,7 +395,8 @@ export class DemoStore implements AppStore, WeekStore {
 
   constructor() {
     const now = new Date();
-    this.snap = createDemoSnapshot(now);
+    // With a prompt-cache break of each kind, which only the demo server serves.
+    this.snap = stageCacheBreaks(createDemoSnapshot(now));
     const full = createContextDemo(now);
     full.session = withLiveFields(full, now.getTime());
     this.others = [
@@ -403,10 +404,6 @@ export class DemoStore implements AppStore, WeekStore {
       full.session,
     ];
     this.sides = [...createDemoSideSnapshots(now), full];
-    // With a prompt-cache break of each kind, which only the demo server serves.
-    this.snap = stageCacheBreaks(createDemoSnapshot(now));
-    this.others = createDemoSessions(now).filter((s) => s.id !== DEMO_SESSION_ID);
-    this.sides = createDemoSideSnapshots(now);
     this.quotas = createDemoQuotas(now);
     this.weekBehind = createDemoWeek(now.getTime());
     const history = createDemoRules(now.getTime());
