@@ -24,6 +24,8 @@
  */
 import type { Diagnostics, ModelRequest, TokenUsage } from '../../../src/core/model.js';
 import { contextSize, emptyUsage } from '../../../src/core/usage.js';
+import type { MessageKey, T } from '../i18n';
+import { formatDuration } from './format';
 import { type Cost, type PriceTable, sumCost } from './prices';
 
 export type CacheBreakReason = 'compaction' | 'shape' | 'expired' | 'rewound' | 'unknown';
@@ -185,4 +187,31 @@ export function cacheBreakCost(breaks: Iterable<CacheBreak>, table: PriceTable):
     });
   }
   return sumCost(parts, table);
+}
+
+const WORD: Record<CacheBreakReason, MessageKey> = {
+  compaction: 'cacheBreaks.reason.compaction',
+  shape: 'cacheBreaks.reason.shape',
+  expired: 'cacheBreaks.reason.expired',
+  rewound: 'cacheBreaks.reason.rewound',
+  unknown: 'cacheBreaks.reason.unknown',
+};
+
+const WHY: Record<CacheBreakReason, MessageKey> = {
+  compaction: 'cacheBreaks.why.compaction',
+  shape: 'cacheBreaks.why.shape',
+  expired: 'cacheBreaks.why.expired',
+  rewound: 'cacheBreaks.why.rewound',
+  unknown: 'cacheBreaks.why.unknown',
+};
+
+/** A break's reason in a word or two: "expired". */
+export const reasonWord = (b: CacheBreak, t: T) => t(WORD[b.reason]);
+
+/** A break's reason in a sentence, for a tooltip: "The cache broke: 6m31s passed since …". */
+export function reasonSentence(b: CacheBreak, t: T): string {
+  return t(WHY[b.reason], {
+    idle: formatDuration(b.idleMs),
+    ttl: t(b.ttlMs === TTL_1H ? 'cacheBreaks.ttl1h' : 'cacheBreaks.ttl5m'),
+  });
 }

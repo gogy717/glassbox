@@ -2,13 +2,15 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { createDemoSnapshot } from '../../../../src/core/fixtures/demo.js';
 import type { AgentKind, QuotaSnapshot } from '../../../../src/core/model.js';
 import { emptyUsage } from '../../../../src/core/usage.js';
+import { stageCacheBreaks } from '../../../../src/server/demo-cache-breaks.js';
 import { SessionAgentContext } from '../../data/session-agent';
-import { createStore, StoreContext } from '../../data/store';
+import { createStore, fromSnapshot, StoreContext } from '../../data/store';
 import { I18nContext, makeI18n } from '../../i18n';
 import type { ContextPoint } from '../../lib/token-stats';
-import { demoOpen } from '../../test/demo';
+import { DEMO_NOW, demoOpen } from '../../test/demo';
 import { UiContext } from '../../ui';
 import { ContextChart } from './ContextChart';
 import { TokensView } from './TokensView';
@@ -105,6 +107,18 @@ describe('TokensView', () => {
   it('labels the tree / spend switch as the rows’ order', () => {
     renderTokens();
     expect(screen.getByRole('radiogroup', { name: 'Order' })).toBeInTheDocument();
+  });
+
+  it('shows the cache breaks between the request lists and what the context held', () => {
+    const snap = stageCacheBreaks(createDemoSnapshot(DEMO_NOW));
+    renderTokens('main', fromSnapshot(snap.session.id, snap));
+    const headings = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
+    const at = headings.findIndex((h) => h?.startsWith('Cache breaks'));
+    expect(at).toBeGreaterThan(0);
+    expect(headings[at + 1]).toMatch(/^What the context held/);
+    cleanup();
+    renderTokens();
+    expect(screen.queryByRole('heading', { name: /Cache breaks/ })).toBeNull();
   });
 
   it('leads with the conclusions', () => {

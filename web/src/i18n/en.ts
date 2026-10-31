@@ -832,4 +832,30 @@ export const en: Record<MessageKey, string> = {
   'files.diff': 'Change',
   'files.writeSize': '{lines} {lines|line|lines} · {chars} {chars|character|characters}',
   'files.cell': 'Cell {id}',
+  // Package H (round 3): prompt-cache breaks, in Where tokens went and the execution chain.
+  'cacheBreaks.title': 'Cache breaks',
+  'cacheBreaks.summary': 'The cache broke {n} {n|time|times} · ≈ {k} tokens written again',
+  'cacheBreaks.cost': '{cost} at API prices',
+  'cacheBreaks.notAvailable': 'Not available for {agent}: it records no cache reads per request.',
+  'cacheBreaks.row': '{time} · {reason} · ≈ {k} tokens written again',
+  'cacheBreaks.reason.compaction': 'compacted',
+  'cacheBreaks.reason.shape': 'prompt changed',
+  'cacheBreaks.reason.expired': 'expired',
+  'cacheBreaks.reason.rewound': 'rewound',
+  'cacheBreaks.reason.unknown': 'cause unknown',
+  'cacheBreaks.why.compaction':
+    'The cache broke: the conversation was compacted, so its new context was written to the cache again.',
+  'cacheBreaks.why.shape':
+    'The cache broke: the system prompt or the tools changed since the previous request, so nothing cached before could be read back.',
+  'cacheBreaks.why.expired':
+    'The cache broke: {idle} passed since the previous request, longer than the cache lives ({ttl}).',
+  'cacheBreaks.why.rewound':
+    'The cache broke: the context shrank without a compaction; a message was edited, or the conversation resumed from an earlier point.',
+  'cacheBreaks.why.unknown':
+    'The cache broke: this request read back little of the previous context, for no reason the records show.',
+  'cacheBreaks.note':
+    'Estimates: a request that read back less than half of the previous context (over 20K tokens) broke the cache; tokens written again leave out a usual turn of new ones.',
+  'cacheBreaks.ttl5m': '5 minutes',
+  'cacheBreaks.ttl1h': 'an hour',
+  'flow.cacheBreak': 'cache · {reason}',
 };
