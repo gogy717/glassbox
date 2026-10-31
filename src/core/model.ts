@@ -104,6 +104,12 @@ export interface SessionSummary {
    * session, as `activity`; absent otherwise.
    */
   lastReply?: string | null;
+  /**
+   * True when `repo` is null and nothing is left at `cwd` (a removed worktree, a deleted scratch
+   * directory), as the server finds when it lists the session. Absent otherwise: the directory
+   * is there, a repository was found, or the server has not looked (an older server, the demo).
+   */
+  cwdGone?: boolean;
 }
 
 /**

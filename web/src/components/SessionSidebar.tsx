@@ -151,8 +151,8 @@ export function SessionSidebar({
       0,
     );
   }, [groups, sessions, query, showProbes, agent, live]);
-  // The folded groups, by key. A folded group keeps the open session's row, so the list never
-  // loses what the page shows.
+  // The folded groups, by key. A folded group lists no row, the open session's neither: its
+  // title says the open session is in it instead.
   const foldedSet = useMemo(() => new Set(prefs.folded), [prefs.folded]);
   const toggleFold = (key: string) =>
     onPrefs({
@@ -167,8 +167,7 @@ export function SessionSidebar({
     () =>
       groups.map((g) => {
         const none: SessionSummary[] = [];
-        if (foldedSet.has(g.key))
-          return { g, rows: g.sessions.filter((s) => s.id === selectedId), more: none };
+        if (foldedSet.has(g.key)) return { g, rows: none, more: none };
         if (!capped || g.kind === 'pinned' || unfolded.has(g.key))
           return { g, rows: g.sessions, more: none };
         const { shown, more } = foldClosed(g.sessions, selectedId);
@@ -176,6 +175,14 @@ export function SessionSidebar({
       }),
     [groups, foldedSet, selectedId, capped, unfolded],
   );
+  // The open session's place in the list: its row, or the title of the folded group it is in.
+  const current = useMemo(() => {
+    if (selectedId === null) return null;
+    const fold = visible.find(
+      ({ g }) => foldedSet.has(g.key) && g.sessions.some((s) => s.id === selectedId),
+    );
+    return fold ? headId(fold.g.key) : selectedId;
+  }, [visible, foldedSet, selectedId]);
   // One tab stop for the whole list; the arrow keys move between the rows, the group titles and
   // the "N more" rows in their order, across projects. The rows come first here, so Tab enters
   // at a row.
@@ -188,7 +195,7 @@ export function SessionSidebar({
     ],
     [visible],
   );
-  const roving = useRovingFocus(listRef, ids, selectedId);
+  const roving = useRovingFocus(listRef, ids, current);
   const uid = useId();
   // Focus follows a row that a change lists elsewhere (a pin moves it to the Pinned group).
   const [refocusRow, setRefocusRow] = useState<string | null>(null);
@@ -253,7 +260,7 @@ export function SessionSidebar({
   // A project group reads as its name; the pinned and time groups in the UI language.
   const label = (g: SessionGroup) =>
     g.kind === 'project'
-      ? g.key
+      ? g.name
       : g.kind === 'pinned'
         ? t('sidebar.pinned')
         : t(TIME_LABEL[g.bucket]);
@@ -353,6 +360,7 @@ export function SessionSidebar({
           const listId = `${uid}-${i}`;
           const busy = folded ? g.sessions.filter((s) => s.live === 'busy').length : 0;
           const waiting = folded ? g.sessions.filter((s) => s.live === 'waiting').length : 0;
+          const holdsOpen = folded && g.sessions.some((s) => s.id === selectedId);
           return (
             <div key={g.key} className={css.group}>
               <button
@@ -370,8 +378,9 @@ export function SessionSidebar({
                   <ChevronDown size={12} aria-hidden="true" />
                 )}
                 <span className={css.groupName}>{name}</span>
-                {/* Folded: how many, and a dot per running or waiting session, so nothing urgent
-                    hides. The spaces are for the title's spoken name. */}
+                {/* Folded: how many, whether the open session is in it, and a dot per running or
+                    waiting session, so nothing urgent hides. The spaces are for the title's
+                    spoken name. */}
                 {folded && (
                   <>
                     {' '}
@@ -381,6 +390,15 @@ export function SessionSidebar({
                     <span className="visually-hidden">
                       {t('sidebar.foldedCount', { n: g.sessions.length })}
                     </span>
+                    {holdsOpen && (
+                      <>
+                        {' '}
+                        <span className={css.groupOpen} aria-hidden="true">
+                          · {t('sidebar.foldedOpenMark')}
+                        </span>
+                        <span className="visually-hidden">{t('sidebar.foldedOpen')}</span>
+                      </>
+                    )}
                     {busy + waiting > 0 && (
                       <>
                         {' '}
@@ -411,14 +429,18 @@ export function SessionSidebar({
                       const shown = new Set(rows.map((s) => s.id));
                       const own = w.sessions.filter((s) => shown.has(s.id));
                       if (own.length === 0) return null;
-                      const treeName = w.main ? `${w.name} · ${t('sidebar.mainTree')}` : w.name;
+                      // The main tree says so; a removed one too (its directory is gone).
+                      const note = w.main
+                        ? t('sidebar.mainTree')
+                        : w.gone
+                          ? t('sidebar.goneTree')
+                          : null;
+                      const treeName = note ? `${w.name} · ${note}` : w.name;
                       return (
                         <li key={w.dir} className={css.tree}>
                           <div className={`${css.treeName} figure`} title={w.dir}>
                             {w.name}
-                            {w.main && (
-                              <span className={css.treeNote}> · {t('sidebar.mainTree')}</span>
-                            )}
+                            {note && <span className={css.treeNote}> · {note}</span>}
                           </div>
                           <ul aria-label={`${name} · ${treeName}`} className={css.rows}>
                             {own.map(rowItem)}

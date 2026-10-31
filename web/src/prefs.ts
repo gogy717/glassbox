@@ -15,7 +15,10 @@ export interface Prefs {
   notify: boolean;
   /** How the session list groups its rows (D, F7): by project, or by when each last ran. */
   groupBy: GroupBy;
-  /** The list's folded groups, by key: a project's name, or `/pinned`, `/today` … `/earlier`. */
+  /**
+   * The list's folded groups, by key: what a project group gathers by (`/p/…`, `/n/…`, see
+   * `SessionGroup`), or `/pinned`, `/today` … `/earlier`.
+   */
   folded: string[];
   /** Pinned sessions, by id, in the order pinned. */
   pinned: string[];
@@ -71,7 +74,9 @@ export function loadPrefs(): Prefs {
         : null,
       notify: raw?.notify === true,
       groupBy: raw?.groupBy === 'time' ? 'time' : 'project',
-      folded: strings(raw?.folded),
+      // Every key starts with a slash; one that does not is a project's name, as folds were
+      // saved before they were kept by directory, and names nothing now.
+      folded: strings(raw?.folded).filter((k) => k.startsWith('/')),
       pinned: strings(raw?.pinned),
       statsNoteSeen: raw?.statsNoteSeen === true,
       prices: prices(raw?.prices),

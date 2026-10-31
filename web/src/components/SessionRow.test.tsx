@@ -320,6 +320,29 @@ describe('SessionRow', () => {
       expect(rule(when, 'flex-shrink')).toBe('0');
     });
 
+    // Round 3, A: beside a sign of trouble the activity gave way to its dot, or to nothing, and
+    // the sign's "·" stood beside it alone; the sign could give way to its "·" alone too. Each
+    // part now keeps what follows its separator: the activity a word, the sign its glyph, the
+    // age and tokens a figure, and the age and tokens give way too.
+    it('leaves no separator beside nothing when a sign of trouble is shown', () => {
+      const trouble = { kind: 'repeat' as const, params: { x: 'npm test', n: 4 }, at: null };
+      for (const s of [reading, thinking]) {
+        const row = renderRow({ ...s, trouble: { ...trouble, since: since(240) } });
+        const meta = row.lastElementChild as HTMLElement;
+        const sign = meta.querySelector(`.${css.sign}`);
+        const when = meta.querySelector(`.${css.when}`);
+        expect(rule(meta.firstElementChild, 'min-width')).toBe('5em');
+        expect(rule(sign, 'min-width')).toBe('calc(0.75em + 12px)');
+        expect(rule(when, 'flex-shrink')).toBe('1');
+        expect(rule(when, 'min-width')).toBe('calc(3ch + 0.75em)');
+        cleanup();
+      }
+      // Without a sign, as before.
+      const { activity, when } = parts(renderRow(reading));
+      expect(rule(activity, 'min-width')).toBeUndefined();
+      expect(rule(when, 'flex-shrink')).toBe('0');
+    });
+
     it('leaves Home’s cards as they were', () => {
       const row = renderRow(thinking, false, vi.fn(), 'zh', { density: 'card' });
       expect(rule(parts(row).activity, 'flex-shrink')).toBe('8');

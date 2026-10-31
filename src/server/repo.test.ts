@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createRepoLookup, type RepoFs, repoOf } from './repo.js';
+import { createGoneLookup, createRepoLookup, type RepoFs, repoOf } from './repo.js';
 
 /** A filesystem of `.git` entries only: directories, and files with their one gitdir line. */
 function fsOf(entries: Record<string, 'dir' | string>): RepoFs {
@@ -70,5 +70,23 @@ describe('createRepoLookup', () => {
     t = 1000;
     lookup('/r');
     expect(kind.mock.calls.length).toBeGreaterThan(calls);
+  });
+});
+
+describe('createGoneLookup', () => {
+  it('says a directory is gone when nothing is at its path, read once within the ttl', () => {
+    const kind = vi.fn((p: string) =>
+      p === '/w/tree' ? ('dir' as const) : p === '/w/file' ? ('file' as const) : null,
+    );
+    let t = 0;
+    const gone = createGoneLookup({ kind, head: () => null }, 1000, () => t);
+    expect(gone('/w/tree')).toBe(false);
+    expect(gone('/w/file')).toBe(false);
+    expect(gone('/w/removed')).toBe(true);
+    expect(gone('/w/removed')).toBe(true);
+    expect(kind).toHaveBeenCalledTimes(3);
+    t = 1000;
+    gone('/w/removed');
+    expect(kind).toHaveBeenCalledTimes(4);
   });
 });

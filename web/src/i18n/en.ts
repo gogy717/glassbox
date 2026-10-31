@@ -832,4 +832,8 @@ export const en: Record<MessageKey, string> = {
   'files.cell': 'Cell {id}',
   // Package B (round 3): the Rules page's tag for a rule that writes.
   'rules.danger.writes': 'Changes files or history',
+  // Round 3, A: the session list's groups and folds.
+  'sidebar.goneTree': 'removed',
+  'sidebar.foldedOpenMark': 'open',
+  'sidebar.foldedOpen': 'including the open session',
 };

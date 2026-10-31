@@ -19,7 +19,7 @@ import { isActive } from './live.js';
 import { errorText, OpenSession } from './open-session.js';
 import { adapterQuotaSources, QuotaWatcher } from './quota.js';
 import { RateTracker } from './rate.js';
-import { createRepoLookup } from './repo.js';
+import { createGoneLookup, createRepoLookup } from './repo.js';
 import { type WeekRead, WeekService, type WeekStore } from './week.js';
 
 export interface SessionStoreOptions {
@@ -30,6 +30,8 @@ export interface SessionStoreOptions {
   quotaStaleReason?: (q: QuotaSnapshot) => QuotaStaleReason | undefined;
   /** The git repository of a directory, for the session list's groups; `repo.ts` by default. */
   repoOf?: (cwd: string) => RepoIdentity | null;
+  /** Whether nothing is left at a directory, asked when `repoOf` finds no repository there. */
+  cwdGone?: (cwd: string) => boolean;
   /** Parsed sessions kept in memory; busy/waiting and subscribed ones don't count against it. */
   maxOpen?: number;
   /** How often to look for new or updated sessions on disk. */
@@ -116,12 +118,21 @@ export function listedSummary(summary: SessionSummary, live = summary.live): Ses
   return { ...next, activity: idleActivity(next.updatedAt) };
 }
 
-/** `summary` with the repository of its directory, as `repoOf` answers; unchanged without one. */
+/**
+ * `summary` with the repository of its directory, as `repoOf` answers; unchanged without one.
+ * When there is no repository and `cwdGone` says nothing is left at the directory (a removed
+ * worktree), `cwdGone: true` too.
+ */
 export function withRepo(
   summary: SessionSummary,
   repoOf: (cwd: string) => RepoIdentity | null,
+  cwdGone?: (cwd: string) => boolean,
 ): SessionSummary {
-  return summary.cwd ? { ...summary, repo: repoOf(summary.cwd) } : summary;
+  if (!summary.cwd) return summary;
+  const repo = repoOf(summary.cwd);
+  return repo === null && cwdGone?.(summary.cwd)
+    ? { ...summary, repo, cwdGone: true }
+    : { ...summary, repo };
 }
 
 export function compareSessions(a: SessionSummary, b: SessionSummary): number {
@@ -186,6 +197,7 @@ export class SessionStore implements WeekStore {
       quotaSources: [],
       quotaStaleReason: () => undefined,
       repoOf: createRepoLookup(),
+      cwdGone: createGoneLookup(),
       log: () => {},
       ...opts,
     };
@@ -267,7 +279,7 @@ export class SessionStore implements WeekStore {
 
   listSessions(): SessionSummary[] {
     return [...this.entries.values()]
-      .map((e) => withRepo(listedSummary(e.summary, e.live), this.opts.repoOf))
+      .map((e) => withRepo(listedSummary(e.summary, e.live), this.opts.repoOf, this.opts.cwdGone))
       .sort(compareSessions);
   }
 

@@ -7,7 +7,9 @@ import {
   groupSessions,
   isRunning,
   liveFilterOf,
+  projectKey,
   timeBucket,
+  worktreesOf,
 } from './sessions';
 
 const base: SessionSummary = {
@@ -41,9 +43,10 @@ const sessions: SessionSummary[] = [
   s('a3', 'alpha', '09:40', { live: 'closed' }),
 ];
 
-// A project group's key is its name; the pinned and time groups' keys start with a slash.
+// A project group by its name (its key is the identity it groups by); the pinned and time
+// groups by their keys, which start with a slash.
 const ids = (groups: ReturnType<typeof groupSessions>) =>
-  groups.map((g) => [g.key, g.sessions.map((x) => x.id)]);
+  groups.map((g) => [g.kind === 'project' ? g.name : g.key, g.sessions.map((x) => x.id)]);
 
 // Final review M8: one test of "running", which busy and waiting both are.
 describe('isRunning', () => {
@@ -164,7 +167,8 @@ describe('groupNames', () => {
     return list.map(name);
   };
 
-  it('prefixes a worktree with its repository: a parent named like another session’s directory', () => {
+  it('reads a worktree as its repository: a parent named like another session’s directory', () => {
+    // Round 3, A: the worktree's session groups with the repository, so it reads as it does.
     expect(
       named([
         '/home/dev/src/glassbox',
@@ -172,7 +176,13 @@ describe('groupNames', () => {
         '/home/dev/work/glassbox/opaleye-2',
         '/home/dev/src/blog',
       ]),
-    ).toEqual(['glassbox', 'glassbox/weever', 'glassbox/opaleye-2', 'blog']);
+    ).toEqual(['glassbox', 'glassbox', 'glassbox', 'blog']);
+    // Two repositories of that name, and nothing to tell which: the parent goes before it.
+    expect(named(['/a/glassbox', '/b/glassbox', '/w/glassbox/weever'])).toEqual([
+      'a/glassbox',
+      'b/glassbox',
+      'glassbox/weever',
+    ]);
   });
 
   it('leaves unrelated siblings alone: a parent that is nobody’s project names nothing', () => {
@@ -193,7 +203,7 @@ describe('groupNames', () => {
   it('reads Windows paths and trailing separators as the same directories', () => {
     expect(named(['C:\\w\\glassbox\\', 'D:\\clones\\glassbox\\weever', '/w/blog/'])).toEqual([
       'glassbox',
-      'glassbox/weever',
+      'glassbox',
       'blog',
     ]);
     // The same directory written twice is one group.
@@ -346,12 +356,11 @@ describe('groupSessions pins, time groups and names', () => {
     ];
     const groups = groupSessions(list, '');
     expect(ids(groups)).toEqual([
-      ['glassbox/weever', ['tree', 'tree2']],
-      ['glassbox', ['main']],
+      ['glassbox', ['tree', 'main', 'tree2']],
       ['codex', ['nowhere']],
     ]);
+    // Several directories: the group tells the repository's.
     expect(groups.map((g) => (g.kind === 'project' ? g.cwd : null))).toEqual([
-      '/home/dev/work/glassbox/weever',
       '/home/dev/src/glassbox',
       null,
     ]);
@@ -374,7 +383,7 @@ describe('groupSessions pins, time groups and names', () => {
       s('main', 'glassbox', '09:00', { cwd: '/home/dev/src/glassbox' }),
       s('tree', 'weever', '09:30', { cwd: '/home/dev/work/glassbox/weever', title: 'Pins' }),
     ];
-    expect(ids(groupSessions(list, 'pins'))).toEqual([['glassbox/weever', ['tree']]]);
+    expect(ids(groupSessions(list, 'pins'))).toEqual([['glassbox', ['tree']]]);
   });
 
   it('lists pinned sessions first, in the order pinned, out of their own groups', () => {
@@ -429,5 +438,168 @@ describe('groupSessions pins, time groups and names', () => {
     expect(ids(groupSessions(list.slice(0, 1), '', { groupBy: 'time', now }))).toEqual([
       ['/earlier', ['old']],
     ]);
+  });
+});
+
+// Round 3, A: sessions of worktrees whose directories were removed (the server finds no `.git`
+// up their paths, so `repo` is null) group with their repository, each as a sub-list; a group's
+// key is the identity it groups by, so a name that changes with the list does not change it.
+describe('groupSessions with removed worktrees', () => {
+  const repo = (root: string, dir = root) => ({
+    root,
+    dir,
+    name: root.split('/').at(-1) as string,
+  });
+  const glassbox = '/home/dev/src/glassbox';
+  const list = [
+    s('main', 'glassbox', '09:00', { cwd: glassbox, repo: repo(glassbox) }),
+    s('weever', 'weever', '09:30', {
+      cwd: '/home/dev/work/glassbox/weever',
+      repo: repo(glassbox, '/home/dev/work/glassbox/weever'),
+      live: 'busy',
+    }),
+    s('opaleye', 'opaleye', '09:10', {
+      cwd: '/home/dev/work/glassbox/opaleye',
+      repo: repo(glassbox, '/home/dev/work/glassbox/opaleye'),
+    }),
+    // Removed: no repository the server can read, and no directory left.
+    s('whitefish', 'whitefish', '08:30', {
+      cwd: '/home/dev/work/glassbox/whitefish',
+      repo: null,
+      cwdGone: true,
+    }),
+    s('ridley', 'ridley', '08:20', {
+      cwd: '/home/dev/work/glassbox/ridley',
+      repo: null,
+      cwdGone: true,
+    }),
+    s('ridley2', 'ridley', '08:10', {
+      cwd: '/home/dev/work/glassbox/ridley/',
+      repo: null,
+      cwdGone: true,
+    }),
+    // A worktree of another repository, removed, with no live sibling to go by: its parent is
+    // named like the repository.
+    s('shop', 'shop', '07:00', { cwd: '/home/dev/src/shop', repo: repo('/home/dev/src/shop') }),
+    s('grampus', 'grampus', '06:50', {
+      cwd: '/home/dev/orca/shop/grampus',
+      repo: null,
+      cwdGone: true,
+    }),
+    // Unrelated directories: one named like the repository, one inside a folder named like it
+    // that is a session's own directory (a subdirectory, not a worktree).
+    s('stranger', 'glassbox', '06:00', { cwd: '/home/dev/notes/glassbox', repo: null }),
+    s('inner', 'web', '05:00', { cwd: '/home/dev/notes/glassbox/web', repo: null }),
+  ];
+  const project = (groups: ReturnType<typeof groupSessions>, name: string) => {
+    const g = groups.find((x) => x.kind === 'project' && x.name === name);
+    if (g?.kind !== 'project') throw new Error(`no group ${name}`);
+    return g;
+  };
+
+  it('puts a removed worktree’s session under its repository’s group, as a sub-list', () => {
+    const groups = groupSessions(list, '');
+    expect(ids(groups)).toEqual([
+      ['src/glassbox', ['weever', 'opaleye', 'main', 'whitefish', 'ridley', 'ridley2']],
+      ['shop', ['shop', 'grampus']],
+      ['notes/glassbox', ['stranger']],
+      ['web', ['inner']],
+    ]);
+    const g = project(groups, 'src/glassbox');
+    expect(g.cwd).toBe(glassbox);
+    expect(g.worktrees?.map((w) => [w.name, w.main, w.gone, w.sessions.map((x) => x.id)])).toEqual([
+      ['glassbox', true, false, ['main']],
+      ['weever', false, false, ['weever']],
+      ['opaleye', false, false, ['opaleye']],
+      ['whitefish', false, true, ['whitefish']],
+      ['ridley', false, true, ['ridley', 'ridley2']],
+    ]);
+    expect(project(groups, 'shop').worktrees?.map((w) => [w.name, w.gone])).toEqual([
+      ['shop', false],
+      ['grampus', true],
+    ]);
+  });
+
+  it('gathers a worktree by its parent’s name alone when the server does not say it is gone', () => {
+    const quiet = list.map(({ cwdGone: _, ...x }) => x);
+    const g = project(groupSessions(quiet, ''), 'src/glassbox');
+    expect(g.worktrees?.map((w) => [w.name, w.gone])).toEqual([
+      ['glassbox', false],
+      ['weever', false],
+      ['opaleye', false],
+      ['whitefish', false],
+      ['ridley', false],
+    ]);
+  });
+
+  it('gathers worktrees under a repository the server could not read, by its directory’s name', () => {
+    // No repository known at all (an older server): a session's own directory is the project.
+    const bare = [
+      s('main', 'glassbox', '09:00', { cwd: glassbox }),
+      s('tree', 'weever', '09:30', { cwd: '/home/dev/work/glassbox/weever' }),
+    ];
+    const groups = groupSessions(bare, '');
+    expect(ids(groups)).toEqual([['glassbox', ['tree', 'main']]]);
+    expect(project(groups, 'glassbox').worktrees?.map((w) => [w.name, w.main])).toEqual([
+      ['glassbox', true],
+      ['weever', false],
+    ]);
+  });
+
+  it('prefers the repository whose worktrees sit beside it, and leaves a tie alone', () => {
+    const two = [
+      s('a', 'api', '09:00', { cwd: '/a/api', repo: repo('/a/api') }),
+      s('b', 'api', '09:00', { cwd: '/b/api', repo: repo('/b/api') }),
+      s('bt', 'one', '08:00', { cwd: '/trees/api/one', repo: repo('/b/api', '/trees/api/one') }),
+      s('gone', 'two', '07:00', { cwd: '/trees/api/two', repo: null }),
+      s('tie', 'three', '06:00', { cwd: '/elsewhere/api/three', repo: null }),
+    ];
+    const groups = groupSessions(two, '');
+    expect(ids(groups)).toEqual([
+      ['a/api', ['a']],
+      ['b/api', ['b', 'bt', 'gone']],
+      ['api/three', ['tie']],
+    ]);
+  });
+
+  it('keys a group by the identity it groups by, whatever its name reads as', () => {
+    const before = groupSessions(list.slice(0, 8), '');
+    const after = groupSessions(list, '');
+    // The name changes as a like-named directory appears; the key does not.
+    expect(project(before, 'glassbox').key).toBe(projectKey(glassbox));
+    expect(project(after, 'src/glassbox').key).toBe(projectKey(glassbox));
+    expect(projectKey('/home/dev/src/glassbox/')).toBe(projectKey(glassbox));
+    // Nor as a removed worktree's sessions come and go.
+    const fewer = groupSessions(list.slice(0, 3), '');
+    expect(project(fewer, 'glassbox').key).toBe(projectKey(glassbox));
+    // A session without a directory keys by the server's name, apart from any directory.
+    const none = groupSessions([s('n', 'codex', '09:00')], '')[0];
+    expect(none?.key).not.toBe(projectKey('codex'));
+    expect(none?.kind === 'project' && none.name).toBe('codex');
+  });
+});
+
+describe('worktreesOf', () => {
+  const repo = (root: string, dir = root) => ({ root, dir, name: 'glassbox' });
+  it('splits a group whose sessions include one without a repository, by its directory', () => {
+    const trees = worktreesOf([
+      s('w', 'weever', '09:30', { cwd: '/w/weever', repo: repo('/src/glassbox', '/w/weever') }),
+      s('gone', 'dab', '09:00', { cwd: '/w/dab', repo: null, cwdGone: true }),
+      s('main', 'glassbox', '08:00', { cwd: '/src/glassbox', repo: repo('/src/glassbox') }),
+    ]);
+    expect(trees?.map((w) => [w.name, w.main, w.sessions.map((x) => x.id)])).toEqual([
+      ['glassbox', true, ['main']],
+      ['weever', false, ['w']],
+      ['dab', false, ['gone']],
+    ]);
+  });
+
+  it('has nothing to split by when a session names no directory at all', () => {
+    expect(
+      worktreesOf([
+        s('w', 'weever', '09:30', { cwd: '/w/weever', repo: repo('/src/glassbox', '/w/weever') }),
+        s('x', 'codex', '09:00'),
+      ]),
+    ).toBeNull();
   });
 });

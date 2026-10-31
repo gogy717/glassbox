@@ -806,6 +806,10 @@ export const zh = {
   'files.cell': '单元格 {id}',
   // Package B (round 3): the Rules page's tag for a rule that writes.
   'rules.danger.writes': '会改动文件或提交历史',
+  // Round 3, A: the session list's groups and folds.
+  'sidebar.goneTree': '已删除',
+  'sidebar.foldedOpenMark': '当前',
+  'sidebar.foldedOpen': '含当前打开的会话',
 } as const;
 
 export type MessageKey = keyof typeof zh;

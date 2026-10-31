@@ -93,6 +93,20 @@ describe('withRepo', () => {
     const none = { ...base, cwd: null };
     expect(withRepo(none, repoOf)).toBe(none);
   });
+
+  // Round 3, A: a removed worktree's sessions have no repository the server can read; it says
+  // their directory is gone, so the list can mark them. Only asked when no repository was found.
+  it('says a session’s directory is gone when it found no repository and nothing is there', () => {
+    const repoOf = (cwd: string) =>
+      cwd === '/w/tree' ? { root: '/w/repo', dir: '/w/tree', name: 'repo' } : null;
+    const gone = vi.fn((cwd: string) => cwd === '/w/removed');
+    const base = { id: 'x', cwd: '/w/removed' } as unknown as SessionSummary;
+    expect(withRepo(base, repoOf, gone)).toMatchObject({ repo: null, cwdGone: true });
+    expect(withRepo({ ...base, cwd: '/w/notes' }, repoOf, gone)).not.toHaveProperty('cwdGone');
+    gone.mockClear();
+    expect(withRepo({ ...base, cwd: '/w/tree' }, repoOf, gone)).not.toHaveProperty('cwdGone');
+    expect(gone).not.toHaveBeenCalled();
+  });
 });
 
 describe('SessionStore', () => {
