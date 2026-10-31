@@ -147,7 +147,6 @@ const zh: Record<Key, string> = {
   crossingCut: '改过 400 个以上文件的会话，只比较它最近改的 400 个。',
 };
 
-export type StatsKey = Key;
 const STRINGS: Record<Locale, Record<Key, string>> = { en, zh };
 
 /**
