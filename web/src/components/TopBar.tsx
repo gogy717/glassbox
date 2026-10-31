@@ -98,12 +98,15 @@ export function TopBar(p: Props) {
         </span>
       )}
       <span className={css.spacer} />
-      <TokenRate
-        agent={p.prefs.rateAgent}
-        onAgent={(rateAgent) => p.onPrefs({ ...p.prefs, rateAgent })}
-        sessionOpen={p.title !== null}
-      />
-      <TopQuota quotas={p.quotas} sessionOpen={p.title !== null} />
+      {/* The rate and the quota, side by side as one: narrow, they go under the pages together. */}
+      <span className={css.instruments}>
+        <TokenRate
+          agent={p.prefs.rateAgent}
+          onAgent={(rateAgent) => p.onPrefs({ ...p.prefs, rateAgent })}
+          sessionOpen={p.title !== null}
+        />
+        <TopQuota quotas={p.quotas} sessionOpen={p.title !== null} />
+      </span>
       {/* News only while it is not connected (a chip); connected, read but not seen, so the
           status region announces the next drop and the recovery alike. */}
       <span role="status" className={css.conn} data-state={p.connection}>
