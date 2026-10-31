@@ -14,6 +14,7 @@ import {
   statsWeek,
   timeText,
   topProjects,
+  waitingOf,
 } from './statsData';
 
 const r = demoWeek('week');
@@ -178,5 +179,33 @@ describe('the Stats page figures', () => {
     expect(topProjects(empty)).toEqual([]);
     expect(longestSessions(empty)).toEqual([]);
     expect(empty.receipt.now).toBe(WEEK_NOW);
+  });
+});
+
+describe('the waits on the person', () => {
+  it('adds up the sessions’ waits, by kind, and names the session of the longest', () => {
+    const waited = w.result.sessions.filter((s) => s.inWindow.waiting);
+    const f = waitingOf(w);
+    expect(waited.length).toBeGreaterThan(0);
+    expect(f?.ms).toBe(sum(waited.map((s) => s.inWindow.waiting?.ms ?? 0)));
+    expect(f?.count).toBe(sum(waited.map((s) => s.inWindow.waiting?.count ?? 0)));
+    expect(f?.byKind.reduce((n, k) => n + k.ms, 0)).toBe(f?.ms);
+    const longest = Math.max(...waited.map((s) => s.inWindow.waiting?.longestMs ?? 0));
+    expect(f?.longest.ms).toBe(longest);
+    expect(waited.find((s) => s.inWindow.waiting?.longestMs === longest)?.id).toBe(f?.longest.id);
+  });
+
+  it('is none when no session waited on the person', () => {
+    const quiet = {
+      ...w,
+      result: {
+        ...w.result,
+        sessions: w.result.sessions.map((s) => ({
+          ...s,
+          inWindow: { ...s.inWindow, waiting: undefined },
+        })),
+      },
+    };
+    expect(waitingOf(quiet)).toBeNull();
   });
 });

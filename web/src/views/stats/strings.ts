@@ -74,6 +74,18 @@ const en = {
   crossingHint:
     'Lines are numbered as each worktree found the file; neighbouring lines count as the same, as in a merge.',
   crossingCut: 'A session that changed more than 400 files is compared on its latest 400.',
+  // Package G (round 3): the Waiting on you card.
+  waiting: 'Waiting on you',
+  waitingNote: 'time the agents waited on you',
+  waitingLine: '{n} {n|wait|waits} · longest {time}',
+  waitingLongest: 'Longest wait',
+  waitingPermission: 'Permission',
+  waitingQuestion: 'Question',
+  waitingPlan: 'Plan approval',
+  waitingTurn: 'Between prompts',
+  waitingFoot:
+    'Counts questions, plan approvals and the permission prompts glassbox showed. Gaps between prompts are not counted: no transcript says the session was live through them.',
+  waitingNone: 'No agent waited on you in this window.',
 };
 
 type Key = keyof typeof en;
@@ -145,6 +157,18 @@ const zh: Record<Key, string> = {
   crossingNoChange: '时间范围内没有改动这个文件。',
   crossingHint: '行号按各工作树开始改动时的文件算；相邻的行也算同一处，和合并时一样。',
   crossingCut: '改过 400 个以上文件的会话，只比较它最近改的 400 个。',
+  // Package G (round 3): the Waiting on you card.
+  waiting: '等待用户',
+  waitingNote: '代理等你的时间',
+  waitingLine: '{n} 次 · 最长 {time}',
+  waitingLongest: '等得最久的一次',
+  waitingPermission: '权限确认',
+  waitingQuestion: '提问',
+  waitingPlan: '计划确认',
+  waitingTurn: '轮次之间',
+  waitingFoot:
+    '只计提问、计划确认，以及 glassbox 显示过的权限确认；轮次之间的空档不计，因为转录里看不出会话当时是否在线。',
+  waitingNone: '这个时间范围内没有代理在等你。',
 };
 
 export type StatsKey = Key;

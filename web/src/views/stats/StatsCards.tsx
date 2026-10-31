@@ -7,6 +7,7 @@
 import { memo, type RefObject, useEffect, useRef, useState } from 'react';
 import type { QuotaSnapshot, QuotaWindow } from '../../../../src/core/model.js';
 import { firstCountedIndex, ratePerMinute, rateSeries } from '../../../../src/shared/rate.js';
+import type { WaitKind } from '../../../../src/shared/waiting.js';
 import type { WeekWindowKind } from '../../../../src/shared/week.js';
 import { AgentTag } from '../../components/AgentTag';
 import { UiCjk } from '../../components/CompactFigure';
@@ -35,8 +36,9 @@ import {
   type StatsWeek,
   sameIsolate,
   timeText,
+  waitingOf,
 } from './statsData';
-import { st } from './strings';
+import { type StatsKey, st } from './strings';
 import type { Cell } from './WeekGrid';
 
 /** A card's head: its name, in capitals, and what its figures are, muted. */
@@ -343,6 +345,66 @@ export const LongestCard = memo(function LongestCard({
     <section className={css.card} data-area="longest" aria-labelledby="stats-longest">
       <Head id="stats-longest" name={st(locale, 'longest')} note={st(locale, 'longestNote')} />
       {rows.length > 0 ? <SessionRows rows={rows} listed={listed} locale={locale} /> : <None />}
+    </section>
+  );
+});
+
+/** The card's name for each kind of wait. */
+const WAIT_NAME: Record<WaitKind, StatsKey> = {
+  permission: 'waitingPermission',
+  question: 'waitingQuestion',
+  plan: 'waitingPlan',
+  turn: 'waitingTurn',
+};
+
+/**
+ * Waiting on you: the time the agents waited on the person in the window, by kind, and the
+ * longest wait with its session (a link while the list has it). Its footnote says what is not
+ * counted.
+ */
+export const WaitingCard = memo(function WaitingCard({
+  w,
+  listed,
+  locale,
+}: {
+  w: StatsWeek;
+  listed: Set<string>;
+  locale: Locale;
+}) {
+  const f = waitingOf(w);
+  return (
+    <section className={css.card} data-area="waiting" aria-labelledby="stats-waiting">
+      <Head id="stats-waiting" name={st(locale, 'waiting')} note={st(locale, 'waitingNote')} />
+      {f ? (
+        <>
+          <p className={css.waitFigure}>
+            <span className={`${css.rateFigure} figure`}>
+              <UiCjk text={timeText(f.ms, locale)} />
+            </span>
+            <span className={css.note}>
+              {st(locale, 'waitingLine', { n: f.count, time: timeText(f.longest.ms, locale) })}
+            </span>
+          </p>
+          <ul className={css.waitKinds}>
+            {f.byKind.map((k) => (
+              <li key={k.kind} className={css.waitKind}>
+                <span className={css.waitName}>{st(locale, WAIT_NAME[k.kind])}</span>
+                <span className={`${css.track} ${css.waitTrack}`} aria-hidden="true">
+                  <span style={{ width: `${(k.ms / f.ms) * 100}%` }} />
+                </span>
+                <span className={`${css.waitValue} figure`}>
+                  <UiCjk text={timeText(k.ms, locale)} />
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className={css.hint}>{st(locale, 'waitingLongest')}</p>
+          <SessionRows rows={[f.longest]} listed={listed} locale={locale} />
+          <p className={css.hint}>{st(locale, 'waitingFoot')}</p>
+        </>
+      ) : (
+        <p className={css.hint}>{st(locale, 'waitingNone')}</p>
+      )}
     </section>
   );
 });

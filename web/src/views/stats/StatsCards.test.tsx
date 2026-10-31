@@ -7,7 +7,7 @@ import { I18nContext, type Locale, makeI18n } from '../../i18n';
 import { priceTable } from '../../lib/prices';
 import { DEMO_NOW } from '../../test/demo';
 import { demoWeek } from '../../test/week';
-import { HourCard, NowCard, TokensCard } from './StatsCards';
+import { HourCard, NowCard, TokensCard, WaitingCard } from './StatsCards';
 import { busiestCell, indexHours, statsWeek } from './statsData';
 import type { Cell } from './WeekGrid';
 
@@ -178,5 +178,43 @@ describe('the hour card', () => {
     expect(titles().length).toBeGreaterThan(0);
     expect(titles().length).toBeLessThanOrEqual(8);
     expect(screen.queryByRole('button', { name: /more/ })).toBeNull();
+  });
+});
+
+// Package G (round 3): the time the agents waited on the person.
+describe('the Waiting on you card', () => {
+  const renderCard = (w: ReturnType<typeof statsWeek>, locale: Locale = 'en') =>
+    render(
+      <I18nContext.Provider value={makeI18n(locale)}>
+        <WaitingCard w={w} listed={new Set(w.result.sessions.map((s) => s.id))} locale={locale} />
+      </I18nContext.Provider>,
+    );
+
+  it('says how long the agents waited on the person, by kind, and names the longest wait', () => {
+    const w = statsWeek(demoWeek(), false);
+    renderCard(w);
+    const card = screen.getByRole('region', { name: /Waiting on you/i });
+    expect(within(card).getByText(/\d+ (wait|waits) · longest/)).toBeInTheDocument();
+    expect(within(card).getByText('Question')).toBeInTheDocument();
+    expect(within(card).getByText('Longest wait')).toBeInTheDocument();
+    // The longest wait's session is a link, as the session list has it.
+    expect(within(card).getByRole('link')).toHaveAttribute('href', expect.stringContaining('/'));
+    expect(within(card).getByText(/Gaps between prompts are not counted/)).toBeInTheDocument();
+  });
+
+  it('says so, in Chinese too, when no agent waited on the person', () => {
+    const whole = statsWeek(demoWeek(), false);
+    const quiet = {
+      ...whole,
+      result: {
+        ...whole.result,
+        sessions: whole.result.sessions.map((s) => ({
+          ...s,
+          inWindow: { ...s.inWindow, waiting: undefined },
+        })),
+      },
+    };
+    renderCard(quiet, 'zh');
+    expect(screen.getByText('这个时间范围内没有代理在等你。')).toBeInTheDocument();
   });
 });

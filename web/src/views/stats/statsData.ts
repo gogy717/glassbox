@@ -7,6 +7,7 @@
  */
 import type { AgentKind } from '../../../../src/core/model.js';
 import { crossings, type RepoCrossing } from '../../../../src/shared/crossing.js';
+import type { WaitKind } from '../../../../src/shared/waiting.js';
 import type { WeekResult, WeekSession, WeekWindowKind } from '../../../../src/shared/week.js';
 import { clock, day, durationParts, partsText, shortDay } from '../../components/receipt/format';
 import { projectNames, projectTreeNames } from '../../components/receipt/printed';
@@ -130,6 +131,49 @@ export function longestSessions(w: StatsWeek, n = 5): SessionLine[] {
     .sort((a, b) => b.inWindow.activeMs - a.inWindow.activeMs)
     .slice(0, n)
     .map((s) => lineOf(w, s, s.inWindow.activeMs));
+}
+
+/** The kinds of wait, in the order the card lists them. */
+const WAIT_KINDS: WaitKind[] = ['permission', 'question', 'plan', 'turn'];
+
+/** The window's waits on the person, as the Waiting on you card prints them. */
+export interface WaitingFigures {
+  /** The waits' lengths added up, and how many there were. */
+  ms: number;
+  count: number;
+  /** The kinds that waited, most time first. */
+  byKind: { kind: WaitKind; ms: number }[];
+  /** The session with the longest wait, and that wait. */
+  longest: SessionLine;
+}
+
+/** The window's waits on the person, from each session's figures; null when none. */
+export function waitingOf(w: StatsWeek): WaitingFigures | null {
+  let ms = 0;
+  let count = 0;
+  const byKind = new Map<WaitKind, number>();
+  let top: { s: WeekSession; longestMs: number } | null = null;
+  for (const s of w.result.sessions) {
+    const x = s.inWindow.waiting;
+    if (!x) continue;
+    ms += x.ms;
+    count += x.count;
+    for (const kind of WAIT_KINDS) {
+      const part = x.byKind[kind];
+      if (part) byKind.set(kind, (byKind.get(kind) ?? 0) + part);
+    }
+    if (!top || x.longestMs > top.longestMs) top = { s, longestMs: x.longestMs };
+  }
+  if (!top || count === 0) return null;
+  return {
+    ms,
+    count,
+    byKind: WAIT_KINDS.flatMap((kind) => {
+      const part = byKind.get(kind);
+      return part ? [{ kind, ms: part }] : [];
+    }).sort((a, b) => b.ms - a.ms),
+    longest: lineOf(w, top.s, top.longestMs),
+  };
 }
 
 /** Where the busiest hour sits in the grid, selected when the page opens; null with none. */
