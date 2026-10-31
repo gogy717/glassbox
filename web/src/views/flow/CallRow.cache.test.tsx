@@ -36,7 +36,8 @@ function renderTurn(
   );
 }
 
-const row = (n: number) => screen.getAllByRole('article', { name: `Model call #${n}` })[0] as HTMLElement;
+const row = (n: number) =>
+  screen.getAllByRole('article', { name: `Model call #${n}` })[0] as HTMLElement;
 
 describe('a request that broke the prompt cache', () => {
   useFakeLayout();
