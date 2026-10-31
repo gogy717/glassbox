@@ -136,6 +136,8 @@ export function SummaryBar({
           </>
         ) : undefined,
     },
+    // Before the token counts, where the bar is seen without scrolling it sideways.
+    ...(use ? [contextFigure(use.tokens, use.window)] : []),
     { label: t('summary.input'), value: tokens(s.input), exact: exact(s.input), more: true },
     { label: t('summary.cacheHit'), value: formatPercent(s.cacheHitRate, intl), more: true },
     {
@@ -159,7 +161,6 @@ export function SummaryBar({
       more: true,
     },
   ];
-  if (use) figures.push(contextFigure(use.tokens, use.window));
   /**
    * The agent's context as of its latest finished call, of its model's window where known:
    * "184K of 200K · 92%". The share is in whole percent rounded down, as the sign's. Behind
