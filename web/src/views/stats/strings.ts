@@ -74,6 +74,12 @@ const en = {
   crossingHint:
     'Lines are numbered as each worktree found the file; neighbouring lines count as the same, as in a merge.',
   crossingCut: 'A session that changed more than 400 files is compared on its latest 400.',
+  // Package E (r3/quota-burn): who used the plan window, on Right now.
+  burnLead: 'Who used {name} · {window}:',
+  burnHint:
+    'Shares of the tokens glassbox saw on this machine; other machines and apps are not seen',
+  burnHintRequests:
+    'Shares of the requests glassbox saw on this machine (these sessions report no tokens); other machines and apps are not seen',
 };
 
 type Key = keyof typeof en;
@@ -145,6 +151,11 @@ const zh: Record<Key, string> = {
   crossingNoChange: '时间范围内没有改动这个文件。',
   crossingHint: '行号按各工作树开始改动时的文件算；相邻的行也算同一处，和合并时一样。',
   crossingCut: '改过 400 个以上文件的会话，只比较它最近改的 400 个。',
+  // Package E (r3/quota-burn): who used the plan window, on Right now.
+  burnLead: '{name} · {window}的用量：',
+  burnHint: '按 glassbox 在这台机器上看到的 token 算；别的机器和应用用掉的看不到',
+  burnHintRequests:
+    '按 glassbox 在这台机器上看到的请求数算（这些会话没有上报 token）；别的机器和应用用掉的看不到',
 };
 
 export type StatsKey = Key;
