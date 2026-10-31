@@ -806,6 +806,20 @@ export const zh = {
   'files.diff': '改动',
   'files.writeSize': '{lines} 行 · {chars} 字符',
   'files.cell': '单元格 {id}',
+  // Package F (round 3): MCP servers in Where tokens went.
+  'mcp.title': 'MCP 服务器',
+  'mcp.includeSub': '包括子代理',
+  'mcp.calls': '{n} 次调用',
+  'mcp.failed': '{n} 次失败',
+  'mcp.running': '{n} 次进行中',
+  'mcp.total': '共 {time}',
+  'mcp.median': '中位 {time}',
+  'mcp.tokens': '≈ {n} token',
+  'mcp.chars': '结果 {n} 字符',
+  'mcp.tools': '{server} 的工具',
+  'mcp.more': '再显示 {n} 次',
+  'mcp.noneAgent': '这个代理自己没有调用 MCP 服务器',
+  'mcp.note': '结果大小是各次调用带回上下文的字符数，之后每次请求都要再付一次；token 按字符估算。',
 } as const;
 
 export type MessageKey = keyof typeof zh;

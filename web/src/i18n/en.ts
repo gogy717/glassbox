@@ -832,4 +832,19 @@ export const en: Record<MessageKey, string> = {
   'files.diff': 'Change',
   'files.writeSize': '{lines} {lines|line|lines} · {chars} {chars|character|characters}',
   'files.cell': 'Cell {id}',
+  // Package F (round 3): MCP servers in Where tokens went.
+  'mcp.title': 'MCP servers',
+  'mcp.includeSub': 'Include sub-agents',
+  'mcp.calls': '{n} {n|call|calls}',
+  'mcp.failed': '{n} failed',
+  'mcp.running': '{n} running',
+  'mcp.total': '{time} in all',
+  'mcp.median': 'median {time}',
+  'mcp.tokens': '≈ {n} tokens',
+  'mcp.chars': 'results of {n} {n|character|characters}',
+  'mcp.tools': 'Tools of {server}',
+  'mcp.more': 'Show {n} more',
+  'mcp.noneAgent': 'This agent made no MCP call of its own',
+  'mcp.note':
+    'Result size is what each call brought back into the context, paid for again by every later request; tokens are estimated from its characters.',
 };

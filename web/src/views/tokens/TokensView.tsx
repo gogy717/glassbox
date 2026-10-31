@@ -25,6 +25,7 @@ import { useUi } from '../../ui';
 import { AgentBreakdown } from './AgentBreakdown';
 import { ContextBill } from './ContextBill';
 import { ContextChart } from './ContextChart';
+import { McpUsage } from './McpUsage';
 import css from './TokensView.module.css';
 import { TopRequests } from './TopRequests';
 
@@ -71,12 +72,16 @@ export function TokensView({ open, agentId, navigate }: Props) {
     [navigate, setFollow],
   );
 
-  // "Yet" only while the agent may still add to it.
+  // "Yet" only while the agent may still add to it. Its MCP servers still count: they have no
+  // tokens of their own.
   if (!total || totalTokens(total) === 0)
     return (
-      <p className={css.empty}>
-        {t(mayStillRun(open, agentId) ? 'tokens.noData' : 'tokens.noDataDone')}
-      </p>
+      <div className={css.view}>
+        <p className={css.empty}>
+          {t(mayStillRun(open, agentId) ? 'tokens.noData' : 'tokens.noDataDone')}
+        </p>
+        <McpUsage open={open} agentId={agentId} navigate={navigate} />
+      </div>
     );
 
   return (
@@ -135,6 +140,7 @@ export function TokensView({ open, agentId, navigate }: Props) {
       </div>
 
       <ContextBill open={open} agentId={agentId} navigate={navigate} />
+      <McpUsage open={open} agentId={agentId} navigate={navigate} />
     </div>
   );
 }
