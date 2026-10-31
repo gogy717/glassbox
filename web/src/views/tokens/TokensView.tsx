@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react';
 import type { ModelRequest } from '../../../../src/core/model.js';
 import { MAIN_AGENT_ID } from '../../../../src/core/model.js';
 import { totalTokens } from '../../../../src/core/usage.js';
+import { contextUse } from '../../../../src/shared/context-use.js';
 import { FigureText } from '../../components/FigureText';
 import { TokenBar, TokenLegend } from '../../components/TokenBar';
 import { usePriceTable } from '../../data/price-table';
@@ -45,6 +46,11 @@ export function TokensView({ open, agentId, navigate }: Props) {
   const costs = useMemo(() => rollupCosts(open, prices), [open, prices]);
   const found = useMemo(() => insights(open), [open]);
   const series = useMemo(() => contextSeries(open, agentId), [open, agentId]);
+  // The window of the agent's model, as its latest call names it: the curve's ceiling.
+  const windowTokens = useMemo(
+    () => contextUse(open.requests.values(), agentId)?.window ?? null,
+    [open, agentId],
+  );
   const top = useMemo(() => topRequests(open, TOP_N, subtreeIds(open, agentId)), [open, agentId]);
   const selected = rows.find((r) => r.kind === 'agent' && r.id === agentId);
   const total = selected?.total;
@@ -125,6 +131,7 @@ export function TokensView({ open, agentId, navigate }: Props) {
           <ContextChart
             agent={agentName}
             points={series}
+            windowTokens={windowTokens}
             onPick={(id) => {
               const req = open.requests.get(id);
               if (req) openInFlow(req);
