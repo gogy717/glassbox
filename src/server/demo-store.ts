@@ -34,6 +34,8 @@ import {
 import { detectTrouble } from '../shared/trouble.js';
 import type { AppStore } from './app.js';
 import { troubleLabel } from './open-session.js';
+import { QuotaBurnService } from './quota-burn.js';
+import { createDemoBurn } from './quota-burn-demo.js';
 import { RateTracker } from './rate.js';
 import { RulesService } from './rules.js';
 import { createDemoRules, DEMO_HOME } from './rules-demo.js';
@@ -162,6 +164,10 @@ export class DemoStore implements AppStore, WeekStore {
   private readonly rulesBehind: SessionSnapshot[];
   /** The Rules page's data: the demo's sessions, the week behind them, and that history. */
   readonly rules: RulesService;
+  /** The last hours behind the quota's "Who used it": read by it only, never listed. */
+  private readonly burnBehind: SessionSnapshot[];
+  /** Who used the plan window: the demo's sessions, the week behind them, and those hours. */
+  readonly burn: QuotaBurnService;
   private readonly sessionCbs = new Set<(s: SessionSummary[]) => void>();
   private readonly patchCbs = new Set<(p: SessionPatch) => void>();
   private timer: NodeJS.Timeout | null = null;
@@ -202,6 +208,14 @@ export class DemoStore implements AppStore, WeekStore {
         yourSettings: `${DEMO_HOME}/.claude/settings.json`,
       },
     );
+    this.burnBehind = createDemoBurn(now.getTime());
+    this.burn = new QuotaBurnService({
+      weekSessions: () => [...this.weekSessions(), ...this.burnBehind.map((s) => s.session)],
+      readSession: async (id) => {
+        const behind = this.burnBehind.find((s) => s.session.id === id);
+        return behind ? { snapshot: structuredClone(behind), bytes: 0 } : this.readSession(id);
+      },
+    });
     const inFlight = this.snap.requests.find(
       (r) => r.agentId === MAIN_AGENT_ID && r.status === 'in-flight',
     );

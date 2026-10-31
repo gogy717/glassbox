@@ -51,6 +51,8 @@ export type AppStore = Pick<
   week?: WeekService | null;
   /** The Rules page's data, when the store keeps one (the demo's does). */
   rules?: RulesService | null;
+  /** Who used the plan window, when the store keeps its own (the demo's does). */
+  burn?: QuotaBurnService | null;
 } & Partial<WeekStore>;
 
 export interface AppDeps {
@@ -70,7 +72,10 @@ export interface AppDeps {
   week?: WeekService | null;
   /** The Rules page's data; by default the store's own. */
   rules?: RulesService | null;
-  /** Who used the plan window; by default read from the store's sessions, as the week reads them. */
+  /**
+   * Who used the plan window; by default the store's own, else read from the store's sessions as
+   * the week reads them.
+   */
   burn?: QuotaBurnService | null;
   log?: (msg: string) => void;
   now?: () => number;
@@ -96,9 +101,11 @@ export function createApp(deps: AppDeps): Hono {
   const burn =
     deps.burn !== undefined
       ? deps.burn
-      : store.weekSessions && store.readSession
-        ? new QuotaBurnService(store as WeekStore, { log })
-        : null;
+      : store.burn !== undefined
+        ? store.burn
+        : store.weekSessions && store.readSession
+          ? new QuotaBurnService(store as WeekStore, { log })
+          : null;
 
   // Outermost, so early answers (403s, 404s, errors) carry the headers too.
   app.use('*', securityHeaders);
