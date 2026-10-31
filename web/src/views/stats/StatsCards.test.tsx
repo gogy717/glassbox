@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { createDemoQuotas } from '../../../../src/core/fixtures/demo.js';
@@ -6,8 +7,10 @@ import { createStore, StoreContext } from '../../data/store';
 import { I18nContext, type Locale, makeI18n } from '../../i18n';
 import { priceTable } from '../../lib/prices';
 import { DEMO_NOW } from '../../test/demo';
+import { moduleCssValue } from '../../test/module-css';
 import { demoWeek } from '../../test/week';
 import { HourCard, NowCard, TokensCard } from './StatsCards';
+import classes from './StatsPage.module.css';
 import { busiestCell, indexHours, statsWeek } from './statsData';
 import type { Cell } from './WeekGrid';
 
@@ -79,6 +82,22 @@ describe('the Tokens card', () => {
       'title',
       `${TITLE} · Left out, no price: claude-opus-5-5, claude-sonnet-5-5, gpt-5.5-codex`,
     );
+  });
+
+  it('keeps the total and its cost together at the right: the cost never wraps under the total', () => {
+    renderCard(statsWeek(demoWeek(), false), 'zh');
+    const card = screen.getByRole('region', { name: /TOKEN/ });
+    const total = within(card).getByText('总量').parentElement as HTMLElement;
+    const sums = within(card).getByText('API 费用（估）').parentElement
+      ?.parentElement as HTMLElement;
+    expect(total.parentElement).toBe(sums);
+    const css = join(import.meta.dirname, 'StatsPage.module.css');
+    const value = (el: Element, prop: string) => moduleCssValue(css, classes, el, prop);
+    // The two go to the next line as one, at its right, and the total keeps its hairline.
+    expect(value(sums, 'display')).toBe('flex');
+    expect(value(sums, 'flex-wrap') ?? 'nowrap').toBe('nowrap');
+    expect(value(sums, 'margin-left')).toBe('auto');
+    expect(value(total, 'border-left')).toBe('1px solid var(--border)');
   });
 
   it('speaks Chinese', () => {

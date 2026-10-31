@@ -450,9 +450,17 @@ a.sessionTitle:hover {
   border-left: 1px solid var(--border);
 }
 
-.figure:first-child {
+.figures > .figure:first-child {
   padding-left: 0;
   border-left: 0;
+}
+
+/* The total and its cost: one unit at the right, going under as one when the line is full. */
+.sums {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  margin-left: auto;
 }
 
 .figure > :global(.section-label) {
@@ -463,10 +471,6 @@ a.sessionTitle:hover {
   font-size: 20px;
   font-weight: 500;
   white-space: nowrap;
-}
-
-.figure[data-total] {
-  margin-left: auto;
 }
 
 .figure[data-total] .value {

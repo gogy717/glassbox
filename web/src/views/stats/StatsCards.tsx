@@ -409,17 +409,21 @@ export const TokensCard = memo(function TokensCard({
               </span>
               <span className="section-label">{rt(locale, 'cacheHit')}</span>
             </div>
-            <div className={css.figure} data-total>
-              <span className={`${css.value} figure`}>
-                <UiCjk text={fmt(tk.total)} />
-              </span>
-              <span className="section-label">{rt(locale, 'total')}</span>
-            </div>
-            <div className={css.figure} data-cost title={costTitle}>
-              <span className={`${css.value} figure`}>
-                {tk.cost.priced ? `≈ ${formatUsdShort(tk.cost.usd, intl)}` : '—'}
-              </span>
-              <span className="section-label">{st(locale, 'apiCost')}</span>
+            {/* The total and its cost, at the right as one: short of room they go under
+                together, never the cost alone. */}
+            <div className={css.sums}>
+              <div className={css.figure} data-total>
+                <span className={`${css.value} figure`}>
+                  <UiCjk text={fmt(tk.total)} />
+                </span>
+                <span className="section-label">{rt(locale, 'total')}</span>
+              </div>
+              <div className={css.figure} data-cost title={costTitle}>
+                <span className={`${css.value} figure`}>
+                  {tk.cost.priced ? `≈ ${formatUsdShort(tk.cost.usd, intl)}` : '—'}
+                </span>
+                <span className="section-label">{st(locale, 'apiCost')}</span>
+              </div>
             </div>
           </div>
           {note && <p className={css.hint}>{note}</p>}
