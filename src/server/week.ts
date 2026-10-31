@@ -9,6 +9,7 @@
  * ready.
  */
 import type { RepoIdentity, SessionSnapshot, SessionSummary } from '../core/model.js';
+import type { ApprovalWindows } from '../shared/waiting.js';
 import {
   type WeekLine,
   type WeekResult,
@@ -103,6 +104,8 @@ export class WeekService {
   private readonly now: () => number;
   private readonly log: (msg: string) => void;
   private readonly repoOf: ((cwd: string) => RepoIdentity | null) | null;
+  /** The permission prompts glassbox's runs showed for a session (`useApprovals`). */
+  private approvalsOf: ((sessionId: string) => ApprovalWindows | undefined) | null = null;
 
   constructor(
     private readonly store: WeekStore,
@@ -114,6 +117,15 @@ export class WeekService {
     this.reparseMs = opts.reparseMs ?? 30_000;
     this.now = opts.now ?? Date.now;
     this.log = opts.log ?? (() => {});
+  }
+
+  /**
+   * Where the permission prompts of a session come from: the glassbox runs of the server, which
+   * exist once the store does. A session already read keeps the prompts it was read with, until
+   * it is written again. Null: no permission wait is known.
+   */
+  useApprovals(source: ((sessionId: string) => ApprovalWindows | undefined) | null): void {
+    this.approvalsOf = source;
   }
 
   /** No more reading: a computation under way ends at its next session, and none starts. */
@@ -231,7 +243,8 @@ export class WeekService {
       if (this.stopped) return null;
       const got = await this.store.readSession(s.id);
       if (!got || this.stopped) return null;
-      const buckets = await sessionBucketsPausing(got.snapshot, asOf, yieldToLoop);
+      const approvals = this.approvalsOf?.(s.id);
+      const buckets = await sessionBucketsPausing(got.snapshot, asOf, yieldToLoop, approvals);
       if (this.stopped) return null;
       this.cache.set(s.id, { buckets, updatedAt: s.updatedAt, readAt: asOf, running: running(s) });
       return got.bytes;
