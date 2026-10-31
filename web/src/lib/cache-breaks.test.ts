@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { createDemoSnapshot } from '../../../src/core/fixtures/demo.js';
 import type { Diagnostics, ModelRequest, TokenUsage } from '../../../src/core/model.js';
 import { emptyUsage } from '../../../src/core/usage.js';
+import { stageCacheBreaks } from '../../../src/server/demo-cache-breaks.js';
+import { fromSnapshot } from '../data/store';
+import { DEMO_NOW } from '../test/demo';
 import {
   agentCacheBreaks,
   type CacheBreaksInput,
@@ -269,5 +273,26 @@ describe('cacheBreakCost', () => {
     const cost = cacheBreakCost(agentCacheBreaks(reqs), DEFAULT_PRICES);
     expect(cost.priced).toBe(false);
     expect(cost.partial).toBe(true);
+  });
+});
+
+describe('the demo', () => {
+  it('breaks the cache once for each reason, the first request of no agent among them', () => {
+    const snap = stageCacheBreaks(createDemoSnapshot(DEMO_NOW));
+    const open = fromSnapshot(snap.session.id, snap);
+    const found = cacheBreaks(open);
+    expect(found.available && found.breaks.map((b) => [b.request.id, b.reason])).toEqual([
+      ['req_m2', 'shape'],
+      ['req_w2_4', 'compaction'],
+      ['req_w2_7', 'rewound'],
+      ['req_w3_2', 'unknown'],
+      ['req_w1_4', 'expired'],
+    ]);
+  });
+
+  it('serves the fixture itself unchanged to everything else', () => {
+    const plain = fromSnapshot('demo', createDemoSnapshot(DEMO_NOW));
+    const found = cacheBreaks(plain);
+    expect(found.available && found.breaks).toEqual([]);
   });
 });

@@ -33,6 +33,7 @@ import {
 } from '../shared/rate.js';
 import { detectTrouble } from '../shared/trouble.js';
 import type { AppStore } from './app.js';
+import { DEMO_SHAPE_LATER, stageCacheBreaks } from './demo-cache-breaks.js';
 import { troubleLabel } from './open-session.js';
 import { RateTracker } from './rate.js';
 import { RulesService } from './rules.js';
@@ -181,7 +182,8 @@ export class DemoStore implements AppStore, WeekStore {
 
   constructor() {
     const now = new Date();
-    this.snap = createDemoSnapshot(now);
+    // With a prompt-cache break of each kind, which only the demo server serves.
+    this.snap = stageCacheBreaks(createDemoSnapshot(now));
     this.others = createDemoSessions(now).filter((s) => s.id !== DEMO_SESSION_ID);
     this.sides = createDemoSideSnapshots(now);
     this.quotas = createDemoQuotas(now);
@@ -537,6 +539,7 @@ export class DemoStore implements AppStore, WeekStore {
       toolCallIds: [],
       hasDetail: true,
       error: null,
+      shapeHash: DEMO_SHAPE_LATER,
     };
     turn.requestIds.push(request.id);
     this.snap.requests.push(request);
