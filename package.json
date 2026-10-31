@@ -25,15 +25,13 @@
     "dev:live": "concurrently -k -n server,web -c cyan,magenta \"npm:dev:server:live\" \"npm:dev:web\"",
     "dev:server:live": "tsx watch src/server/cli.ts --no-open",
     "dev:web": "vite",
-    "build": "vite build && tsc -p tsconfig.server.json",
     "start": "node dist/server/cli.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p web/tsconfig.json --noEmit",
     "lint": "biome check .",
     "format": "biome check --write .",
-    "check": "npm run typecheck && npm run lint && npm test",
-    "prepare": "npm run build"
+    "check": "npm run typecheck && npm run lint && npm test"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.5",
