@@ -104,6 +104,26 @@ export interface SessionSummary {
    * session, as `activity`; absent otherwise.
    */
   lastReply?: string | null;
+  /**
+   * How full the main agent's context is (`src/shared/context-use.ts`): its latest finished
+   * model call, against its model's window where known. Only a session whose process is
+   * running carries it, from the session the server has open, as `trouble`; null when no call
+   * of the main agent has finished yet (or the one after a compaction is still in flight);
+   * absent otherwise.
+   */
+  contextUse?: ContextUse | null;
+}
+
+/**
+ * How full an agent's context is, as of its latest finished model call: `tokens` that call read
+ * (uncached input + cache reads + cache writes, the chain's "context") and the window of its
+ * model, null when not known. Data only: the UI words it and works out the share.
+ */
+export interface ContextUse {
+  agentId: string;
+  requestId: string;
+  tokens: number;
+  window: number | null;
 }
 
 /**
@@ -143,8 +163,18 @@ export interface SessionActivity {
  * - 'waiting': waiting for the person since `since`, past ten minutes.
  * - 'long-turn': the running prompt, since `since`, past three times the others' `median` (ms).
  * - 'compaction': the context was compacted `n` times.
+ * - 'context-full': the agent's latest model call read `tokens` of its model's `window`, `pct`
+ *   percent (whole, rounded down), 85 or more: it compacts soon. Raised only while the session
+ *   runs, and only where the window is known.
  */
-export type TroubleKind = 'repeat' | 'failing' | 'errors' | 'waiting' | 'long-turn' | 'compaction';
+export type TroubleKind =
+  | 'repeat'
+  | 'failing'
+  | 'errors'
+  | 'waiting'
+  | 'long-turn'
+  | 'compaction'
+  | 'context-full';
 
 /** What a sign points at: a tool call, a model call or a prompt, and whose it is. */
 export type TroubleRef =

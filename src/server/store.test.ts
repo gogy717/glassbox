@@ -608,6 +608,38 @@ describe('SessionStore signs of trouble', () => {
     expect(s.listSessions()[0]?.trouble?.since).toBe(T(1));
   });
 
+  it('sends how full a running session’s main context is with its summary, never a stopped one’s', async () => {
+    const p = await session(
+      'a',
+      rec.sent('r1', T(1), 40_000, []),
+      rec.sent('r2', T(2), 52_000, []),
+    );
+    await setLive({ a: 'busy' });
+    const s = await startStore();
+    // The fake adapter's model has no known window: a figure, no share.
+    const use = { agentId: 'main', requestId: 'r2', tokens: 52_001, window: null };
+    await vi.waitFor(() => expect(s.listSessions()[0]?.contextUse).toEqual(use), {
+      timeout: 5000,
+    });
+    const patches: SessionPatch[] = [];
+    s.onPatch(p.id, (x) => patches.push(x));
+    await appendFile(p.main, lines(rec.sent('r3', T(3), 61_000, [])));
+    await vi.waitFor(() => expect(patches.at(-1)?.session.contextUse?.requestId).toBe('r3'), {
+      timeout: 5000,
+    });
+    expect((await s.getSnapshot(p.id))?.session.contextUse?.tokens).toBe(61_001);
+
+    const listed = s.listSessions()[0] as SessionSummary;
+    expect(listedSummary(listed, 'closed')).not.toHaveProperty('contextUse');
+  });
+
+  it('carries no context figure for a session that is not running', async () => {
+    const p = await session('a', rec.sent('r1', T(1), 40_000, []));
+    const s = await startStore();
+    await s.getSnapshot(p.id);
+    expect(s.listSessions()[0]).not.toHaveProperty('contextUse');
+  });
+
   it('drops a sign worked out for a live state the poll has since replaced', () => {
     const sign = { kind: 'waiting' as const, params: {}, at: null, since: T(1) };
     const waiting: SessionSummary = {

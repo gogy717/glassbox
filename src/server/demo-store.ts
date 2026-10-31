@@ -554,7 +554,9 @@ export class DemoStore implements AppStore, WeekStore {
     const elapsed = Math.max(1000, Date.parse(now) - started);
     const firstBlockAt = new Date(started + elapsed * 0.6).toISOString();
     const n = ++this.serial;
-    const context = 60_000 + n * 3_500;
+    // Grows quickly, then levels off under 140K: never near its 200K window, so the demo session
+    // never drifts into a context nearly full.
+    const context = 60_000 + Math.round(80_000 * (1 - Math.exp(-n / 120)));
     request.status = 'complete';
     request.endedAt = now;
     request.firstBlockAt = firstBlockAt;

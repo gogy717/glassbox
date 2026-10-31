@@ -173,6 +173,11 @@ describe('inboxItems', () => {
     expect(items(sessions, [])).toEqual([]);
   });
 
+  // A context nearly full is a running session about to forget, not one stuck: Home says it.
+  it('leaves out a session whose sign is its context nearly full', () => {
+    expect(items([session('busy', { trouble: sign('context-full', 60) })], [])).toEqual([]);
+  });
+
   it('leaves the hidden probes out unless they are shown', () => {
     const sessions = [
       session('waiting', { tags: ['probe'], activity: waitingOn('Bash', 30) }),

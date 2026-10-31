@@ -293,6 +293,73 @@ describe('detectTrouble', () => {
     expect(detect({ requests: requests.slice(0, 3) })).toEqual([]);
   });
 
+  describe('context full', () => {
+    /** A call of `model` that read `tokens` of context. */
+    const read = (tokens: number, over: Partial<ModelRequest> = {}) =>
+      request({
+        model: 'claude-sonnet-5-5',
+        usage: { ...agent('main').usage, input: 10, cacheWrite: 990, cacheRead: tokens - 1_000 },
+        ...over,
+      });
+
+    it('is the agent’s latest call at 85% or more of a known window, while the session runs', () => {
+      const requests = [read(120_000), read(184_000)];
+      expect(detect({ requests })).toEqual([
+        {
+          kind: 'context-full',
+          params: { pct: 92, tokens: 184_000, window: 200_000 },
+          at: { kind: 'request', agentId: 'main', requestId: 'q2' },
+          since: at(2),
+        },
+      ]);
+      expect(kinds(detect({ requests, live: 'waiting', updatedAt: at(118) }))).toEqual([
+        'context-full',
+      ]);
+      expect(kinds(detect({ requests: [read(170_000)] }))).toEqual(['context-full']);
+    });
+
+    it('is not under 85%, nor a window not known, nor a session that does not run', () => {
+      expect(detect({ requests: [read(169_999)] })).toEqual([]);
+      expect(detect({ requests: [read(190_000, { model: 'gpt-6.1-sol' })] })).toEqual([]);
+      expect(detect({ requests: [read(190_000, { model: null })] })).toEqual([]);
+      for (const live of ['idle', 'closed', 'unknown'] as const)
+        expect(detect({ requests: [read(190_000)], live })).toEqual([]);
+    });
+
+    it('reads the window as 1M once the context went past 200K', () => {
+      expect(detect({ requests: [read(210_000), read(190_000)] })).toEqual([]);
+      expect(kinds(detect({ requests: [read(210_000), read(860_000)] }))).toEqual(['context-full']);
+    });
+
+    it('is the agent’s own: a sub-agent’s context is its own to fill', () => {
+      const agents = [agent('main'), agent('sub')];
+      const requests = [read(40_000), read(190_000, { agentId: 'sub' })];
+      expect(detect({ agents, requests })).toEqual([]);
+      expect(detect({ agents, requests }, 'sub').map((s) => s.at)).toEqual([
+        { kind: 'request', agentId: 'sub', requestId: 'q2' },
+      ]);
+    });
+
+    it('ranks under a wait for you and over a long prompt', () => {
+      const turns = [turn(1, 0, 4), turn(2, 10, 13), turn(3, 20, 25), turn(4, 86, null)];
+      expect(kinds(detect({ turns, requests: [read(190_000)] }))).toEqual([
+        'context-full',
+        'long-turn',
+      ]);
+      const blocked = bash('rm -rf dist', { status: 'running', endedAt: null });
+      const activity: SessionActivity = {
+        kind: 'waiting',
+        tool: 'Bash',
+        target: 'rm',
+        agentId: 'main',
+        since: at(105),
+      };
+      expect(
+        kinds(detect({ live: 'waiting', activity, calls: [blocked], requests: [read(190_000)] })),
+      ).toEqual(['waiting', 'context-full']);
+    });
+  });
+
   describe('waiting', () => {
     const blocked = bash('rm -rf dist', { status: 'running', endedAt: null });
     const activity: SessionActivity = {

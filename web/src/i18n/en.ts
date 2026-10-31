@@ -832,4 +832,14 @@ export const en: Record<MessageKey, string> = {
   'files.diff': 'Change',
   'files.writeSize': '{lines} {lines|line|lines} · {chars} {chars|character|characters}',
   'files.cell': 'Cell {id}',
+  // Package D (round 3): context nearly full.
+  'trouble.long.contextFull': 'Context {pct}% full; compaction soon',
+  'trouble.short.contextFull': 'Context {pct}%',
+  'context.label': 'Context',
+  'context.of': 'of {window} · {pct}',
+  'context.tip':
+    'What the latest model call read, of the model’s {window} window. Before it fills, the agent compacts the conversation: a summary takes its place and the detail is lost.',
+  'context.tipUnknown':
+    'What the latest model call read. This model’s window is not known, so no share is shown.',
+  'tokens.window': '{window} window',
 };
