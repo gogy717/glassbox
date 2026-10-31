@@ -24,6 +24,7 @@ import {
 import type { Navigate } from '../../router';
 import { useUi } from '../../ui';
 import { AgentBreakdown } from './AgentBreakdown';
+import { CacheBreaks } from './CacheBreaks';
 import { ContextBill } from './ContextBill';
 import { ContextChart } from './ContextChart';
 import css from './TokensView.module.css';
@@ -140,6 +141,8 @@ export function TokensView({ open, agentId, navigate }: Props) {
           <TopRequests open={open} requests={top} onPick={openInFlow} />
         </div>
       </div>
+
+      <CacheBreaks open={open} agentId={agentId} navigate={navigate} />
 
       <ContextBill open={open} agentId={agentId} navigate={navigate} />
     </div>

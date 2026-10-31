@@ -819,6 +819,29 @@ export const zh = {
     '最近一次模型调用读入的上下文，模型窗口为 {window}。用满之前代理会压缩对话：换成一份摘要，细节随之丢失。',
   'context.tipUnknown': '最近一次模型调用读入的上下文。不知道这个模型的窗口大小，所以不显示占比。',
   'tokens.window': '窗口 {window}',
+  // Package H (round 3): prompt-cache breaks, in Where tokens went and the execution chain.
+  'cacheBreaks.title': '缓存失效',
+  'cacheBreaks.summary': '缓存失效了 {n} 次 · 约 {k} token 重新写入',
+  'cacheBreaks.cost': '按 API 价格 {cost}',
+  'cacheBreaks.notAvailable': '不适用于 {agent}：它没有按请求记录缓存读写。',
+  'cacheBreaks.row': '{time} · {reason} · 约 {k} token 重新写入',
+  'cacheBreaks.reason.compaction': '已压缩',
+  'cacheBreaks.reason.shape': '提示变了',
+  'cacheBreaks.reason.expired': '已过期',
+  'cacheBreaks.reason.rewound': '回退',
+  'cacheBreaks.reason.unknown': '原因不明',
+  'cacheBreaks.why.compaction': '缓存失效：对话被压缩了，新的上下文要重新写入缓存。',
+  'cacheBreaks.why.shape':
+    '缓存失效：系统提示或工具定义和上一次请求不同，之前缓存的内容都读不回来了。',
+  'cacheBreaks.why.expired': '缓存失效：距上一次请求过去了 {idle}，超过了缓存的有效期（{ttl}）。',
+  'cacheBreaks.why.rewound':
+    '缓存失效：上下文变短了却没有压缩，可能改了一条消息，或从更早的地方接着对话。',
+  'cacheBreaks.why.unknown': '缓存失效：这次请求几乎没读回上一次的上下文，记录里看不出原因。',
+  'cacheBreaks.note':
+    '均为估算：一次请求读回的缓存不到上一次上下文（超过 2 万 token）的一半，算一次失效；重新写入的 token 已扣除一轮正常的新增。',
+  'cacheBreaks.ttl5m': '5 分钟',
+  'cacheBreaks.ttl1h': '1 小时',
+  'flow.cacheBreak': '缓存 · {reason}',
 } as const;
 
 export type MessageKey = keyof typeof zh;

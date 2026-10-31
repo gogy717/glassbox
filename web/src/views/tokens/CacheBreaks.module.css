@@ -1,0 +1,113 @@
+/* "Cache breaks": a section of Where tokens went, under a hairline like the others. */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  min-height: 22px;
+}
+
+.head h3 {
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+
+.agent {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+/* "The cache broke 3 times · ≈ 412K tokens written again · ≈$1.20 at API prices": a takeaway. */
+.summary {
+  margin: 0;
+  font-size: var(--fs-small);
+  line-height: var(--lh);
+  color: var(--text);
+}
+
+.cost {
+  color: var(--muted);
+}
+
+.message {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--muted);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* One break: its reason over when and where, the tokens written again, what they would cost. */
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: var(--radius-m);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--motion);
+}
+
+.row:hover {
+  background: var(--layer-2);
+}
+
+.who {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.reason {
+  font-size: var(--fs-body);
+  font-weight: 500;
+}
+
+.ref {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+
+.value {
+  flex: none;
+  font-size: var(--fs-body);
+}
+
+.rowCost {
+  flex: none;
+  min-width: 52px;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+  text-align: right;
+}
+
+.note {
+  margin: 0;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}

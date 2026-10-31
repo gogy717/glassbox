@@ -6,6 +6,7 @@ import type { OpenSession } from '../../data/store';
 import { useDebounced } from '../../data/useDebounced';
 import { useI18n } from '../../i18n';
 import { mayStillRun } from '../../lib/agents';
+import { cacheBreaksById } from '../../lib/cache-breaks';
 import type { Navigate, Route } from '../../router';
 import { useUi } from '../../ui';
 import { LiveOverlay } from '../composer/LiveOverlay';
@@ -230,6 +231,12 @@ function CallList({
     () => requestsOf(open, turn).map((req) => ({ req, tools: toolsOf(open, req) })),
     [open, turn],
   );
+  // The agent's prompt-cache breaks, read across all its requests: a break needs the one before.
+  const { requests, diagnostics } = open;
+  const breaks = useMemo(
+    () => cacheBreaksById({ requests, diagnostics }, turn.agentId),
+    [requests, diagnostics, turn.agentId],
+  );
   const [selected, setSelected] = useState<Selection | null>(linked);
   // The URL wins when it changes on its own: a pasted link, Back or Forward.
   const linkedRequest = linked?.requestId ?? null;
@@ -316,6 +323,7 @@ function CallList({
                 onSelect={onSelect}
                 onEnterAgent={onEnterAgent}
                 onOpenCall={onOpenCall}
+                cacheBreak={breaks.get(call.req.id) ?? null}
               />
             </div>
           );

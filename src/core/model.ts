@@ -364,6 +364,12 @@ export interface ModelRequest {
   error: { message: string; status: number | null; retryAttempt: number | null } | null;
   /** True on the first request after the agent's context was compacted. */
   compactedBefore?: boolean;
+  /**
+   * Identifies the system prompt and tool definitions the request sent: two requests with
+   * different hashes could not share a cached prefix. Claude Code (`api-request.shapeHash`) only;
+   * absent where the agent does not record it.
+   */
+  shapeHash?: string;
 }
 
 export type ToolStatus = 'running' | 'complete' | 'error' | 'unknown';

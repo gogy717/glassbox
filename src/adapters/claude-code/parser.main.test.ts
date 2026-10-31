@@ -158,6 +158,24 @@ describe('requests', () => {
     expect(s.turns[0]?.requestIds).toEqual(['api-1']);
   });
 
+  it('carries the shape hash of the system prompt and tools its api-request sent', () => {
+    const s = parseMain(
+      prompt(),
+      apiRequest({ id: 'api-1', ts: at(1), shapeHash: 'shape-a' }),
+      assistantBlocks({ requestId: 'req_1', requestRef: 'api-1', blocks: ['text'] }),
+      apiRequest({ id: 'api-2', ts: at(2), shapeHash: 'shape-b' }),
+    ).snapshot();
+    expect(s.requests.map((r) => r.shapeHash)).toEqual(['shape-a', 'shape-b']);
+  });
+
+  it('a request without an api-request has no shape hash', () => {
+    const s = parseMain(
+      prompt(),
+      assistantBlocks({ requestId: 'req_1', blocks: ['text'], usage: { output: 5 } }),
+    ).snapshot();
+    expect(s.requests[0]).not.toHaveProperty('shapeHash');
+  });
+
   it('the in-flight request becomes complete with the same id when its records arrive', () => {
     const p = parseMain(prompt(), apiRequest({ id: 'api-1', ts: at(1) }));
     const ch = p.ingestLines(

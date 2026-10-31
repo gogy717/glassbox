@@ -631,6 +631,7 @@ export class ClaudeSessionParser implements SessionParser {
     req.apiTs = rec.ts;
     req.apiModel = rec.model;
     req.apiEffort = rec.effort;
+    req.shapeHash = rec.shapeHash;
     this.markRequest(req, ch);
   }
 
@@ -1119,6 +1120,7 @@ export class ClaudeSessionParser implements SessionParser {
       hasDetail: r.hasApi,
       error: r.error,
       ...(r.compactedBefore ? { compactedBefore: true } : {}),
+      ...(r.shapeHash ? { shapeHash: r.shapeHash } : {}),
     };
   }
 
