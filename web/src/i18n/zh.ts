@@ -272,8 +272,6 @@ export const zh = {
   'flow.chipTools': '工具 {n}',
   'flow.chipContext': '上下文 {n}',
   'flow.runTool': '运行工具',
-  'flow.agent': '子代理',
-  'flow.workflow': '工作流',
   'flow.phaseProgress': '{title} {done}/{total}',
   'flow.moreAgents': '还有 {n} 个',
   'flow.noTurns': '这个代理还没有轮次',

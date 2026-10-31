@@ -274,8 +274,6 @@ export const en: Record<MessageKey, string> = {
   'flow.chipTools': 'tools {n}',
   'flow.chipContext': 'context {n}',
   'flow.runTool': 'Run tool',
-  'flow.agent': 'Agent',
-  'flow.workflow': 'Workflow',
   'flow.phaseProgress': '{title} {done}/{total}',
   'flow.moreAgents': '{n} more',
   'flow.noTurns': 'No prompts for this agent yet',
