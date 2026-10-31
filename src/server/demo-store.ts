@@ -24,6 +24,7 @@ import type {
 import { MAIN_AGENT_ID } from '../core/model.js';
 import { emptyUsage, sumUsage } from '../core/usage.js';
 import { type SessionContextBill, sessionBill } from '../shared/context-bill.js';
+import { contextUse } from '../shared/context-use.js';
 import {
   MINUTE_MS,
   RATE_MINUTES,
@@ -128,6 +129,209 @@ const FLAKY_PASS = '1 passed (3.2s)';
 const STUCK_EVERY = 4;
 const STUCK_FAILS = 4;
 
+/**
+ * A second running session, its main context nearly full: 184K of Claude Sonnet's 200K window
+ * after one long prompt of edits and test runs, its next call in flight. It stays as it is, so
+ * Home's Working row and the sidebar say "Context 92%" whenever the demo runs. Synthetic: no
+ * real project, path or transcript.
+ */
+export const CONTEXT_DEMO_ID = 'claude-code:demo-0000-4000-8000-000000000004';
+const CONTEXT_DEMO_CALLS = 22;
+const CONTEXT_DEMO_FILES = ['editor.ts', 'store.ts', 'toolbar.ts', 'history.ts', 'shortcuts.ts'];
+
+/** A request's usage that read `context` tokens, the last 3K of them new to the cache. */
+function readUsage(context: number, output: number): TokenUsage {
+  return {
+    ...emptyUsage(),
+    input: 8,
+    cacheRead: context - 3_000 - 8,
+    cacheWrite: 3_000,
+    cacheWrite1h: 3_000,
+    output,
+    thinking: Math.round(output / 2),
+  };
+}
+
+function createContextDemo(now: Date): SessionSnapshot {
+  const t0 = now.getTime() - (CONTEXT_DEMO_CALLS * 2 + 3) * 60_000;
+  const at = (min: number): IsoTime => new Date(t0 + min * 60_000).toISOString();
+  const cwd = '/Users/demo/Dev/notes';
+  const turnId = 'turn_n1';
+  const requests: ModelRequest[] = [];
+  const toolCalls: ToolCall[] = [];
+  for (let i = 0; i < CONTEXT_DEMO_CALLS; i++) {
+    const id = `req_n${i + 1}`;
+    const toolId = `tu_n${i + 1}`;
+    const file = `${cwd}/src/${CONTEXT_DEMO_FILES[i % CONTEXT_DEMO_FILES.length]}`;
+    const tool =
+      i % 3 === 0
+        ? { name: 'Read', input: { file_path: file }, result: '1\texport class Editor {…' }
+        : i % 3 === 1
+          ? {
+              name: 'Edit',
+              input: { file_path: file, old_string: `state${i}`, new_string: `store.state${i}` },
+              result: 'The file has been updated.',
+            }
+          : {
+              name: 'Bash',
+              input: { command: `npm test -- editor --shard=${i}`, description: 'Run the tests' },
+              result: `${40 + i} passed`,
+            };
+    const start = 1 + i * 2;
+    // From 30K up to 184K, a little more each call: the files read stay in the context.
+    const context = Math.round(30_000 + (154_000 * i) / (CONTEXT_DEMO_CALLS - 1));
+    requests.push({
+      id,
+      agentId: MAIN_AGENT_ID,
+      turnId,
+      index: i + 1,
+      model: 'claude-sonnet-5-5',
+      effort: 'high',
+      startedAt: at(start),
+      firstBlockAt: at(start + 0.5),
+      endedAt: at(start + 1),
+      status: 'complete',
+      stopReason: 'tool_use',
+      usage: readUsage(context, 700 + (i % 4) * 250),
+      blocks: [
+        { kind: 'thinking', text: null, durationMs: 20_000, at: at(start + 0.5) },
+        { kind: 'tool-use', toolCallId: toolId, at: at(start + 1) },
+      ],
+      toolCallIds: [toolId],
+      hasDetail: true,
+      error: null,
+    });
+    toolCalls.push({
+      id: toolId,
+      agentId: MAIN_AGENT_ID,
+      requestId: id,
+      name: tool.name,
+      input: tool.input,
+      status: 'complete',
+      startedAt: at(start + 1),
+      endedAt: at(start + 1.5),
+      durationMs: 30_000,
+      resultPreview: tool.result,
+      hasFullResult: true,
+      spawned: null,
+    });
+  }
+  // The next call, in flight: what the agent thinks over with a context nearly full.
+  requests.push({
+    id: `req_n${CONTEXT_DEMO_CALLS + 1}`,
+    agentId: MAIN_AGENT_ID,
+    turnId,
+    index: CONTEXT_DEMO_CALLS + 1,
+    model: 'claude-sonnet-5-5',
+    effort: 'high',
+    startedAt: at(CONTEXT_DEMO_CALLS * 2 + 1),
+    firstBlockAt: null,
+    endedAt: null,
+    status: 'in-flight',
+    stopReason: null,
+    usage: null,
+    blocks: [],
+    toolCallIds: [],
+    hasDetail: true,
+    error: null,
+  });
+  const usage = sumUsage(requests.map((r) => r.usage));
+  const counts = { turns: 1, requests: requests.length, toolCalls: toolCalls.length };
+  const startedAt = at(0);
+  const updatedAt = requests.at(-1)?.startedAt ?? startedAt;
+  return {
+    session: {
+      id: CONTEXT_DEMO_ID,
+      agent: 'claude-code',
+      nativeId: CONTEXT_DEMO_ID.slice('claude-code:'.length),
+      title: 'Move the editor onto the new store',
+      cwd,
+      project: 'notes',
+      startedAt,
+      updatedAt,
+      live: 'busy',
+      version: '2.1.308',
+      model: 'claude-sonnet-5-5',
+      usage,
+      counts: { ...counts, agents: 1 },
+    },
+    agents: [
+      {
+        id: MAIN_AGENT_ID,
+        kind: 'main',
+        parentId: null,
+        spawnedByToolCallId: null,
+        agentType: null,
+        label: 'Main',
+        workflowRunId: null,
+        phase: null,
+        model: 'claude-sonnet-5-5',
+        status: 'running',
+        startedAt,
+        endedAt: null,
+        usage,
+        counts,
+      },
+    ],
+    turns: [
+      {
+        id: turnId,
+        agentId: MAIN_AGENT_ID,
+        index: 1,
+        origin: 'human',
+        prompt: 'Move the editor, its toolbar and its undo history onto the new store',
+        startedAt,
+        endedAt: null,
+        status: 'running',
+        requestIds: requests.map((r) => r.id),
+      },
+    ],
+    requests,
+    toolCalls,
+    workflows: [],
+    diagnostics: { unknownRecordTypes: {}, parseErrors: 0, unavailable: [] },
+  };
+}
+
+/** A snapshot's summary with what the server works out of a running session it has open. */
+function withLiveFields(s: SessionSnapshot, now: number): SessionSummary {
+  const {
+    activity: _old,
+    trouble: _sign,
+    lastReply: _said,
+    contextUse: _use,
+    ...session
+  } = s.session;
+  const next: SessionSummary = {
+    ...session,
+    ...activityField({
+      live: s.session.live,
+      toolCalls: s.toolCalls,
+      requests: s.requests,
+      lastTurn: latestTurn(s.turns),
+      updatedAt: s.session.updatedAt,
+    }),
+    ...lastReplyField({
+      live: s.session.live,
+      lastTurn: latestTurn(s.turns),
+      request: requestsById(s.requests),
+    }),
+  };
+  if (isActive(next.live)) {
+    const byId = <T extends { id: string }>(items: T[]) => new Map(items.map((x) => [x.id, x]));
+    const input = {
+      session: next,
+      agents: byId(s.agents),
+      turns: byId(s.turns),
+      requests: byId(s.requests),
+      toolCalls: byId(s.toolCalls),
+    };
+    next.trouble = detectTrouble(input, MAIN_AGENT_ID, now, troubleLabel)[0] ?? null;
+    next.contextUse = contextUse(s.requests, MAIN_AGENT_ID);
+  }
+  return next;
+}
+
 type Lane =
   | { phase: 'thinking'; ticksLeft: number; requestId: string }
   | { phase: 'tool'; ticksLeft: number; requestId: string; toolId: string; tool: DemoTool }
@@ -151,7 +355,10 @@ interface Changed {
 export class DemoStore implements AppStore, WeekStore {
   private readonly snap: SessionSnapshot;
   private readonly others: SessionSummary[];
-  /** The other listed sessions, finished: they open but never change. */
+  /**
+   * The other listed sessions: they open but never change. All finished, but for the one near
+   * its window (`CONTEXT_DEMO_ID`), which runs on the spot.
+   */
   private readonly sides: SessionSnapshot[];
   private readonly quotas: QuotaSnapshot[];
   /** The rest of the week behind the weekly receipt: read by the week only, never listed. */
@@ -182,8 +389,13 @@ export class DemoStore implements AppStore, WeekStore {
   constructor() {
     const now = new Date();
     this.snap = createDemoSnapshot(now);
-    this.others = createDemoSessions(now).filter((s) => s.id !== DEMO_SESSION_ID);
-    this.sides = createDemoSideSnapshots(now);
+    const full = createContextDemo(now);
+    full.session = withLiveFields(full, now.getTime());
+    this.others = [
+      ...createDemoSessions(now).filter((s) => s.id !== DEMO_SESSION_ID),
+      full.session,
+    ];
+    this.sides = [...createDemoSideSnapshots(now), full];
     this.quotas = createDemoQuotas(now);
     this.weekBehind = createDemoWeek(now.getTime());
     const history = createDemoRules(now.getTime());
@@ -656,38 +868,11 @@ export class DemoStore implements AppStore, WeekStore {
 
   /**
    * What the demo session is doing and what it last said, worked out as a parser would, and
-   * its strongest sign of trouble as the server reads one of a session it has open.
+   * its strongest sign of trouble and how full its context is, as the server reads them of a
+   * session it has open.
    */
   private refreshActivity(): void {
-    const s = this.snap;
-    const { activity: _old, trouble: _sign, lastReply: _said, ...session } = s.session;
-    const next: SessionSummary = {
-      ...session,
-      ...activityField({
-        live: s.session.live,
-        toolCalls: s.toolCalls,
-        requests: s.requests,
-        lastTurn: latestTurn(s.turns),
-        updatedAt: s.session.updatedAt,
-      }),
-      ...lastReplyField({
-        live: s.session.live,
-        lastTurn: latestTurn(s.turns),
-        request: requestsById(s.requests),
-      }),
-    };
-    if (isActive(next.live)) {
-      const byId = <T extends { id: string }>(items: T[]) => new Map(items.map((x) => [x.id, x]));
-      const input = {
-        session: next,
-        agents: byId(s.agents),
-        turns: byId(s.turns),
-        requests: byId(s.requests),
-        toolCalls: byId(s.toolCalls),
-      };
-      next.trouble = detectTrouble(input, MAIN_AGENT_ID, Date.now(), troubleLabel)[0] ?? null;
-    }
-    s.session = next;
+    this.snap.session = withLiveFields(this.snap, Date.now());
   }
 
   private snapshotOf(sessionId: string): SessionSnapshot | undefined {

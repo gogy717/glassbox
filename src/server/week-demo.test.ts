@@ -29,9 +29,9 @@ describe('the demo week', () => {
     const r = await new WeekService(store, { now: () => NOW }).compute('7d');
     expect(r.sessions.length).toBeGreaterThan(25);
     expect(new Set(r.sessions.map((s) => s.agent)).size).toBe(5);
-    // The demo's own listed sessions are in it too, and its sidebar keeps its three.
+    // The demo's own listed sessions are in it too, and its sidebar keeps its four.
     expect(r.sessions.some((s) => s.id.includes('demo-0000'))).toBe(true);
-    expect(store.listSessions()).toHaveLength(3);
+    expect(store.listSessions()).toHaveLength(4);
     const hours = r.window.hourStarts.map((_, i) =>
       r.sessions.reduce((n, s) => n + (s.hours[i] ?? 0), 0),
     );
