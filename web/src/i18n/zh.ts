@@ -804,6 +804,8 @@ export const zh = {
   'files.diff': '改动',
   'files.writeSize': '{lines} 行 · {chars} 字符',
   'files.cell': '单元格 {id}',
+  // Package B (round 3): the Rules page's tag for a rule that writes.
+  'rules.danger.writes': '会改动文件或提交历史',
 } as const;
 
 export type MessageKey = keyof typeof zh;

@@ -830,4 +830,6 @@ export const en: Record<MessageKey, string> = {
   'files.diff': 'Change',
   'files.writeSize': '{lines} {lines|line|lines} · {chars} {chars|character|characters}',
   'files.cell': 'Cell {id}',
+  // Package B (round 3): the Rules page's tag for a rule that writes.
+  'rules.danger.writes': 'Changes files or history',
 };
