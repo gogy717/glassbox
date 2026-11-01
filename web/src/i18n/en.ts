@@ -151,14 +151,10 @@ export const en: Record<MessageKey, string> = {
   'sidebar.yesterday': 'Yesterday',
   'sidebar.thisWeek': 'This week',
   'sidebar.earlier': 'Earlier',
-  'summary.turns': 'Prompts',
-  'summary.requests': 'Model calls',
   'summary.toolCalls': 'Tool calls',
   'summary.duration': 'Active time',
   'summary.overDays': 'over {n} {n|day|days}',
-  'summary.input': 'Input',
   'summary.cacheHit': 'Cache hit',
-  'summary.output': 'Output (thinking)',
   'summary.cost': 'API cost (est.)',
   'cost.title':
     'What these tokens would cost on the API, estimated from the price table in Settings',
@@ -167,8 +163,6 @@ export const en: Record<MessageKey, string> = {
   'cost.noPrice': 'no price',
   'summary.title': 'Summary',
   'summary.rate': 'Token rate',
-  'summary.more': 'More figures',
-  'summary.fewer': 'Fewer figures',
   'receipt.open': 'Receipt',
   'receipt.loading': 'Loading…',
   'receipt.nothing': 'Nothing to print yet',
@@ -903,4 +897,16 @@ export const en: Record<MessageKey, string> = {
     'Result size is what each call brought back into the context, paid for again by every later request; tokens are estimated from its characters.',
   // Package G (round 3): the time the agents waited on the person.
   'time.waitingYou': 'Waiting for you',
+  // The summary bar as gauges (2026-11-01): an activity strip, two rings, two token bars.
+  'summary.active': 'Active',
+  'summary.strip':
+    '{turns} {turns|prompt|prompts}, {calls} model {calls|call|calls}, {tools} tool {tools|call|calls}, active {time}',
+  'summary.ofWindow': 'of {window}',
+  'summary.contextHidden': 'Context {exact}',
+  'summary.cacheRing': '{pct} of {input} input tokens read from cache',
+  'summary.in': 'in',
+  'summary.out': 'out',
+  'summary.tokensHidden': 'Input {input}, {cached} cached; output {output}, {thinking} thinking',
+  'summary.api': 'API',
+  'summary.costHidden': 'API cost (est.) {cost}',
 };

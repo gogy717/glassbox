@@ -1,56 +1,58 @@
+/* Short of room even when tight, the bar takes a second row rather than cut anything off. */
 .bar {
   display: flex;
   flex: none;
-  min-height: 52px;
+  flex-wrap: wrap;
+  align-items: center;
+  min-height: 56px;
   border-bottom: 1px solid var(--border);
   background: var(--layer-1);
 }
 
-/* Figures scroll sideways when they must; the diagnostics popover sits outside, unclipped. The
-   strip takes only its figures' width, so "More figures" sits right after them. */
-.metrics {
+/* One cell per gauge: what it draws, and its readout and label beside it. Never wraps inside. */
+.cell {
   display: flex;
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  height: 56px;
+  padding: 6px 12px;
+  border-left: 1px solid var(--border);
+  white-space: nowrap;
 }
 
-.metric {
+.cell:first-child {
+  border-left: 0;
+}
+
+.stack {
   display: flex;
   flex-direction: column;
   justify-content: center;
   gap: 2px;
-  flex: none;
-  min-width: 96px;
-  padding: 7px 16px;
-  border-left: 1px solid var(--border);
 }
 
-.metric:first-child {
-  border-left: 0;
-}
-
-.value {
+.read {
   font-size: var(--fs-readout);
   font-weight: 500;
   line-height: 1.25;
   white-space: nowrap;
 }
 
-/* The thinking share, a muted parenthesis. */
+/* After the readout, muted: the window the context is of, the days the active time spans. */
 .aside {
   font-size: var(--fs-small);
   color: var(--muted);
+  font-weight: 400;
 }
 
-/* The context figure: muted while far from its window, amber once nearly full. */
-.metric[data-tone="muted"] .value {
+/* The context readout: muted while far from its window, amber once nearly full. */
+.cell[data-tone="muted"] .read {
   color: var(--muted);
 }
 
-.metric[data-tone="warn"] .value,
-.metric[data-tone="warn"] .aside {
+.cell[data-tone="warn"] .read,
+.cell[data-tone="warn"] .aside {
   color: var(--warning);
 }
 
@@ -65,65 +67,82 @@
   letter-spacing: 0;
 }
 
-.more {
-  display: none;
-  flex: none;
-  align-self: center;
-  margin: 0 8px;
-  padding: 0 4px;
-  border: 0;
-  background: transparent;
-  color: var(--accent);
-  font-size: var(--fs-small);
-  cursor: pointer;
-  white-space: nowrap;
+/* Under the strip: its three marks and their counts, the marks drawn as the strip draws them. */
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-label);
+  color: var(--muted);
+  line-height: 1;
 }
 
-.more:hover {
-  text-decoration: underline;
+.legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.tri {
+  width: 0;
+  height: 0;
+  border-left: 3.5px solid transparent;
+  border-right: 3.5px solid transparent;
+  border-top: 6px solid var(--accent);
+}
+
+.barGlyph {
+  width: 3px;
+  height: 8px;
+  background: var(--ink-soft);
+}
+
+.tick {
+  width: 1px;
+  height: 4px;
+  background: var(--muted);
+}
+
+/* Takes the room left on the row, so the right-hand group sits at the right and its auto
+   margin (Diagnostics' sheet) stays nought: the measure of what a row needs leaves it out. */
+.gap {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 0;
+}
+
+/* Diagnostics, Trouble and Receipt: one group at the right, moved to the next row whole. */
+.side {
+  display: flex;
+  flex: none;
+  align-items: center;
+  margin-left: auto;
+  height: 56px;
+}
+
+/* Tight (the cells and the diagnostics do not fit): less padding, and the right-hand words go;
+   their icons keep the word as tooltip and accessible name. */
+.bar[data-tight] .cell {
+  padding: 6px 10px;
+}
+
+.bar[data-tight] [data-word] {
+  display: none;
 }
 
 /* The token rate lives in the top bar until it gives it up, below 900px. */
-.metric[data-narrow-only] {
+.cell[data-narrow-only] {
   display: none;
 }
 
-/* The bar too narrow for every figure (measured: beside the sidebar, a 1512px window gives them
-   about 920px, and nine need more): keep four, the rest behind the button. */
-.bar[data-tight] .more {
-  display: block;
-}
-
-.bar[data-tight]:not([data-more]) .metric[data-extra] {
-  display: none;
-}
-
-/* Folded and still short of room: the strip scrolls sideways, its cut edge faded to say so. */
-.bar[data-cut] .metrics {
-  mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
-}
-
-/* Seven labels in one row is a spreadsheet: keep four, the rest behind the button. */
+/* Below 900px the top bar gives the rate up, and the bar carries it. */
 @media (max-width: 900px) {
-  .bar[data-more] .metric[data-narrow-only] {
+  .cell[data-narrow-only] {
     display: flex;
   }
-
-  .bar:not([data-more]) .metric[data-extra] {
-    display: none;
-  }
-
-  .more {
-    display: block;
-  }
-
-  .metric {
-    min-width: 0;
-    padding: 7px 12px;
-  }
 }
 
-/* Receipt: beside the diagnostics, in its style; the icon alone where the bar is narrow. */
+/* Receipt: beside the diagnostics, in its style; the icon alone where the bar is tight. */
 .receipt {
   display: inline-flex;
   flex: none;
@@ -157,10 +176,4 @@
 .receipt[aria-disabled="true"]:hover {
   background: transparent;
   color: var(--muted);
-}
-
-@media (max-width: 900px) {
-  .receiptLabel {
-    display: none;
-  }
 }

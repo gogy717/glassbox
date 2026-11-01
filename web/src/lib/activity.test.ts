@@ -31,8 +31,8 @@ describe('activityStrip', () => {
     }
     // Calls come in start order, so their x never goes back.
     for (let i = 1; i < strip.calls.length; i++)
-      expect(strip.calls[i].x).toBeGreaterThanOrEqual(strip.calls[i - 1].x);
-    expect(strip.turns[0].x).toBe(0);
+      expect(strip.calls[i]?.x).toBeGreaterThanOrEqual(strip.calls[i - 1]?.x ?? 0);
+    expect(strip.turns[0]?.x).toBe(0);
   });
 
   it('scales each call by its output against the largest, hollow before usage arrives', () => {
@@ -44,10 +44,11 @@ describe('activityStrip', () => {
     const strip = activityStrip(open, 'main', now);
     const tallest = strip.calls.filter((c) => c.h === 1);
     expect(tallest).toHaveLength(1);
-    expect(tallest[0].hollow).toBe(false);
+    const top = tallest[0] as (typeof tallest)[number];
+    expect(top.hollow).toBe(false);
     const hollow = activityStrip(withRequest(open, largest.id, { usage: null }), 'main', now);
-    expect(hollow.calls.find((c) => c.x === tallest[0].x)).toEqual({
-      x: tallest[0].x,
+    expect(hollow.calls.find((c) => c.x === top.x)).toEqual({
+      x: top.x,
       h: 0,
       hollow: true,
     });
@@ -84,7 +85,7 @@ describe('activityStrip', () => {
 
   it('leaves out a call that has no start time', () => {
     const open = demoOpen();
-    const first = [...open.requests.values()][0];
+    const first = [...open.requests.values()][0] as ModelRequest;
     const strip = activityStrip(withRequest(open, first.id, { startedAt: null }), 'main', now);
     expect(strip.calls).toHaveLength(summarize(open, 'main', now).requests - 1);
   });

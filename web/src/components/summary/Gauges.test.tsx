@@ -44,7 +44,7 @@ describe('ActivityStrip', () => {
     expect(container.querySelectorAll('[data-tool]')).toHaveLength(1);
     // x runs from 4 to width − 4: the second turn's triangle is centred at 100.
     const second = container.querySelectorAll('[data-turn]')[1];
-    expect(second.getAttribute('d')).toBe('M96.5 0 L103.5 0 L100 6 Z');
+    expect(second?.getAttribute('d')).toBe('M96.5 0 L103.5 0 L100 6 Z');
     expect(container.querySelector('[data-base]')).toHaveAttribute('y1', '22.5');
   });
 

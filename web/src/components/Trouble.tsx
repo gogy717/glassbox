@@ -115,7 +115,10 @@ export function Trouble({ open, agentId, now, navigate }: Props) {
       >
         <TriangleAlert size={14} aria-hidden="true" />
         {signals.length > 0 && <span className={css.dot} aria-hidden="true" />}
-        <span className={css.count}>{count}</span>
+        {/* "No trouble" gives way when the summary bar is tight; a sign's words never do. */}
+        <span className={css.count} data-word={signals.length === 0 || undefined}>
+          {count}
+        </span>
       </button>
       {shown && (
         <div className={css.panel} role="dialog" aria-label={t('trouble.title')}>

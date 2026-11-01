@@ -56,7 +56,9 @@ export function Diagnostics({ diagnostics: d }: { diagnostics: Diag }) {
       >
         <Activity size={14} aria-hidden="true" />
         {alert && <span className={css.dot} aria-hidden="true" />}
-        <span className={css.count}>{count}</span>
+        <span className={css.count} data-word>
+          {count}
+        </span>
       </button>
       {open && (
         <div className={css.panel} role="dialog" aria-label={t('diag.title')}>
