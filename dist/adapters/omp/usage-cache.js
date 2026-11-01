@@ -1,0 +1,202 @@
+/**
+ * Plan quota from oh-my-pi's usage cache: the `cache` table of `<agent dir>/agent.db`, where
+ * oh-my-pi keeps the last usage report of every provider account it is signed in to, in rows
+ * keyed `usage_cache:report:<provider>:<baseUrl>:<account>`. No network, no credentials.
+ *
+ * Keys and reports name the account (e-mail, account and org ids). Only the `value` column is
+ * selected, and only the provider, fetch time, plan and each limit's id, label, window and
+ * amount are read out of it; nothing else is kept, logged or returned.
+ *
+ * Read only, the files beside the database included: one short query on a read-only connection,
+ * closed straight after. `openReadOnly` (`../sqlite.ts`) says how it is opened, and the one race
+ * it leaves.
+ */
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { codexPlanName, KIND_ORDER, msToIso, num, obj, STALE_MS, spellOut, str, windowKind, } from '../../quota/shared.js';
+import { openReadOnly } from '../sqlite.js';
+/** How long a read may wait on oh-my-pi's lock; the query itself blocks the event loop. */
+const BUSY_TIMEOUT_MS = 100;
+/** The model vendor whose plan an oh-my-pi provider id reports on. */
+export function ompQuotaProvider(id) {
+    if (id === 'xai-oauth')
+        return 'xai';
+    if (id === 'openai-codex')
+        return 'openai';
+    if (id.startsWith('anthropic'))
+        return 'anthropic';
+    return id.replace(/-oauth$/, '');
+}
+const UNIT_MINUTES = {
+    m: 1,
+    h: 60,
+    d: 24 * 60,
+    w: 7 * 24 * 60,
+    mo: 30 * 24 * 60,
+};
+/** By the window's length when oh-my-pi knows it, else by its id ("5h", "1w", "monthly"). */
+function kindOf(window) {
+    const ms = num(window?.durationMs);
+    if (ms !== null && ms > 0)
+        return windowKind(ms / 60_000);
+    const id = str(window?.id)?.toLowerCase() ?? '';
+    if (id === 'monthly')
+        return 'monthly';
+    if (id === 'weekly')
+        return 'weekly';
+    const m = /^(\d+)(mo|m|h|d|w)$/.exec(id);
+    return m ? windowKind(Number(m[1]) * (UNIT_MINUTES[m[2] ?? ''] ?? 0)) : 'other';
+}
+/** The window's length: its duration, else what its id says ("5h", "1w"); a month ("1mo") has none. */
+function lengthOf(window) {
+    const ms = num(window?.durationMs);
+    if (ms !== null && ms > 0)
+        return ms;
+    const m = /^(\d+)(m|h|d|w)$/.exec(str(window?.id)?.toLowerCase() ?? '');
+    const minutes = m ? Number(m[1]) * (UNIT_MINUTES[m[2] ?? ''] ?? 0) : 0;
+    return minutes > 0 ? minutes * 60_000 : null;
+}
+/**
+ * 0..100 from whichever amount the provider filled in, in oh-my-pi's own order: the used
+ * fraction, used / limit, a used percentage, what remains. Null when none is usable (e.g.
+ * Copilot's premium requests reported as 0 of 0).
+ */
+function usedPercent(amount) {
+    const fraction = num(amount.usedFraction);
+    const used = num(amount.used);
+    const limit = num(amount.limit);
+    const remaining = num(amount.remainingFraction);
+    const percent = fraction !== null
+        ? fraction * 100
+        : used !== null && limit !== null && limit > 0
+            ? (used * 100) / limit
+            : used !== null && amount.unit === 'percent'
+                ? used
+                : remaining !== null
+                    ? (1 - remaining) * 100
+                    : null;
+    return percent === null ? null : Math.min(100, Math.max(0, percent));
+}
+/**
+ * A limit as a window; null when its status is "unknown" (its numbers are not to be trusted).
+ * Its id loses oh-my-pi's `<provider>:` prefix ("xai-oauth:credits:1w" → "credits:1w"), so it
+ * matches what other sources of the same provider call that window.
+ */
+function windowOf(limit, provider) {
+    const l = obj(limit);
+    const id = str(l?.id);
+    const amount = obj(l?.amount);
+    const used = amount ? usedPercent(amount) : null;
+    if (!l || !id || used === null || l.status === 'unknown')
+        return null;
+    const window = obj(l.window);
+    const prefix = `${provider}:`;
+    const length = lengthOf(window);
+    return {
+        id: id.startsWith(prefix) && id.length > prefix.length ? id.slice(prefix.length) : id,
+        kind: kindOf(window),
+        label: str(l.label),
+        model: null,
+        usedPercent: used,
+        resetsAt: msToIso(num(window?.resetsAt)),
+        ...(length !== null ? { durationMs: length } : {}),
+    };
+}
+/** Plan from the report's metadata: ChatGPT's `planType` ("free") or Copilot's `plan`. */
+function planOf(provider, metadata) {
+    const plan = str(metadata?.planType) ?? str(metadata?.plan);
+    if (!plan)
+        return null;
+    return provider === 'openai' ? codexPlanName(plan) : spellOut(plan);
+}
+/** One cached report (a `value` column) as a snapshot; null when malformed or without windows. */
+function snapshotOf(value, now) {
+    let parsed;
+    try {
+        parsed = typeof value === 'string' ? JSON.parse(value) : null;
+    }
+    catch {
+        return null;
+    }
+    const report = obj(obj(parsed)?.value);
+    const id = str(report?.provider);
+    const fetchedAtMs = num(report?.fetchedAt);
+    const fetchedAt = msToIso(fetchedAtMs);
+    if (!report || !id || fetchedAtMs === null || fetchedAt === null)
+        return null;
+    const windows = [];
+    for (const limit of Array.isArray(report.limits) ? report.limits : []) {
+        const w = windowOf(limit, id);
+        if (w && !windows.some((x) => x.id === w.id))
+            windows.push(w);
+    }
+    if (windows.length === 0)
+        return null;
+    windows.sort((a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind));
+    const provider = ompQuotaProvider(id);
+    return {
+        provider,
+        agent: 'oh-my-pi',
+        plan: planOf(provider, obj(report.metadata)),
+        fetchedAt,
+        stale: now - fetchedAtMs > STALE_MS,
+        windows,
+        extraUsage: null,
+        balance: null,
+        source: 'oh-my-pi-cache',
+    };
+}
+/**
+ * Snapshots from the `value` column of cached usage reports, one per provider: the newest
+ * report with windows wins (Copilot keeps one report per API base URL).
+ */
+export function quotasFromCacheValues(values, now) {
+    const best = new Map();
+    for (const value of values) {
+        const q = snapshotOf(value, now);
+        const kept = q && best.get(q.provider);
+        if (q && (!kept || Date.parse(q.fetchedAt) > Date.parse(kept.fetchedAt))) {
+            best.set(q.provider, q);
+        }
+    }
+    return [...best.values()];
+}
+/**
+ * The `value` of every usage report oh-my-pi itself would still serve (within retention), read
+ * as `openReadOnly` reads another app's database: no file beside agent.db changes. Pages still
+ * in the WAL are read only when SQLite cannot change a file doing so; otherwise agent.db is read
+ * alone, and new reports show once oh-my-pi checkpoints them. An immutable read takes no lock,
+ * so one that overlaps a checkpoint can see a half-written page: a row that fails to parse is
+ * skipped, an SQLite error is logged once, and the watcher reads again before it lets a provider
+ * vanish.
+ */
+export async function readCacheValues(path, now, io = {}) {
+    const db = await openReadOnly(path, { busyMs: BUSY_TIMEOUT_MS, beforeOpen: io.beforeOpen });
+    try {
+        return db
+            .prepare("SELECT value FROM cache WHERE key GLOB 'usage_cache:report:*' AND expires_at > ?")
+            .all(Math.floor(now / 1000))
+            .map((row) => row.value);
+    }
+    finally {
+        db.close();
+    }
+}
+/**
+ * The `oh-my-pi-cache` quota source. Empty while there is no database; rejects when there is
+ * one that cannot be read (locked past the timeout, not a database, no cache table).
+ */
+export function createOmpUsageCacheSource({ agentDir }) {
+    const path = join(agentDir, 'agent.db');
+    return {
+        id: 'oh-my-pi-cache',
+        read: async () => {
+            if (!existsSync(path))
+                return [];
+            const now = Date.now();
+            return quotasFromCacheValues(await readCacheValues(path, now), now);
+        },
+        watchFiles: () => [path, `${path}-wal`],
+    };
+}
+//# sourceMappingURL=usage-cache.js.map

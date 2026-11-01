@@ -1,0 +1,154 @@
+/**
+ * On unless `--no-fetch-quota`: asks xAI for the SuperGrok plan usage with Grok CLI's own
+ * sign-in. The endpoint is the one oh-my-pi asks for its `xai-oauth` provider (and the path Grok
+ * CLI's billing extension asks), `GET https://cli-chat-proxy.grok.com/v1/billing?format=credits`;
+ * it answers the weekly credit window and its share per product (GrokBot, Grok Build, ...).
+ *
+ * Only the access token (`key`) and `expires_at` are read out of `auth.json`; the e-mail, names
+ * and ids beside them are not. The token is sent to cli-chat-proxy.grok.com and nowhere else (no
+ * redirects), and is never logged or kept between requests. An expired token is never refreshed:
+ * refreshing rotates it and could sign Grok CLI out, so glassbox waits until Grok CLI has
+ * refreshed it itself.
+ */
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { getJson, periodicFetch } from '../../quota/periodic-fetch.js';
+import { obj, STALE_MS } from '../../quota/shared.js';
+export const BILLING_URL = 'https://cli-chat-proxy.grok.com/v1/billing?format=credits';
+/** Treat a token this close to expiry as expired: it could lapse mid-request. */
+const EXPIRY_MARGIN_MS = 60_000;
+/** Products as oh-my-pi labels them, so windows read the same whichever source is newer. */
+const PRODUCT_NAMES = { GrokBuild: 'Grok Build', Api: 'API' };
+/** A usage percentage, capped at 100 (a plan used up shows as full); negative ones are unusable. */
+const percent = (v) => typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.min(v, 100) : null;
+const isoMs = (v) => {
+    const ms = typeof v === 'string' ? Date.parse(v) : Number.NaN;
+    return Number.isNaN(ms) ? null : ms;
+};
+/**
+ * The token in Grok CLI's `auth.json`: one entry per sign-in, keyed by issuer and client; the
+ * one that expires last wins.
+ */
+export function tokenFrom(text, now) {
+    let root;
+    try {
+        root = obj(JSON.parse(text));
+    }
+    catch {
+        return { missing: 'the Grok sign-in is not valid JSON', reason: 'fetch-failed' };
+    }
+    let best = null;
+    for (const value of Object.values(root ?? {})) {
+        const entry = obj(value);
+        const token = entry?.key;
+        if (typeof token !== 'string' || token === '')
+            continue;
+        const expiresAt = isoMs(entry?.expires_at);
+        if (!best || (expiresAt ?? -1) > (best.expiresAt ?? -1))
+            best = { token, expiresAt };
+    }
+    if (!best)
+        return { missing: 'not signed in to Grok (`grok login`)', reason: 'no-credentials' };
+    if (best.expiresAt !== null && best.expiresAt - EXPIRY_MARGIN_MS <= now) {
+        return {
+            missing: 'the Grok sign-in has expired; Grok CLI renews it the next time it runs',
+            reason: 'sign-in-expired',
+        };
+    }
+    return { token: best.token };
+}
+/**
+ * Windows from a `/v1/billing?format=credits` answer: the weekly credits, then each product's
+ * share of them. Empty when the answer has no weekly period: an error envelope, or an account
+ * billed monthly (oh-my-pi then asks `/v1/billing` without `format`; glassbox does not).
+ */
+export function billingWindows(body) {
+    const config = obj(obj(body)?.config);
+    const period = obj(config?.currentPeriod);
+    const type = period?.type;
+    if (!config || typeof type !== 'string' || !type.toUpperCase().includes('WEEK'))
+        return [];
+    const end = isoMs(period?.end);
+    const resetsAt = end === null ? null : new Date(end).toISOString();
+    const windows = [];
+    const add = (id, label, usedPercent) => {
+        if (!windows.some((w) => w.id === id)) {
+            windows.push({ id, kind: 'weekly', label, model: null, usedPercent, resetsAt });
+        }
+    };
+    const credits = percent(config.creditUsagePercent);
+    if (credits !== null)
+        add('credits:1w', 'SuperGrok Weekly Credits', credits);
+    for (const item of Array.isArray(config.productUsage) ? config.productUsage : []) {
+        const p = obj(item);
+        const product = typeof p?.product === 'string' ? p.product.trim() : '';
+        const slug = product.toLowerCase().replace(/[^a-z0-9]/g, '');
+        // A product without a number has not been used this week.
+        const used = p?.usagePercent == null ? 0 : percent(p.usagePercent);
+        if (slug && used !== null) {
+            add(`product:${slug}:1w`, `${PRODUCT_NAMES[product] ?? product} (Weekly)`, used);
+        }
+    }
+    return windows;
+}
+export function xaiSnapshot(windows, fetchedAtMs, now) {
+    return {
+        provider: 'xai',
+        agent: 'grok',
+        // The answer does not name the plan.
+        plan: null,
+        fetchedAt: new Date(fetchedAtMs).toISOString(),
+        stale: now - fetchedAtMs > STALE_MS,
+        windows,
+        extraUsage: null,
+        balance: null,
+        source: 'xai-api',
+    };
+}
+export function createXaiQuotaSource(opts) {
+    const doFetch = opts.fetch ?? fetch;
+    const readText = opts.readText ?? ((path) => readFile(path, 'utf8'));
+    const now = opts.now ?? Date.now;
+    async function attempt() {
+        let text;
+        try {
+            text = await readText(join(opts.grokDir, 'auth.json'));
+        }
+        catch {
+            return { problem: 'no Grok sign-in found', reason: 'no-credentials' };
+        }
+        const read = tokenFrom(text, now());
+        if ('missing' in read)
+            return { problem: read.missing, reason: read.reason };
+        const res = await getJson(doFetch, BILLING_URL, {
+            Authorization: `Bearer ${read.token}`,
+            Accept: 'application/json',
+            // Grok CLI's header: the proxy validates the bearer as a CLI sign-in.
+            'X-XAI-Token-Auth': 'xai-grok-cli',
+        }, read.token, 'the billing endpoint');
+        if ('problem' in res)
+            return res;
+        // An error envelope has no windows; it must not replace real ones.
+        const windows = billingWindows(res.ok);
+        return windows.length > 0
+            ? { ok: windows }
+            : { problem: 'the billing endpoint answered in an unknown format' };
+    }
+    const loop = periodicFetch({
+        attempt,
+        name: 'quota fetch (xAI)',
+        intervalMs: opts.intervalMs,
+        log: opts.log,
+        now,
+    });
+    return {
+        id: 'xai-api',
+        async read() {
+            const last = await loop.latest();
+            // Rebuilt on every read so `stale` follows the clock.
+            return last ? [xaiSnapshot(last.value, last.fetchedAtMs, now())] : [];
+        },
+        problem: loop.problem,
+    };
+}
+//# sourceMappingURL=quota-fetch.js.map
