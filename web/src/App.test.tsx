@@ -326,16 +326,15 @@ describe('App', () => {
     // The open session's agent, in its colours, at every width.
     expect(within(banner).getByText('Claude Code')).toHaveAttribute('data-tone', 'claude-code');
 
+    // The summary bar's gauges, as a screen reader hears them.
     const summary = screen.getByRole('region', { name: 'Summary' });
-    const value = (label: string) =>
-      within(summary).getByText(label).parentElement?.querySelector('[data-value]')?.textContent;
-    expect(value('Prompts')).toBe('3');
-    expect(value('Model calls')).toBe('28');
-    expect(value('Tool calls')).toBe('32');
-    expect(value('Active time')).toBe('3m4s');
-    expect(value('Input')).toBe('1.84M');
-    expect(value('Cache hit')).toBe('86.0%');
-    expect(value('Output (thinking)')).toBe('42K (27.1K)');
+    const said = (cell: string) =>
+      summary.querySelector(`[data-cell="${cell}"] .visually-hidden`)?.textContent;
+    expect(said('activity')).toBe('3 prompts, 28 model calls, 32 tool calls, active 3m4s');
+    expect(said('cache')).toBe('86.0% of 1,838,850 input tokens read from cache');
+    expect(said('tokens')).toMatch(
+      /^Input 1,838,850, [\d,]+ cached; output 42,040, 27,050 thinking$/,
+    );
 
     expect(screen.getByRole('navigation', { name: 'Agent' })).toHaveTextContent('Main');
     expect(within(summary).getByRole('button', { name: /^Data diagnostics/ })).toBeInTheDocument();
@@ -358,10 +357,9 @@ describe('App', () => {
       /Main.*cc-recon.*recon:prior-art/,
     );
     const summary = screen.getByRole('region', { name: 'Summary' });
-    expect(
-      within(summary).getByText('Model calls').parentElement?.querySelector('[data-value]')
-        ?.textContent,
-    ).toBe('9');
+    expect(summary.querySelector('[data-cell="activity"] .visually-hidden')?.textContent).toMatch(
+      /^\d+ prompts?, 9 model calls, /,
+    );
   });
 
   it('shows the tab named in the route', async () => {
