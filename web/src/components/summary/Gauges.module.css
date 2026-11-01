@@ -1,0 +1,129 @@
+/* A share as a ring: the track under the arc, the percent inside. Colours by tone. */
+.ring {
+  flex: none;
+}
+
+.track {
+  fill: none;
+  stroke: var(--layer-3);
+  stroke-width: 3.5;
+}
+
+.arc {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 3.5;
+}
+
+.ring[data-tone="plain"] .arc {
+  stroke: var(--text);
+}
+
+.ring[data-tone="warn"] .arc {
+  stroke: var(--warning);
+}
+
+.ring[data-tone="ok"] .arc {
+  stroke: var(--success);
+}
+
+.pct {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+  font-weight: 500;
+  fill: var(--text);
+}
+
+/* The activity strip: calls as bars, turns as triangles, tools as ticks, on a baseline. */
+.strip {
+  display: block;
+  flex: none;
+}
+
+.base {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+
+.call {
+  fill: var(--ink-soft);
+}
+
+.hollow {
+  fill: none;
+  stroke: var(--ink-soft);
+  stroke-width: 1;
+}
+
+.turn {
+  fill: var(--accent);
+}
+
+.tool {
+  fill: var(--muted);
+}
+
+/* Two token bars: a short label, the track, the compact total. */
+.bars {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1;
+}
+
+.barLabel {
+  min-width: 18px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.track {
+  position: relative;
+  flex: none;
+  height: 7px;
+  border-radius: 2px;
+  background: var(--layer-3);
+  overflow: hidden;
+}
+
+.track > i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+}
+
+/* The input read from cache, hatched; the rest, solid. */
+.cached {
+  background: repeating-linear-gradient(135deg, var(--ink-soft) 0 2px, transparent 2px 4px);
+}
+
+.fresh {
+  background: var(--text);
+}
+
+/* The whole output, soft; its thinking share over it, in the accent. */
+.outAll {
+  width: 100%;
+  background: var(--accent-soft);
+}
+
+.thinking {
+  background: var(--accent);
+}
+
+.total {
+  min-width: 44px;
+  font-size: 11px;
+  color: var(--text);
+  white-space: nowrap;
+}
