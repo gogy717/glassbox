@@ -24,6 +24,9 @@
   --accent: #335e9a;
   --accent-tint: #ebeff5;
   --ink: var(--text);
+  /* The summary bar's gauges: the text and the accent at a share, under a solid part. */
+  --ink-soft: rgba(27, 31, 38, 0.28);
+  --accent-soft: rgba(51, 94, 154, 0.22);
   --success: #016c36;
   --success-tint: rgba(42, 154, 87, 0.1);
   --error: #b21e25;
@@ -191,6 +194,8 @@
     --faint: #8f97a1;
     --accent: #8fb3e8;
     --accent-tint: #282d37;
+    --ink-soft: rgba(230, 232, 235, 0.3);
+    --accent-soft: rgba(143, 179, 232, 0.3);
     --success: #4cc27b;
     --success-tint: rgba(76, 194, 123, 0.13);
     --error: #fe8c88;
@@ -260,6 +265,8 @@
   --faint: #8f97a1;
   --accent: #8fb3e8;
   --accent-tint: #282d37;
+  --ink-soft: rgba(230, 232, 235, 0.3);
+  --accent-soft: rgba(143, 179, 232, 0.3);
   --success: #4cc27b;
   --success-tint: rgba(76, 194, 123, 0.13);
   --error: #fe8c88;
