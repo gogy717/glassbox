@@ -1,6 +1,6 @@
 import { Receipt } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Suspense, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { CONTEXT_FULL, contextUse } from '../../../src/shared/context-use.js';
 import type { TokenRate } from '../../../src/shared/rate.js';
 import { usePriceTable } from '../data/price-table';
@@ -109,6 +109,35 @@ export function SummaryBar({
   const rate = given !== undefined ? given : stored;
   const now = useNow();
   const [more, setMore] = useState(false);
+  // Whether the bar's own width holds every figure: the figures past its edge are cut, not
+  // scrolled into view (the strip hides its scrollbar), so when they don't fit the extras fold
+  // behind "More figures" at any screen width, not only under 900px. The bar's width is the
+  // window's less the sidebar's and the diagnostics', and the figures grow with the session, so
+  // it is measured after each render and on resize. Unfolded, the strip's scroll width is what
+  // they all need; folded (the button beside them), that last measure says whether the bar has
+  // grown enough to unfold. Stale once the figures grew: unfolding then folds again at once.
+  const strip = useRef<HTMLDivElement>(null);
+  const need = useRef(0);
+  const [tight, setTight] = useState(false);
+  // Folded and still short of room (a narrow window with the sidebar docked): the strip scrolls
+  // sideways, its cut edge faded to say so, and the button stays outside it, in view.
+  const [cut, setCut] = useState(false);
+  const [resized, setResized] = useState(0);
+  useLayoutEffect(() => {
+    const el = strip.current;
+    if (!el || el.clientWidth === 0) return;
+    if (!tight) need.current = el.scrollWidth;
+    setTight(el.clientWidth < need.current);
+    setCut(el.scrollWidth > el.clientWidth + 1);
+  });
+  useEffect(() => {
+    const el = strip.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => setResized((n) => n + 1));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  void resized;
   // Counts only change with the data; the clock only moves the running duration.
   const s = useMemo(() => summarize(open, agentId, now), [open, agentId, now]);
   const prices = usePriceTable();
@@ -200,8 +229,14 @@ export function SummaryBar({
       narrowOnly: true,
     });
   return (
-    <section className={css.bar} aria-label={t('summary.title')} data-more={more || undefined}>
-      <div className={css.metrics}>
+    <section
+      className={css.bar}
+      aria-label={t('summary.title')}
+      data-more={more || undefined}
+      data-tight={tight || undefined}
+      data-cut={cut || undefined}
+    >
+      <div ref={strip} className={css.metrics}>
         {figures.map((f) => (
           <div
             key={f.label}
@@ -220,15 +255,15 @@ export function SummaryBar({
             <span className={`${css.label} section-label`}>{f.label}</span>
           </div>
         ))}
-        <button
-          type="button"
-          className={css.more}
-          aria-expanded={more}
-          onClick={() => setMore(!more)}
-        >
-          {t(more ? 'summary.fewer' : 'summary.more')}
-        </button>
       </div>
+      <button
+        type="button"
+        className={css.more}
+        aria-expanded={more}
+        onClick={() => setMore(!more)}
+      >
+        {t(more ? 'summary.fewer' : 'summary.more')}
+      </button>
       <Diagnostics diagnostics={open.diagnostics} />
       <Trouble open={open} agentId={agentId} now={now} navigate={navigate} />
       <ReceiptButton open={open} />

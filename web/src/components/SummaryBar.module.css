@@ -6,10 +6,11 @@
   background: var(--layer-1);
 }
 
-/* Figures scroll sideways when they must; the diagnostics popover sits outside, unclipped. */
+/* Figures scroll sideways when they must; the diagnostics popover sits outside, unclipped. The
+   strip takes only its figures' width, so "More figures" sits right after them. */
 .metrics {
   display: flex;
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
@@ -85,6 +86,21 @@
 /* The token rate lives in the top bar until it gives it up, below 900px. */
 .metric[data-narrow-only] {
   display: none;
+}
+
+/* The bar too narrow for every figure (measured: beside the sidebar, a 1512px window gives them
+   about 920px, and nine need more): keep four, the rest behind the button. */
+.bar[data-tight] .more {
+  display: block;
+}
+
+.bar[data-tight]:not([data-more]) .metric[data-extra] {
+  display: none;
+}
+
+/* Folded and still short of room: the strip scrolls sideways, its cut edge faded to say so. */
+.bar[data-cut] .metrics {
+  mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
 }
 
 /* Seven labels in one row is a spreadsheet: keep four, the rest behind the button. */

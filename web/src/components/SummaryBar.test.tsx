@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { Turn } from '../../../src/core/model.js';
@@ -7,7 +8,9 @@ import { I18nContext, makeI18n } from '../i18n';
 import { priceTable } from '../lib/prices';
 import { cjkInMono } from '../test/cjk';
 import { DEMO_NOW, demoOpen } from '../test/demo';
+import { moduleCssValue } from '../test/module-css';
 import { SummaryBar } from './SummaryBar';
+import css from './SummaryBar.module.css';
 
 const value = (label: string, region = 'Summary') =>
   within(screen.getByRole('region', { name: region }))
@@ -160,6 +163,55 @@ describe('SummaryBar', () => {
       'aria-expanded',
       'true',
     );
+  });
+
+  it('folds the extras whenever the bar is too narrow for them all, at any screen width', () => {
+    const sheet = join(import.meta.dirname, 'SummaryBar.module.css');
+    const display = (el: Element | null) =>
+      el ? moduleCssValue(sheet, css, el, 'display') : 'missing';
+    // A fresh element each time: React skips a render of the very same one.
+    const ui = () => (
+      <I18nContext.Provider value={makeI18n('en')}>
+        <SummaryBar open={demoOpen()} agentId="main" />
+      </I18nContext.Provider>
+    );
+    const { rerender } = render(ui());
+    const bar = screen.getByRole('region', { name: 'Summary' });
+    const strip = bar.firstElementChild as HTMLElement;
+    const size = (scroll: number, client: number) => {
+      Object.defineProperty(strip, 'scrollWidth', { configurable: true, value: scroll });
+      Object.defineProperty(strip, 'clientWidth', { configurable: true, value: client });
+      rerender(ui());
+    };
+    const extra = bar.querySelector('[data-extra]');
+    const more = within(bar).getByRole('button', { name: 'More figures' });
+    // The widest the sheet lets a 1512 px window give the figures beside the sidebar and the
+    // diagnostics is about 920 px; nine figures need more. Nothing is cut: the extras fold.
+    size(1030, 920);
+    expect(bar).toHaveAttribute('data-tight');
+    expect(display(extra)).toBe('none');
+    expect(display(more)).toBe('block');
+    // The button is outside the strip, in view however short the strip is.
+    expect(strip.contains(more)).toBe(false);
+    // "More figures" shows them all again, the strip scrolling sideways.
+    fireEvent.click(more);
+    expect(display(extra)).toBe('flex');
+    fireEvent.click(within(bar).getByRole('button', { name: 'Fewer figures' }));
+    expect(display(extra)).toBe('none');
+    // Folded and still short of room, the strip scrolls sideways, its cut edge faded.
+    size(712, 642);
+    expect(bar).toHaveAttribute('data-tight');
+    expect(bar).toHaveAttribute('data-cut');
+    expect(moduleCssValue(sheet, css, strip, 'mask-image')).toMatch(/^linear-gradient\(to right/);
+    // Folded, the strip measures short. The bar widening to what the figures need unfolds it.
+    size(600, 1000);
+    expect(bar).toHaveAttribute('data-tight');
+    expect(bar).not.toHaveAttribute('data-cut');
+    expect(moduleCssValue(sheet, css, strip, 'mask-image')).toBeUndefined();
+    size(600, 1040);
+    expect(bar).not.toHaveAttribute('data-tight');
+    expect(display(extra)).toBe('flex');
+    expect(display(more)).toBe('none');
   });
 
   it('carries the token rate behind the disclosure, for narrow screens where the top bar drops it', () => {
